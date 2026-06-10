@@ -1,5 +1,5 @@
 // API route for creating, reading, and listing locally persisted question sessions.
-import { createQuestionSession, getQuestionSession, listQuestionSessions } from "@/lib/questionStore";
+import { createQuestionSession, getQuestionSession, listQuestionSessions, type SessionType } from "@/lib/questionStore";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -34,13 +34,16 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as { question?: string };
+  const body = (await request.json()) as { question?: string; type?: string };
   const question = body.question?.trim();
 
   if (!question) {
     return Response.json({ error: "Question is required." }, { status: 400 });
   }
 
-  const session = await createQuestionSession(question);
+  const type: SessionType =
+    body.type === "fist-to-five" ? "fist-to-five" : "question";
+
+  const session = await createQuestionSession(question, type);
   return Response.json(session, { status: 201 });
 }

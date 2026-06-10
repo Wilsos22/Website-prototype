@@ -2,12 +2,15 @@
 import Link from "next/link";
 
 const tools = [
-  { href: "/whiteboard", label: "Whiteboard" },
-  { href: "/algebra-tiles", label: "Algebra Tiles" },
-  { href: "/fraction-bars", label: "Fraction Bars" },
-  { href: "/number-line", label: "Number Line" },
-  { href: "/start-question", label: "Start Question" },
-  { href: "/timer", label: "Timer" },
+  { href: "/today", label: "Today's Lesson", badge: "student" },
+  { href: "/lessons", label: "Past Lessons", badge: "student" },
+  { href: "/join", label: "Join Session", badge: "student" },
+  { href: "/start-question", label: "Start Question", badge: "teacher" },
+  { href: "/whiteboard", label: "Whiteboard", badge: "teacher" },
+  { href: "/algebra-tiles", label: "Algebra Tiles", badge: "teacher" },
+  { href: "/fraction-bars", label: "Fraction Bars", badge: "teacher" },
+  { href: "/number-line", label: "Number Line", badge: "teacher" },
+  { href: "/timer", label: "Timer", badge: "teacher" },
 ];
 
 export default function HomePage() {
@@ -25,9 +28,12 @@ export default function HomePage() {
         </p>
       </section>
 
-      <nav className="launch-grid" aria-label="Teacher tools">
+      <nav className="launch-grid" aria-label="Classroom tools">
         {tools.map((tool) => (
           <Link key={tool.href} className="launch-button" href={tool.href}>
+            <span style={{ fontSize: "0.6rem", fontWeight: 900, letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.45, display: "block", marginBottom: "4px" }}>
+              {tool.badge}
+            </span>
             {tool.label}
           </Link>
         ))}

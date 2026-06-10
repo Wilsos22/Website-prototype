@@ -2,18 +2,29 @@
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 
+export type SessionType = "question" | "fist-to-five";
+
 export interface StudentResponse {
   id: string;
   name: string;
-  answer: string;
+  answer: string;       // used for "question" type
+  rating?: number;      // 0-5, used for "fist-to-five" type
+  submittedAt: string;
+}
+
+export interface AnonQuestion {
+  id: string;
+  text: string;
   submittedAt: string;
 }
 
 export interface QuestionSession {
   code: string;
+  type: SessionType;
   question: string;
   createdAt: string;
   responses: StudentResponse[];
+  anonQuestions: AnonQuestion[];
 }
 
 interface QuestionStoreData {
@@ -43,6 +54,9 @@ async function loadSessions(): Promise<void> {
     sessions.clear();
 
     for (const session of data.sessions ?? []) {
+      // Backfill legacy sessions that pre-date these fields.
+      if (!session.type) session.type = "question";
+      if (!session.anonQuestions) session.anonQuestions = [];
       sessions.set(session.code, session);
     }
   } catch (error) {
@@ -77,7 +91,10 @@ function generateCode(): string {
   return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
-export async function createQuestionSession(question: string): Promise<QuestionSession> {
+export async function createQuestionSession(
+  question: string,
+  type: SessionType = "question",
+): Promise<QuestionSession> {
   await loadSessions();
   let code = generateCode();
 
@@ -87,9 +104,11 @@ export async function createQuestionSession(question: string): Promise<QuestionS
 
   const session: QuestionSession = {
     code,
+    type,
     question,
     createdAt: new Date().toISOString(),
     responses: [],
+    anonQuestions: [],
   };
 
   sessions.set(code, session);
@@ -114,6 +133,7 @@ export async function addStudentResponse(
   code: string,
   name: string,
   answer: string,
+  rating?: number,
 ): Promise<StudentResponse> {
   await loadSessions();
   const session = sessions.get(code);
@@ -126,10 +146,41 @@ export async function addStudentResponse(
     id: crypto.randomUUID(),
     name,
     answer,
+    rating,
     submittedAt: new Date().toISOString(),
   };
 
   session.responses.push(response);
   await persistSessions();
   return response;
+}
+
+export async function addAnonQuestion(code: string, text: string): Promise<AnonQuestion> {
+  await loadSessions();
+  const session = sessions.get(code);
+
+  if (!session) {
+    throw new Error("Session not found");
+  }
+
+  const question: AnonQuestion = {
+    id: crypto.randomUUID(),
+    text,
+    submittedAt: new Date().toISOString(),
+  };
+
+  session.anonQuestions.push(question);
+  await persistSessions();
+  return question;
+}
+
+export async function getAnonQuestions(code: string): Promise<AnonQuestion[]> {
+  await loadSessions();
+  const session = sessions.get(code);
+
+  if (!session) {
+    throw new Error("Session not found");
+  }
+
+  return session.anonQuestions;
 }

@@ -9,17 +9,31 @@ export async function POST(request: Request) {
     code?: string;
     name?: string;
     answer?: string;
+    rating?: number;
   };
   const code = body.code?.trim();
   const name = body.name?.trim();
-  const answer = body.answer?.trim();
+  const answer = body.answer?.trim() ?? "";
+  const rating = typeof body.rating === "number" ? body.rating : undefined;
 
-  if (!code || !name || !answer) {
-    return Response.json({ error: "Code, name, and answer are required." }, { status: 400 });
+  if (!code || !name) {
+    return Response.json({ error: "Code and name are required." }, { status: 400 });
+  }
+
+  // For fist-to-five: rating must be 0-5. For questions: answer is required.
+  if (rating === undefined && !answer) {
+    return Response.json(
+      { error: "Either an answer or a rating (0-5) is required." },
+      { status: 400 },
+    );
+  }
+
+  if (rating !== undefined && (rating < 0 || rating > 5 || !Number.isInteger(rating))) {
+    return Response.json({ error: "Rating must be an integer 0-5." }, { status: 400 });
   }
 
   try {
-    const response = await addStudentResponse(code, name, answer);
+    const response = await addStudentResponse(code, name, answer, rating);
     return Response.json(response, { status: 201 });
   } catch {
     return Response.json({ error: "Session not found." }, { status: 404 });

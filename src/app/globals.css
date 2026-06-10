@@ -557,6 +557,7 @@ a {
 }
 
 .number-line-stage {
+  position: relative;
   display: grid;
   gap: 34px;
   min-height: calc(100vh - 230px);
@@ -565,6 +566,81 @@ a {
   border-radius: 8px;
   background: var(--surface);
   padding: 34px;
+}
+
+.ratio-controls {
+  grid-template-columns: repeat(5, minmax(140px, 1fr));
+}
+
+.ratio-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  border: 2px solid var(--primary);
+  border-radius: 8px;
+  background: #eef6ff;
+  padding: 14px 16px;
+  color: var(--primary-dark);
+  font-size: 1.08rem;
+  font-weight: 800;
+}
+
+.ratio-summary strong {
+  font-size: 1.22rem;
+}
+
+.ratio-track {
+  cursor: default;
+}
+
+.ratio-highlight .number-line-tick-mark {
+  width: 8px;
+  background: var(--warning);
+}
+
+.ratio-highlight .number-line-tick-label {
+  border: 2px solid var(--warning);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 4px 8px;
+  color: var(--text);
+  font-size: 1.08rem;
+}
+
+.ratio-guide {
+  position: absolute;
+  top: 118px;
+  bottom: 82px;
+  z-index: 1;
+  width: 4px;
+  border-radius: 999px;
+  background: rgb(216 144 40 / 65%);
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.ratio-guide span {
+  position: absolute;
+  top: -34px;
+  left: 50%;
+  border: 2px solid var(--warning);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 4px 8px;
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 900;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.ratio-guide-target {
+  background: rgb(36 92 170 / 55%);
+}
+
+.ratio-guide-target span {
+  border-color: var(--primary);
 }
 
 .number-line-row {
@@ -684,6 +760,7 @@ a {
   }
 
   .expression-panel,
+  .ratio-controls,
   .number-line-controls {
     grid-template-columns: 1fr;
   }
