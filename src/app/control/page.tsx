@@ -19,6 +19,7 @@ interface ClassState {
   label: string;
   minutes: number;
   color: string;
+  desc: string;
 }
 
 interface LineupItem {
@@ -27,17 +28,17 @@ interface LineupItem {
 }
 
 const DEFAULT_STATES: ClassState[] = [
-  { id: "warmup", label: "Warm-Up", minutes: 10, color: "#4e6ef2" },
-  { id: "review", label: "Go Over / Review", minutes: 5, color: "#8b5cf6" },
-  { id: "i-do", label: "Direct Instruction (I do)", minutes: 15, color: "#0ea5e9" },
-  { id: "we-do", label: "Guided Practice (We do)", minutes: 10, color: "#14b8a6" },
-  { id: "discussion", label: "Discussion (Think–Pair–Share)", minutes: 3, color: "#06b6d4" },
-  { id: "you-do", label: "Independent Practice (You do)", minutes: 15, color: "#22c55e" },
-  { id: "manip", label: "Manipulatives / Hands-On", minutes: 10, color: "#f59e0b" },
-  { id: "partner", label: "Partner / Group Work", minutes: 10, color: "#ec4899" },
-  { id: "exit", label: "Exit Ticket", minutes: 5, color: "#ef4444" },
-  { id: "cleanup", label: "Clean Up / Pack Up", minutes: 3, color: "#64748b" },
-  { id: "break", label: "Brain Break", minutes: 3, color: "#a3a3a3" },
+  { id: "warmup", label: "Warm-Up", minutes: 10, color: "#4e6ef2", desc: "Silently begin your warm-up. Work on your own." },
+  { id: "review", label: "Go Over / Review", minutes: 5, color: "#8b5cf6", desc: "Eyes up — we're going over the answers together." },
+  { id: "i-do", label: "Direct Instruction (I do)", minutes: 15, color: "#0ea5e9", desc: "Watch and take notes. I'll model each step." },
+  { id: "we-do", label: "Guided Practice (We do)", minutes: 10, color: "#14b8a6", desc: "We'll solve these together — try each step with me." },
+  { id: "discussion", label: "Discussion (Think–Pair–Share)", minutes: 3, color: "#06b6d4", desc: "Think on your own, then talk it through with your group." },
+  { id: "you-do", label: "Independent Practice (You do)", minutes: 15, color: "#22c55e", desc: "Work independently. Show all of your steps." },
+  { id: "manip", label: "Manipulatives / Hands-On", minutes: 10, color: "#f59e0b", desc: "Use the manipulative to model the problem." },
+  { id: "partner", label: "Partner / Group Work", minutes: 10, color: "#ec4899", desc: "Work with your partner — both of you explain your thinking." },
+  { id: "exit", label: "Exit Ticket", minutes: 5, color: "#ef4444", desc: "Complete your exit ticket on your own and turn it in before the timer ends." },
+  { id: "cleanup", label: "Clean Up / Pack Up", minutes: 3, color: "#64748b", desc: "Clean your space and pack up quietly." },
+  { id: "break", label: "Brain Break", minutes: 3, color: "#a3a3a3", desc: "Quick brain break — reset and get ready to focus." },
 ];
 
 const LS_BANK = "bdm-control-bank-v2";
@@ -114,6 +115,7 @@ export default function ControlPage() {
   const [showSounds, setShowSounds] = useState(false);
   const [showSpinner, setShowSpinner] = useState(false);
   const [showDiscussion, setShowDiscussion] = useState(false);
+  const [autoAdvance, setAutoAdvance] = useState(true);
   const [soundUrls, setSoundUrls] = useState<Record<string, string>>({});
 
   const secRef = useRef(0);
@@ -229,6 +231,26 @@ export default function ControlPage() {
     return () => { if (tickRef.current) clearInterval(tickRef.current); };
   }, [running, playCue, stopMusic]);
 
+  // ── Auto-advance to the next lineup item when time's up ─────────────────
+  useEffect(() => {
+    if (!finished || !autoAdvance) return;
+    const ni = currentIndex + 1;
+    if (ni >= lineup.length) return;
+    const t = setTimeout(() => {
+      const item = lineup[ni];
+      const st = item ? bank.find((s) => s.id === item.stateId) : undefined;
+      if (!st) return;
+      stopMusic();
+      setCurrentIndex(ni);
+      secRef.current = st.minutes * 60;
+      setSecondsLeft(secRef.current);
+      setFinished(false);
+      setRunning(true);
+      startMusicFor(st.id);
+    }, 2600);
+    return () => clearTimeout(t);
+  }, [finished, autoAdvance, currentIndex, lineup, bank, startMusicFor, stopMusic]);
+
   const activeItem = currentIndex >= 0 ? lineup[currentIndex] : undefined;
   const activeState = activeItem ? bank.find((s) => s.id === activeItem.stateId) : undefined;
   const totalMin = lineup.reduce((sum, it) => {
@@ -336,6 +358,10 @@ export default function ControlPage() {
   const accent = activeState?.color ?? "#4e6ef2";
   const inFinal10 = running && secondsLeft <= 10 && secondsLeft > 0;
   const overBudget = totalMin > PERIOD_MIN;
+  const denom = activeState ? activeState.minutes * 60 : 1;
+  const pct = activeState ? Math.max(0, Math.min(100, (secondsLeft / denom) * 100)) : 0;
+  const hasNext = currentIndex + 1 < lineup.length;
+  const nextState = hasNext ? bank.find((s) => s.id === lineup[currentIndex + 1].stateId) : undefined;
 
   return (
     <>
@@ -359,6 +385,11 @@ export default function ControlPage() {
         @keyframes cxPulse { 50%{opacity:0.55; transform:scale(1.04);} }
         .cx-note { font-size:1.1rem; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; min-height:1.3em; }
         .cx-warn { color:#facc15; } .cx-fin { color:#ef4444; } .cx-idle { color:#3a4460; font-weight:700; max-width:440px; text-transform:none; letter-spacing:0; }
+        .cx-desc { font-size:clamp(1.1rem,3vw,1.9rem); font-weight:800; color:#dfe5f5; max-width:780px; line-height:1.3; }
+        .cx-progress { width:min(82vw,760px); height:16px; border-radius:999px; background:#1a1f30; overflow:hidden; border:1px solid #2a3045; }
+        .cx-progress-fill { height:100%; border-radius:999px; transition:width 1s linear, background 300ms ease; }
+        .cx-upnext { font-size:0.82rem; font-weight:800; color:#5a6280; text-transform:uppercase; letter-spacing:0.07em; }
+        .cx-upnext strong { color:#9aa3bd; }
 
         .cx-actions { display:flex; flex-wrap:wrap; gap:9px; justify-content:center; }
         .cx-btn { font-size:1rem; font-weight:900; border-radius:11px; padding:13px 24px; cursor:pointer; border:1px solid #2a3045; background:#161a28; color:#fff; transition:transform 120ms ease, border-color 140ms ease, filter 140ms; }
@@ -403,6 +434,7 @@ export default function ControlPage() {
           <p className="cx-mark">Big Dog Math — Classroom</p>
           <div className="cx-tbtns">
             <button className="cx-sbtn" onClick={() => setShowSpinner(true)}>🎰 Spinner</button>
+            <button className="cx-sbtn" style={autoAdvance ? { borderColor: accent, color: "#fff" } : undefined} onClick={() => setAutoAdvance((v) => !v)}>Auto-advance: {autoAdvance ? "on" : "off"}</button>
             <button className="cx-sbtn" onClick={() => setShowSounds((v) => !v)}>{showSounds ? "Close sounds" : "Sounds"}</button>
             <button className="cx-sbtn" onClick={() => setEditing((v) => !v)}>{editing ? "Done editing" : "Edit times"}</button>
             <button className="cx-sbtn" onClick={toggleFullscreen}>Fullscreen</button>
@@ -415,9 +447,15 @@ export default function ControlPage() {
             <>
               <div className="cx-pos">Step {currentIndex + 1} of {lineup.length}</div>
               <div className="cx-state">{activeState.label}</div>
+              <div className="cx-desc">{activeState.desc}</div>
               <div className="cx-clock">{inFinal10 ? secondsLeft : fmt(secondsLeft)}</div>
+              <div className="cx-progress">
+                <div className="cx-progress-fill" style={{ width: `${pct}%`, background: finished ? "#ef4444" : inFinal10 ? "#fbbf24" : accent }} />
+              </div>
               <div className={`cx-note ${finished ? "cx-fin" : warnFlash ? "cx-warn" : ""}`}>
-                {finished ? "⏰ Time's up — tap Next" : warnFlash ? "30 seconds!" : ""}
+                {finished
+                  ? (autoAdvance && hasNext ? "⏰ Time's up — moving on…" : hasNext ? "⏰ Time's up — tap Next ▶" : "✓ Lesson complete!")
+                  : warnFlash ? "30 seconds!" : ""}
               </div>
               <div className="cx-actions">
                 <button className="cx-btn pri" onClick={toggleRun}>{running ? "⏸ Pause" : secondsLeft <= 0 ? "↻ Restart" : "▶ Start"}</button>
@@ -433,6 +471,9 @@ export default function ControlPage() {
                   <button className="cx-btn" style={{ background: "#06b6d4", borderColor: "#06b6d4" }} onClick={() => setShowDiscussion(true)}>▶ Run discussion</button>
                 )}
               </div>
+              {hasNext
+                ? <div className="cx-upnext">Up next: <strong>{nextState?.label}</strong></div>
+                : <div className="cx-upnext">Last step of the lesson</div>}
             </>
           ) : (
             <p className="cx-note cx-idle">
