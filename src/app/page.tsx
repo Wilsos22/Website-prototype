@@ -10,6 +10,7 @@ const tools = [
   { href: "/algebra-tiles", label: "Algebra Tiles", badge: "teacher" },
   { href: "/equation-builder", label: "Equation Builder", badge: "teacher" },
   { href: "/order-of-operations", label: "GEMS (Order of Ops)", badge: "teacher" },
+  { href: "/combine-like-terms", label: "Combine Like Terms", badge: "teacher" },
   { href: "/fraction-bars", label: "Fraction Bars", badge: "teacher" },
   { href: "/number-line", label: "Number Line", badge: "teacher" },
   { href: "/timer", label: "Timer", badge: "teacher" },
