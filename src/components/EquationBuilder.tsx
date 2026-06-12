@@ -146,14 +146,14 @@ export default function EquationBuilder() {
           const sign = eq.constant > 0 ? "−" : "+";
           setRows((r) => [...r, { eq: ne, note: `${sign}${Math.abs(eq.constant)} from both sides · +${Math.abs(eq.constant)} and −${Math.abs(eq.constant)} make a zero pair → cancel` }]);
           setAnim(null); advance(ne);
-        }, 1700);
+        }, 1400);
       } else {
         setAnim({ kind: "divide", n: eq.coef }); sCancel();
         window.setTimeout(() => {
           const ne: Eq = { coef: 1, constant: 0, rhs: eq.rhs / eq.coef };
           setRows((r) => [...r, { eq: ne, note: `÷${eq.coef} on both sides · ${eq.coef}x ÷ ${eq.coef} = x` }]);
           setAnim(null); advance(ne);
-        }, 1700);
+        }, 1400);
       }
     } else {
       sWrong(); setWrong((w) => w + 1); giveHint();
@@ -177,33 +177,41 @@ export default function EquationBuilder() {
       >{coef === 1 ? "x" : `${coef}x`}</span>
     );
   }
-  function constChip(v: number, cancel = false) {
+  function constChip(v: number, strike = false) {
     const pos = v > 0;
-    return <span className={`eqb-chip ${pos ? "eqb-pos" : "eqb-neg"}${cancel ? " eqb-cancel" : ""}`}>{pos ? "+" : "−"}{Math.abs(v)}</span>;
+    return <span className={`eqb-chip ${pos ? "eqb-pos" : "eqb-neg"}${strike ? " eqb-strike" : ""}`}>{pos ? "+" : "−"}{Math.abs(v)}</span>;
   }
   function numChip(v: number) {
     return <span className="eqb-chip eqb-rhs">{v}</span>;
   }
+  function opUnder(label: string, strike = false) {
+    return <span className={`eqb-under-chip${strike ? " eqb-strike" : ""}`}>{label}</span>;
+  }
 
   function EquationRow({ row, active }: { row: Row; active: boolean }) {
     const e = row.eq;
-    const showZeroPair = active && anim?.kind === "cancel";
+    const cancel = active && anim?.kind === "cancel";
+    const divide = active && anim?.kind === "divide";
+    const b = e.constant;
+    const subLabel = `${b > 0 ? "−" : "+"} ${Math.abs(b)}`;
     return (
       <div className="eqb-row">
-        <div className="eqb-note">{row.note !== "Start" ? row.note : ""}</div>
+        {row.note && row.note !== "Start" && <div className="eqb-note">{row.note}</div>}
         <div className="eqb-eq">
-          <span className="eqb-side">
-            {varChip(e.coef, active && phase === "tap-var")}
-            {e.constant !== 0 && constChip(e.constant, showZeroPair)}
-            {showZeroPair && <span className="eqb-zero" aria-hidden>{constChip(-e.constant, true)}<em>zero pair = 0</em></span>}
-          </span>
+          <div className="eqb-side">
+            <div className="eqb-terms">
+              {varChip(e.coef, active && phase === "tap-var")}
+              {b !== 0 && constChip(b, cancel)}
+            </div>
+            {cancel && <div className="eqb-under">{opUnder(subLabel, true)}</div>}
+            {divide && <div className="eqb-under">{opUnder(`÷ ${anim!.n}`)}</div>}
+          </div>
           <span className="eqb-eqsign">=</span>
-          <span className="eqb-side">
-            {numChip(e.rhs)}
-            {showZeroPair && <span className="eqb-incoming">{constChip(-e.constant)}</span>}
-            {active && anim?.kind === "divide" && <span className="eqb-divlabel">÷{anim.n}</span>}
-          </span>
-          {active && anim?.kind === "divide" && <span className="eqb-divlabel-left">÷{anim.n}</span>}
+          <div className="eqb-side">
+            <div className="eqb-terms">{numChip(e.rhs)}</div>
+            {cancel && <div className="eqb-under">{opUnder(subLabel)}</div>}
+            {divide && <div className="eqb-under">{opUnder(`÷ ${anim!.n}`)}</div>}
+          </div>
         </div>
       </div>
     );
@@ -236,12 +244,16 @@ export default function EquationBuilder() {
         .eqb-start { font-size:1.2rem; font-weight:900; color:#fff; background:#22c55e; border:none; border-radius:13px; padding:15px 40px; cursor:pointer; box-shadow:0 10px 26px -10px #22c55e; }
 
         /* Worked solution */
-        .eqb-rows { display:grid; gap:14px; width:100%; }
-        .eqb-row { display:grid; grid-template-columns:1fr auto; gap:18px; align-items:center; animation:eqbDrop 0.5s ease; }
+        .eqb-rows { display:grid; gap:18px; width:100%; justify-items:center; }
+        .eqb-row { display:grid; justify-items:center; gap:6px; animation:eqbDrop 0.5s ease; }
         @keyframes eqbDrop { from{opacity:0; transform:translateY(-14px);} to{opacity:1; transform:none;} }
-        .eqb-note { text-align:right; font-size:0.86rem; font-weight:700; color:#5a6280; line-height:1.4; }
-        .eqb-eq { display:flex; align-items:center; gap:16px; justify-self:end; }
-        .eqb-side { display:flex; align-items:center; gap:8px; position:relative; }
+        .eqb-note { text-align:center; font-size:0.86rem; font-weight:700; color:#5a6280; line-height:1.4; }
+        .eqb-eq { display:flex; align-items:flex-start; gap:18px; justify-content:center; }
+        .eqb-side { display:flex; flex-direction:column; align-items:center; gap:8px; position:relative; }
+        .eqb-terms { display:flex; align-items:center; gap:8px; }
+        .eqb-under { display:flex; align-items:center; gap:8px; animation:eqbUnderIn 0.4s ease; }
+        @keyframes eqbUnderIn { from{opacity:0; transform:translateY(-6px);} to{opacity:1; transform:none;} }
+        .eqb-under-chip { font-weight:900; color:#fca5a5; font-size:clamp(1.1rem,3vw,1.7rem); position:relative; padding:2px 6px; }
         .eqb-eqsign { font-size:clamp(1.8rem,5vw,2.8rem); font-weight:900; color:#8a93ad; }
         .eqb-chip { display:inline-flex; align-items:center; justify-content:center; font-weight:900; border-radius:11px; padding:10px 14px; font-size:clamp(1.2rem,3.4vw,1.9rem); min-width:46px; box-shadow:0 4px 12px -6px rgba(0,0,0,0.6); }
         .eqb-x { background:#22c55e; color:#04230f; }
@@ -251,14 +263,9 @@ export default function EquationBuilder() {
         .eqb-pos { background:#f59e0b; color:#3a2503; }
         .eqb-neg { background:#ef4444; color:#3a0606; }
         .eqb-rhs { background:#4e6ef2; color:#06122e; }
-        .eqb-cancel { animation:eqbPoof 1.6s ease forwards; }
-        @keyframes eqbPoof { 0%{} 55%{box-shadow:0 0 0 3px #ef4444; transform:scale(1.06);} 100%{opacity:0.12; transform:scale(0.6) rotate(-8deg);} }
-        .eqb-zero { position:absolute; left:0; top:-40px; display:flex; flex-direction:column; align-items:center; gap:2px; }
-        .eqb-zero em { font-style:normal; font-size:0.7rem; font-weight:800; color:#fca5a5; white-space:nowrap; }
-        .eqb-incoming { animation:eqbFly 1.6s ease; }
-        @keyframes eqbFly { 0%{opacity:0; transform:translateX(-90px) scale(0.6);} 60%{opacity:1; transform:translateX(0) scale(1.05);} 100%{opacity:1; transform:none;} }
-        .eqb-divlabel,.eqb-divlabel-left { font-size:1rem; font-weight:900; color:#67e8f9; background:rgba(6,182,212,0.12); border:1px solid rgba(6,182,212,0.4); border-radius:8px; padding:4px 9px; animation:eqbPulse 0.8s ease-in-out infinite; }
-        .eqb-divlabel-left { position:absolute; left:-54px; }
+        .eqb-strike { position:relative; }
+        .eqb-strike::after { content:""; position:absolute; left:2%; right:2%; top:50%; height:4px; background:#ef4444; border-radius:2px; transform:scaleX(0); transform-origin:left; animation:eqbStrike 0.5s ease forwards; animation-delay:0.35s; }
+        @keyframes eqbStrike { to{transform:scaleX(1);} }
         @keyframes eqbPulse { 50%{opacity:0.5;} }
 
         /* Guided panel */

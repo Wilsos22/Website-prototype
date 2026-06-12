@@ -127,10 +127,10 @@ export default function CombineLikeTerms() {
 
         .cl-main { padding:24px; display:grid; gap:18px; align-content:start; justify-items:center; max-width:900px; margin:0 auto; width:100%; }
         .cl-lines { display:grid; gap:12px; width:100%; }
-        .cl-line { display:grid; grid-template-columns:1fr auto; gap:18px; align-items:center; animation:clDrop 0.45s ease; }
+        .cl-line { display:grid; justify-items:center; gap:5px; animation:clDrop 0.45s ease; }
         @keyframes clDrop { from{opacity:0; transform:translateY(-12px);} to{opacity:1; transform:none;} }
-        .cl-note { text-align:right; font-size:0.84rem; font-weight:700; color:#86efac; line-height:1.4; }
-        .cl-expr { display:flex; align-items:center; gap:9px; justify-self:end; flex-wrap:wrap; }
+        .cl-note { text-align:center; font-size:0.84rem; font-weight:700; color:#86efac; line-height:1.4; }
+        .cl-expr { display:flex; align-items:center; gap:9px; justify-content:center; flex-wrap:wrap; }
         .cl-chip { font-weight:900; border-radius:12px; padding:11px 16px; font-size:clamp(1.3rem,3.6vw,2rem); cursor:pointer; border:3px solid transparent; transition:transform 120ms ease; }
         .cl-chip.sel { outline:3px solid #fff; outline-offset:2px; transform:translateY(-2px); }
         .cl-chip.poof { animation:clPoof 1s ease forwards; }
