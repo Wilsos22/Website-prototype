@@ -12,13 +12,19 @@
 import { useRef, useState, useCallback } from "react";
 
 type Op = "add" | "subtract" | "multiply" | "divide";
-type Phase = "build" | "ask-op" | "ask-term" | "animating" | "solved";
+type Phase = "build" | "goal" | "tap-var" | "ask-op" | "ask-term" | "animating" | "solved";
 interface Eq { coef: number; constant: number; rhs: number; }
 interface Row { eq: Eq; note: string; }
 interface Anim { kind: "cancel" | "divide"; n: number; }
 
 const OP_LABEL: Record<Op, string> = { add: "Add", subtract: "Subtract", multiply: "Multiply", divide: "Divide" };
 const PRESETS: [number, number, number][] = [ /* a, b, x */ [1, 5, 7], [2, 3, 4], [3, -4, 5], [4, 6, 3], [2, -7, 9] ];
+const GOAL_CHOICES: { label: string; correct: boolean }[] = [
+  { label: "Isolate the variable", correct: true },
+  { label: "Make both sides as big as possible", correct: false },
+  { label: "Get rid of the equals sign", correct: false },
+  { label: "Remove the variable", correct: false },
+];
 
 function stepOf(eq: Eq): "constant" | "coefficient" | "done" {
   if (eq.constant !== 0) return "constant";
@@ -68,10 +74,19 @@ export default function EquationBuilder() {
     setRows([{ eq: e, note: "Start" }]);
     setWrong(0); setHint(null); setAnim(null);
     if (stepOf(e) === "done") { setPhase("solved"); sSolved(); }
-    else { setPhase("ask-op"); setFeedback(askOpText(e)); }
+    else { setPhase("goal"); setFeedback(""); }
   }
 
   function loadPreset(p: [number, number, number]) { setA(p[0]); setB(p[1]); setXAns(p[2]); }
+
+  function pickGoal(correct: boolean) {
+    if (correct) { sCorrect(); setFeedback(""); setPhase("tap-var"); }
+    else { sWrong(); setWrong((w) => w + 1); setFeedback("Not quite — solving an equation means getting the variable by itself."); }
+  }
+  function tapVar() {
+    if (phase !== "tap-var" || !eq) return;
+    sCorrect(); setPhase("ask-op"); setFeedback(askOpText(eq));
+  }
 
   function askOpText(e: Eq): string {
     return stepOf(e) === "constant"
@@ -154,8 +169,13 @@ export default function EquationBuilder() {
   function reset() { setPhase("build"); setRows([]); setAnim(null); setFeedback(""); setHint(null); setWrong(0); }
 
   // ── chip rendering ────────────────────────────────────────────────────
-  function varChip(coef: number) {
-    return <span className="eqb-chip eqb-x">{coef === 1 ? "x" : `${coef}x`}</span>;
+  function varChip(coef: number, clickable = false) {
+    return (
+      <span
+        className={`eqb-chip eqb-x${clickable ? " eqb-x-click" : ""}`}
+        onClick={clickable ? tapVar : undefined}
+      >{coef === 1 ? "x" : `${coef}x`}</span>
+    );
   }
   function constChip(v: number, cancel = false) {
     const pos = v > 0;
@@ -173,7 +193,7 @@ export default function EquationBuilder() {
         <div className="eqb-note">{row.note !== "Start" ? row.note : ""}</div>
         <div className="eqb-eq">
           <span className="eqb-side">
-            {varChip(e.coef)}
+            {varChip(e.coef, active && phase === "tap-var")}
             {e.constant !== 0 && constChip(e.constant, showZeroPair)}
             {showZeroPair && <span className="eqb-zero" aria-hidden>{constChip(-e.constant, true)}<em>zero pair = 0</em></span>}
           </span>
@@ -225,6 +245,9 @@ export default function EquationBuilder() {
         .eqb-eqsign { font-size:clamp(1.8rem,5vw,2.8rem); font-weight:900; color:#8a93ad; }
         .eqb-chip { display:inline-flex; align-items:center; justify-content:center; font-weight:900; border-radius:11px; padding:10px 14px; font-size:clamp(1.2rem,3.4vw,1.9rem); min-width:46px; box-shadow:0 4px 12px -6px rgba(0,0,0,0.6); }
         .eqb-x { background:#22c55e; color:#04230f; }
+        .eqb-x-click { cursor:pointer; outline:3px solid #bbf7d0; outline-offset:2px; animation:eqbPulse 0.9s ease-in-out infinite; }
+        .eqb-modal { position:fixed; inset:0; background:rgba(5,7,12,0.82); display:grid; place-items:center; z-index:40; padding:20px; }
+        .eqb-modal-card { background:#121520; border:1px solid #2a3045; border-radius:18px; padding:26px 28px; max-width:520px; width:100%; display:grid; gap:16px; box-shadow:0 30px 80px -20px #000; }
         .eqb-pos { background:#f59e0b; color:#3a2503; }
         .eqb-neg { background:#ef4444; color:#3a0606; }
         .eqb-rhs { background:#4e6ef2; color:#06122e; }
@@ -297,6 +320,20 @@ export default function EquationBuilder() {
                 <p className="eqb-feedback">Solved{wrong === 0 ? " with no mistakes — nice!" : "!"} The variable is isolated.</p>
                 <button className="eqb-start" onClick={reset}>↻ New equation</button>
               </div>
+            ) : phase === "goal" ? (
+              <div className="eqb-modal">
+                <div className="eqb-modal-card">
+                  <p className="eqb-q">First — what is your <strong>goal</strong> when solving an equation?</p>
+                  <div className="eqb-choices" style={{ flexDirection: "column" }}>
+                    {GOAL_CHOICES.map((g, i) => (
+                      <button className="eqb-choice" key={i} onClick={() => pickGoal(g.correct)}>{g.label}</button>
+                    ))}
+                  </div>
+                  {feedback && <p className="eqb-feedback">{feedback}</p>}
+                </div>
+              </div>
+            ) : phase === "tap-var" ? (
+              <p className="eqb-q">👆 Now <strong>tap the variable</strong> you’re solving for to begin.</p>
             ) : phase === "animating" ? (
               <p className="eqb-q">{anim?.kind === "cancel" ? "Zero pair — they cancel out…" : "Dividing both sides…"}</p>
             ) : (
