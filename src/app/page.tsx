@@ -11,6 +11,7 @@ const tools = [
   { href: "/fraction-bars", label: "Fraction Bars", badge: "teacher" },
   { href: "/number-line", label: "Number Line", badge: "teacher" },
   { href: "/timer", label: "Timer", badge: "teacher" },
+  { href: "/control", label: "Classroom Control", badge: "teacher" },
 ];
 
 export default function HomePage() {
