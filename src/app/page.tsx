@@ -8,6 +8,7 @@ const tools = [
   { href: "/start-question", label: "Start Question", badge: "teacher" },
   { href: "/whiteboard", label: "Whiteboard", badge: "teacher" },
   { href: "/algebra-tiles", label: "Algebra Tiles", badge: "teacher" },
+  { href: "/equation-builder", label: "Equation Builder", badge: "teacher" },
   { href: "/fraction-bars", label: "Fraction Bars", badge: "teacher" },
   { href: "/number-line", label: "Number Line", badge: "teacher" },
   { href: "/timer", label: "Timer", badge: "teacher" },
