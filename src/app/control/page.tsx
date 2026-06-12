@@ -1,17 +1,27 @@
 "use client";
 
 // Teacher Classroom Control Panel — front-of-room display.
-// Pick a classroom "state" (Warm-Up, Practice, etc.); each loads an adjustable
-// countdown timer. Start / pause / reset, +/- time, time's-up flash + beep,
-// fullscreen. Pure client-side. Your edited durations are saved on this device.
+// • Bank (bottom) → pull states into the day's LINEUP (sequence) with a running
+//   total vs. a 55-minute period.
+// • Each state loads an adjustable countdown. At 0 it flashes and WAITS for you
+//   to tap Next.
+// • Ending sequence: 30-second alert, giant on-screen 10→1 countdown with ticks,
+//   flash at zero.
+// • Upload your own sounds (warm-up music + cue sounds). They're remembered on
+//   this computer (stored in the browser). No upload = simple built-in beep.
 
 import { useEffect, useRef, useState, useCallback } from "react";
 
 interface ClassState {
   id: string;
   label: string;
-  minutes: number; // default duration
+  minutes: number;
   color: string;
+}
+
+interface LineupItem {
+  uid: string;
+  stateId: string;
 }
 
 const DEFAULT_STATES: ClassState[] = [
@@ -27,7 +37,17 @@ const DEFAULT_STATES: ClassState[] = [
   { id: "break", label: "Brain Break", minutes: 3, color: "#a3a3a3" },
 ];
 
-const STORAGE_KEY = "bdm-control-states-v1";
+const LS_BANK = "bdm-control-bank-v2";
+const LS_LINEUP = "bdm-control-lineup-v1";
+const PERIOD_MIN = 55;
+
+type CueKey = "music" | "warn30" | "tick" | "end";
+const CUE_LABELS: Record<CueKey, string> = {
+  music: "Warm-up music (loops)",
+  warn30: "30-second alert",
+  tick: "Last-10 countdown tick",
+  end: "Time's-up buzzer",
+};
 
 function fmt(totalSeconds: number): string {
   const s = Math.max(0, totalSeconds);
@@ -36,118 +56,262 @@ function fmt(totalSeconds: number): string {
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
+function uid(): string {
+  return Math.random().toString(36).slice(2, 9);
+}
+
+// ── IndexedDB (stores uploaded sound files so they persist on this computer) ──
+function idbOpen(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open("bdm-control", 1);
+    req.onupgradeneeded = () => req.result.createObjectStore("sounds");
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbPut(key: string, blob: Blob): Promise<void> {
+  const db = await idbOpen();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction("sounds", "readwrite");
+    tx.objectStore("sounds").put(blob, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function idbGet(key: string): Promise<Blob | undefined> {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("sounds", "readonly");
+    const r = tx.objectStore("sounds").get(key);
+    r.onsuccess = () => resolve(r.result as Blob | undefined);
+    r.onerror = () => reject(r.error);
+  });
+}
+async function idbDel(key: string): Promise<void> {
+  const db = await idbOpen();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction("sounds", "readwrite");
+    tx.objectStore("sounds").delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 export default function ControlPage() {
-  const [states, setStates] = useState<ClassState[]>(DEFAULT_STATES);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [bank, setBank] = useState<ClassState[]>(DEFAULT_STATES);
+  const [lineup, setLineup] = useState<LineupItem[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(-1);
+
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [running, setRunning] = useState(false);
   const [finished, setFinished] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const audioRef = useRef<AudioContext | null>(null);
+  const [warnFlash, setWarnFlash] = useState(false);
 
-  // Load saved durations (per-device)
+  const [editing, setEditing] = useState(false);
+  const [showSounds, setShowSounds] = useState(false);
+  const [soundUrls, setSoundUrls] = useState<Record<string, string>>({});
+
+  const secRef = useRef(0);
+  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const musicRef = useRef<HTMLAudioElement | null>(null);
+
+  // ── Load saved bank minutes + lineup + uploaded sounds ──────────────────
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const saved = JSON.parse(raw) as ClassState[];
-        // Merge saved minutes onto defaults so new states still appear
-        setStates(
-          DEFAULT_STATES.map((d) => {
-            const s = saved.find((x) => x.id === d.id);
-            return s ? { ...d, minutes: s.minutes } : d;
-          })
-        );
+      const rawBank = localStorage.getItem(LS_BANK);
+      if (rawBank) {
+        const saved = JSON.parse(rawBank) as ClassState[];
+        setBank(DEFAULT_STATES.map((d) => {
+          const s = saved.find((x) => x.id === d.id);
+          return s ? { ...d, minutes: s.minutes } : d;
+        }));
       }
-    } catch {
-      /* ignore */
-    }
+      const rawLine = localStorage.getItem(LS_LINEUP);
+      if (rawLine) setLineup(JSON.parse(rawLine) as LineupItem[]);
+    } catch { /* ignore */ }
+
+    (async () => {
+      const keys: string[] = ["warn30", "tick", "end", ...DEFAULT_STATES.map((s) => `music:${s.id}`)];
+      const next: Record<string, string> = {};
+      for (const k of keys) {
+        try {
+          const blob = await idbGet(k);
+          if (blob) next[k] = URL.createObjectURL(blob);
+        } catch { /* ignore */ }
+      }
+      setSoundUrls(next);
+    })();
   }, []);
 
-  const persist = useCallback((next: ClassState[]) => {
-    setStates(next);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      /* ignore */
-    }
+  const persistBank = useCallback((next: ClassState[]) => {
+    setBank(next);
+    try { localStorage.setItem(LS_BANK, JSON.stringify(next)); } catch { /* ignore */ }
+  }, []);
+  const persistLineup = useCallback((next: LineupItem[]) => {
+    setLineup(next);
+    try { localStorage.setItem(LS_LINEUP, JSON.stringify(next)); } catch { /* ignore */ }
   }, []);
 
-  const beep = useCallback(() => {
+  // ── Sound playback ──────────────────────────────────────────────────────
+  const genTone = useCallback((pattern: { f: number; t: number; d: number }[]) => {
     try {
-      audioRef.current =
-        audioRef.current ?? new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-      const ctx = audioRef.current;
-      [0, 0.25, 0.5].forEach((t) => {
+      audioCtxRef.current = audioCtxRef.current
+        ?? new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      const ctx = audioCtxRef.current;
+      pattern.forEach(({ f, t, d }) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        osc.frequency.value = 880;
+        osc.frequency.value = f;
         osc.connect(gain);
         gain.connect(ctx.destination);
         gain.gain.setValueAtTime(0.0001, ctx.currentTime + t);
         gain.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + t + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + t + 0.22);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + t + d);
         osc.start(ctx.currentTime + t);
-        osc.stop(ctx.currentTime + t + 0.24);
+        osc.stop(ctx.currentTime + t + d + 0.02);
       });
-    } catch {
-      /* ignore */
+    } catch { /* ignore */ }
+  }, []);
+
+  const playCue = useCallback((key: CueKey) => {
+    const url = soundUrls[key];
+    if (url) {
+      const a = new Audio(url);
+      a.play().catch(() => { /* ignore */ });
+      return;
+    }
+    if (key === "tick") genTone([{ f: 660, t: 0, d: 0.07 }]);
+    else if (key === "warn30") genTone([{ f: 880, t: 0, d: 0.18 }, { f: 660, t: 0.22, d: 0.18 }]);
+    else if (key === "end") genTone([{ f: 880, t: 0, d: 0.2 }, { f: 880, t: 0.25, d: 0.2 }, { f: 880, t: 0.5, d: 0.2 }]);
+  }, [soundUrls, genTone]);
+
+  const stopMusic = useCallback(() => {
+    if (musicRef.current) {
+      musicRef.current.pause();
+      musicRef.current.currentTime = 0;
+      musicRef.current = null;
     }
   }, []);
 
-  // Countdown engine
+  const startMusicFor = useCallback((stateId: string) => {
+    const url = soundUrls[`music:${stateId}`];
+    if (!url) return;
+    stopMusic();
+    const a = new Audio(url);
+    a.loop = true;
+    a.play().catch(() => { /* ignore */ });
+    musicRef.current = a;
+  }, [soundUrls, stopMusic]);
+
+  // ── Countdown engine ────────────────────────────────────────────────────
   useEffect(() => {
-    if (running) {
-      tickRef.current = setInterval(() => {
-        setSecondsLeft((prev) => {
-          if (prev <= 1) {
-            setRunning(false);
-            setFinished(true);
-            beep();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-    return () => {
-      if (tickRef.current) clearInterval(tickRef.current);
-    };
-  }, [running, beep]);
+    if (!running) return;
+    tickRef.current = setInterval(() => {
+      const next = secRef.current - 1;
+      secRef.current = next;
+      setSecondsLeft(next);
+      if (next === 30) { playCue("warn30"); setWarnFlash(true); setTimeout(() => setWarnFlash(false), 3000); }
+      else if (next <= 10 && next >= 1) { playCue("tick"); }
+      if (next <= 0) {
+        if (tickRef.current) clearInterval(tickRef.current);
+        setRunning(false);
+        setFinished(true);
+        stopMusic();
+        playCue("end");
+      }
+    }, 1000);
+    return () => { if (tickRef.current) clearInterval(tickRef.current); };
+  }, [running, playCue, stopMusic]);
 
-  const active = states.find((s) => s.id === activeId) ?? null;
+  const activeItem = currentIndex >= 0 ? lineup[currentIndex] : undefined;
+  const activeState = activeItem ? bank.find((s) => s.id === activeItem.stateId) : undefined;
+  const totalMin = lineup.reduce((sum, it) => {
+    const st = bank.find((s) => s.id === it.stateId);
+    return sum + (st?.minutes ?? 0);
+  }, 0);
 
-  function selectState(s: ClassState) {
-    setActiveId(s.id);
-    setSecondsLeft(s.minutes * 60);
+  // ── Lineup management ───────────────────────────────────────────────────
+  function addToLineup(stateId: string) {
+    persistLineup([...lineup, { uid: uid(), stateId }]);
+  }
+  function removeFromLineup(u: string) {
+    const idx = lineup.findIndex((l) => l.uid === u);
+    const next = lineup.filter((l) => l.uid !== u);
+    persistLineup(next);
+    if (idx === currentIndex) { setCurrentIndex(-1); setRunning(false); setFinished(false); stopMusic(); }
+  }
+  function moveItem(u: string, dir: -1 | 1) {
+    const i = lineup.findIndex((l) => l.uid === u);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= lineup.length) return;
+    const next = [...lineup];
+    [next[i], next[j]] = [next[j], next[i]];
+    persistLineup(next);
+  }
+  function loadIndex(i: number) {
+    const item = lineup[i];
+    if (!item) return;
+    const st = bank.find((s) => s.id === item.stateId);
+    if (!st) return;
+    setCurrentIndex(i);
+    secRef.current = st.minutes * 60;
+    setSecondsLeft(st.minutes * 60);
     setRunning(false);
     setFinished(false);
+    stopMusic();
   }
 
+  // ── Timer controls ──────────────────────────────────────────────────────
   function toggleRun() {
-    if (secondsLeft === 0 && active) {
-      setSecondsLeft(active.minutes * 60);
-      setFinished(false);
-    }
-    setRunning((r) => !r);
+    if (!activeState) return;
+    if (secondsLeft <= 0) { secRef.current = activeState.minutes * 60; setSecondsLeft(secRef.current); setFinished(false); }
+    const willRun = !running;
+    setRunning(willRun);
+    if (willRun) startMusicFor(activeState.id);
+    else if (musicRef.current) musicRef.current.pause();
   }
-
   function reset() {
-    if (active) setSecondsLeft(active.minutes * 60);
+    if (!activeState) return;
+    secRef.current = activeState.minutes * 60;
+    setSecondsLeft(secRef.current);
     setRunning(false);
     setFinished(false);
+    stopMusic();
   }
-
   function adjust(deltaSeconds: number) {
-    setSecondsLeft((prev) => Math.max(0, prev + deltaSeconds));
+    secRef.current = Math.max(0, secRef.current + deltaSeconds);
+    setSecondsLeft(secRef.current);
     if (deltaSeconds > 0) setFinished(false);
   }
-
+  function next() {
+    stopMusic();
+    if (currentIndex + 1 < lineup.length) loadIndex(currentIndex + 1);
+    else { setRunning(false); setFinished(false); setCurrentIndex(-1); }
+  }
   function editMinutes(id: string, minutes: number) {
     const clamped = Math.max(1, Math.min(120, Math.round(minutes) || 1));
-    persist(states.map((s) => (s.id === id ? { ...s, minutes: clamped } : s)));
-    if (id === activeId && !running) setSecondsLeft(clamped * 60);
+    persistBank(bank.map((s) => (s.id === id ? { ...s, minutes: clamped } : s)));
+    if (activeState && id === activeState.id && !running) {
+      secRef.current = clamped * 60; setSecondsLeft(clamped * 60);
+    }
+  }
+
+  // ── Sound upload ────────────────────────────────────────────────────────
+  async function uploadSound(key: string, file: File | undefined) {
+    if (!file) return;
+    await idbPut(key, file);
+    setSoundUrls((prev) => {
+      if (prev[key]) URL.revokeObjectURL(prev[key]);
+      return { ...prev, [key]: URL.createObjectURL(file) };
+    });
+  }
+  async function clearSound(key: string) {
+    await idbDel(key);
+    setSoundUrls((prev) => {
+      if (prev[key]) URL.revokeObjectURL(prev[key]);
+      const n = { ...prev }; delete n[key]; return n;
+    });
   }
 
   function toggleFullscreen() {
@@ -155,181 +319,176 @@ export default function ControlPage() {
     else document.exitFullscreen?.();
   }
 
-  // Spacebar = start/pause
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.code === "Space" && active && !editing) {
-        e.preventDefault();
-        toggleRun();
-      }
+      if (e.code === "Space" && activeState && !editing && !showSounds) { e.preventDefault(); toggleRun(); }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, editing, secondsLeft, running]);
+  }, [activeState, editing, showSounds, secondsLeft, running]);
 
-  const accent = active?.color ?? "#4e6ef2";
-  const low = active && secondsLeft <= 30 && secondsLeft > 0;
+  const accent = activeState?.color ?? "#4e6ef2";
+  const inFinal10 = running && secondsLeft <= 10 && secondsLeft > 0;
+  const overBudget = totalMin > PERIOD_MIN;
 
   return (
     <>
       <style>{`
-        .ctrl-root {
-          min-height: 100vh;
-          background: ${finished ? "#2a0d0d" : "#0b0d14"};
-          color: #fff;
-          font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-          display: grid;
-          grid-template-rows: auto 1fr auto;
-          transition: background 300ms ease;
-        }
-        .ctrl-topbar {
-          display: flex; align-items: center; justify-content: space-between;
-          padding: 16px 28px; border-bottom: 1px solid #1f2332;
-        }
-        .ctrl-wordmark {
-          font-size: 0.78rem; font-weight: 900; letter-spacing: 0.14em;
-          text-transform: uppercase; color: ${accent}; margin: 0;
-          transition: color 300ms ease;
-        }
-        .ctrl-topbtns { display: flex; gap: 8px; }
-        .ctrl-smallbtn {
-          font-size: 0.78rem; font-weight: 800; letter-spacing: 0.05em;
-          text-transform: uppercase; color: #8a93ad; background: transparent;
-          border: 1px solid #1f2332; border-radius: 7px; padding: 7px 13px;
-          cursor: pointer; text-decoration: none; transition: all 140ms ease;
-        }
-        .ctrl-smallbtn:hover { border-color: ${accent}; color: #fff; }
+        .cx-root { min-height:100vh; background:${finished ? "#2a0d0d" : warnFlash ? "#1a1c0d" : "#0b0d14"}; color:#fff; font-family:Inter,ui-sans-serif,system-ui,sans-serif; display:grid; grid-template-rows:auto 1fr auto auto; transition:background 300ms ease; }
+        .cx-top { display:flex; align-items:center; justify-content:space-between; padding:14px 26px; border-bottom:1px solid #1f2332; flex-wrap:wrap; gap:8px; }
+        .cx-mark { font-size:0.76rem; font-weight:900; letter-spacing:0.14em; text-transform:uppercase; color:${accent}; margin:0; transition:color 300ms ease; }
+        .cx-tbtns { display:flex; gap:8px; flex-wrap:wrap; }
+        .cx-sbtn { font-size:0.76rem; font-weight:800; letter-spacing:0.05em; text-transform:uppercase; color:#8a93ad; background:transparent; border:1px solid #1f2332; border-radius:7px; padding:7px 12px; cursor:pointer; text-decoration:none; transition:all 140ms ease; }
+        .cx-sbtn:hover { border-color:${accent}; color:#fff; }
 
-        .ctrl-main {
-          display: grid; align-content: center; justify-items: center;
-          gap: 22px; padding: 24px;
-        }
-        .ctrl-state-name {
-          font-size: clamp(1.2rem, 3.5vw, 2.2rem); font-weight: 900;
-          letter-spacing: 0.02em; color: ${accent}; text-align: center;
-          transition: color 300ms ease; min-height: 1.2em;
-        }
-        .ctrl-clock {
-          font-variant-numeric: tabular-nums;
-          font-size: clamp(5rem, 22vw, 16rem); font-weight: 900;
-          line-height: 0.95; letter-spacing: -0.02em;
-          color: ${low ? "#fbbf24" : finished ? "#ef4444" : "#fff"};
-          animation: ${finished ? "ctrlFlash 0.8s steps(1) infinite" : low ? "ctrlPulse 1s ease-in-out infinite" : "none"};
-        }
-        @keyframes ctrlFlash { 50% { opacity: 0.25; } }
-        @keyframes ctrlPulse { 50% { opacity: 0.6; } }
-        .ctrl-finished-note {
-          font-size: 1.1rem; font-weight: 800; color: #ef4444;
-          text-transform: uppercase; letter-spacing: 0.1em; min-height: 1.2em;
-        }
-        .ctrl-idle-note {
-          color: #3a4460; font-size: 1.1rem; font-weight: 700; text-align: center;
-          max-width: 420px;
-        }
+        .cx-main { display:grid; align-content:center; justify-items:center; gap:18px; padding:18px; text-align:center; }
+        .cx-state { font-size:clamp(1.2rem,3.5vw,2.2rem); font-weight:900; color:${accent}; min-height:1.2em; transition:color 300ms ease; }
+        .cx-pos { font-size:0.8rem; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:#5a6280; }
+        .cx-clock { font-variant-numeric:tabular-nums; font-weight:900; line-height:0.9; letter-spacing:-0.02em;
+          font-size:${inFinal10 ? "clamp(9rem,40vw,28rem)" : "clamp(5rem,20vw,15rem)"};
+          color:${inFinal10 ? "#fbbf24" : finished ? "#ef4444" : "#fff"};
+          animation:${finished ? "cxFlash 0.7s steps(1) infinite" : inFinal10 ? "cxPulse 1s ease-in-out infinite" : "none"}; }
+        @keyframes cxFlash { 50%{opacity:0.18;} }
+        @keyframes cxPulse { 50%{opacity:0.55; transform:scale(1.04);} }
+        .cx-note { font-size:1.1rem; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; min-height:1.3em; }
+        .cx-warn { color:#facc15; } .cx-fin { color:#ef4444; } .cx-idle { color:#3a4460; font-weight:700; max-width:440px; text-transform:none; letter-spacing:0; }
 
-        .ctrl-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
-        .ctrl-btn {
-          font-size: 1rem; font-weight: 900; letter-spacing: 0.03em;
-          border-radius: 11px; padding: 14px 26px; cursor: pointer;
-          border: 1px solid #2a3045; background: #161a28; color: #fff;
-          transition: transform 120ms ease, background 140ms ease, border-color 140ms ease;
-        }
-        .ctrl-btn:hover { transform: translateY(-1px); border-color: ${accent}; }
-        .ctrl-btn.primary { background: ${accent}; border-color: ${accent}; }
-        .ctrl-btn.primary:hover { filter: brightness(1.08); }
-        .ctrl-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+        .cx-actions { display:flex; flex-wrap:wrap; gap:9px; justify-content:center; }
+        .cx-btn { font-size:1rem; font-weight:900; border-radius:11px; padding:13px 24px; cursor:pointer; border:1px solid #2a3045; background:#161a28; color:#fff; transition:transform 120ms ease, border-color 140ms ease, filter 140ms; }
+        .cx-btn:hover { transform:translateY(-1px); border-color:${accent}; }
+        .cx-btn.pri { background:${accent}; border-color:${accent}; } .cx-btn.pri:hover { filter:brightness(1.08); }
+        .cx-btn.next { background:#22c55e; border-color:#22c55e; }
+        .cx-btn:disabled { opacity:0.32; cursor:not-allowed; transform:none; }
 
-        .ctrl-states {
-          display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
-          padding: 16px 24px 26px; border-top: 1px solid #1f2332;
-        }
-        .ctrl-chip {
-          display: inline-flex; align-items: center; gap: 9px;
-          background: #121520; border: 1px solid #1f2332; border-radius: 999px;
-          padding: 9px 16px; cursor: pointer; transition: all 140ms ease;
-          font-weight: 800; font-size: 0.92rem; color: #c8cedd;
-        }
-        .ctrl-chip:hover { border-color: #3a4460; }
-        .ctrl-chip.active { background: rgba(255,255,255,0.04); }
-        .ctrl-dot { width: 11px; height: 11px; border-radius: 50%; flex: none; }
-        .ctrl-chip-min {
-          font-size: 0.78rem; font-weight: 800; color: #5a6280;
-          background: #0b0d14; border-radius: 6px; padding: 2px 7px;
-        }
-        .ctrl-min-input {
-          width: 46px; background: #0b0d14; border: 1px solid #2a3045;
-          color: #fff; border-radius: 6px; padding: 3px 6px; font-weight: 800;
-          font-size: 0.82rem; text-align: center;
-        }
-        .ctrl-edit-hint { color: #5a6280; font-size: 0.8rem; font-weight: 700; }
+        .cx-lineup { border-top:1px solid #1f2332; padding:12px 20px; display:flex; gap:8px; align-items:center; overflow-x:auto; }
+        .cx-lineup-title { font-size:0.72rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; color:#5a6280; flex:none; margin-right:4px; }
+        .cx-budget { flex:none; font-size:0.78rem; font-weight:900; padding:4px 10px; border-radius:999px; margin-left:auto; background:${overBudget ? "rgba(239,68,68,0.15)" : "rgba(34,197,94,0.12)"}; color:${overBudget ? "#fca5a5" : "#86efac"}; border:1px solid ${overBudget ? "rgba(239,68,68,0.4)" : "rgba(34,197,94,0.3)"}; }
+        .cx-litem { flex:none; display:flex; align-items:center; gap:7px; background:#121520; border:1px solid #1f2332; border-radius:10px; padding:7px 10px; cursor:pointer; }
+        .cx-litem.cur { border-color:#fff; background:rgba(255,255,255,0.05); }
+        .cx-litem .dot { width:9px; height:9px; border-radius:50%; flex:none; }
+        .cx-litem .lbl { font-size:0.82rem; font-weight:800; color:#c8cedd; white-space:nowrap; }
+        .cx-litem .mins { font-size:0.72rem; font-weight:800; color:#5a6280; }
+        .cx-ibtn { background:#0b0d14; border:1px solid #2a3045; color:#8a93ad; border-radius:6px; width:22px; height:22px; cursor:pointer; font-weight:900; line-height:1; }
+        .cx-ibtn:hover { color:#fff; }
+        .cx-empty-line { color:#3a4460; font-size:0.86rem; font-weight:700; }
+
+        .cx-bank { border-top:1px solid #1f2332; padding:12px 20px 22px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+        .cx-bank-title { width:100%; font-size:0.72rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; color:#5a6280; margin:0 0 2px; }
+        .cx-chip { display:inline-flex; align-items:center; gap:9px; background:#121520; border:1px solid #1f2332; border-radius:999px; padding:8px 14px; cursor:pointer; font-weight:800; font-size:0.9rem; color:#c8cedd; transition:border-color 140ms ease; }
+        .cx-chip:hover { border-color:#3a4460; }
+        .cx-chip .dot { width:11px; height:11px; border-radius:50%; flex:none; }
+        .cx-chip .m { font-size:0.74rem; font-weight:800; color:#5a6280; background:#0b0d14; border-radius:6px; padding:2px 6px; }
+        .cx-min-in { width:44px; background:#0b0d14; border:1px solid #2a3045; color:#fff; border-radius:6px; padding:3px 5px; font-weight:800; font-size:0.8rem; text-align:center; }
+        .cx-music-tag { font-size:0.66rem; font-weight:900; color:#facc15; }
+
+        .cx-sounds { border-top:1px solid #1f2332; padding:16px 22px 22px; display:grid; gap:12px; background:#0d1018; }
+        .cx-sounds h3 { margin:0; font-size:0.8rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; color:#8a93ad; }
+        .cx-srow { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+        .cx-slabel { font-size:0.9rem; font-weight:800; color:#c8cedd; min-width:220px; }
+        .cx-supload { font-size:0.8rem; font-weight:800; color:#8ba0f8; background:rgba(78,110,242,0.1); border:1px solid rgba(78,110,242,0.3); border-radius:8px; padding:7px 12px; cursor:pointer; }
+        .cx-sset { font-size:0.78rem; font-weight:800; color:#86efac; }
+        .cx-sclear { font-size:0.74rem; font-weight:800; color:#fca5a5; background:transparent; border:1px solid rgba(239,68,68,0.3); border-radius:6px; padding:5px 9px; cursor:pointer; }
+        .cx-hint { color:#5a6280; font-size:0.82rem; font-weight:600; }
       `}</style>
 
-      <div className="ctrl-root">
-        <header className="ctrl-topbar">
-          <p className="ctrl-wordmark">Big Dog Math — Classroom</p>
-          <div className="ctrl-topbtns">
-            <button className="ctrl-smallbtn" onClick={() => setEditing((e) => !e)}>
-              {editing ? "Done editing" : "Edit times"}
-            </button>
-            <button className="ctrl-smallbtn" onClick={toggleFullscreen}>Fullscreen</button>
-            <a className="ctrl-smallbtn" href="/">Home</a>
+      <div className="cx-root">
+        <header className="cx-top">
+          <p className="cx-mark">Big Dog Math — Classroom</p>
+          <div className="cx-tbtns">
+            <button className="cx-sbtn" onClick={() => setShowSounds((v) => !v)}>{showSounds ? "Close sounds" : "Sounds"}</button>
+            <button className="cx-sbtn" onClick={() => setEditing((v) => !v)}>{editing ? "Done editing" : "Edit times"}</button>
+            <button className="cx-sbtn" onClick={toggleFullscreen}>Fullscreen</button>
+            <a className="cx-sbtn" href="/">Home</a>
           </div>
         </header>
 
-        <main className="ctrl-main">
-          <div className="ctrl-state-name">{active ? active.label : ""}</div>
-
-          {active ? (
+        <main className="cx-main">
+          {activeState ? (
             <>
-              <div className="ctrl-clock">{fmt(secondsLeft)}</div>
-              <div className="ctrl-finished-note">{finished ? "⏰ Time's up!" : ""}</div>
-
-              <div className="ctrl-actions">
-                <button className="ctrl-btn primary" onClick={toggleRun}>
-                  {running ? "⏸ Pause" : secondsLeft === 0 ? "↻ Restart" : "▶ Start"}
-                </button>
-                <button className="ctrl-btn" onClick={reset}>Reset</button>
-                <button className="ctrl-btn" onClick={() => adjust(60)}>+1 min</button>
-                <button className="ctrl-btn" onClick={() => adjust(-60)} disabled={secondsLeft < 60}>−1 min</button>
-                <button className="ctrl-btn" onClick={() => adjust(30)}>+30s</button>
+              <div className="cx-pos">Step {currentIndex + 1} of {lineup.length}</div>
+              <div className="cx-state">{activeState.label}</div>
+              <div className="cx-clock">{inFinal10 ? secondsLeft : fmt(secondsLeft)}</div>
+              <div className={`cx-note ${finished ? "cx-fin" : warnFlash ? "cx-warn" : ""}`}>
+                {finished ? "⏰ Time's up — tap Next" : warnFlash ? "30 seconds!" : ""}
+              </div>
+              <div className="cx-actions">
+                <button className="cx-btn pri" onClick={toggleRun}>{running ? "⏸ Pause" : secondsLeft <= 0 ? "↻ Restart" : "▶ Start"}</button>
+                <button className="cx-btn" onClick={reset}>Reset</button>
+                <button className="cx-btn" onClick={() => adjust(60)}>+1 min</button>
+                <button className="cx-btn" onClick={() => adjust(-60)} disabled={secondsLeft < 60}>−1 min</button>
+                <button className="cx-btn" onClick={() => adjust(30)}>+30s</button>
+                <button className="cx-btn next" onClick={next} disabled={currentIndex + 1 >= lineup.length}>Next ▶</button>
               </div>
             </>
           ) : (
-            <p className="ctrl-idle-note">
-              Pick a classroom state below to start a timer. Tap “Edit times” to set
-              your own default minutes for each — they’ll be remembered on this computer.
+            <p className="cx-note cx-idle">
+              Build today&apos;s lineup: tap states in the bank below to add them, then tap a
+              step in your lineup to load its timer. Hit “Sounds” to upload your warm-up
+              music and cue sounds.
             </p>
           )}
         </main>
 
-        <section className="ctrl-states">
-          {editing && (
-            <p className="ctrl-edit-hint" style={{ width: "100%", textAlign: "center", marginTop: 0 }}>
-              Set the default minutes for each state, then tap “Done editing.”
-            </p>
-          )}
-          {states.map((s) => (
-            <div
-              key={s.id}
-              className={`ctrl-chip${s.id === activeId ? " active" : ""}`}
-              onClick={() => !editing && selectState(s)}
-              style={s.id === activeId ? { borderColor: s.color } : undefined}
-            >
-              <span className="ctrl-dot" style={{ background: s.color }} />
+        {/* Lineup */}
+        <section className="cx-lineup">
+          <span className="cx-lineup-title">Today</span>
+          {lineup.length === 0 && <span className="cx-empty-line">empty — add states from the bank ↓</span>}
+          {lineup.map((it, i) => {
+            const st = bank.find((s) => s.id === it.stateId);
+            if (!st) return null;
+            return (
+              <div key={it.uid} className={`cx-litem${i === currentIndex ? " cur" : ""}`} onClick={() => loadIndex(i)}>
+                <span className="dot" style={{ background: st.color }} />
+                <span className="lbl">{st.label}</span>
+                <span className="mins">{st.minutes}m</span>
+                <button className="cx-ibtn" onClick={(e) => { e.stopPropagation(); moveItem(it.uid, -1); }} title="Move left">‹</button>
+                <button className="cx-ibtn" onClick={(e) => { e.stopPropagation(); moveItem(it.uid, 1); }} title="Move right">›</button>
+                <button className="cx-ibtn" onClick={(e) => { e.stopPropagation(); removeFromLineup(it.uid); }} title="Remove">×</button>
+              </div>
+            );
+          })}
+          <span className="cx-budget">{totalMin} / {PERIOD_MIN} min{overBudget ? " ⚠ over" : ""}</span>
+        </section>
+
+        {/* Sound setup */}
+        {showSounds && (
+          <section className="cx-sounds">
+            <h3>Sound setup — upload from your sound bank (remembered on this computer)</h3>
+            {(["music", "warn30", "tick", "end"] as CueKey[]).map((key) => {
+              const storageKey = key === "music" ? "music:warmup" : key;
+              const has = !!soundUrls[storageKey];
+              return (
+                <div className="cx-srow" key={key}>
+                  <span className="cx-slabel">{CUE_LABELS[key]}</span>
+                  <label className="cx-supload">
+                    {has ? "Replace file" : "Upload file"}
+                    <input type="file" accept="audio/*" style={{ display: "none" }}
+                      onChange={(e) => uploadSound(storageKey, e.target.files?.[0])} />
+                  </label>
+                  {has && <span className="cx-sset">✓ loaded</span>}
+                  {has && <button className="cx-sclear" onClick={() => clearSound(storageKey)}>Remove</button>}
+                  {!has && <span className="cx-hint">no file — uses built-in beep</span>}
+                </div>
+              );
+            })}
+            <p className="cx-hint">Warm-up music plays &amp; loops while the Warm-Up step is running, and stops at zero. Tip: keep your Stream Deck too — both can work together.</p>
+          </section>
+        )}
+
+        {/* Bank */}
+        <section className="cx-bank">
+          <p className="cx-bank-title">Bank — tap to add to today&apos;s lineup{editing ? " · set default minutes" : ""}</p>
+          {bank.map((s) => (
+            <div key={s.id} className="cx-chip" onClick={() => !editing && addToLineup(s.id)} style={editing ? { cursor: "default" } : undefined}>
+              <span className="dot" style={{ background: s.color }} />
               {s.label}
+              {soundUrls[`music:${s.id}`] && <span className="cx-music-tag">♪</span>}
               {editing ? (
-                <input
-                  className="ctrl-min-input"
-                  type="number"
-                  min={1}
-                  max={120}
-                  value={s.minutes}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => editMinutes(s.id, Number(e.target.value))}
-                />
+                <input className="cx-min-in" type="number" min={1} max={120} value={s.minutes}
+                  onClick={(e) => e.stopPropagation()} onChange={(e) => editMinutes(s.id, Number(e.target.value))} />
               ) : (
-                <span className="ctrl-chip-min">{s.minutes}m</span>
+                <span className="m">{s.minutes}m</span>
               )}
             </div>
           ))}
