@@ -184,6 +184,8 @@ export default function EquationBuilder() {
           cells.push(<div className="gc eq" key={`o${i}q`} />);
           cells.push(<div className="gc right" key={`o${i}r`}>{underChip(`÷ ${op.val}`)}</div>);
         }
+        // horizontal line between the operation and the result below it
+        cells.push(<div className="gc hr" key={`o${i}hr`} />);
       }
     });
     return cells;
@@ -226,6 +228,8 @@ export default function EquationBuilder() {
         .gc.eq { justify-content:center; }
         .gc.right { justify-content:flex-start; }
         .gc.arrow { justify-content:flex-end; color:#22c55e; font-weight:900; font-size:1.7rem; }
+        .gc.hr { grid-column:1 / -1; height:0; border-top:3px solid #6b7392; margin:3px 0; transform-origin:center; animation:eqbLineIn 0.45s ease; }
+        @keyframes eqbLineIn { from{opacity:0; transform:scaleX(0.15);} to{opacity:1; transform:scaleX(1);} }
 
         .eqb-eqsign { font-size:clamp(1.8rem,5vw,2.8rem); font-weight:900; color:#8a93ad; }
         .eqb-chip { display:inline-flex; align-items:center; justify-content:center; font-weight:900; border-radius:11px; padding:10px 14px; font-size:clamp(1.3rem,3.6vw,2rem); min-width:48px; box-shadow:0 4px 12px -6px rgba(0,0,0,0.6); }
