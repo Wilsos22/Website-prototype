@@ -11,6 +11,8 @@
 //   this computer (stored in the browser). No upload = simple built-in beep.
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import StudentSpinner from "@/components/StudentSpinner";
+import DiscussionProtocol from "@/components/DiscussionProtocol";
 
 interface ClassState {
   id: string;
@@ -29,6 +31,7 @@ const DEFAULT_STATES: ClassState[] = [
   { id: "review", label: "Go Over / Review", minutes: 5, color: "#8b5cf6" },
   { id: "i-do", label: "Direct Instruction (I do)", minutes: 15, color: "#0ea5e9" },
   { id: "we-do", label: "Guided Practice (We do)", minutes: 10, color: "#14b8a6" },
+  { id: "discussion", label: "Discussion (Think–Pair–Share)", minutes: 3, color: "#06b6d4" },
   { id: "you-do", label: "Independent Practice (You do)", minutes: 15, color: "#22c55e" },
   { id: "manip", label: "Manipulatives / Hands-On", minutes: 10, color: "#f59e0b" },
   { id: "partner", label: "Partner / Group Work", minutes: 10, color: "#ec4899" },
@@ -109,6 +112,8 @@ export default function ControlPage() {
 
   const [editing, setEditing] = useState(false);
   const [showSounds, setShowSounds] = useState(false);
+  const [showSpinner, setShowSpinner] = useState(false);
+  const [showDiscussion, setShowDiscussion] = useState(false);
   const [soundUrls, setSoundUrls] = useState<Record<string, string>>({});
 
   const secRef = useRef(0);
@@ -336,6 +341,7 @@ export default function ControlPage() {
     <>
       <style>{`
         .cx-root { min-height:100vh; background:${finished ? "#2a0d0d" : warnFlash ? "#1a1c0d" : "#0b0d14"}; color:#fff; font-family:Inter,ui-sans-serif,system-ui,sans-serif; display:grid; grid-template-rows:auto 1fr auto auto; transition:background 300ms ease; }
+        .cx-overlay { position:fixed; inset:0; z-index:50; overflow:auto; background:#0b0d14; }
         .cx-top { display:flex; align-items:center; justify-content:space-between; padding:14px 26px; border-bottom:1px solid #1f2332; flex-wrap:wrap; gap:8px; }
         .cx-mark { font-size:0.76rem; font-weight:900; letter-spacing:0.14em; text-transform:uppercase; color:${accent}; margin:0; transition:color 300ms ease; }
         .cx-tbtns { display:flex; gap:8px; flex-wrap:wrap; }
@@ -396,6 +402,7 @@ export default function ControlPage() {
         <header className="cx-top">
           <p className="cx-mark">Big Dog Math — Classroom</p>
           <div className="cx-tbtns">
+            <button className="cx-sbtn" onClick={() => setShowSpinner(true)}>🎰 Spinner</button>
             <button className="cx-sbtn" onClick={() => setShowSounds((v) => !v)}>{showSounds ? "Close sounds" : "Sounds"}</button>
             <button className="cx-sbtn" onClick={() => setEditing((v) => !v)}>{editing ? "Done editing" : "Edit times"}</button>
             <button className="cx-sbtn" onClick={toggleFullscreen}>Fullscreen</button>
@@ -419,6 +426,12 @@ export default function ControlPage() {
                 <button className="cx-btn" onClick={() => adjust(-60)} disabled={secondsLeft < 60}>−1 min</button>
                 <button className="cx-btn" onClick={() => adjust(30)}>+30s</button>
                 <button className="cx-btn next" onClick={next} disabled={currentIndex + 1 >= lineup.length}>Next ▶</button>
+                {finished && activeState.id === "warmup" && (
+                  <button className="cx-btn" style={{ background: "#f59e0b", borderColor: "#f59e0b" }} onClick={() => setShowSpinner(true)}>🎰 Pick readers</button>
+                )}
+                {activeState.id === "discussion" && (
+                  <button className="cx-btn" style={{ background: "#06b6d4", borderColor: "#06b6d4" }} onClick={() => setShowDiscussion(true)}>▶ Run discussion</button>
+                )}
               </div>
             </>
           ) : (
@@ -454,25 +467,46 @@ export default function ControlPage() {
         {/* Sound setup */}
         {showSounds && (
           <section className="cx-sounds">
-            <h3>Sound setup — upload from your sound bank (remembered on this computer)</h3>
-            {(["music", "warn30", "tick", "end"] as CueKey[]).map((key) => {
-              const storageKey = key === "music" ? "music:warmup" : key;
-              const has = !!soundUrls[storageKey];
+            <h3>Cue sounds — used by every timer (remembered on this computer)</h3>
+            {(["warn30", "tick", "end"] as CueKey[]).map((key) => {
+              const has = !!soundUrls[key];
               return (
                 <div className="cx-srow" key={key}>
                   <span className="cx-slabel">{CUE_LABELS[key]}</span>
                   <label className="cx-supload">
                     {has ? "Replace file" : "Upload file"}
                     <input type="file" accept="audio/*" style={{ display: "none" }}
-                      onChange={(e) => uploadSound(storageKey, e.target.files?.[0])} />
+                      onChange={(e) => uploadSound(key, e.target.files?.[0])} />
                   </label>
                   {has && <span className="cx-sset">✓ loaded</span>}
-                  {has && <button className="cx-sclear" onClick={() => clearSound(storageKey)}>Remove</button>}
+                  {has && <button className="cx-sclear" onClick={() => clearSound(key)}>Remove</button>}
                   {!has && <span className="cx-hint">no file — uses built-in beep</span>}
                 </div>
               );
             })}
-            <p className="cx-hint">Warm-up music plays &amp; loops while the Warm-Up step is running, and stops at zero. Tip: keep your Stream Deck too — both can work together.</p>
+
+            <h3 style={{ marginTop: 6 }}>Music per state — loops while that state runs, stops at zero</h3>
+            {bank.map((s) => {
+              const storageKey = `music:${s.id}`;
+              const has = !!soundUrls[storageKey];
+              return (
+                <div className="cx-srow" key={s.id}>
+                  <span className="cx-slabel">
+                    <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: s.color, marginRight: 8 }} />
+                    {s.label}
+                  </span>
+                  <label className="cx-supload">
+                    {has ? "Replace music" : "Upload music"}
+                    <input type="file" accept="audio/*" style={{ display: "none" }}
+                      onChange={(e) => uploadSound(storageKey, e.target.files?.[0])} />
+                  </label>
+                  {has && <span className="cx-sset">♪ loaded</span>}
+                  {has && <button className="cx-sclear" onClick={() => clearSound(storageKey)}>Remove</button>}
+                  {!has && <span className="cx-hint">no music</span>}
+                </div>
+              );
+            })}
+            <p className="cx-hint">Tip: your Stream Deck still works alongside this — use either.</p>
           </section>
         )}
 
@@ -493,6 +527,13 @@ export default function ControlPage() {
             </div>
           ))}
         </section>
+
+        {showSpinner && (
+          <div className="cx-overlay"><StudentSpinner onClose={() => setShowSpinner(false)} /></div>
+        )}
+        {showDiscussion && (
+          <div className="cx-overlay"><DiscussionProtocol onClose={() => setShowDiscussion(false)} /></div>
+        )}
       </div>
     </>
   );
