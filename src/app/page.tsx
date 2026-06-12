@@ -14,6 +14,7 @@ const tools = [
   { href: "/group-bars", label: "Group Bars (% · dec · frac)", badge: "teacher" },
   { href: "/proportions", label: "Proportion Builder", badge: "teacher" },
   { href: "/number-line-plus", label: "Number Line (hops)", badge: "teacher" },
+  { href: "/percent-bar", label: "Percent Bar", badge: "teacher" },
   { href: "/fraction-bars", label: "Fraction Bars", badge: "teacher" },
   { href: "/number-line", label: "Number Line", badge: "teacher" },
   { href: "/timer", label: "Timer", badge: "teacher" },
