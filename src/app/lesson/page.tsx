@@ -11,6 +11,19 @@ import { getSupabase } from "@/lib/supabase";
 interface LessonData {
   title: string; subtitle: string; essentialIdeas: string;
   assignmentLink: string; date: string; dueDate: string; topic: string; module: string;
+  agenda?: string; supplies?: string; tools?: string; warmUpLink?: string; exitTicketLink?: string;
+}
+
+const TOOL_ROUTES: Record<string, string> = {
+  "whiteboard": "/whiteboard", "number line": "/number-line-plus", "fraction bars": "/fraction-bars",
+  "group bars": "/group-bars", "percent bar": "/percent-bar", "algebra tiles": "/algebra-tiles",
+  "equation builder": "/equation-builder", "gems": "/order-of-operations", "order of operations": "/order-of-operations",
+  "combine like terms": "/combine-like-terms", "proportions": "/proportions", "proportion builder": "/proportions", "timer": "/timer",
+};
+function lines(text?: string) { return (text || "").split(/[\n,]/).map((s) => s.trim()).filter(Boolean); }
+function parseTools(text?: string): { label: string; href: string }[] {
+  if (!text || !text.trim()) return DEFAULT_TOOLS;
+  return lines(text).map((name) => ({ label: name, href: TOOL_ROUTES[name.toLowerCase()] || "" }));
 }
 
 const DEFAULT_AGENDA = ["Warm-Up", "Mini-lesson & notes", "Practice with a partner", "Independent practice", "Exit Ticket"];
@@ -78,6 +91,11 @@ export default function LessonPage() {
     })();
   }, []);
 
+  const agendaItems = lesson?.agenda?.trim() ? lesson.agenda.split("\n").map((s) => s.trim()).filter(Boolean) : DEFAULT_AGENDA;
+  const supplyItems = lesson?.supplies?.trim() ? lines(lesson.supplies) : DEFAULT_SUPPLIES;
+  const toolItems = parseTools(lesson?.tools);
+  const exitHref = lesson?.exitTicketLink || lesson?.assignmentLink || "/join";
+
   return (
     <main className="ls-page">
       <style>{`
@@ -135,11 +153,18 @@ export default function LessonPage() {
           {lesson?.subtitle && <p className="ls-sub">{lesson.subtitle}</p>}
         </div>
 
+        {lesson?.warmUpLink && (
+          <section className="ls-card" style={{ borderColor: "#ffd2a8", background: "#fff7ed" }}>
+            <h2>Warm-Up</h2>
+            <a className="ls-assign" style={{ background: "#ff6b3d" }} href={lesson.warmUpLink} target="_blank" rel="noopener noreferrer">Start the warm-up ↗</a>
+          </section>
+        )}
+
         <section className="ls-card">
           <h2>Today&apos;s agenda</h2>
           <div className="ls-agenda">
-            {DEFAULT_AGENDA.map((a, i) => (
-              <div className="ls-arow" key={a}><span className="ls-num">{i + 1}</span>{a}</div>
+            {agendaItems.map((a, i) => (
+              <div className="ls-arow" key={i}><span className="ls-num">{i + 1}</span>{a}</div>
             ))}
           </div>
         </section>
@@ -153,13 +178,15 @@ export default function LessonPage() {
 
         <section className="ls-card">
           <h2>Supplies</h2>
-          <div className="ls-list">{DEFAULT_SUPPLIES.map((s) => <span className="ls-chip" key={s}>{s}</span>)}</div>
+          <div className="ls-list">{supplyItems.map((s, i) => <span className="ls-chip" key={i}>{s}</span>)}</div>
         </section>
 
         <section className="ls-card">
           <h2>Tools you&apos;ll need</h2>
           <div className="ls-list">
-            {DEFAULT_TOOLS.map((t) => <a className="ls-toolbtn" href={t.href} key={t.href}>{t.label} →</a>)}
+            {toolItems.map((t, i) => t.href
+              ? <a className="ls-toolbtn" href={t.href} key={i}>{t.label} →</a>
+              : <span className="ls-chip" key={i}>{t.label}</span>)}
           </div>
         </section>
 
@@ -174,7 +201,7 @@ export default function LessonPage() {
         <section className="ls-exit">
           <h2>Exit Ticket</h2>
           <p>Finish strong — complete your exit ticket before the timer ends.</p>
-          <a href={lesson?.assignmentLink || "/join"} target={lesson?.assignmentLink ? "_blank" : undefined} rel="noopener noreferrer">Start exit ticket →</a>
+          <a href={exitHref} target={exitHref.startsWith("http") ? "_blank" : undefined} rel="noopener noreferrer">Start exit ticket →</a>
         </section>
 
         {!loading && !lesson && <p className="ls-muted">No lesson published for today yet. Your teacher will add today&apos;s agenda in Notion.</p>}

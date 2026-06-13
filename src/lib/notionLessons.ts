@@ -16,6 +16,12 @@ export interface LessonData {
   dueDate: string;    // ISO date string
   topic: string;
   module: string;
+  // Optional agenda fields — add these columns in Notion to fill them; empty if absent.
+  agenda: string;        // text, one activity per line
+  supplies: string;      // text, comma- or line-separated
+  tools: string;         // text, tool names (comma- or line-separated)
+  warmUpLink: string;    // url to today's warm-up
+  exitTicketLink: string; // url to the exit ticket
 }
 
 interface RichTextItem {
@@ -58,6 +64,11 @@ function mapPage(page: NotionPage): LessonData {
     dueDate: extractText(p["Due Date"]),
     topic: extractText(p["Topic"]),
     module: extractText(p["Module #"]),
+    agenda: extractText(p["Agenda"]),
+    supplies: extractText(p["Supplies"]),
+    tools: extractText(p["Tools"]),
+    warmUpLink: extractText(p["Warm Up Link"]),
+    exitTicketLink: extractText(p["Exit Ticket Link"]),
   };
 }
 
