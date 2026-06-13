@@ -82,13 +82,9 @@ export default function HomePage() {
       <style>{`
         .hp-page { min-height:100vh; background:#17181c; padding:clamp(14px,3vw,40px); font-family:Inter,ui-sans-serif,system-ui,sans-serif; box-sizing:border-box; }
         .hp-panel { max-width:1080px; margin:0 auto; background:#fbf7ef; border-radius:30px; padding:clamp(24px,4vw,52px); box-shadow:0 30px 80px -30px rgba(0,0,0,0.6); }
-        .hp-brandrow { display:flex; justify-content:center; margin-bottom:clamp(20px,4vw,38px); }
-        .hp-pill { display:inline-flex; align-items:center; gap:10px; background:#1c1d22; color:#fff; border-radius:999px; padding:8px; }
-        .hp-logo { width:34px; height:34px; border-radius:9px; background:#ff6b3d; display:grid; place-items:center; font-weight:900; color:#fff; font-size:1.1rem; }
-        .hp-pill-name { font-weight:800; font-size:0.92rem; letter-spacing:0.01em; padding-right:14px; }
-        .hp-hero { text-align:center; margin-bottom:clamp(26px,5vw,46px); }
-        .hp-title { font-family:Georgia,"Times New Roman",serif; font-size:clamp(2.2rem,6vw,3.6rem); font-weight:700; color:#1c1d22; margin:0; line-height:1.05; }
-        .hp-sub { margin:10px 0 0; color:#7a7468; font-size:clamp(1rem,2.4vw,1.25rem); font-weight:500; }
+        .hp-banner { display:flex; justify-content:center; margin-bottom:14px; }
+        .hp-banner img { width:100%; max-width:680px; height:auto; border-radius:22px; display:block; box-shadow:0 14px 30px -16px rgba(255,107,61,0.6); }
+        .hp-sub { text-align:center; margin:0 0 clamp(26px,5vw,44px); color:#7a7468; font-size:clamp(1rem,2.4vw,1.25rem); font-weight:600; }
 
         .hp-section { margin-bottom:clamp(22px,4vw,38px); }
         .hp-section-title { font-size:0.72rem; font-weight:900; letter-spacing:0.14em; text-transform:uppercase; color:#a89f8c; margin:0 0 14px; }
@@ -104,17 +100,11 @@ export default function HomePage() {
       `}</style>
 
       <div className="hp-panel">
-        <div className="hp-brandrow">
-          <div className="hp-pill">
-            <span className="hp-logo">B</span>
-            <span className="hp-pill-name">Big Dog Math</span>
-          </div>
+        <div className="hp-banner">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/big-dog-logo.png" alt="Big Dog Math — Abbie" />
         </div>
-
-        <div className="hp-hero">
-          <h1 className="hp-title">Big Dog Math</h1>
-          <p className="hp-sub">Pick a tool to get started.</p>
-        </div>
+        <p className="hp-sub">Pick a tool to get started.</p>
 
         {SECTIONS.map((sec) => (
           <section className="hp-section" key={sec.title}>
