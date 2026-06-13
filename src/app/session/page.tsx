@@ -8,6 +8,7 @@ import { getSupabase } from "@/lib/supabase";
 
 interface Period { id: string; name: string; }
 interface Join { id: string; display_name: string | null; joined_at: string; }
+interface Answer { id: string; display_name: string | null; answer: string | null; }
 
 function makeCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -25,6 +26,13 @@ export default function SessionPage() {
   const [rosterCount, setRosterCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const [question, setQuestion] = useState("");
+  const [mc, setMc] = useState(false);
+  const [choices, setChoices] = useState(["", "", "", ""]);
+  const [poll, setPoll] = useState<{ id: string; question: string; choices: string[] | null } | null>(null);
+  const [answers, setAnswers] = useState<Answer[]>([]);
+  const ansRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (!supabase) return;
@@ -62,8 +70,34 @@ export default function SessionPage() {
   async function end() {
     if (!supabase || !session) return;
     await supabase.from("sessions").update({ status: "closed", ended_at: new Date().toISOString() }).eq("id", session.id);
-    setSession(null); setJoins([]);
+    setSession(null); setJoins([]); setPoll(null); setAnswers([]);
   }
+
+  async function pushPoll() {
+    if (!supabase || !session || !question.trim()) return;
+    setError(null);
+    const ch = mc ? choices.map((c) => c.trim()).filter(Boolean) : null;
+    const { data, error } = await supabase.from("polls").insert({ session_id: session.id, question: question.trim(), choices: ch, status: "open" }).select("id").single();
+    if (error) { setError(error.message); return; }
+    setPoll({ id: (data as { id: string }).id, question: question.trim(), choices: ch && ch.length ? ch : null });
+    setAnswers([]);
+  }
+  async function closePoll() {
+    if (!supabase || !poll) return;
+    await supabase.from("polls").update({ status: "closed" }).eq("id", poll.id);
+    setPoll(null); setAnswers([]); setQuestion(""); setMc(false); setChoices(["", "", "", ""]);
+  }
+
+  useEffect(() => {
+    if (!poll || !supabase) return;
+    const fetchA = async () => {
+      const { data } = await supabase.from("poll_answers").select("id,display_name,answer").eq("poll_id", poll.id).order("created_at");
+      setAnswers((data as Answer[]) || []);
+    };
+    fetchA();
+    ansRef.current = setInterval(fetchA, 3000);
+    return () => { if (ansRef.current) clearInterval(ansRef.current); };
+  }, [poll, supabase]);
 
   return (
     <main className="se-page">
@@ -89,6 +123,15 @@ export default function SessionPage() {
         .se-empty { color:#b3aa97; font-weight:600; }
         .se-warn { background:#fff7e6; border:1px solid #ffe2a8; color:#92660a; border-radius:14px; padding:16px 18px; font-weight:700; line-height:1.6; }
         .se-err { background:#fdecea; border:1px solid #f5c6c0; color:#b91c1c; border-radius:12px; padding:12px 16px; font-weight:700; }
+        .se-qh { margin:0 0 12px; font-size:1.1rem; font-weight:900; color:#2a2a2e; }
+        .se-qin { width:100%; min-height:66px; border:2px solid #e7dec9; border-radius:12px; padding:12px 14px; font-size:1.05rem; font-weight:700; color:#2a2a2e; background:#fbf7ef; resize:vertical; box-sizing:border-box; }
+        .se-mc { display:flex; align-items:center; gap:8px; font-weight:800; color:#5a5346; margin:12px 0; font-size:0.95rem; }
+        .se-choices { display:grid; gap:8px; margin-bottom:12px; }
+        .se-choice { border:2px solid #e7dec9; border-radius:11px; padding:10px 13px; font-weight:700; color:#2a2a2e; background:#fbf7ef; }
+        .se-tally { display:grid; gap:12px; margin-top:14px; }
+        .se-tallylabel { font-weight:800; color:#2a2a2e; margin-bottom:5px; }
+        .se-bar { height:16px; background:#f0ece1; border-radius:999px; overflow:hidden; }
+        .se-barfill { height:100%; background:#14b8a6; border-radius:999px; transition:width 400ms ease; }
       `}</style>
 
       <header className="se-top">
@@ -127,6 +170,51 @@ export default function SessionPage() {
               {joins.length === 0 ? <span className="se-empty">Waiting for students to join…</span>
                 : <div className="se-joins">{joins.map((j) => <span className="se-chip" key={j.id}>{j.display_name || "Student"}</span>)}</div>}
             </div>
+
+            {!poll ? (
+              <div className="se-card">
+                <h3 className="se-qh">Ask a question</h3>
+                <textarea className="se-qin" value={question} placeholder="Type your question…" onChange={(e) => setQuestion(e.target.value)} />
+                <label className="se-mc"><input type="checkbox" checked={mc} onChange={(e) => setMc(e.target.checked)} /> Multiple choice</label>
+                {mc && (
+                  <div className="se-choices">
+                    {choices.map((c, i) => (
+                      <input key={i} className="se-choice" value={c} placeholder={`Choice ${i + 1}`}
+                        onChange={(e) => setChoices((cs) => cs.map((x, j) => (j === i ? e.target.value : x)))} />
+                    ))}
+                  </div>
+                )}
+                <button className="se-start" onClick={pushPoll} disabled={!question.trim()}>Push to class →</button>
+              </div>
+            ) : (
+              <div className="se-card">
+                <div className="se-row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <h3 className="se-qh" style={{ margin: 0 }}>{poll.question}</h3>
+                  <button className="se-end" onClick={closePoll}>Close question</button>
+                </div>
+                <div className="se-count" style={{ marginTop: 12 }}>Answers: {answers.length}</div>
+                {poll.choices ? (
+                  <div className="se-tally">
+                    {poll.choices.map((ch) => {
+                      const n = answers.filter((a) => a.answer === ch).length;
+                      const pct = answers.length ? Math.round((n / answers.length) * 100) : 0;
+                      return (
+                        <div className="se-tallyrow" key={ch}>
+                          <div className="se-tallylabel">{ch} · {n}</div>
+                          <div className="se-bar"><div className="se-barfill" style={{ width: `${pct}%` }} /></div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : answers.length === 0 ? (
+                  <span className="se-empty">Waiting for answers…</span>
+                ) : (
+                  <div className="se-joins">
+                    {answers.map((a) => <span className="se-chip" key={a.id} style={{ background: "#eef6ff", borderColor: "#d7e6fb", color: "#1d4ed8" }}>{a.display_name || "Student"}: {a.answer}</span>)}
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
       </div>

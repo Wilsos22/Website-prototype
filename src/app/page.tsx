@@ -62,7 +62,10 @@ export default function StudentHome() {
     if (supabase && joinSess) {
       await supabase.from("session_joins").insert({ session_id: joinSess.id, student_id: s.id, display_name: s.full_name });
     }
-    try { localStorage.setItem("bdm-student-name", s.full_name); } catch { /* ignore */ }
+    try {
+      localStorage.setItem("bdm-student-name", s.full_name);
+      if (joinSess) localStorage.setItem("bdm-student-session", JSON.stringify({ sessionId: joinSess.id, studentId: s.id, name: s.full_name }));
+    } catch { /* ignore */ }
     setJoinSess(null); setRoster([]); setCode(""); save(2);
   }
 

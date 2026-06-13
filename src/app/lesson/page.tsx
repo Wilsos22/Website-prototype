@@ -6,6 +6,7 @@
 // bottom. Fields not yet in Notion show sensible defaults the teacher can wire up.
 
 import { useEffect, useState } from "react";
+import { getSupabase } from "@/lib/supabase";
 
 interface LessonData {
   title: string; subtitle: string; essentialIdeas: string;
@@ -31,10 +32,41 @@ export default function LessonPage() {
   const [date, setDate] = useState("");
   const [loading, setLoading] = useState(true);
   const [firstName, setFirstName] = useState("");
+  const supabase = getSupabase();
+  const [sess, setSess] = useState<{ sessionId: string; studentId: string; name: string } | null>(null);
+  const [activePoll, setActivePoll] = useState<{ id: string; question: string; choices: string[] | null } | null>(null);
+  const [answered, setAnswered] = useState<string[]>([]);
+  const [answerText, setAnswerText] = useState("");
+  const [sent, setSent] = useState(false);
 
   useEffect(() => {
-    try { const n = localStorage.getItem("bdm-student-name"); if (n) setFirstName(n.trim().split(/\s+/)[0]); } catch { /* ignore */ }
+    try {
+      const n = localStorage.getItem("bdm-student-name"); if (n) setFirstName(n.trim().split(/\s+/)[0]);
+      const s = localStorage.getItem("bdm-student-session"); if (s) setSess(JSON.parse(s));
+    } catch { /* ignore */ }
   }, []);
+
+  useEffect(() => {
+    if (!sess || !supabase) return;
+    let stop = false;
+    const tick = async () => {
+      const { data } = await supabase.from("polls").select("id,question,choices")
+        .eq("session_id", sess.sessionId).eq("status", "open").order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (stop) return;
+      const p = data as { id: string; question: string; choices: string[] | null } | null;
+      if (p && !answered.includes(p.id)) { setActivePoll(p); setSent(false); } else setActivePoll(null);
+    };
+    tick();
+    const id = setInterval(tick, 4000);
+    return () => { stop = true; clearInterval(id); };
+  }, [sess, supabase, answered]);
+
+  async function submitPoll(ans: string) {
+    if (!supabase || !activePoll || !sess || !ans.trim()) return;
+    await supabase.from("poll_answers").insert({ poll_id: activePoll.id, student_id: sess.studentId, display_name: sess.name, answer: ans.trim() });
+    setAnswered((a) => [...a, activePoll.id]); setSent(true); setAnswerText("");
+    setTimeout(() => setActivePoll(null), 1300);
+  }
 
   useEffect(() => {
     (async () => {
@@ -78,6 +110,16 @@ export default function LessonPage() {
         .ls-exit p { color:#7a5c5a; font-weight:600; margin:0 0 14px; }
         .ls-exit a { display:inline-flex; align-items:center; gap:8px; background:#ef4444; color:#fff; border-radius:12px; padding:13px 26px; font-weight:900; text-decoration:none; }
         .ls-muted { color:#b3aa97; font-weight:600; font-size:0.9rem; text-align:center; padding:20px; }
+        .ls-poll-overlay { position:fixed; inset:0; background:rgba(28,29,34,0.62); display:grid; place-items:center; z-index:60; padding:20px; }
+        .ls-poll-card { background:#fff; border-radius:24px; padding:30px 26px; max-width:520px; width:100%; box-shadow:0 30px 80px -20px #000; text-align:center; }
+        .ls-poll-q { font-size:clamp(1.4rem,4vw,2rem); font-weight:900; color:#1c1d22; margin-bottom:20px; line-height:1.2; }
+        .ls-poll-choices { display:grid; gap:12px; }
+        .ls-poll-choice { background:#eef6ff; border:2px solid #d7e6fb; color:#1d4ed8; border-radius:14px; padding:16px; font-size:1.15rem; font-weight:900; cursor:pointer; }
+        .ls-poll-choice:hover { border-color:#4d8df6; }
+        .ls-poll-open { display:flex; gap:8px; }
+        .ls-poll-in { flex:1; border:2px solid #d7e6fb; border-radius:12px; padding:13px 15px; font-size:1.1rem; font-weight:700; box-sizing:border-box; }
+        .ls-poll-send { background:#4d8df6; color:#fff; border:none; border-radius:12px; padding:0 22px; font-weight:900; cursor:pointer; }
+        .ls-poll-sent { font-size:1.6rem; font-weight:900; color:#22c55e; }
       `}</style>
 
       <header className="ls-top">
@@ -137,6 +179,29 @@ export default function LessonPage() {
 
         {!loading && !lesson && <p className="ls-muted">No lesson published for today yet. Your teacher will add today&apos;s agenda in Notion.</p>}
       </div>
+
+      {activePoll && (
+        <div className="ls-poll-overlay">
+          <div className="ls-poll-card">
+            {sent ? <div className="ls-poll-sent">✓ Answer sent!</div> : (
+              <>
+                <div className="ls-poll-q">{activePoll.question}</div>
+                {activePoll.choices ? (
+                  <div className="ls-poll-choices">
+                    {activePoll.choices.map((c) => <button key={c} className="ls-poll-choice" onClick={() => submitPoll(c)}>{c}</button>)}
+                  </div>
+                ) : (
+                  <div className="ls-poll-open">
+                    <input className="ls-poll-in" value={answerText} placeholder="Your answer" autoFocus
+                      onChange={(e) => setAnswerText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submitPoll(answerText); }} />
+                    <button className="ls-poll-send" onClick={() => submitPoll(answerText)}>Send</button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </main>
   );
 }
