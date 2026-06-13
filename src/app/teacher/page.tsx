@@ -20,6 +20,7 @@ const SECTIONS: Section[] = [
       { href: "/spinner", label: "Student Spinner", icon: "spinner", color: "#ff6b3d" },
       { href: "/start-question", label: "Start a Question", icon: "question", color: "#4d8df6" },
       { href: "/roster", label: "Rosters", icon: "join", color: "#10b981" },
+      { href: "/session", label: "Live Session", icon: "join", color: "#14b8a6" },
     ],
   },
   {

@@ -438,6 +438,7 @@ export default function ControlPage() {
             <button className="cx-sbtn" onClick={() => setShowSounds((v) => !v)}>{showSounds ? "Close sounds" : "Sounds"}</button>
             <button className="cx-sbtn" onClick={() => setEditing((v) => !v)}>{editing ? "Done editing" : "Edit times"}</button>
             <button className="cx-sbtn" onClick={toggleFullscreen}>Fullscreen</button>
+            <a className="cx-sbtn" href="/session">👥 Session</a>
             <a className="cx-sbtn" href="/teacher">🧰 Tools</a>
           </div>
         </header>
