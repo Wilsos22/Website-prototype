@@ -30,6 +30,11 @@ export default function LessonPage() {
   const [lesson, setLesson] = useState<LessonData | null>(null);
   const [date, setDate] = useState("");
   const [loading, setLoading] = useState(true);
+  const [firstName, setFirstName] = useState("");
+
+  useEffect(() => {
+    try { const n = localStorage.getItem("bdm-student-name"); if (n) setFirstName(n.trim().split(/\s+/)[0]); } catch { /* ignore */ }
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -51,6 +56,7 @@ export default function LessonPage() {
         .ls-wrap { max-width:680px; margin:0 auto; padding:0 16px; display:grid; gap:16px; }
 
         .ls-hero { text-align:center; padding:8px 0 6px; }
+        .ls-hey { font-size:clamp(1.3rem,3.4vw,1.9rem); font-weight:900; color:#ff6b3d; margin-bottom:6px; }
         .ls-tag { display:inline-block; background:#ffe6db; color:#c2410c; font-weight:900; font-size:0.72rem; letter-spacing:0.1em; text-transform:uppercase; border-radius:999px; padding:5px 12px; margin-bottom:10px; }
         .ls-title { font-family:Georgia,"Times New Roman",serif; font-size:clamp(1.8rem,5vw,2.8rem); font-weight:700; color:#1c1d22; margin:0; line-height:1.08; }
         .ls-sub { color:#7a7468; font-weight:600; font-size:clamp(1rem,2.4vw,1.2rem); margin:8px 0 0; }
@@ -81,6 +87,7 @@ export default function LessonPage() {
 
       <div className="ls-wrap">
         <div className="ls-hero">
+          {firstName && <div className="ls-hey">Hey {firstName}! 👋</div>}
           {lesson?.module && <span className="ls-tag">{lesson.module}</span>}
           <h1 className="ls-title">{loading ? "Loading…" : lesson?.title || "Today's Lesson"}</h1>
           {lesson?.subtitle && <p className="ls-sub">{lesson.subtitle}</p>}
