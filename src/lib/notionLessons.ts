@@ -4,7 +4,7 @@
 
 const DB_ID = "613d13a5-ac90-4ab3-9f5f-b7da95911ec3";
 const NOTION_API = "https://api.notion.com/v1";
-const NOTION_VERSION = "2022-06-28";
+const NOTION_VERSION = "2025-09-03";
 
 export interface LessonData {
   id: string;
