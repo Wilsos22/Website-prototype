@@ -33,6 +33,7 @@ export default function SessionPage() {
   const [poll, setPoll] = useState<{ id: string; question: string; choices: string[] | null } | null>(null);
   const [answers, setAnswers] = useState<Answer[]>([]);
   const ansRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [broadcast, setBroadcast] = useState<string | null>(null);
 
   useEffect(() => {
     if (!supabase) return;
@@ -65,13 +66,27 @@ export default function SessionPage() {
     const { count } = await supabase.from("students").select("id", { count: "exact", head: true }).eq("period_id", periodId);
     setRosterCount(count || 0);
     setSession({ id: (data as { id: string }).id, code, periodName });
-    setJoins([]);
+    setJoins([]); setBroadcast(null);
   }
   async function end() {
     if (!supabase || !session) return;
-    await supabase.from("sessions").update({ status: "closed", ended_at: new Date().toISOString() }).eq("id", session.id);
-    setSession(null); setJoins([]); setPoll(null); setAnswers([]);
+    await supabase.from("sessions").update({ status: "closed", ended_at: new Date().toISOString(), broadcast: null }).eq("id", session.id);
+    setSession(null); setJoins([]); setPoll(null); setAnswers([]); setBroadcast(null);
   }
+  async function setBroadcastTo(value: string | null) {
+    if (!supabase || !session) return;
+    await supabase.from("sessions").update({ broadcast: value }).eq("id", session.id);
+    setBroadcast(value);
+  }
+  const SENDS: { label: string; value: string }[] = [
+    { label: "Free (browse)", value: "free" },
+    { label: "Lesson page", value: "/lesson" },
+    { label: "Whiteboard", value: "/whiteboard" },
+    { label: "Number Line", value: "/number-line-plus" },
+    { label: "Percent Bar", value: "/percent-bar" },
+    { label: "Equation Builder", value: "/equation-builder" },
+    { label: "GEMS", value: "/order-of-operations" },
+  ];
 
   async function pushPoll() {
     if (!supabase || !session || !question.trim()) return;
@@ -132,6 +147,10 @@ export default function SessionPage() {
         .se-tallylabel { font-weight:800; color:#2a2a2e; margin-bottom:5px; }
         .se-bar { height:16px; background:#f0ece1; border-radius:999px; overflow:hidden; }
         .se-barfill { height:100%; background:#14b8a6; border-radius:999px; transition:width 400ms ease; }
+        .se-sends { display:flex; flex-wrap:wrap; gap:8px; }
+        .se-send { background:#f6f1e6; border:1px solid #e7dec9; color:#5a5346; border-radius:999px; padding:9px 15px; font-weight:800; cursor:pointer; font-size:0.9rem; }
+        .se-send:hover { border-color:#14b8a6; }
+        .se-send.on { background:#14b8a6; border-color:#14b8a6; color:#04231f; }
       `}</style>
 
       <header className="se-top">
@@ -169,6 +188,18 @@ export default function SessionPage() {
               <div className="se-count">Joined: {joins.length}{rosterCount ? ` of ${rosterCount}` : ""}</div>
               {joins.length === 0 ? <span className="se-empty">Waiting for students to join…</span>
                 : <div className="se-joins">{joins.map((j) => <span className="se-chip" key={j.id}>{j.display_name || "Student"}</span>)}</div>}
+            </div>
+
+            <div className="se-card">
+              <h3 className="se-qh">Class mode — send screens to</h3>
+              <div className="se-sends">
+                {SENDS.map((s) => (
+                  <button key={s.value} className={`se-send${(broadcast || "free") === s.value ? " on" : ""}`} onClick={() => setBroadcastTo(s.value === "free" ? null : s.value)}>{s.label}</button>
+                ))}
+              </div>
+              <p className="se-empty" style={{ marginTop: 10 }}>
+                {broadcast && broadcast !== "free" ? `Joined students are following ${broadcast}.` : "Students are browsing freely."}
+              </p>
             </div>
 
             {!poll ? (

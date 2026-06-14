@@ -1,0 +1,6 @@
+-- Big Dog Math — Class Mode (sync student screens to the teacher).
+-- Run once in Supabase (SQL Editor → New query → paste → Run).
+-- Adds a "broadcast" field to sessions: when set to a route (e.g. '/lesson'),
+-- joined students' screens follow it. null or 'free' = students browse freely.
+
+alter table public.sessions add column if not exists broadcast text;

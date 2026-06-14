@@ -1,6 +1,7 @@
 // The root layout applies shared metadata and the global stylesheet for the prototype.
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import ClassSync from "@/components/ClassSync";
 
 export const metadata: Metadata = {
   title: "Big Dog Board",
@@ -19,7 +20,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>{children}<ClassSync /></body>
     </html>
   );
 }
