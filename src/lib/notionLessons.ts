@@ -22,8 +22,10 @@ export interface LessonData {
   module: string;
   // Optional agenda fields — add these columns in Notion to fill them; empty if absent.
   agenda: string;        // text, one activity per line
-  supplies: string;      // text, comma- or line-separated
-  tools: string;         // text, tool names (comma- or line-separated)
+  supplies: string;      // text list, or checked Supply: ... checkbox properties
+  tools: string;         // text list, or checked Tool: ... checkbox properties
+  suppliesConfigured: boolean;
+  toolsConfigured: boolean;
   warmUpLink: string;    // url to today's warm-up
   exitTicketLink: string; // url to the exit ticket
 }
@@ -39,6 +41,7 @@ interface NotionProperty {
   url?: string | null;
   select?: { name: string } | null;
   date?: { start: string } | null;
+  checkbox?: boolean;
 }
 
 interface NotionPage {
@@ -56,8 +59,93 @@ function extractText(prop: NotionProperty | undefined): string {
   return "";
 }
 
+function splitList(text: string): string[] {
+  return text
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function uniq(items: string[]): string[] {
+  return [...new Set(items)];
+}
+
+function checkedPrefixedProperties(properties: Record<string, NotionProperty>, prefixes: string[]): string[] {
+  const items: string[] = [];
+  for (const [name, prop] of Object.entries(properties)) {
+    if (prop.type !== "checkbox" || !prop.checkbox) continue;
+    const match = prefixes.find((prefix) => name.toLowerCase().startsWith(prefix.toLowerCase()));
+    if (!match) continue;
+    const label = name.slice(match.length).trim().replace(/^[-:]\s*/, "");
+    if (label) items.push(label);
+  }
+  return items;
+}
+
+function hasPrefixedCheckboxProperties(properties: Record<string, NotionProperty>, prefixes: string[]): boolean {
+  return Object.entries(properties).some(([name, prop]) => (
+    prop.type === "checkbox" && prefixes.some((prefix) => name.toLowerCase().startsWith(prefix.toLowerCase()))
+  ));
+}
+
+function checkedNamedProperties(properties: Record<string, NotionProperty>, names: string[]): string[] {
+  return names.filter((name) => properties[name]?.type === "checkbox" && properties[name]?.checkbox);
+}
+
+function hasNamedCheckboxProperties(properties: Record<string, NotionProperty>, names: string[]): boolean {
+  return names.some((name) => properties[name]?.type === "checkbox");
+}
+
+const SUPPLY_PREFIXES = ["Supply:", "Supply -", "Supplies:", "Supplies -"];
+const TOOL_PREFIXES = ["Tool:", "Tool -", "Tools:", "Tools -"];
+
+const SUPPLY_CHECKBOX_NAMES = [
+  "Pencil",
+  "Notebook",
+  "Notebook or paper",
+  "Paper",
+  "Chromebook",
+  "Chromebook (charged)",
+  "Calculator",
+  "Ruler",
+  "Protractor",
+  "Colored Pencils",
+  "Scissors",
+  "Glue",
+  "Dry Erase Marker",
+];
+
+const TOOL_CHECKBOX_NAMES = [
+  "Whiteboard",
+  "Number Line",
+  "Fraction Bars",
+  "Group Bars",
+  "Percent Bar",
+  "Algebra Tiles",
+  "Equation Builder",
+  "GEMS",
+  "Order of Operations",
+  "Combine Like Terms",
+  "Proportions",
+  "Proportion Builder",
+  "Timer",
+];
+
 function mapPage(page: NotionPage): LessonData {
   const p = page.properties;
+  const supplyText = extractText(p["Supplies"]);
+  const toolText = extractText(p["Tools"]);
+  const checkedSupplies = uniq([
+    ...checkedPrefixedProperties(p, SUPPLY_PREFIXES),
+    ...checkedNamedProperties(p, SUPPLY_CHECKBOX_NAMES),
+  ]);
+  const checkedTools = uniq([
+    ...checkedPrefixedProperties(p, TOOL_PREFIXES),
+    ...checkedNamedProperties(p, TOOL_CHECKBOX_NAMES),
+  ]);
+  const hasSupplyCheckboxes = hasPrefixedCheckboxProperties(p, SUPPLY_PREFIXES) || hasNamedCheckboxProperties(p, SUPPLY_CHECKBOX_NAMES);
+  const hasToolCheckboxes = hasPrefixedCheckboxProperties(p, TOOL_PREFIXES) || hasNamedCheckboxProperties(p, TOOL_CHECKBOX_NAMES);
+
   return {
     id: page.id,
     title: extractText(p["Lesson"]),
@@ -69,8 +157,10 @@ function mapPage(page: NotionPage): LessonData {
     topic: extractText(p["Topic"]),
     module: extractText(p["Module #"]),
     agenda: extractText(p["Agenda"]),
-    supplies: extractText(p["Supplies"]),
-    tools: extractText(p["Tools"]),
+    supplies: uniq([...splitList(supplyText), ...checkedSupplies]).join("\n"),
+    tools: uniq([...splitList(toolText), ...checkedTools]).join("\n"),
+    suppliesConfigured: Boolean(supplyText.trim()) || hasSupplyCheckboxes,
+    toolsConfigured: Boolean(toolText.trim()) || hasToolCheckboxes,
     warmUpLink: extractText(p["Warm Up Link"]),
     exitTicketLink: extractText(p["Exit Ticket Link"]),
   };

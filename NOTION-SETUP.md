@@ -32,6 +32,13 @@ Due Date**. To fill the rest of the agenda, add these columns to the Lessons DB
 | `Warm Up Link` | URL | Link to today's warm-up form |
 | `Exit Ticket Link` | URL | Link to the exit ticket |
 
+You can also use checkbox properties instead of typing lists:
+
+- Supplies: add checkbox columns named like `Supply: Pencil`, `Supply: Notebook`, `Supply: Chromebook`.
+- Tools: add checkbox columns named like `Tool: Whiteboard`, `Tool: Number Line`, `Tool: Percent Bar`.
+
+Only checked items show on the lesson page. If none are checked, that section is hidden.
+
 Tool names that auto-link: Whiteboard, Number Line, Fraction Bars, Group Bars,
 Percent Bar, Algebra Tiles, Equation Builder, GEMS, Combine Like Terms,
 Proportions, Timer. (Other names show as plain labels.)

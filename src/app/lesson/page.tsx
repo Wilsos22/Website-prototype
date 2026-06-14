@@ -11,7 +11,8 @@ import { getSupabase } from "@/lib/supabase";
 interface LessonData {
   title: string; subtitle: string; essentialIdeas: string;
   assignmentLink: string; date: string; dueDate: string; topic: string; module: string;
-  agenda?: string; supplies?: string; tools?: string; warmUpLink?: string; exitTicketLink?: string;
+  agenda?: string; supplies?: string; tools?: string; suppliesConfigured?: boolean; toolsConfigured?: boolean;
+  warmUpLink?: string; exitTicketLink?: string;
 }
 
 const TOOL_ROUTES: Record<string, string> = {
@@ -22,7 +23,6 @@ const TOOL_ROUTES: Record<string, string> = {
 };
 function lines(text?: string) { return (text || "").split(/[\n,]/).map((s) => s.trim()).filter(Boolean); }
 function parseTools(text?: string): { label: string; href: string }[] {
-  if (!text || !text.trim()) return DEFAULT_TOOLS;
   return lines(text).map((name) => ({ label: name, href: TOOL_ROUTES[name.toLowerCase()] || "" }));
 }
 
@@ -92,8 +92,8 @@ export default function LessonPage() {
   }, []);
 
   const agendaItems = lesson?.agenda?.trim() ? lesson.agenda.split("\n").map((s) => s.trim()).filter(Boolean) : DEFAULT_AGENDA;
-  const supplyItems = lesson?.supplies?.trim() ? lines(lesson.supplies) : DEFAULT_SUPPLIES;
-  const toolItems = parseTools(lesson?.tools);
+  const supplyItems = lesson ? (lesson.suppliesConfigured ? lines(lesson.supplies) : DEFAULT_SUPPLIES) : [];
+  const toolItems = lesson ? (lesson.toolsConfigured ? parseTools(lesson.tools) : DEFAULT_TOOLS) : [];
   const exitHref = lesson?.exitTicketLink || lesson?.assignmentLink || "/join";
 
   return (
@@ -176,19 +176,23 @@ export default function LessonPage() {
           </section>
         )}
 
-        <section className="ls-card">
-          <h2>Supplies</h2>
-          <div className="ls-list">{supplyItems.map((s, i) => <span className="ls-chip" key={i}>{s}</span>)}</div>
-        </section>
+        {supplyItems.length > 0 && (
+          <section className="ls-card">
+            <h2>Supplies</h2>
+            <div className="ls-list">{supplyItems.map((s, i) => <span className="ls-chip" key={i}>{s}</span>)}</div>
+          </section>
+        )}
 
-        <section className="ls-card">
-          <h2>Tools you&apos;ll need</h2>
-          <div className="ls-list">
-            {toolItems.map((t, i) => t.href
-              ? <a className="ls-toolbtn" href={t.href} key={i}>{t.label} →</a>
-              : <span className="ls-chip" key={i}>{t.label}</span>)}
-          </div>
-        </section>
+        {toolItems.length > 0 && (
+          <section className="ls-card">
+            <h2>Tools you&apos;ll need</h2>
+            <div className="ls-list">
+              {toolItems.map((t, i) => t.href
+                ? <a className="ls-toolbtn" href={t.href} key={i}>{t.label} →</a>
+                : <span className="ls-chip" key={i}>{t.label}</span>)}
+            </div>
+          </section>
+        )}
 
         {lesson?.assignmentLink && (
           <section className="ls-card">
