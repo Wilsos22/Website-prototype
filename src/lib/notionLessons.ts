@@ -1,8 +1,8 @@
 // Notion API integration for the Math 6 Lessons database (no SDK dependency — uses raw fetch).
 // Requires NOTION_TOKEN env var (Notion internal integration token).
-// Database ID: e367e541-c0c7-4613-8066-d2e61b6fee64
+// Database ID: 613d13a5-ac90-4ab3-9f5f-b7da95911ec3
 
-const DB_ID = "e367e541-c0c7-4613-8066-d2e61b6fee64";
+const DB_ID = "613d13a5-ac90-4ab3-9f5f-b7da95911ec3";
 const NOTION_API = "https://api.notion.com/v1";
 const NOTION_VERSION = "2022-06-28";
 
