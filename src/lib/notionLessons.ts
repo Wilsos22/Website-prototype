@@ -1,8 +1,12 @@
 // Notion API integration for the Math 6 Lessons database (no SDK dependency — uses raw fetch).
 // Requires NOTION_TOKEN env var (Notion internal integration token).
-// Database ID: 613d13a5-ac90-4ab3-9f5f-b7da95911ec3
+// Parent database ID: 613d13a5-ac90-4ab3-9f5f-b7da95911ec3
+// Child data source IDs returned by Notion for this database.
 
-const DB_ID = "613d13a5-ac90-4ab3-9f5f-b7da95911ec3";
+const DATA_SOURCE_IDS = [
+  "e367e541-c0c7-4613-8066-d2e61b6fee64",
+  "3282eba1-de37-8069-a043-000b7c36799d",
+];
 const NOTION_API = "https://api.notion.com/v1";
 const NOTION_VERSION = "2025-09-03";
 
@@ -79,24 +83,36 @@ async function queryLessons(body: object): Promise<LessonData[]> {
     throw new Error("NOTION_TOKEN is not set. Add it to your Vercel environment variables.");
   }
 
-  const res = await fetch(`${NOTION_API}/databases/${DB_ID}/query`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      "Notion-Version": NOTION_VERSION,
-    },
-    body: JSON.stringify(body),
-    cache: "no-store",
-  });
+  const lessons: LessonData[] = [];
+  const errors: string[] = [];
 
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new Error(`Notion API error ${res.status}: ${detail}`);
+  for (const dataSourceId of DATA_SOURCE_IDS) {
+    const res = await fetch(`${NOTION_API}/data_sources/${dataSourceId}/query`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "Notion-Version": NOTION_VERSION,
+      },
+      body: JSON.stringify(body),
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      errors.push(`${dataSourceId}: Notion API error ${res.status}: ${detail}`);
+      continue;
+    }
+
+    const data = (await res.json()) as { results: NotionPage[] };
+    lessons.push(...data.results.map(mapPage));
   }
 
-  const data = (await res.json()) as { results: NotionPage[] };
-  return data.results.map(mapPage);
+  if (!lessons.length && errors.length === DATA_SOURCE_IDS.length) {
+    throw new Error(errors.join(" | "));
+  }
+
+  return lessons;
 }
 
 export async function getTodayLesson(isoDate: string): Promise<LessonData | null> {
