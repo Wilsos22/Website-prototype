@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Inter, "Google Sans", Arial, sans-serif;
+      font-size: 13px;
+      background: #f8f9fa;
+      color: #202124;
+      padding: 16px;
+    }
+    h2 {
+      font-size: 15px;
+      font-weight: 800;
+      color: #1a73e8;
+      margin-bottom: 14px;
+    }
+    .setup-card {
+      background: #fff;
+      border: 1px solid #dadce0;
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 14px;
+      display: grid;
+      gap: 10px;
+    }
+    .input-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .input-group { display: grid; gap: 4px; }
+    label {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: #5f6368;
+    }
+    input[type="text"], input[type="number"] {
+      border: 1px solid #dadce0;
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 13px;
+      font-family: inherit;
+      color: #202124;
+      width: 100%;
+      transition: border-color 100ms;
+    }
+    input:focus { outline: none; border-color: #1a73e8; }
+    input::placeholder { color: #bdc1c6; }
+    .topic-grid {
+      display: grid;
+      gap: 8px;
+      margin-top: 2px;
+    }
+    .day-topic-row {
+      display: grid;
+      grid-template-columns: 74px 1fr;
+      gap: 8px;
+      align-items: center;
+    }
+    .day-name {
+      font-size: 12px;
+      font-weight: 800;
+      color: #3c4043;
+    }
+    .btn-build {
+      width: 100%;
+      background: #1a73e8;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 14px;
+      font-weight: 800;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 120ms;
+      letter-spacing: 0.01em;
+    }
+    .btn-build:hover:not(:disabled) { background: #1557b0; }
+    .btn-build:disabled { opacity: 0.45; cursor: not-allowed; }
+    #days-area { margin-top: 14px; display: none; }
+    .day-card {
+      background: #fff;
+      border: 1px solid #dadce0;
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+      transition: border-color 200ms;
+    }
+    .day-card.card-done { border-color: #34a853; }
+    .day-card.card-running { border-color: #1a73e8; }
+    .day-card.card-error { border-color: #ea4335; }
+    .day-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .day-label {
+      font-weight: 800;
+      font-size: 13px;
+      color: #202124;
+    }
+    .day-date-badge {
+      font-size: 11px;
+      font-weight: 700;
+      color: #80868b;
+      background: #f1f3f4;
+      border-radius: 4px;
+      padding: 2px 7px;
+    }
+    .status-pill {
+      font-size: 11px;
+      font-weight: 700;
+      border-radius: 20px;
+      padding: 3px 9px;
+      white-space: nowrap;
+    }
+    .pill-waiting { background: #f1f3f4; color: #80868b; }
+    .pill-running { background: #e8f0fe; color: #1a73e8; }
+    .pill-done { background: #e6f4ea; color: #137333; }
+    .pill-error { background: #fce8e6; color: #c5221f; }
+    .spinner {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border: 2px solid #1a73e8;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 4px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .day-result {
+      display: none;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #f1f3f4;
+    }
+    .result-topic {
+      font-size: 12px;
+      color: #202124;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .result-review {
+      font-size: 11px;
+      color: #5f6368;
+      margin-bottom: 8px;
+      line-height: 1.35;
+    }
+    .change-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .change-input {
+      border: 1px solid #dadce0;
+      border-radius: 6px;
+      padding: 6px 9px;
+      font-size: 12px;
+      font-family: inherit;
+      color: #202124;
+      width: 100%;
+    }
+    .change-input:focus { outline: none; border-color: #1a73e8; }
+    .btn-rebuild {
+      background: #1a73e8;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .btn-rebuild:hover { background: #1557b0; }
+    .btn-rebuild:disabled { opacity: 0.45; cursor: not-allowed; }
+    .toggle-change {
+      font-size: 11px;
+      color: #1a73e8;
+      cursor: pointer;
+      text-decoration: underline;
+      background: none;
+      border: none;
+      font-family: inherit;
+      padding: 0;
+    }
+    .toggle-change:hover { color: #1557b0; }
+    a {
+      color: #1a73e8;
+      font-size: 11px;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <h2>Warm-Up Builder</h2>
+
+  <div class="setup-card">
+    <div class="input-row">
+      <div class="input-group">
+        <label>Week #</label>
+        <input type="number" id="week-number" value="1" min="1" max="40">
+      </div>
+      <div class="input-group">
+        <label>Start Date (MM-DD-YY)</label>
+        <input type="text" id="start-date" value="08-10-26" placeholder="08-10-26" maxlength="8">
+      </div>
+    </div>
+
+    <div class="input-group">
+      <label>Topics For Each Day</label>
+      <div class="topic-grid">
+        <div class="day-topic-row">
+          <div class="day-name">Monday</div>
+          <input type="text" id="topic-0" value="whole-number operations">
+        </div>
+        <div class="day-topic-row">
+          <div class="day-name">Tuesday</div>
+          <input type="text" id="topic-1" value="fractions">
+        </div>
+        <div class="day-topic-row">
+          <div class="day-name">Wednesday</div>
+          <input type="text" id="topic-2" value="decimals">
+        </div>
+        <div class="day-topic-row">
+          <div class="day-name">Thursday</div>
+          <input type="text" id="topic-3" value="data and statistics">
+        </div>
+        <div class="day-topic-row">
+          <div class="day-name">Friday</div>
+          <input type="text" id="topic-4" value="order of operations">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn-build" id="btn-build" onclick="startBuild()">Build All 5 Forms</button>
+
+  <div id="days-area">
+    <div id="day-cards"></div>
+  </div>
+
+<script>
+  const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+  const dayResults = Array(5).fill(null);
+
+  function getDateForDay(startDate, dayIndex) {
+    const [mm, dd, yy] = startDate.split("-");
+    const monday = new Date(2000 + parseInt(yy, 10), parseInt(mm, 10) - 1, parseInt(dd, 10));
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + dayIndex);
+    return String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0") + "-" + String(d.getFullYear()).slice(-2);
+  }
+
+  function getWeekConfig() {
+    return {
+      number: document.getElementById("week-number").value,
+      startDate: document.getElementById("start-date").value.trim()
+    };
+  }
+
+  function getTopicForDay(index) {
+    return document.getElementById(`topic-${index}`).value.trim();
+  }
+
+  function setTopicForDay(index, value) {
+    document.getElementById(`topic-${index}`).value = value || "";
+  }
+
+  function setBuilding(building) {
+    document.getElementById("btn-build").disabled = building;
+    document.querySelectorAll(".btn-rebuild").forEach(button => button.disabled = building);
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+  }
+
+  function escapeAttr(value) {
+    return escapeHtml(value).replaceAll("\n", " ");
+  }
+
+  function startBuild() {
+    const startDate = document.getElementById("start-date").value.trim();
+    if (!/^\d{2}-\d{2}-\d{2}$/.test(startDate)) {
+      alert("Date format should be MM-DD-YY, for example 08-10-26.");
+      return;
+    }
+
+    for (let i = 0; i < 5; i++) {
+      if (!getTopicForDay(i)) {
+        alert(`Enter a topic for ${DAYS[i]}.`);
+        return;
+      }
+    }
+
+    const container = document.getElementById("day-cards");
+    container.innerHTML = "";
+    document.getElementById("days-area").style.display = "block";
+
+    DAYS.forEach((day, i) => {
+      container.appendChild(buildDayCard(i, day, getDateForDay(startDate, i)));
+    });
+
+    setBuilding(true);
+    buildDay(0);
+  }
+
+  function buildDay(index) {
+    if (index >= 5) {
+      setBuilding(false);
+      return;
+    }
+
+    setDayStatus(index, "running");
+
+    google.script.run
+      .withSuccessHandler(result => {
+        dayResults[index] = result;
+        setDayStatus(index, "done", result);
+        buildDay(index + 1);
+      })
+      .withFailureHandler(err => {
+        setDayStatus(index, "error", null, err.message);
+        setBuilding(false);
+      })
+      .generateSingleDayAuto(getWeekConfig(), index, getTopicForDay(index), null);
+  }
+
+  function rebuildDay(index) {
+    const input = document.getElementById(`override-${index}`);
+    const overrideTopic = input ? input.value.trim() : getTopicForDay(index);
+    if (!overrideTopic) {
+      alert("Enter a topic before rebuilding.");
+      return;
+    }
+
+    setTopicForDay(index, overrideTopic);
+    setDayStatus(index, "running");
+    setBuilding(true);
+
+    google.script.run
+      .withSuccessHandler(result => {
+        dayResults[index] = result;
+        setDayStatus(index, "done", result);
+        setBuilding(false);
+      })
+      .withFailureHandler(err => {
+        setDayStatus(index, "error", null, err.message);
+        setBuilding(false);
+      })
+      .generateSingleDayAuto(getWeekConfig(), index, overrideTopic, overrideTopic);
+  }
+
+  function buildDayCard(index, dayName, dateStr) {
+    const div = document.createElement("div");
+    div.className = "day-card";
+    div.id = `card-${index}`;
+    div.innerHTML = `
+      <div class="day-header">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="day-label">${escapeHtml(dayName)}</span>
+          <span class="day-date-badge">${escapeHtml(dateStr)}</span>
+        </div>
+        <span class="status-pill pill-waiting" id="pill-${index}">Waiting</span>
+      </div>
+      <div class="day-result" id="result-${index}"></div>`;
+    return div;
+  }
+
+  function setDayStatus(index, state, result, errorMsg) {
+    const card = document.getElementById(`card-${index}`);
+    const pill = document.getElementById(`pill-${index}`);
+    const resultDiv = document.getElementById(`result-${index}`);
+    card.className = "day-card";
+
+    if (state === "running") {
+      card.classList.add("card-running");
+      pill.className = "status-pill pill-running";
+      pill.innerHTML = `<span class="spinner"></span> Building`;
+      resultDiv.style.display = "none";
+      return;
+    }
+
+    if (state === "done") {
+      card.classList.add("card-done");
+      pill.className = "status-pill pill-done";
+      pill.textContent = "Done";
+
+      const dailyTopic = escapeHtml(result.dailyTopic);
+      const dailyTopicAttr = escapeAttr(result.dailyTopic);
+      const editUrl = escapeAttr(result.editUrl);
+      const reviews = result.reviewTopics ? escapeHtml(result.reviewTopics.join(" / ")) : "";
+      const responseTab = result.responseTabName ? escapeHtml(result.responseTabName) : "";
+      const source = result.source ? escapeHtml(result.source) : "grade-5.pdf";
+      const linkStatus = result.notionStatus || {};
+      const triggerStatus = result.triggerStatus || {};
+      const linkLine = linkStatus.ok
+        ? `<div class="result-review">Links export: ${escapeHtml(linkStatus.action || "ready")}</div>`
+        : `<div class="result-review" style="color:#c5221f">Links export warning: ${escapeHtml(linkStatus.error || "not exported")}</div>`;
+      const triggerLine = triggerStatus.ok
+        ? `<div class="result-review">Responses: export trigger ready</div>`
+        : `<div class="result-review" style="color:#c5221f">Responses warning: ${escapeHtml(triggerStatus.error || "trigger not installed")}</div>`;
+
+      resultDiv.innerHTML = `
+        <div class="result-topic">${dailyTopic}</div>
+        ${reviews ? `<div class="result-review">Review slots: ${reviews}</div>` : ""}
+        ${responseTab ? `<div class="result-review">Response tab: ${responseTab}</div>` : ""}
+        <div class="result-review">Problem source: ${source}</div>
+        ${linkLine}
+        ${triggerLine}
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          <a href="${editUrl}" target="_blank">Edit Form</a>
+          <button class="toggle-change" onclick="toggleChange(${index})">Change topic & rebuild</button>
+        </div>
+        <div id="change-row-${index}" style="display:none">
+          <div class="change-row">
+            <input class="change-input" id="override-${index}" type="text" value="${dailyTopicAttr}">
+            <button class="btn-rebuild" onclick="rebuildDay(${index})">Rebuild</button>
+          </div>
+        </div>`;
+      resultDiv.style.display = "block";
+      return;
+    }
+
+    if (state === "error") {
+      card.classList.add("card-error");
+      pill.className = "status-pill pill-error";
+      pill.textContent = "Error";
+      const safeError = escapeHtml(errorMsg || "Something went wrong.");
+      const safeTopic = escapeAttr(getTopicForDay(index));
+      resultDiv.innerHTML = `
+        <div style="color:#c5221f;font-size:12px;margin-bottom:8px">${safeError}</div>
+        <div class="change-row">
+          <input class="change-input" id="override-${index}" type="text" value="${safeTopic}">
+          <button class="btn-rebuild" onclick="rebuildDay(${index})">Retry</button>
+        </div>`;
+      resultDiv.style.display = "block";
+    }
+  }
+
+  function toggleChange(index) {
+    const row = document.getElementById(`change-row-${index}`);
+    row.style.display = row.style.display === "none" ? "block" : "none";
+    if (row.style.display === "block") {
+      document.getElementById(`override-${index}`).focus();
+    }
+  }
+</script>
+</body>
+</html>

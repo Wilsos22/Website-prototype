@@ -4,7 +4,7 @@ import Link from "next/link";
 
 type IconKey =
   | "control" | "timer" | "spinner" | "question"
-  | "equation" | "gems" | "combine" | "proportion" | "percent"
+  | "equation" | "gems" | "combine" | "proportion" | "percent" | "area"
   | "whiteboard" | "algebra" | "fraction" | "numberline" | "hops" | "groupbars"
   | "today" | "lessons" | "join";
 
@@ -31,6 +31,7 @@ const SECTIONS: Section[] = [
       { href: "/combine-like-terms", label: "Combine Like Terms", icon: "combine", color: "#ef4444" },
       { href: "/proportions", label: "Proportion Builder", icon: "proportion", color: "#ec4899" },
       { href: "/percent-bar", label: "Percent Bar", icon: "percent", color: "#f472b6" },
+      { href: "/area-model", label: "Area Model", icon: "area", color: "#f97316" },
     ],
   },
   {
@@ -66,6 +67,7 @@ function Icon({ name }: { name: IconKey }) {
     case "combine": return <svg viewBox="0 0 24 24" {...p}><circle cx="8" cy="12" r="4.5" /><circle cx="16" cy="12" r="4.5" /><line x1="12" y1="9.5" x2="12" y2="14.5" /><line x1="9.6" y1="12" x2="14.4" y2="12" /></svg>;
     case "proportion": return <svg viewBox="0 0 24 24" {...p}><circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="none" /><circle cx="8" cy="16" r="1.4" fill="currentColor" stroke="none" /><line x1="13" y1="6" x2="13" y2="18" /><circle cx="17.5" cy="9" r="1.4" fill="currentColor" stroke="none" /><circle cx="17.5" cy="15" r="1.4" fill="currentColor" stroke="none" /></svg>;
     case "percent": return <svg viewBox="0 0 24 24" {...p}><line x1="6" y1="18" x2="18" y2="6" /><circle cx="7.5" cy="7.5" r="2.2" /><circle cx="16.5" cy="16.5" r="2.2" /></svg>;
+    case "area": return <svg viewBox="0 0 24 24" {...p}><rect x="4" y="5" width="16" height="14" rx="1.5" /><line x1="13" y1="5" x2="13" y2="19" /><line x1="4" y1="12" x2="20" y2="12" /><path d="M7 8 h3" /><path d="M15.5 8 h1.5" /><path d="M7 16 h3" /><path d="M15.5 16 h1.5" /></svg>;
     case "whiteboard": return <svg viewBox="0 0 24 24" {...p}><rect x="3" y="4" width="18" height="13" rx="2" /><line x1="12" y1="20" x2="12" y2="17" /><path d="M8 13 l3 -5 l2 2 Z" fill="currentColor" stroke="none" /></svg>;
     case "algebra": return <svg viewBox="0 0 24 24" {...p}><rect x="3" y="3" width="11" height="11" rx="1.5" /><rect x="15" y="15" width="6" height="6" rx="1.5" /></svg>;
     case "fraction": return <svg viewBox="0 0 24 24" {...p}><rect x="3" y="8" width="18" height="8" rx="1.5" /><line x1="9" y1="8" x2="9" y2="16" /><line x1="15" y1="8" x2="15" y2="16" /><rect x="3" y="8" width="6" height="8" fill="currentColor" stroke="none" opacity="0.9" /></svg>;
