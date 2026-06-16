@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
+import SiteNav from "@/components/SiteNav";
 
 interface Period { id: string; name: string; }
 interface Join { id: string; display_name: string | null; joined_at: string; }
@@ -153,11 +154,7 @@ export default function SessionPage() {
         .se-send.on { background:#14b8a6; border-color:#14b8a6; color:#04231f; }
       `}</style>
 
-      <header className="se-top">
-        <a className="se-back" href="/control">← Control panel</a>
-        <span className="se-mark">Live Session</span>
-      </header>
-
+      <SiteNav variant="teacher" />
       <div className="se-wrap">
         <h1 className="se-h1">Join with a code</h1>
 

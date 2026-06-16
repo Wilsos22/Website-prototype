@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
+import SiteNav from "@/components/SiteNav";
 
 interface LessonData {
   title: string;
@@ -120,6 +121,7 @@ export default function LessonPage() {
         .ls-date { color:#a89f8c; font-weight:800; font-size:0.88rem; }
 
         .ls-hero { text-align:center; padding:6px 0 10px; }
+        .ls-datehero { color:#a89f8c; font-weight:800; font-size:0.85rem; margin-bottom:10px; }
         .ls-hey { font-size:clamp(1.2rem,3.2vw,1.7rem); font-weight:900; color:#ff6b3d; margin-bottom:6px; }
         .ls-tag { display:inline-flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-bottom:12px; }
         .ls-chiptag { background:#ffe6db; color:#c2410c; font-weight:900; font-size:0.74rem; letter-spacing:0.06em; text-transform:uppercase; border-radius:999px; padding:5px 12px; }
@@ -176,13 +178,10 @@ export default function LessonPage() {
         .ls-poll-sent { font-size:1.6rem; font-weight:900; color:#22c55e; }
       `}</style>
 
+      <SiteNav variant="student" />
       <div className="ls-wrap">
-        <header className="ls-top">
-          <a className="ls-back" href="/">← Home</a>
-          <span className="ls-date">{date ? fmtDate(date) : ""}</span>
-        </header>
-
         <div className="ls-hero">
+          {date && <div className="ls-datehero">{fmtDate(date)}</div>}
           {firstName && <div className="ls-hey">Hey {firstName}! 👋</div>}
           <div className="ls-tag">
             {lesson?.module && <span className="ls-chiptag">{lesson.module}</span>}

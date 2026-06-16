@@ -5,6 +5,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { getSupabase } from "@/lib/supabase";
+import SiteNav from "@/components/SiteNav";
 
 interface Period { id: string; name: string; sort_order: number; }
 interface Student { id: string; period_id: string; full_name: string; email: string | null; }
@@ -73,11 +74,7 @@ export default function RosterPage() {
         .rs-warn { background:#fff7e6; border:1px solid #ffe2a8; color:#92660a; border-radius:14px; padding:16px 18px; font-weight:700; line-height:1.6; }
       `}</style>
 
-      <header className="rs-top">
-        <a className="rs-back" href="/teacher">← Tools</a>
-        <span className="rs-mark">Rosters</span>
-      </header>
-
+      <SiteNav variant="teacher" />
       <div className="rs-wrap">
         <h1 className="rs-h1">Class rosters</h1>
         <p className="rs-sub">Your periods and students, saved in Supabase.</p>
