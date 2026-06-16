@@ -29,8 +29,12 @@ Due Date**. To fill the rest of the agenda, add these columns to the Lessons DB
 | `Agenda` | Text | Today's steps — **one per line** |
 | `Supplies` | Text | Comma- or line-separated (Pencil, Notebook, Chromebook) |
 | `Tools` | Text | Tool names, comma-separated (e.g. `Percent Bar, Number Line`) — they become buttons |
-| `Warm Up Link` | URL | Link to today's warm-up form |
-| `Exit Ticket Link` | URL | Link to the exit ticket |
+| `Warm Up Link` | URL or Relation | Direct Google Form URL, or a relation to a warm-up link page that contains a URL property |
+| `Exit Ticket Link` | URL or Relation | Direct exit-ticket URL, or a relation to a link page that contains a URL property |
+
+If `Warm Up Link` is a relation, also share the related warm-up links database
+with the **Big Dog Math** Notion integration. The app follows the relation and
+uses the first URL property it finds on that related page.
 
 You can also use checkbox properties instead of typing lists:
 

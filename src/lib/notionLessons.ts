@@ -42,6 +42,20 @@ interface NotionProperty {
   select?: { name: string } | null;
   date?: { start: string } | null;
   checkbox?: boolean;
+  relation?: { id: string }[];
+  formula?: {
+    type: string;
+    string?: string | null;
+    number?: number | null;
+    boolean?: boolean | null;
+    date?: { start: string } | null;
+  };
+  rollup?: {
+    type: string;
+    array?: NotionProperty[];
+    number?: number | null;
+    date?: { start: string } | null;
+  };
 }
 
 interface NotionPage {
@@ -56,6 +70,80 @@ function extractText(prop: NotionProperty | undefined): string {
   if (prop.type === "url") return prop.url ?? "";
   if (prop.type === "select") return prop.select?.name ?? "";
   if (prop.type === "date") return prop.date?.start ?? "";
+  if (prop.type === "formula") {
+    if (prop.formula?.type === "string") return prop.formula.string ?? "";
+    if (prop.formula?.type === "number") return prop.formula.number?.toString() ?? "";
+    if (prop.formula?.type === "date") return prop.formula.date?.start ?? "";
+  }
+  if (prop.type === "rollup") {
+    if (prop.rollup?.type === "array") return prop.rollup.array?.map(extractText).filter(Boolean).join("\n") ?? "";
+    if (prop.rollup?.type === "number") return prop.rollup.number?.toString() ?? "";
+    if (prop.rollup?.type === "date") return prop.rollup.date?.start ?? "";
+  }
+  return "";
+}
+
+function firstUrlFromText(text: string): string {
+  return text.match(/https?:\/\/\S+/)?.[0]?.replace(/[),.;]+$/, "") ?? "";
+}
+
+function extractUrl(prop: NotionProperty | undefined): string {
+  if (!prop) return "";
+  if (prop.type === "url") return prop.url ?? "";
+  if (prop.type === "title" || prop.type === "rich_text" || prop.type === "formula") {
+    return firstUrlFromText(extractText(prop));
+  }
+  if (prop.type === "rollup" && prop.rollup?.type === "array") {
+    for (const item of prop.rollup.array ?? []) {
+      const url = extractUrl(item);
+      if (url) return url;
+    }
+  }
+  return "";
+}
+
+async function fetchRelatedPage(pageId: string, token: string, cache: Map<string, Promise<NotionPage>>): Promise<NotionPage> {
+  let cached = cache.get(pageId);
+  if (!cached) {
+    cached = fetch(`${NOTION_API}/pages/${pageId}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Notion-Version": NOTION_VERSION,
+      },
+      cache: "no-store",
+    }).then(async (res) => {
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        throw new Error(`Related Notion page ${pageId} error ${res.status}: ${detail}`);
+      }
+      return res.json() as Promise<NotionPage>;
+    });
+    cache.set(pageId, cached);
+  }
+  return cached;
+}
+
+async function resolveLink(prop: NotionProperty | undefined, token: string, cache: Map<string, Promise<NotionPage>>): Promise<string> {
+  const directUrl = extractUrl(prop);
+  if (directUrl) return directUrl;
+
+  if (prop?.type !== "relation") return "";
+
+  for (const relation of prop.relation ?? []) {
+    let relatedPage: NotionPage;
+    try {
+      relatedPage = await fetchRelatedPage(relation.id, token, cache);
+    } catch (err) {
+      console.warn(err instanceof Error ? err.message : err);
+      continue;
+    }
+
+    for (const relatedProp of Object.values(relatedPage.properties)) {
+      const url = extractUrl(relatedProp);
+      if (url) return url;
+    }
+  }
+
   return "";
 }
 
@@ -131,7 +219,7 @@ const TOOL_CHECKBOX_NAMES = [
   "Timer",
 ];
 
-function mapPage(page: NotionPage): LessonData {
+async function mapPage(page: NotionPage, token: string, cache: Map<string, Promise<NotionPage>>): Promise<LessonData> {
   const p = page.properties;
   const supplyText = extractText(p["Supplies"]);
   const toolText = extractText(p["Tools"]);
@@ -151,7 +239,7 @@ function mapPage(page: NotionPage): LessonData {
     title: extractText(p["Lesson"]),
     subtitle: extractText(p["Subtitle"]),
     essentialIdeas: extractText(p["Essential Ideas"]),
-    assignmentLink: extractText(p["Assignment Link"]),
+    assignmentLink: await resolveLink(p["Assignment Link"], token, cache),
     date: extractText(p["Date"]),
     dueDate: extractText(p["Due Date"]),
     topic: extractText(p["Topic"]),
@@ -161,8 +249,8 @@ function mapPage(page: NotionPage): LessonData {
     tools: uniq([...splitList(toolText), ...checkedTools]).join("\n"),
     suppliesConfigured: Boolean(supplyText.trim()) || hasSupplyCheckboxes,
     toolsConfigured: Boolean(toolText.trim()) || hasToolCheckboxes,
-    warmUpLink: extractText(p["Warm Up Link"]),
-    exitTicketLink: extractText(p["Exit Ticket Link"]),
+    warmUpLink: await resolveLink(p["Warm Up Link"], token, cache),
+    exitTicketLink: await resolveLink(p["Exit Ticket Link"], token, cache),
   };
 }
 
@@ -175,6 +263,7 @@ async function queryLessons(body: object): Promise<LessonData[]> {
 
   const lessons: LessonData[] = [];
   const errors: string[] = [];
+  const relatedPageCache = new Map<string, Promise<NotionPage>>();
 
   for (const dataSourceId of DATA_SOURCE_IDS) {
     const res = await fetch(`${NOTION_API}/data_sources/${dataSourceId}/query`, {
@@ -195,7 +284,7 @@ async function queryLessons(body: object): Promise<LessonData[]> {
     }
 
     const data = (await res.json()) as { results: NotionPage[] };
-    lessons.push(...data.results.map(mapPage));
+    lessons.push(...await Promise.all(data.results.map((page) => mapPage(page, token, relatedPageCache))));
   }
 
   if (!lessons.length && errors.length === DATA_SOURCE_IDS.length) {
