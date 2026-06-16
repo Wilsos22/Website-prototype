@@ -403,9 +403,9 @@ export default function TodayPage() {
                   </div>
                 )}
 
-                {lesson.warmUpLink && (
-                  <div className="today-card">
-                    <p className="today-card-label">Warm-Up</p>
+                <div className="today-card">
+                  <p className="today-card-label">Warm-Up</p>
+                  {lesson.warmUpLink ? (
                     <a
                       className="today-assignment-btn is-warmup"
                       href={lesson.warmUpLink}
@@ -414,6 +414,15 @@ export default function TodayPage() {
                     >
                       Start Warm-Up ↗
                     </a>
+                  ) : (
+                    <p className="today-card-content">No warm-up link has been added yet.</p>
+                  )}
+                </div>
+
+                {!lesson.assignmentLink && (
+                  <div className="today-card">
+                    <p className="today-card-label">Assignment</p>
+                    <p className="today-card-content">No assignment link has been added yet.</p>
                   </div>
                 )}
 

@@ -291,6 +291,14 @@ export default function LessonPage() {
         .ls-action.is-assignment {
           border-top: 5px solid #2563eb;
         }
+        .ls-action.is-disabled {
+          border-top: 5px solid #94a3b8;
+          cursor: default;
+        }
+        .ls-action.is-disabled:hover {
+          border-color: #d9e2ef;
+          transform: none;
+        }
 
         .ls-grid {
           display: grid;
@@ -611,11 +619,16 @@ export default function LessonPage() {
           <>
             {hasPrimaryActions && (
               <section className="ls-actions" aria-label="Lesson actions">
-                {lesson.warmUpLink && (
+                {lesson.warmUpLink ? (
                   <a className="ls-action is-warmup" href={lesson.warmUpLink} target="_blank" rel="noopener noreferrer">
                     <strong>Warm-up</strong>
                     <span>Start the first task for today.</span>
                   </a>
+                ) : (
+                  <div className="ls-action is-disabled">
+                    <strong>Warm-up</strong>
+                    <span>No warm-up link has been added yet.</span>
+                  </div>
                 )}
                 <a className="ls-action is-join" href="/join">
                   <strong>Join session</strong>
