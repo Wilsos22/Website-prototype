@@ -1,7 +1,7 @@
 "use client";
 
 // Student LESSON page. Pulls today's lesson from /api/today and turns the
-// Notion fields into a designed classroom view.
+// Notion fields into a designed classroom view (cream / Abbie theme).
 
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
@@ -33,7 +33,6 @@ const TOOL_ROUTES: Record<string, string> = {
 function lines(text?: string) {
   return (text || "").split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
 }
-
 function parseTools(text?: string): { label: string; href: string }[] {
   return lines(text).map((name) => ({ label: name, href: TOOL_ROUTES[name.toLowerCase()] || "" }));
 }
@@ -45,22 +44,14 @@ const DEFAULT_TOOLS: { label: string; href: string }[] = [
   { label: "Number Line", href: "/number-line-plus" },
   { label: "Percent Bar", href: "/percent-bar" },
 ];
+const BADGE = ["#ff6b3d", "#14b8a6", "#22c55e", "#f5b915", "#4d8df6", "#8b5cf6"];
 
 function fmtDate(iso: string) {
   if (!iso) return "";
   const [y, m, d] = iso.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
 }
-
-function shortDate(iso: string) {
-  if (!iso) return "";
-  const [y, m, d] = iso.split("-").map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-function isExternalLink(href: string) {
-  return /^https?:\/\//i.test(href);
-}
+function isExternalLink(href: string) { return /^https?:\/\//i.test(href); }
 
 export default function LessonPage() {
   const [lesson, setLesson] = useState<LessonData | null>(null);
@@ -117,577 +108,161 @@ export default function LessonPage() {
   const supplyItems = lesson ? (lesson.suppliesConfigured ? lines(lesson.supplies) : DEFAULT_SUPPLIES) : [];
   const toolItems = lesson ? (lesson.toolsConfigured ? parseTools(lesson.tools) : DEFAULT_TOOLS) : [];
   const exitHref = lesson?.exitTicketLink || lesson?.assignmentLink || "/join";
-  const hasPrimaryActions = Boolean(lesson?.warmUpLink || lesson?.assignmentLink || exitHref);
 
   return (
     <main className="ls-page">
       <style>{`
-        .ls-page {
-          min-height: 100vh;
-          background: #f6f8fb;
-          color: #172033;
-          font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-          box-sizing: border-box;
-        }
-        .ls-shell {
-          width: min(1120px, calc(100% - 32px));
-          margin: 0 auto;
-          padding: 22px 0 44px;
-        }
-        .ls-top {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 16px;
-          margin-bottom: 20px;
-        }
-        .ls-nav {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          flex-wrap: wrap;
-        }
-        .ls-link {
-          color: #42526b;
-          font-weight: 800;
-          font-size: 0.92rem;
-          text-decoration: none;
-          border: 1px solid #d9e2ef;
-          border-radius: 8px;
-          padding: 9px 12px;
-          background: #ffffff;
-        }
-        .ls-link:hover {
-          border-color: #2563eb;
-          color: #1d4ed8;
-        }
-        .ls-date {
-          color: #64748b;
-          font-weight: 800;
-          font-size: 0.95rem;
-          text-align: right;
-        }
+        .ls-page { min-height:100vh; background:#fbf7ef; color:#2a2a2e; font-family:Inter,ui-sans-serif,system-ui,sans-serif; box-sizing:border-box; }
+        .ls-wrap { max-width:720px; margin:0 auto; padding:0 16px 56px; }
+        .ls-top { display:flex; align-items:center; justify-content:space-between; padding:16px 4px; }
+        .ls-back { color:#7a7468; font-weight:800; font-size:0.88rem; text-decoration:none; }
+        .ls-back:hover { color:#2a2a2e; }
+        .ls-date { color:#a89f8c; font-weight:800; font-size:0.88rem; }
 
-        .ls-hero {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) 280px;
-          gap: 22px;
-          align-items: stretch;
-          margin-bottom: 18px;
-        }
-        .ls-hero-main,
-        .ls-hero-side,
-        .ls-panel,
-        .ls-action,
-        .ls-empty {
-          background: #ffffff;
-          border: 1px solid #d9e2ef;
-          border-radius: 8px;
-          box-shadow: 0 16px 42px -34px rgba(15, 23, 42, 0.42);
-        }
-        .ls-hero-main {
-          padding: 30px;
-          border-left: 8px solid #2563eb;
-        }
-        .ls-kicker {
-          display: flex;
-          align-items: center;
-          flex-wrap: wrap;
-          gap: 8px;
-          color: #2563eb;
-          font-size: 0.86rem;
-          font-weight: 900;
-          margin-bottom: 18px;
-        }
-        .ls-pill {
-          display: inline-flex;
-          align-items: center;
-          min-height: 28px;
-          border-radius: 999px;
-          padding: 0 10px;
-          background: #eff6ff;
-          color: #1d4ed8;
-          font-size: 0.82rem;
-          font-weight: 900;
-        }
-        .ls-greeting {
-          margin: 0 0 8px;
-          color: #f97316;
-          font-size: 1.05rem;
-          font-weight: 900;
-        }
-        .ls-title {
-          margin: 0;
-          color: #111827;
-          font-size: 2.55rem;
-          font-weight: 950;
-          line-height: 1.04;
-        }
-        .ls-sub {
-          color: #475569;
-          font-size: 1.12rem;
-          font-weight: 650;
-          line-height: 1.45;
-          margin: 14px 0 0;
-          max-width: 62ch;
-        }
-        .ls-hero-side {
-          display: grid;
-          align-content: space-between;
-          gap: 18px;
-          padding: 22px;
-          background: #102033;
-          color: #ffffff;
-          border-color: #102033;
-        }
-        .ls-side-label {
-          margin: 0 0 8px;
-          color: #93c5fd;
-          font-size: 0.82rem;
-          font-weight: 900;
-        }
-        .ls-side-value {
-          margin: 0;
-          color: #ffffff;
-          font-size: 1.08rem;
-          font-weight: 850;
-          line-height: 1.35;
-        }
+        .ls-hero { text-align:center; padding:6px 0 10px; }
+        .ls-hey { font-size:clamp(1.2rem,3.2vw,1.7rem); font-weight:900; color:#ff6b3d; margin-bottom:6px; }
+        .ls-tag { display:inline-flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-bottom:12px; }
+        .ls-chiptag { background:#ffe6db; color:#c2410c; font-weight:900; font-size:0.74rem; letter-spacing:0.06em; text-transform:uppercase; border-radius:999px; padding:5px 12px; }
+        .ls-chiptag.t2 { background:#d8f3ec; color:#0f766e; }
+        .ls-title { font-family:Georgia,"Times New Roman",serif; font-size:clamp(2rem,6vw,3.2rem); font-weight:700; color:#1c1d22; margin:0; line-height:1.05; }
+        .ls-sub { color:#7a7468; font-weight:600; font-size:clamp(1rem,2.5vw,1.25rem); margin:10px auto 0; max-width:48ch; line-height:1.5; }
+        .ls-stripe { display:flex; gap:5px; justify-content:center; margin:16px 0 4px; }
+        .ls-stripe span { width:34px; height:7px; border-radius:4px; }
 
-        .ls-actions {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-          gap: 12px;
-          margin-bottom: 18px;
-        }
-        .ls-action {
-          display: grid;
-          gap: 8px;
-          padding: 18px;
-          min-height: 112px;
-          text-decoration: none;
-          color: #172033;
-        }
-        .ls-action:hover {
-          border-color: #2563eb;
-          transform: translateY(-1px);
-        }
-        .ls-action strong {
-          font-size: 1.03rem;
-          color: #111827;
-        }
-        .ls-action span {
-          color: #64748b;
-          font-size: 0.92rem;
-          font-weight: 700;
-          line-height: 1.35;
-        }
-        .ls-action.is-warmup {
-          border-top: 5px solid #f97316;
-        }
-        .ls-action.is-join {
-          border-top: 5px solid #10b981;
-        }
-        .ls-action.is-assignment {
-          border-top: 5px solid #2563eb;
-        }
+        .ls-cards { display:grid; gap:16px; margin-top:18px; }
+        .ls-card { background:#fff; border:1px solid #efe7d6; border-radius:20px; padding:22px 24px; }
+        .ls-h2 { margin:0 0 16px; font-size:0.8rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; color:#a89f8c; }
 
-        .ls-grid {
-          display: grid;
-          grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
-          gap: 18px;
-          align-items: start;
-        }
-        .ls-stack {
-          display: grid;
-          gap: 18px;
-        }
-        .ls-panel {
-          padding: 22px;
-        }
-        .ls-panel-title {
-          margin: 0 0 16px;
-          color: #0f172a;
-          font-size: 1.12rem;
-          font-weight: 950;
-        }
-        .ls-panel-note {
-          color: #64748b;
-          margin: -8px 0 16px;
-          font-size: 0.92rem;
-          font-weight: 650;
-        }
-        .ls-agenda {
-          display: grid;
-          gap: 12px;
-        }
-        .ls-agenda-row {
-          display: grid;
-          grid-template-columns: 38px minmax(0, 1fr);
-          gap: 12px;
-          align-items: start;
-          color: #172033;
-          font-size: 1.02rem;
-          font-weight: 760;
-          line-height: 1.4;
-        }
-        .ls-num {
-          width: 38px;
-          height: 38px;
-          border-radius: 8px;
-          display: grid;
-          place-items: center;
-          background: #eaf2ff;
-          color: #1d4ed8;
-          font-weight: 950;
-        }
-        .ls-focus {
-          color: #334155;
-          font-size: 1rem;
-          font-weight: 650;
-          line-height: 1.65;
-          margin: 0;
-          white-space: pre-wrap;
-        }
-        .ls-list {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-        }
-        .ls-chip,
-        .ls-toolbtn {
-          display: inline-flex;
-          align-items: center;
-          min-height: 36px;
-          border-radius: 8px;
-          padding: 0 12px;
-          font-size: 0.93rem;
-          font-weight: 850;
-        }
-        .ls-chip {
-          background: #f8fafc;
-          border: 1px solid #d9e2ef;
-          color: #42526b;
-        }
-        .ls-toolbtn {
-          background: #ecfdf5;
-          border: 1px solid #bbf7d0;
-          color: #047857;
-          text-decoration: none;
-        }
-        .ls-toolbtn:hover {
-          border-color: #10b981;
-        }
-        .ls-assign {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          min-height: 44px;
-          border-radius: 8px;
-          padding: 0 16px;
-          background: #2563eb;
-          color: #ffffff;
-          font-weight: 900;
-          text-decoration: none;
-          width: fit-content;
-        }
-        .ls-assign:hover {
-          background: #1d4ed8;
-        }
-        .ls-due {
-          color: #64748b;
-          font-weight: 750;
-          font-size: 0.92rem;
-          margin-top: 10px;
-        }
-        .ls-exit {
-          border-color: #fecaca;
-          background: #fff7f7;
-        }
-        .ls-exit .ls-panel-title {
-          color: #b91c1c;
-        }
-        .ls-exit p {
-          color: #6b3640;
-          font-weight: 700;
-          margin: 0 0 16px;
-          line-height: 1.45;
-        }
-        .ls-exit a {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          min-height: 44px;
-          border-radius: 8px;
-          padding: 0 18px;
-          background: #dc2626;
-          color: #ffffff;
-          font-weight: 900;
-          text-decoration: none;
-        }
-        .ls-empty {
-          padding: 34px;
-          text-align: center;
-          color: #64748b;
-          font-weight: 700;
-        }
-        .ls-empty h2 {
-          margin: 0 0 10px;
-          color: #111827;
-          font-size: 1.45rem;
-        }
-        .ls-muted {
-          color: #64748b;
-          font-weight: 700;
-          line-height: 1.5;
-          margin: 0;
-        }
+        .ls-warm { background:linear-gradient(180deg,#ff7a4d,#ff6b3d); border:none; display:flex; align-items:center; gap:18px; text-decoration:none; box-shadow:0 14px 30px -16px rgba(255,107,61,0.7); }
+        .ls-warm-ico { width:56px; height:56px; border-radius:16px; background:rgba(255,255,255,0.22); display:grid; place-items:center; flex:none; }
+        .ls-warm-ico svg { width:30px; height:30px; }
+        .ls-warm-txt b { display:block; color:#fff; font-size:1.3rem; font-weight:900; }
+        .ls-warm-txt span { color:rgba(255,255,255,0.9); font-weight:700; font-size:0.95rem; }
 
-        .ls-poll-overlay {
-          position: fixed;
-          inset: 0;
-          background: rgba(15, 23, 42, 0.66);
-          display: grid;
-          place-items: center;
-          z-index: 60;
-          padding: 20px;
-        }
-        .ls-poll-card {
-          background: #ffffff;
-          border: 1px solid #d9e2ef;
-          border-radius: 8px;
-          padding: 30px 26px;
-          max-width: 520px;
-          width: 100%;
-          box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.55);
-          text-align: center;
-        }
-        .ls-poll-q {
-          font-size: 1.8rem;
-          font-weight: 950;
-          color: #111827;
-          margin-bottom: 20px;
-          line-height: 1.2;
-        }
-        .ls-poll-choices {
-          display: grid;
-          gap: 12px;
-        }
-        .ls-poll-choice {
-          background: #eef6ff;
-          border: 2px solid #bfdbfe;
-          color: #1d4ed8;
-          border-radius: 8px;
-          padding: 16px;
-          font-size: 1.08rem;
-          font-weight: 900;
-          cursor: pointer;
-        }
-        .ls-poll-choice:hover {
-          border-color: #2563eb;
-        }
-        .ls-poll-open {
-          display: flex;
-          gap: 8px;
-        }
-        .ls-poll-in {
-          flex: 1;
-          border: 2px solid #bfdbfe;
-          border-radius: 8px;
-          padding: 13px 15px;
-          font-size: 1.04rem;
-          font-weight: 750;
-          box-sizing: border-box;
-        }
-        .ls-poll-send {
-          background: #2563eb;
-          color: #ffffff;
-          border: none;
-          border-radius: 8px;
-          padding: 0 22px;
-          font-weight: 900;
-          cursor: pointer;
-        }
-        .ls-poll-sent {
-          font-size: 1.45rem;
-          font-weight: 950;
-          color: #059669;
-        }
+        .ls-agenda { display:grid; gap:0; }
+        .ls-arow { display:flex; align-items:center; gap:16px; }
+        .ls-railcol { display:flex; flex-direction:column; align-items:center; }
+        .ls-num { width:46px; height:46px; border-radius:50%; display:grid; place-items:center; color:#fff; font-weight:900; font-size:1.2rem; flex:none; box-shadow:0 5px 0 0 rgba(0,0,0,0.10); }
+        .ls-rail { width:4px; flex:1; min-height:20px; background:#efe7d6; border-radius:2px; margin:3px 0; }
+        .ls-atext { font-size:1.1rem; font-weight:800; color:#2a2a2e; padding:8px 0; }
 
-        @media (max-width: 880px) {
-          .ls-hero,
-          .ls-grid,
-          .ls-actions {
-            grid-template-columns: 1fr;
-          }
-          .ls-hero-side {
-            align-content: start;
-          }
-        }
-        @media (max-width: 620px) {
-          .ls-shell {
-            width: min(100% - 24px, 1120px);
-            padding-top: 14px;
-          }
-          .ls-top {
-            align-items: flex-start;
-            flex-direction: column;
-          }
-          .ls-date {
-            text-align: left;
-          }
-          .ls-hero-main,
-          .ls-hero-side,
-          .ls-panel,
-          .ls-action {
-            padding: 18px;
-          }
-          .ls-title {
-            font-size: 1.9rem;
-          }
-          .ls-sub {
-            font-size: 1rem;
-          }
-          .ls-agenda-row {
-            grid-template-columns: 34px minmax(0, 1fr);
-            font-size: 0.98rem;
-          }
-          .ls-num {
-            width: 34px;
-            height: 34px;
-          }
-          .ls-poll-q {
-            font-size: 1.35rem;
-          }
-          .ls-poll-open {
-            flex-direction: column;
-          }
-          .ls-poll-send {
-            min-height: 44px;
-          }
-        }
+        .ls-two { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+        @media (max-width:560px){ .ls-two { grid-template-columns:1fr; } }
+        .ls-list { display:flex; flex-wrap:wrap; gap:8px; }
+        .ls-pill { background:#f6f1e6; border:1px solid #efe7d6; border-radius:999px; padding:9px 15px; font-weight:800; color:#5a5346; font-size:0.92rem; }
+        .ls-tool { display:inline-flex; align-items:center; gap:6px; background:#eef6ff; border:1px solid #d7e6fb; color:#1d4ed8; border-radius:12px; padding:10px 15px; font-weight:800; text-decoration:none; }
+        .ls-tool:hover { border-color:#4d8df6; }
+        .ls-focus { color:#4a4636; font-weight:600; line-height:1.7; white-space:pre-wrap; margin:0; font-size:1.02rem; }
+        .ls-focuscard { background:#fff8ec; border-color:#ffe2a8; }
+        .ls-focuscard .ls-h2 { color:#b8860b; }
+        .ls-assign { display:inline-flex; align-items:center; gap:8px; background:#4d8df6; color:#fff; border-radius:13px; padding:14px 24px; font-weight:900; text-decoration:none; }
+        .ls-due { color:#9a9282; font-weight:700; font-size:0.9rem; margin-top:10px; }
+
+        .ls-exit { background:#fff4f3; border:2px solid #ffd2cd; text-align:center; }
+        .ls-exit .ls-h2 { color:#ef4444; }
+        .ls-exit p { color:#7a5c5a; font-weight:600; margin:0 0 16px; font-size:1.05rem; }
+        .ls-exit a { display:inline-flex; align-items:center; gap:8px; background:#ef4444; color:#fff; border-radius:13px; padding:15px 30px; font-weight:900; text-decoration:none; font-size:1.05rem; }
+        .ls-muted { color:#b3aa97; font-weight:600; text-align:center; padding:24px; }
+
+        .ls-poll-overlay { position:fixed; inset:0; background:rgba(28,29,34,0.62); display:grid; place-items:center; z-index:60; padding:20px; }
+        .ls-poll-card { background:#fff; border-radius:24px; padding:30px 26px; max-width:520px; width:100%; box-shadow:0 30px 80px -20px #000; text-align:center; }
+        .ls-poll-q { font-size:clamp(1.4rem,4vw,2rem); font-weight:900; color:#1c1d22; margin-bottom:20px; line-height:1.2; }
+        .ls-poll-choices { display:grid; gap:12px; }
+        .ls-poll-choice { background:#eef6ff; border:2px solid #d7e6fb; color:#1d4ed8; border-radius:14px; padding:16px; font-size:1.15rem; font-weight:900; cursor:pointer; }
+        .ls-poll-choice:hover { border-color:#4d8df6; }
+        .ls-poll-open { display:flex; gap:8px; }
+        .ls-poll-in { flex:1; border:2px solid #d7e6fb; border-radius:12px; padding:13px 15px; font-size:1.1rem; font-weight:700; box-sizing:border-box; }
+        .ls-poll-send { background:#4d8df6; color:#fff; border:none; border-radius:12px; padding:0 22px; font-weight:900; cursor:pointer; }
+        .ls-poll-sent { font-size:1.6rem; font-weight:900; color:#22c55e; }
       `}</style>
 
-      <div className="ls-shell">
+      <div className="ls-wrap">
         <header className="ls-top">
-          <nav className="ls-nav" aria-label="Lesson navigation">
-            <a className="ls-link" href="/">Home</a>
-            <a className="ls-link" href="/lessons">Past days</a>
-          </nav>
+          <a className="ls-back" href="/">← Home</a>
           <span className="ls-date">{date ? fmtDate(date) : ""}</span>
         </header>
 
-        <section className="ls-hero" aria-label="Today lesson">
-          <div className="ls-hero-main">
-            <div className="ls-kicker">
-              <span className="ls-pill">{lesson?.module || "Math 6"}</span>
-              {lesson?.topic && <span>{lesson.topic}</span>}
-            </div>
-            {firstName && <p className="ls-greeting">Hi {firstName}</p>}
-            <h1 className="ls-title">{loading ? "Loading today's lesson..." : lesson?.title || "Today's Lesson"}</h1>
-            {lesson?.subtitle && <p className="ls-sub">{lesson.subtitle}</p>}
+        <div className="ls-hero">
+          {firstName && <div className="ls-hey">Hey {firstName}! 👋</div>}
+          <div className="ls-tag">
+            {lesson?.module && <span className="ls-chiptag">{lesson.module}</span>}
+            {lesson?.topic && <span className="ls-chiptag t2">{lesson.topic}</span>}
           </div>
+          <h1 className="ls-title">{loading ? "Loading…" : lesson?.title || "Today's Lesson"}</h1>
+          {lesson?.subtitle && <p className="ls-sub">{lesson.subtitle}</p>}
+          <div className="ls-stripe">
+            <span style={{ background: "#14b8a6" }} /><span style={{ background: "#8a5a2b" }} /><span style={{ background: "#f5b915" }} /><span style={{ background: "#ff6b3d" }} /><span style={{ background: "#4d8df6" }} />
+          </div>
+        </div>
 
-          <aside className="ls-hero-side" aria-label="Lesson details">
-            <div>
-              <p className="ls-side-label">Today</p>
-              <p className="ls-side-value">{date ? fmtDate(date) : "Loading"}</p>
-            </div>
-            <div>
-              <p className="ls-side-label">Focus</p>
-              <p className="ls-side-value">{lesson?.topic || "Classroom math practice"}</p>
-            </div>
-          </aside>
-        </section>
-
-        {!loading && !lesson && (
-          <section className="ls-empty">
-            <h2>No lesson is ready yet</h2>
-            <p className="ls-muted">Check back in a moment or wait for your teacher to open today&apos;s lesson.</p>
-          </section>
-        )}
+        {!loading && !lesson && <p className="ls-muted">No lesson published for today yet — your teacher will open today&apos;s lesson soon.</p>}
 
         {lesson && (
-          <>
-            {hasPrimaryActions && (
-              <section className="ls-actions" aria-label="Lesson actions">
-                {lesson.warmUpLink && (
-                  <a className="ls-action is-warmup" href={lesson.warmUpLink} target="_blank" rel="noopener noreferrer">
-                    <strong>Warm-up</strong>
-                    <span>Start the first task for today.</span>
-                  </a>
-                )}
-                <a className="ls-action is-join" href="/join">
-                  <strong>Join session</strong>
-                  <span>Enter the code from the board.</span>
-                </a>
-                {lesson.assignmentLink && (
-                  <a className="ls-action is-assignment" href={lesson.assignmentLink} target="_blank" rel="noopener noreferrer">
-                    <strong>Assignment</strong>
-                    <span>{lesson.dueDate ? `Due ${shortDate(lesson.dueDate)}` : "Open today's assignment."}</span>
-                  </a>
-                )}
-              </section>
+          <div className="ls-cards">
+            {lesson.warmUpLink && (
+              <a className="ls-card ls-warm" href={lesson.warmUpLink} target="_blank" rel="noopener noreferrer">
+                <span className="ls-warm-ico"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M8 5 v14 l11 -7 Z" fill="#fff" stroke="none" /></svg></span>
+                <span className="ls-warm-txt"><b>Start the Warm-Up</b><span>Begin today&apos;s first task →</span></span>
+              </a>
             )}
 
-            <div className="ls-grid">
-              <div className="ls-stack">
-                <section className="ls-panel">
-                  <h2 className="ls-panel-title">Agenda</h2>
-                  <div className="ls-agenda">
-                    {agendaItems.map((a, i) => (
-                      <div className="ls-agenda-row" key={`${a}-${i}`}>
-                        <span className="ls-num">{i + 1}</span>
-                        <span>{a}</span>
-                      </div>
-                    ))}
+            <section className="ls-card">
+              <h2 className="ls-h2">Today&apos;s plan</h2>
+              <div className="ls-agenda">
+                {agendaItems.map((a, i) => (
+                  <div className="ls-arow" key={i}>
+                    <div className="ls-railcol">
+                      <div className="ls-num" style={{ background: BADGE[i % BADGE.length] }}>{i + 1}</div>
+                      {i < agendaItems.length - 1 && <div className="ls-rail" />}
+                    </div>
+                    <div className="ls-atext">{a}</div>
                   </div>
-                </section>
-
-                {lesson.essentialIdeas && (
-                  <section className="ls-panel">
-                    <h2 className="ls-panel-title">Learning focus</h2>
-                    <p className="ls-focus">{lesson.essentialIdeas}</p>
-                  </section>
-                )}
+                ))}
               </div>
+            </section>
 
-              <aside className="ls-stack">
+            {(supplyItems.length > 0 || toolItems.length > 0) && (
+              <div className="ls-two">
                 {supplyItems.length > 0 && (
-                  <section className="ls-panel">
-                    <h2 className="ls-panel-title">Supplies</h2>
-                    <div className="ls-list">{supplyItems.map((s, i) => <span className="ls-chip" key={`${s}-${i}`}>{s}</span>)}</div>
+                  <section className="ls-card">
+                    <h2 className="ls-h2">Supplies</h2>
+                    <div className="ls-list">{supplyItems.map((s, i) => <span className="ls-pill" key={i}>{s}</span>)}</div>
                   </section>
                 )}
-
                 {toolItems.length > 0 && (
-                  <section className="ls-panel">
-                    <h2 className="ls-panel-title">Tools</h2>
-                    <p className="ls-panel-note">Tap a tool when you need it.</p>
+                  <section className="ls-card">
+                    <h2 className="ls-h2">Tools you&apos;ll need</h2>
                     <div className="ls-list">
                       {toolItems.map((t, i) => t.href
-                        ? <a className="ls-toolbtn" href={t.href} key={`${t.label}-${i}`}>{t.label}</a>
-                        : <span className="ls-chip" key={`${t.label}-${i}`}>{t.label}</span>)}
+                        ? <a className="ls-tool" href={t.href} key={i}>{t.label} →</a>
+                        : <span className="ls-pill" key={i}>{t.label}</span>)}
                     </div>
                   </section>
                 )}
+              </div>
+            )}
 
-                {lesson.assignmentLink && (
-                  <section className="ls-panel">
-                    <h2 className="ls-panel-title">Assignment</h2>
-                    <a className="ls-assign" href={lesson.assignmentLink} target="_blank" rel="noopener noreferrer">Open assignment</a>
-                    {lesson.dueDate && <div className="ls-due">Due {fmtDate(lesson.dueDate)}</div>}
-                  </section>
-                )}
+            {lesson.essentialIdeas && (
+              <section className="ls-card ls-focuscard">
+                <h2 className="ls-h2">Today&apos;s focus</h2>
+                <p className="ls-focus">{lesson.essentialIdeas}</p>
+              </section>
+            )}
 
-                <section className="ls-panel ls-exit">
-                  <h2 className="ls-panel-title">Exit ticket</h2>
-                  <p>Finish strong before class ends.</p>
-                  <a href={exitHref} target={isExternalLink(exitHref) ? "_blank" : undefined} rel="noopener noreferrer">Start exit ticket</a>
-                </section>
-              </aside>
-            </div>
-          </>
+            {lesson.assignmentLink && (
+              <section className="ls-card">
+                <h2 className="ls-h2">Assignment</h2>
+                <a className="ls-assign" href={lesson.assignmentLink} target="_blank" rel="noopener noreferrer">Open assignment ↗</a>
+                {lesson.dueDate && <div className="ls-due">Due {fmtDate(lesson.dueDate)}</div>}
+              </section>
+            )}
+
+            <section className="ls-card ls-exit">
+              <h2 className="ls-h2">Exit Ticket</h2>
+              <p>Finish strong — complete your exit ticket before the timer ends.</p>
+              <a href={exitHref} target={isExternalLink(exitHref) ? "_blank" : undefined} rel="noopener noreferrer">Start exit ticket →</a>
+            </section>
+          </div>
         )}
       </div>
 
