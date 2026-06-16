@@ -19,6 +19,16 @@ database. To turn it on:
 2. Add **`NOTION_TOKEN`** = the secret from step 1. (No `NEXT_PUBLIC_` prefix — it stays server-side.)
 3. Redeploy (or push) so it takes effect.
 
+## Teacher-only access
+To keep teacher pages off student screens, add these Vercel environment variables:
+
+- `TEACHER_USERNAME` = your login name, for example `teacher`
+- `TEACHER_PASSWORD` = a private password students do not know
+
+When `TEACHER_PASSWORD` is set, `/teacher`, `/control`, `/session`, `/roster`,
+`/start-question`, and the form analytics API require that login. The student
+landing page does not show a teacher link.
+
 ## 4. Add a few lesson columns (optional but recommended)
 The page already uses **Essential Ideas, Assignment Link, Module #, Topic, Date,
 Due Date**. To fill the rest of the agenda, add these columns to the Lessons DB

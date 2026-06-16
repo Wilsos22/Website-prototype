@@ -1,6 +1,8 @@
-// Big Dog Math — home launcher. Playful cream-canvas theme with bright,
-// labeled tiles using big, minimal line icons. Tiles link to each tool.
+"use client";
+
+// Big Dog Math teacher command view: classroom controls, student preview, and tool launchers.
 import Link from "next/link";
+import { useState } from "react";
 
 type IconKey =
   | "control" | "timer" | "spinner" | "question"
@@ -8,20 +10,40 @@ type IconKey =
   | "whiteboard" | "algebra" | "fraction" | "numberline" | "hops" | "groupbars"
   | "today" | "lessons" | "join" | "analytics";
 
-interface Tool { href: string; label: string; icon: IconKey; color: string; }
-interface Section { title: string; tools: Tool[]; }
+interface Tool {
+  href: string;
+  label: string;
+  icon: IconKey;
+  color: string;
+  description?: string;
+}
 
-const SECTIONS: Section[] = [
+interface Section {
+  title: string;
+  tools: Tool[];
+}
+
+const PRIMARY_COMMANDS: Tool[] = [
+  { href: "/control", label: "Control Center", icon: "control", color: "#22c55e", description: "Timers, lineup, screens" },
+  { href: "/session", label: "Live Session", icon: "join", color: "#14b8a6", description: "Join code and class mode" },
+  { href: "/teacher/analytics", label: "Analytics", icon: "analytics", color: "#6366f1", description: "Warm-up and form responses" },
+  { href: "/roster", label: "Rosters", icon: "join", color: "#10b981", description: "Periods and students" },
+];
+
+const STUDENT_PREVIEWS = [
+  { label: "Home", path: "/" },
+  { label: "Lesson", path: "/lesson" },
+  { label: "Today", path: "/today" },
+  { label: "Join", path: "/join" },
+];
+
+const TOOL_GROUPS: Section[] = [
   {
     title: "Run the room",
     tools: [
-      { href: "/control", label: "Classroom Control", icon: "control", color: "#34c759" },
       { href: "/timer", label: "Timer", icon: "timer", color: "#f5b915" },
       { href: "/spinner", label: "Student Spinner", icon: "spinner", color: "#ff6b3d" },
       { href: "/start-question", label: "Start a Question", icon: "question", color: "#4d8df6" },
-      { href: "/teacher/analytics", label: "Form Analytics", icon: "analytics", color: "#6366f1" },
-      { href: "/roster", label: "Rosters", icon: "join", color: "#10b981" },
-      { href: "/session", label: "Live Session", icon: "join", color: "#14b8a6" },
     ],
   },
   {
@@ -42,15 +64,16 @@ const SECTIONS: Section[] = [
       { href: "/algebra-tiles", label: "Algebra Tiles", icon: "algebra", color: "#3b82f6" },
       { href: "/fraction-bars", label: "Fraction Bars", icon: "fraction", color: "#14b8a6" },
       { href: "/number-line", label: "Number Line", icon: "numberline", color: "#f59e0b" },
-      { href: "/number-line-plus", label: "Number Line · Hops", icon: "hops", color: "#38bdf8" },
+      { href: "/number-line-plus", label: "Number Line Hops", icon: "hops", color: "#38bdf8" },
       { href: "/group-bars", label: "Group Bars", icon: "groupbars", color: "#10b981" },
     ],
   },
   {
-    title: "For students",
+    title: "Student routes",
     tools: [
-      { href: "/today", label: "Today's Lesson", icon: "today", color: "#4d8df6" },
-      { href: "/lessons", label: "Past Lessons", icon: "lessons", color: "#8b5cf6" },
+      { href: "/", label: "Student Home", icon: "today", color: "#1f2937" },
+      { href: "/lesson", label: "Student Lesson", icon: "today", color: "#4d8df6" },
+      { href: "/today", label: "Today Board", icon: "lessons", color: "#8b5cf6" },
       { href: "/join", label: "Join Session", icon: "join", color: "#34c759" },
     ],
   },
@@ -82,51 +105,189 @@ function Icon({ name }: { name: IconKey }) {
   }
 }
 
-export default function HomePage() {
+function previewSrc(path: string) {
+  return `${path}${path.includes("?") ? "&" : "?"}teacherPreview=1`;
+}
+
+export default function TeacherCommandPage() {
+  const [previewPath, setPreviewPath] = useState(STUDENT_PREVIEWS[1].path);
+  const [previewVersion, setPreviewVersion] = useState(0);
+  const selectedPreview = STUDENT_PREVIEWS.find((item) => item.path === previewPath) ?? STUDENT_PREVIEWS[1];
+  const studentSrc = previewSrc(selectedPreview.path);
+
   return (
-    <main className="hp-page">
+    <main className="tc-page">
       <style>{`
-        .hp-page { min-height:100vh; background:#17181c; padding:clamp(14px,3vw,40px); font-family:Inter,ui-sans-serif,system-ui,sans-serif; box-sizing:border-box; }
-        .hp-panel { max-width:1080px; margin:0 auto; background:#fbf7ef; border-radius:30px; padding:clamp(24px,4vw,52px); box-shadow:0 30px 80px -30px rgba(0,0,0,0.6); }
-        .hp-banner { display:flex; justify-content:center; margin-bottom:14px; }
-        .hp-banner img { width:100%; max-width:680px; height:auto; border-radius:22px; display:block; box-shadow:0 14px 30px -16px rgba(255,107,61,0.6); }
-        .hp-sub { text-align:center; margin:0 0 clamp(26px,5vw,44px); color:#7a7468; font-size:clamp(1rem,2.4vw,1.25rem); font-weight:600; }
+        .tc-page { min-height:100vh; background:#f3f0e8; color:#1f2328; font-family:Inter,ui-sans-serif,system-ui,sans-serif; box-sizing:border-box; }
+        .tc-shell { max-width:1280px; margin:0 auto; padding:18px clamp(14px,2.4vw,28px) 40px; }
+        .tc-top { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:14px; }
+        .tc-brand { display:flex; align-items:center; gap:12px; min-width:0; }
+        .tc-logo { width:38px; height:38px; border-radius:8px; background:#ff6b3d; color:#fff; display:grid; place-items:center; font-weight:900; box-shadow:0 3px 0 rgba(0,0,0,0.12); }
+        .tc-title { margin:0; font-size:clamp(1.45rem,2.8vw,2.3rem); line-height:1.05; font-weight:900; letter-spacing:0; }
+        .tc-sub { margin:4px 0 0; color:#6f6a60; font-size:0.9rem; font-weight:700; }
+        .tc-top-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+        .tc-action { min-height:38px; display:inline-flex; align-items:center; justify-content:center; gap:8px; border-radius:8px; border:1px solid #d8d0bf; background:#fff; color:#282a2e; padding:0 13px; font-size:0.86rem; font-weight:900; text-decoration:none; white-space:nowrap; }
+        .tc-action.primary { background:#1f2328; border-color:#1f2328; color:#fff; }
+        .tc-action:hover { border-color:#8c8374; }
 
-        .hp-section { margin-bottom:clamp(22px,4vw,38px); }
-        .hp-section-title { font-size:0.72rem; font-weight:900; letter-spacing:0.14em; text-transform:uppercase; color:#a89f8c; margin:0 0 14px; }
-        .hp-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:clamp(12px,2vw,18px); }
+        .tc-layout { display:grid; grid-template-columns:minmax(260px,330px) minmax(0,1fr); gap:14px; align-items:start; }
+        .tc-panel { background:#fff; border:1px solid #ded6c7; border-radius:8px; box-shadow:0 10px 28px -24px rgba(31,35,40,0.5); }
+        .tc-panel-pad { padding:14px; }
+        .tc-panel-head { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:13px 14px; border-bottom:1px solid #eee7dc; }
+        .tc-h2 { margin:0; font-size:0.78rem; font-weight:900; letter-spacing:0.12em; text-transform:uppercase; color:#766f62; }
+        .tc-command-list { display:grid; gap:8px; }
+        .tc-command { display:grid; grid-template-columns:40px 1fr; gap:10px; align-items:center; padding:10px; border:1px solid #eee7dc; border-radius:8px; color:#1f2328; text-decoration:none; background:#fff; }
+        .tc-command:hover { border-color:#bdb4a4; background:#fbf8f1; }
+        .tc-command-icon { width:40px; height:40px; border-radius:8px; color:#fff; display:grid; place-items:center; }
+        .tc-command-icon svg { width:23px; height:23px; }
+        .tc-command-title { display:block; font-size:0.95rem; font-weight:900; line-height:1.1; }
+        .tc-command-desc { display:block; margin-top:3px; color:#7a7468; font-size:0.78rem; font-weight:700; line-height:1.25; }
 
-        .hp-tile { display:flex; flex-direction:column; align-items:center; gap:14px; text-decoration:none; padding:22px 10px; border-radius:22px; background:#fff; border:1px solid #efe7d6; transition:transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease; }
-        .hp-tile:hover { transform:translateY(-4px); box-shadow:0 16px 30px -14px rgba(0,0,0,0.35); border-color:#e2d8c2; }
-        .hp-icon { width:88px; height:88px; border-radius:24px; display:grid; place-items:center; color:#fff; box-shadow:0 8px 0 0 rgba(0,0,0,0.10); }
-        .hp-icon svg { width:48px; height:48px; }
-        .hp-label { font-size:0.92rem; font-weight:800; color:#2a2a2e; text-align:center; line-height:1.2; }
+        .tc-status { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+        .tc-status-box { background:#f8f4ec; border:1px solid #eee7dc; border-radius:8px; padding:10px; min-height:58px; }
+        .tc-status-label { color:#8f8676; font-size:0.72rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; }
+        .tc-status-value { margin-top:5px; color:#24272c; font-size:0.95rem; font-weight:900; }
 
-        .hp-foot { text-align:center; margin-top:8px; color:#b3aa97; font-size:0.8rem; font-weight:600; }
+        .tc-preview-wrap { display:grid; grid-template-rows:auto minmax(520px,1fr); min-height:680px; }
+        .tc-preview-tools { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+        .tc-seg { border:1px solid #d8d0bf; background:#fff; color:#5f574c; border-radius:8px; padding:8px 11px; font-size:0.82rem; font-weight:900; cursor:pointer; }
+        .tc-seg.on { background:#1f2328; border-color:#1f2328; color:#fff; }
+        .tc-mini { border:1px solid #d8d0bf; background:#fff; color:#282a2e; border-radius:8px; padding:8px 11px; font-size:0.82rem; font-weight:900; cursor:pointer; text-decoration:none; }
+        .tc-preview-stage { padding:14px; background:#292f3a; border-radius:0 0 8px 8px; display:grid; place-items:center; min-height:0; }
+        .tc-device { width:min(100%, 440px); height:620px; background:#111827; border:10px solid #111827; border-radius:24px; box-shadow:0 22px 54px -26px #000; overflow:hidden; }
+        .tc-device iframe { width:100%; height:100%; border:0; background:#fff; display:block; }
+        .tc-devicebar { height:18px; background:#111827; display:flex; align-items:center; justify-content:center; }
+        .tc-devicebar span { width:54px; height:4px; border-radius:999px; background:#303947; }
+
+        .tc-main-stack { display:grid; gap:14px; }
+        .tc-tool-groups { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+        .tc-tool-panel { padding:13px; }
+        .tc-tool-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; margin-top:10px; }
+        .tc-tool { display:grid; grid-template-columns:34px 1fr; align-items:center; gap:9px; min-height:52px; padding:8px; border-radius:8px; border:1px solid #eee7dc; background:#fff; text-decoration:none; color:#1f2328; }
+        .tc-tool:hover { border-color:#bdb4a4; background:#fbf8f1; }
+        .tc-tool-icon { width:34px; height:34px; border-radius:8px; display:grid; place-items:center; color:#fff; }
+        .tc-tool-icon svg { width:20px; height:20px; }
+        .tc-tool-label { font-size:0.86rem; font-weight:900; line-height:1.16; }
+        .tc-route-note { margin:10px 0 0; color:#7a7468; font-size:0.8rem; font-weight:700; line-height:1.45; }
+
+        @media (max-width:980px) {
+          .tc-layout { grid-template-columns:1fr; }
+          .tc-preview-wrap { min-height:auto; }
+          .tc-tool-groups { grid-template-columns:1fr; }
+          .tc-device { height:560px; }
+        }
+        @media (max-width:620px) {
+          .tc-top { align-items:flex-start; flex-direction:column; }
+          .tc-top-actions { justify-content:flex-start; }
+          .tc-status { grid-template-columns:1fr; }
+          .tc-device { width:100%; height:520px; border-width:7px; border-radius:18px; }
+          .tc-preview-tools { width:100%; }
+          .tc-seg, .tc-mini { flex:1 1 auto; }
+        }
       `}</style>
 
-      <div className="hp-panel">
-        <div className="hp-banner">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/big-dog-logo.png" alt="Big Dog Math — Abbie" />
-        </div>
-        <p className="hp-sub">Pick a tool to get started.</p>
+      <div className="tc-shell">
+        <header className="tc-top">
+          <div className="tc-brand">
+            <span className="tc-logo">B</span>
+            <div>
+              <h1 className="tc-title">Teacher Command</h1>
+              <p className="tc-sub">Your view, their view, and class controls in one place.</p>
+            </div>
+          </div>
+          <div className="tc-top-actions">
+            <Link className="tc-action primary" href="/control">Open Control Center</Link>
+            <Link className="tc-action" href="/" target="_blank">Open Student View</Link>
+            <Link className="tc-action" href="/lesson" target="_blank">Open Lesson View</Link>
+          </div>
+        </header>
 
-        {SECTIONS.map((sec) => (
-          <section className="hp-section" key={sec.title}>
-            <p className="hp-section-title">{sec.title}</p>
-            <div className="hp-grid">
-              {sec.tools.map((t) => (
-                <Link className="hp-tile" href={t.href} key={t.href}>
-                  <span className="hp-icon" style={{ background: t.color }}><Icon name={t.icon} /></span>
-                  <span className="hp-label">{t.label}</span>
+        <div className="tc-layout">
+          <aside className="tc-panel tc-panel-pad">
+            <h2 className="tc-h2">Command shortcuts</h2>
+            <div className="tc-command-list" style={{ marginTop: 10 }}>
+              {PRIMARY_COMMANDS.map((command) => (
+                <Link className="tc-command" href={command.href} key={command.href}>
+                  <span className="tc-command-icon" style={{ background: command.color }}><Icon name={command.icon} /></span>
+                  <span>
+                    <span className="tc-command-title">{command.label}</span>
+                    {command.description && <span className="tc-command-desc">{command.description}</span>}
+                  </span>
                 </Link>
               ))}
             </div>
-          </section>
-        ))}
 
-        <p className="hp-foot">Big Dog Math · classroom tools</p>
+            <div className="tc-status">
+              <div className="tc-status-box">
+                <div className="tc-status-label">Teacher URL</div>
+                <div className="tc-status-value">/teacher</div>
+              </div>
+              <div className="tc-status-box">
+                <div className="tc-status-label">Student URL</div>
+                <div className="tc-status-value">/</div>
+              </div>
+              <div className="tc-status-box">
+                <div className="tc-status-label">Daily Lesson</div>
+                <div className="tc-status-value">/lesson</div>
+              </div>
+              <div className="tc-status-box">
+                <div className="tc-status-label">Board View</div>
+                <div className="tc-status-value">/today</div>
+              </div>
+            </div>
+          </aside>
+
+          <section className="tc-main-stack">
+            <div className="tc-panel tc-preview-wrap">
+              <div className="tc-panel-head">
+                <h2 className="tc-h2">Student preview</h2>
+                <div className="tc-preview-tools">
+                  {STUDENT_PREVIEWS.map((item) => (
+                    <button
+                      className={`tc-seg${previewPath === item.path ? " on" : ""}`}
+                      key={item.path}
+                      onClick={() => setPreviewPath(item.path)}
+                      type="button"
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                  <button className="tc-mini" onClick={() => setPreviewVersion((value) => value + 1)} type="button">Refresh</button>
+                  <Link className="tc-mini" href={selectedPreview.path} target="_blank">Open</Link>
+                </div>
+              </div>
+              <div className="tc-preview-stage">
+                <div className="tc-device">
+                  <div className="tc-devicebar"><span /></div>
+                  <iframe
+                    key={`${studentSrc}-${previewVersion}`}
+                    src={studentSrc}
+                    title={`${selectedPreview.label} student preview`}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="tc-tool-groups">
+              {TOOL_GROUPS.map((section) => (
+                <section className="tc-panel tc-tool-panel" key={section.title}>
+                  <h2 className="tc-h2">{section.title}</h2>
+                  <div className="tc-tool-grid">
+                    {section.tools.map((tool) => (
+                      <Link className="tc-tool" href={tool.href} key={tool.href}>
+                        <span className="tc-tool-icon" style={{ background: tool.color }}><Icon name={tool.icon} /></span>
+                        <span className="tc-tool-label">{tool.label}</span>
+                      </Link>
+                    ))}
+                  </div>
+                  {section.title === "Student routes" && (
+                    <p className="tc-route-note">Student preview disables class-mode redirects, so you can inspect pages without being pulled to the broadcast screen.</p>
+                  )}
+                </section>
+              ))}
+            </div>
+          </section>
+        </div>
       </div>
     </main>
   );

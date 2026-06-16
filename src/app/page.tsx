@@ -128,7 +128,6 @@ export default function StudentHome() {
         )}
       </div>
 
-      <div className="st-foot"><a className="st-teacher" href="/control">Teacher</a></div>
     </main>
   );
 }
