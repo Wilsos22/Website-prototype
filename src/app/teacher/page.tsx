@@ -6,7 +6,7 @@ type IconKey =
   | "control" | "timer" | "spinner" | "question"
   | "equation" | "gems" | "combine" | "proportion" | "percent" | "area"
   | "whiteboard" | "algebra" | "fraction" | "numberline" | "hops" | "groupbars"
-  | "today" | "lessons" | "join";
+  | "today" | "lessons" | "join" | "analytics";
 
 interface Tool { href: string; label: string; icon: IconKey; color: string; }
 interface Section { title: string; tools: Tool[]; }
@@ -19,6 +19,7 @@ const SECTIONS: Section[] = [
       { href: "/timer", label: "Timer", icon: "timer", color: "#f5b915" },
       { href: "/spinner", label: "Student Spinner", icon: "spinner", color: "#ff6b3d" },
       { href: "/start-question", label: "Start a Question", icon: "question", color: "#4d8df6" },
+      { href: "/teacher/analytics", label: "Form Analytics", icon: "analytics", color: "#6366f1" },
       { href: "/roster", label: "Rosters", icon: "join", color: "#10b981" },
       { href: "/session", label: "Live Session", icon: "join", color: "#14b8a6" },
     ],
@@ -62,6 +63,7 @@ function Icon({ name }: { name: IconKey }) {
     case "timer": return <svg viewBox="0 0 24 24" {...p}><circle cx="12" cy="13" r="8" /><path d="M12 13 V8" /><line x1="9" y1="2.5" x2="15" y2="2.5" /></svg>;
     case "spinner": return <svg viewBox="0 0 24 24" {...p}><circle cx="12" cy="12" r="8" /><path d="M12 4 l2.5 4 h-5 Z" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" /></svg>;
     case "question": return <svg viewBox="0 0 24 24" {...p}><path d="M5 5 h14 a1 1 0 0 1 1 1 v9 a1 1 0 0 1 -1 1 H10 l-4 4 v-4 H5 a1 1 0 0 1 -1 -1 V6 a1 1 0 0 1 1 -1 Z" /><path d="M9.5 9.5 a2.5 2.5 0 1 1 3.4 2.3 c-0.8 0.4 -0.9 0.9 -0.9 1.7" /><circle cx="12" cy="15.6" r="0.6" fill="currentColor" stroke="none" /></svg>;
+    case "analytics": return <svg viewBox="0 0 24 24" {...p}><line x1="4" y1="20" x2="20" y2="20" /><rect x="6" y="11" width="3" height="7" rx="1" fill="currentColor" stroke="none" /><rect x="11" y="6" width="3" height="12" rx="1" fill="currentColor" stroke="none" /><rect x="16" y="9" width="3" height="9" rx="1" fill="currentColor" stroke="none" /></svg>;
     case "equation": return <svg viewBox="0 0 24 24" {...p}><line x1="12" y1="4" x2="12" y2="20" /><line x1="5" y1="7" x2="19" y2="7" /><path d="M5 7 L3 12 h4 Z" /><path d="M19 7 L17 12 h4 Z" /><line x1="8" y1="20" x2="16" y2="20" /></svg>;
     case "gems": return <svg viewBox="0 0 24 24" {...p}><path d="M12 3 L21 10 L12 21 L3 10 Z" /><path d="M3 10 H21" /><path d="M9 10 L12 21" /><path d="M15 10 L12 21" /></svg>;
     case "combine": return <svg viewBox="0 0 24 24" {...p}><circle cx="8" cy="12" r="4.5" /><circle cx="16" cy="12" r="4.5" /><line x1="12" y1="9.5" x2="12" y2="14.5" /><line x1="9.6" y1="12" x2="14.4" y2="12" /></svg>;

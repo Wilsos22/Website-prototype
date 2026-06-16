@@ -13,6 +13,8 @@ interface LessonData {
   dueDate: string;
   topic: string;
   module: string;
+  warmUpLink: string;
+  exitTicketLink: string;
 }
 
 function formatDate(iso: string): string {
@@ -218,6 +220,18 @@ export default function TodayPage() {
           background: #3b5be6;
           transform: translateY(-1px);
         }
+        .today-assignment-btn.is-warmup {
+          background: #f97316;
+        }
+        .today-assignment-btn.is-warmup:hover {
+          background: #ea580c;
+        }
+        .today-assignment-btn.is-exit {
+          background: #10b981;
+        }
+        .today-assignment-btn.is-exit:hover {
+          background: #059669;
+        }
         .today-due {
           font-size: 0.9rem;
           font-weight: 700;
@@ -389,6 +403,20 @@ export default function TodayPage() {
                   </div>
                 )}
 
+                {lesson.warmUpLink && (
+                  <div className="today-card">
+                    <p className="today-card-label">Warm-Up</p>
+                    <a
+                      className="today-assignment-btn is-warmup"
+                      href={lesson.warmUpLink}
+                      rel="noopener noreferrer"
+                      target="_blank"
+                    >
+                      Start Warm-Up ↗
+                    </a>
+                  </div>
+                )}
+
                 {lesson.assignmentLink && (
                   <div className="today-card">
                     <p className="today-card-label">Assignment</p>
@@ -403,6 +431,20 @@ export default function TodayPage() {
                     {lesson.dueDate && (
                       <p className="today-due">Due {formatShortDate(lesson.dueDate)}</p>
                     )}
+                  </div>
+                )}
+
+                {lesson.exitTicketLink && (
+                  <div className="today-card">
+                    <p className="today-card-label">Exit Ticket</p>
+                    <a
+                      className="today-assignment-btn is-exit"
+                      href={lesson.exitTicketLink}
+                      rel="noopener noreferrer"
+                      target="_blank"
+                    >
+                      Open Exit Ticket ↗
+                    </a>
                   </div>
                 )}
 
