@@ -6,6 +6,7 @@
 const DATA_SOURCE_IDS = [
   "e367e541-c0c7-4613-8066-d2e61b6fee64",
   "3282eba1-de37-8069-a043-000b7c36799d",
+  "d1c8e7b0-9a3c-4f1b-8c5c-9a2e5f0a1a3f",
 ];
 const NOTION_API = "https://api.notion.com/v1";
 const NOTION_VERSION = "2025-09-03";
