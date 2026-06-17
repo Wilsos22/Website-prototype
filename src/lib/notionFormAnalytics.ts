@@ -1,7 +1,6 @@
-// Notion API integration for Google Forms response tracking.
+// Notion API integration for Google Forms / warm-up response analytics.
 // Requires NOTION_TOKEN env var.
-// Use NOTION_WARMUP_DATA_SOURCE_IDS when you have actual Notion data source IDs.
-// Use NOTION_WARMUP_DATABASE_ID when you only have the parent Notion database ID.
+// Uses the Today's Warm-Up Submissions database, then queries its data source.
 
 const FALLBACK_WARMUP_DATABASE_ID = "78a5a644b26140b0a0695ea8cc342789";
 const NOTION_API = "https://api.notion.com/v1";
@@ -15,6 +14,12 @@ export interface FormResponseData {
   score: number | null;
   maxScore: number | null;
   week: string;
+  period?: string;
+  group?: string;
+  className?: string;
+  needsFollowUp?: boolean;
+  teacherNotes?: string;
+  submissionKey?: string;
 }
 
 interface RichTextItem {
@@ -26,9 +31,25 @@ interface NotionProperty {
   title?: RichTextItem[];
   rich_text?: RichTextItem[];
   url?: string | null;
+  email?: string | null;
   select?: { name: string } | null;
   date?: { start: string } | null;
   number?: number | null;
+  checkbox?: boolean;
+  relation?: { id: string }[];
+  formula?: {
+    type: string;
+    string?: string | null;
+    number?: number | null;
+    boolean?: boolean | null;
+    date?: { start: string } | null;
+  };
+  rollup?: {
+    type: string;
+    array?: NotionProperty[];
+    number?: number | null;
+    date?: { start: string } | null;
+  };
 }
 
 interface NotionPage {
@@ -43,6 +64,12 @@ interface NotionDataSourceSummary {
 interface NotionDatabaseResponse {
   id: string;
   data_sources?: NotionDataSourceSummary[];
+}
+
+interface NotionQueryResponse {
+  results: NotionPage[];
+  has_more?: boolean;
+  next_cursor?: string | null;
 }
 
 function cleanNotionId(id: string): string {
@@ -62,15 +89,30 @@ function extractText(prop: NotionProperty | undefined): string {
   if (prop.type === "title") return prop.title?.map((t) => t.plain_text).join("") ?? "";
   if (prop.type === "rich_text") return prop.rich_text?.map((t) => t.plain_text).join("") ?? "";
   if (prop.type === "url") return prop.url ?? "";
+  if (prop.type === "email") return prop.email ?? "";
   if (prop.type === "select") return prop.select?.name ?? "";
   if (prop.type === "date") return prop.date?.start ?? "";
   if (prop.type === "number") return prop.number?.toString() ?? "";
+  if (prop.type === "formula") {
+    if (prop.formula?.type === "string") return prop.formula.string ?? "";
+    if (prop.formula?.type === "number") return prop.formula.number?.toString() ?? "";
+    if (prop.formula?.type === "boolean") return prop.formula.boolean ? "true" : "false";
+    if (prop.formula?.type === "date") return prop.formula.date?.start ?? "";
+  }
+  if (prop.type === "rollup") {
+    if (prop.rollup?.type === "array") return prop.rollup.array?.map(extractText).filter(Boolean).join("\n") ?? "";
+    if (prop.rollup?.type === "number") return prop.rollup.number?.toString() ?? "";
+    if (prop.rollup?.type === "date") return prop.rollup.date?.start ?? "";
+  }
   return "";
 }
 
 function extractNumber(prop: NotionProperty | undefined): number | null {
   if (!prop) return null;
   if (prop.type === "number") return prop.number ?? null;
+  if (prop.type === "formula" && prop.formula?.type === "number") return prop.formula.number ?? null;
+  if (prop.type === "rollup" && prop.rollup?.type === "number") return prop.rollup.number ?? null;
+
   const text = extractText(prop).trim();
   if (!text) return null;
   const parsed = Number(text.replace(/[^0-9.\-]/g, ""));
@@ -89,13 +131,69 @@ function getIsoWeek(dateString: string): string {
   return `${target.getUTCFullYear()}-W${String(weekNumber).padStart(2, "0")}`;
 }
 
-function parseFormResponse(page: NotionPage): FormResponseData {
+async function fetchRelatedPageTitle(pageId: string, token: string, cache: Map<string, Promise<string>>): Promise<string> {
+  let cached = cache.get(pageId);
+  if (!cached) {
+    cached = fetch(`${NOTION_API}/pages/${pageId}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Notion-Version": NOTION_VERSION,
+      },
+      cache: "no-store",
+    }).then(async (res) => {
+      if (!res.ok) return "";
+      const page = (await res.json()) as NotionPage;
+      for (const prop of Object.values(page.properties)) {
+        if (prop.type === "title") return extractText(prop);
+      }
+      return "";
+    });
+    cache.set(pageId, cached);
+  }
+  return cached;
+}
+
+async function extractRelationTitle(
+  prop: NotionProperty | undefined,
+  token: string,
+  cache: Map<string, Promise<string>>,
+): Promise<string> {
+  if (prop?.type !== "relation") return "";
+  const firstRelation = prop.relation?.[0];
+  if (!firstRelation) return "";
+  return fetchRelatedPageTitle(firstRelation.id, token, cache);
+}
+
+async function parseFormResponse(
+  page: NotionPage,
+  token: string,
+  relatedTitleCache: Map<string, Promise<string>>,
+): Promise<FormResponseData> {
   const p = page.properties;
-  const responseEmail = extractText(p["Response Email"]) || extractText(p["Email"]) || extractText(p["Submitter"]);
-  const submittedAt = extractText(p["Submitted At"]) || extractText(p["Submitted"]) || extractText(p["Timestamp"]);
-  const score = extractNumber(p["Score"]) ?? extractNumber(p["Total Score"]) ?? null;
-  const maxScore = extractNumber(p["Max Score"]) ?? null;
-  const formTitle = extractText(p["Form Title"]) || extractText(p["Title"]) || "Untitled Form";
+
+  const warmUpTitle = await extractRelationTitle(p["Warm Up"], token, relatedTitleCache);
+  const studentTitle = await extractRelationTitle(p["Student"], token, relatedTitleCache);
+
+  const responseEmail =
+    extractText(p["Email Address"]) ||
+    extractText(p["Response Email"]) ||
+    extractText(p["Email"]) ||
+    studentTitle;
+
+  const submittedAt =
+    extractText(p["Submitted"]) ||
+    extractText(p["Submitted At"]) ||
+    extractText(p["Timestamp"]);
+
+  const week = extractText(p["Week"]) || getIsoWeek(submittedAt);
+  const score = extractNumber(p["Score"]);
+  const maxScore = extractNumber(p["Max Score"]);
+  const formTitle =
+    warmUpTitle ||
+    extractText(p["Warm Up Key"]) ||
+    extractText(p["Submission Key"]) ||
+    extractText(p["Form Title"]) ||
+    "Warm Up";
 
   return {
     id: page.id,
@@ -104,7 +202,13 @@ function parseFormResponse(page: NotionPage): FormResponseData {
     submittedAt,
     score,
     maxScore,
-    week: getIsoWeek(submittedAt),
+    week,
+    period: extractText(p["Period"]),
+    group: extractText(p["Group"]),
+    className: extractText(p["Class"]),
+    needsFollowUp: Boolean(p["Needs Follow-Up"]?.checkbox),
+    teacherNotes: extractText(p["Teacher Notes"]),
+    submissionKey: extractText(p["Submission Key"]),
   };
 }
 
@@ -151,27 +255,38 @@ export async function getAllFormResponses(): Promise<FormResponseData[]> {
   const responses: FormResponseData[] = [];
   const errors: string[] = [];
   const dataSourceIds = await getWarmupDataSourceIds(token);
+  const relatedTitleCache = new Map<string, Promise<string>>();
 
   for (const dataSourceId of dataSourceIds) {
-    const res = await fetch(`${NOTION_API}/data_sources/${dataSourceId}/query`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        "Notion-Version": NOTION_VERSION,
-      },
-      body: JSON.stringify({}),
-      cache: "no-store",
-    });
+    let nextCursor: string | null | undefined = undefined;
 
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      errors.push(`${dataSourceId}: Notion API error ${res.status}: ${detail}`);
-      continue;
-    }
+    do {
+      const res = await fetch(`${NOTION_API}/data_sources/${dataSourceId}/query`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "Notion-Version": NOTION_VERSION,
+        },
+        body: JSON.stringify({
+          page_size: 100,
+          ...(nextCursor ? { start_cursor: nextCursor } : {}),
+        }),
+        cache: "no-store",
+      });
 
-    const data = (await res.json()) as { results: NotionPage[] };
-    responses.push(...data.results.map(parseFormResponse));
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        errors.push(`${dataSourceId}: Notion API error ${res.status}: ${detail}`);
+        break;
+      }
+
+      const data = (await res.json()) as NotionQueryResponse;
+      responses.push(
+        ...(await Promise.all(data.results.map((page) => parseFormResponse(page, token, relatedTitleCache))))
+      );
+      nextCursor = data.has_more ? data.next_cursor : null;
+    } while (nextCursor);
   }
 
   if (!responses.length && errors.length === dataSourceIds.length) {
