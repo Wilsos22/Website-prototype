@@ -1,9 +1,9 @@
 // Notion API integration for Google Forms response tracking.
 // Requires NOTION_TOKEN env var.
+// Use NOTION_WARMUP_DATA_SOURCE_IDS when you have actual Notion data source IDs.
+// Use NOTION_WARMUP_DATABASE_ID when you only have the parent Notion database ID.
 
-const DATA_SOURCE_IDS = [
-  "78a5a644b26140b0a0695ea8cc342789",
-];
+const FALLBACK_WARMUP_DATABASE_ID = "78a5a644b26140b0a0695ea8cc342789";
 const NOTION_API = "https://api.notion.com/v1";
 const NOTION_VERSION = "2025-09-03";
 
@@ -34,6 +34,27 @@ interface NotionProperty {
 interface NotionPage {
   id: string;
   properties: Record<string, NotionProperty>;
+}
+
+interface NotionDataSourceSummary {
+  id: string;
+}
+
+interface NotionDatabaseResponse {
+  id: string;
+  data_sources?: NotionDataSourceSummary[];
+}
+
+function cleanNotionId(id: string): string {
+  return id.trim().replace(/-/g, "");
+}
+
+function parseIdList(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((id) => cleanNotionId(id))
+    .filter(Boolean);
 }
 
 function extractText(prop: NotionProperty | undefined): string {
@@ -87,17 +108,51 @@ function parseFormResponse(page: NotionPage): FormResponseData {
   };
 }
 
+async function getWarmupDataSourceIds(token: string): Promise<string[]> {
+  const explicitDataSourceIds = parseIdList(process.env.NOTION_WARMUP_DATA_SOURCE_IDS);
+  if (explicitDataSourceIds.length > 0) return explicitDataSourceIds;
+
+  const databaseId = cleanNotionId(process.env.NOTION_WARMUP_DATABASE_ID ?? FALLBACK_WARMUP_DATABASE_ID);
+  const res = await fetch(`${NOTION_API}/databases/${databaseId}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Notion-Version": NOTION_VERSION,
+    },
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(
+      `Could not read warm-up database ${databaseId}. Make sure this exact database is shared with the Notion integration named Big Dog Math. Notion API error ${res.status}: ${detail}`
+    );
+  }
+
+  const database = (await res.json()) as NotionDatabaseResponse;
+  const dataSourceIds = database.data_sources?.map((source) => cleanNotionId(source.id)).filter(Boolean) ?? [];
+
+  if (!dataSourceIds.length) {
+    throw new Error(
+      `Warm-up database ${databaseId} loaded, but Notion did not return any data source IDs. Add NOTION_WARMUP_DATA_SOURCE_IDS in Vercel using the actual source ID for Today's Warm-Up Submissions.`
+    );
+  }
+
+  return dataSourceIds;
+}
+
 export async function getAllFormResponses(): Promise<FormResponseData[]> {
   const token = process.env.NOTION_TOKEN;
 
   if (!token) {
-    throw new Error("NOTION_TOKEN is not set. Add it to your Vercel environment variables.");
+    throw new Error("NOTION_TOKEN is not set. Add it to your local .env.local file and to your Vercel environment variables, then redeploy.");
   }
 
   const responses: FormResponseData[] = [];
   const errors: string[] = [];
+  const dataSourceIds = await getWarmupDataSourceIds(token);
 
-  for (const dataSourceId of DATA_SOURCE_IDS) {
+  for (const dataSourceId of dataSourceIds) {
     const res = await fetch(`${NOTION_API}/data_sources/${dataSourceId}/query`, {
       method: "POST",
       headers: {
@@ -105,9 +160,7 @@ export async function getAllFormResponses(): Promise<FormResponseData[]> {
         "Content-Type": "application/json",
         "Notion-Version": NOTION_VERSION,
       },
-      body: JSON.stringify({
-        sorts: [{ property: "Submitted At", direction: "descending" }],
-      }),
+      body: JSON.stringify({}),
       cache: "no-store",
     });
 
@@ -121,10 +174,13 @@ export async function getAllFormResponses(): Promise<FormResponseData[]> {
     responses.push(...data.results.map(parseFormResponse));
   }
 
-  if (!responses.length && errors.length === DATA_SOURCE_IDS.length) {
+  if (!responses.length && errors.length === dataSourceIds.length) {
     throw new Error(errors.join(" | "));
   }
 
-  return responses;
+  return responses.sort((a, b) => {
+    const aTime = new Date(a.submittedAt).getTime();
+    const bTime = new Date(b.submittedAt).getTime();
+    return (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime);
+  });
 }
-
