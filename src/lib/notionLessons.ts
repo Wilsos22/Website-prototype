@@ -9,6 +9,8 @@ const DATA_SOURCE_IDS = [
 ];
 const NOTION_API = "https://api.notion.com/v1";
 const NOTION_VERSION = "2025-09-03";
+const NOTION_TOKEN= "secret";
+
 
 export interface LessonData {
   id: string;
