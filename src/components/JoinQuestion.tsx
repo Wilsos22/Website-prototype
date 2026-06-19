@@ -3,6 +3,13 @@
 // Redesigned student-facing join flow: code entry → dynamic session response (question or fist-to-five).
 // Anonymous question can be submitted at any time once a session is active.
 import { FormEvent, useState } from "react";
+import { useRouter } from "next/navigation";
+import { getSupabase } from "@/lib/supabase";
+import {
+  LIVE_FLOW_MODE,
+  LIVE_FLOW_ROUTE,
+  STUDENT_SESSION_KEY,
+} from "@/lib/liveClassFlow";
 
 type SessionType = "question" | "fist-to-five";
 
@@ -24,6 +31,8 @@ const FIST_LEVELS = [
 ] as const;
 
 export function JoinQuestion() {
+  const router = useRouter();
+  const supabase = getSupabase();
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [step, setStep] = useState<Step>("enter");
@@ -39,13 +48,69 @@ export function JoinQuestion() {
 
   const lookupSession = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!name.trim() || code.length < 4) {
-      setStatus("Enter your name and the 4-digit code.");
+    const cleanName = name.trim();
+    const cleanCode = code.trim().toUpperCase();
+
+    if (!cleanName || cleanCode.length < 2) {
+      setStatus("Enter your name and the code from the board.");
       return;
     }
     setStatus("Looking up code...");
 
-    const res = await fetch(`/api/session?code=${code}`, { cache: "no-store" });
+    if (supabase) {
+      const { data: liveSession, error: liveError } = await supabase
+        .from("sessions")
+        .select("id,period_id,broadcast,status,live_flow")
+        .eq("join_code", cleanCode)
+        .eq("status", "open")
+        .limit(1)
+        .maybeSingle();
+
+      if (liveError) {
+        setStatus(liveError.message);
+        return;
+      }
+
+      if (liveSession) {
+        const row = liveSession as {
+          id: string;
+          period_id: string;
+          broadcast: string | null;
+          status: string;
+          live_flow: { tool?: { route?: string | null } | null } | null;
+        };
+        const { error: joinError } = await supabase.from("session_joins").insert({
+          session_id: row.id,
+          display_name: cleanName,
+        });
+
+        if (joinError) {
+          setStatus(joinError.message);
+          return;
+        }
+
+        try {
+          localStorage.setItem("bdm-student-name", cleanName);
+          localStorage.setItem(STUDENT_SESSION_KEY, JSON.stringify({
+            sessionId: row.id,
+            studentId: "",
+            name: cleanName,
+          }));
+        } catch {
+          /* ignore */
+        }
+
+        const target = row.broadcast === LIVE_FLOW_MODE
+          ? row.live_flow?.tool?.route || LIVE_FLOW_ROUTE
+          : row.broadcast && row.broadcast !== "free"
+            ? row.broadcast
+            : "/lesson";
+        router.push(target);
+        return;
+      }
+    }
+
+    const res = await fetch(`/api/session?code=${cleanCode}`, { cache: "no-store" });
 
     if (!res.ok) {
       setStatus("Code not found — double-check with your teacher.");
@@ -452,10 +517,12 @@ export function JoinQuestion() {
                 <input
                   className="join-input code-input"
                   id="join-code"
-                  inputMode="numeric"
-                  maxLength={4}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                  placeholder="0000"
+                  autoCapitalize="characters"
+                  autoComplete="off"
+                  inputMode="text"
+                  maxLength={8}
+                  onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8))}
+                  placeholder="DOG123"
                   value={code}
                 />
               </div>

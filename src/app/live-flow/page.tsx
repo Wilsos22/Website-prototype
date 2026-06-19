@@ -162,7 +162,7 @@ export default function LiveFlowPage() {
     if (!supabase || !activePoll || !student || !answer.trim() || submittedPollIds.includes(activePoll.id)) return;
     await supabase.from("poll_answers").insert({
       poll_id: activePoll.id,
-      student_id: student.studentId,
+      ...(student.studentId ? { student_id: student.studentId } : {}),
       display_name: student.name,
       answer: answer.trim(),
     });
