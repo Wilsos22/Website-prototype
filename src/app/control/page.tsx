@@ -115,6 +115,33 @@ const DEFAULT_STATES: ClassState[] = [
   { id: "break", label: "Brain Break", minutes: 3, color: "#a3a3a3", desc: "Quick brain break — reset and get ready to focus." },
 ];
 
+const BANK_GROUPS = [
+  {
+    id: "class",
+    label: "Class States",
+    hint: "Room routines and teacher-led lesson flow",
+    stateIds: ["warmup", "review", "i-do", "we-do", "discussion", "you-do", "partner", "exit", "cleanup", "break"],
+  },
+  {
+    id: "feedback",
+    label: "Feedback",
+    hint: "Questions, checks for understanding, and polls",
+    stateIds: ["question", "poll"],
+  },
+  {
+    id: "process",
+    label: "Guided Processes",
+    hint: "Step-by-step math thinking routines",
+    stateIds: ["tool-gems", "tool-equation-builder"],
+  },
+  {
+    id: "manipulatives",
+    label: "Manipulatives",
+    hint: "Student screens switch to digital math tools",
+    stateIds: ["tool-whiteboard", "tool-number-line", "tool-percent-bar", "tool-fraction-bars", "tool-algebra-tiles", "manip"],
+  },
+] as const;
+
 const LS_BANK = "bdm-control-bank-v2";
 const LS_LINEUP = "bdm-control-lineup-v1";
 const PERIOD_MIN = 55;
@@ -866,6 +893,25 @@ export default function ControlPage() {
       : liveFlowConnected
         ? "Live Class Flow connected"
         : "Select Live Class Flow in Session";
+  const groupedBankSections = BANK_GROUPS.map((group) => ({
+    ...group,
+    states: bank.filter((state) => (group.stateIds as readonly string[]).includes(state.id)),
+  })).filter((group) => group.states.length > 0);
+  const groupedBankIds = new Set<string>(BANK_GROUPS.flatMap((group) => [...group.stateIds]));
+  const ungroupedBankStates = bank.filter((state) => !groupedBankIds.has(state.id));
+  const renderBankChip = (state: ClassState) => (
+    <div key={state.id} className="cx-chip" onClick={() => !editing && addToLineup(state.id)} style={editing ? { cursor: "default" } : undefined}>
+      <span className="dot" style={{ background: state.color }} />
+      {state.label}
+      {soundUrls[`music:${state.id}`] && <span className="cx-music-tag">♪</span>}
+      {editing ? (
+        <input className="cx-min-in" type="number" min={1} max={120} value={state.minutes}
+          onClick={(e) => e.stopPropagation()} onChange={(e) => editMinutes(state.id, Number(e.target.value))} />
+      ) : (
+        <span className="m">{state.minutes}m</span>
+      )}
+    </div>
+  );
 
   return (
     <>
@@ -943,8 +989,14 @@ export default function ControlPage() {
         .cx-ibtn:hover { color:#fff; }
         .cx-empty-line { color:#3a4460; font-size:0.86rem; font-weight:700; }
 
-        .cx-bank { border-top:1px solid #1f2332; padding:12px 20px 22px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+        .cx-bank { border-top:1px solid #1f2332; padding:12px 20px 22px; display:grid; gap:12px; }
         .cx-bank-title { width:100%; font-size:0.72rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; color:#5a6280; margin:0 0 2px; }
+        .cx-bank-groups { display:grid; gap:12px; }
+        .cx-bank-group { display:grid; gap:8px; padding:10px 12px 12px; border:1px solid #1b2131; border-radius:12px; background:#0e111b; }
+        .cx-bank-group-head { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
+        .cx-bank-group-title { margin:0; font-size:0.76rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; color:#dfe5f5; }
+        .cx-bank-group-hint { color:#5a6280; font-size:0.78rem; font-weight:750; }
+        .cx-bank-chip-row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
         .cx-chip { display:inline-flex; align-items:center; gap:9px; background:#121520; border:1px solid #1f2332; border-radius:999px; padding:8px 14px; cursor:pointer; font-weight:800; font-size:0.9rem; color:#c8cedd; transition:border-color 140ms ease; }
         .cx-chip:hover { border-color:#3a4460; }
         .cx-chip .dot { width:11px; height:11px; border-radius:50%; flex:none; }
@@ -1277,19 +1329,30 @@ export default function ControlPage() {
         {/* Bank */}
         <section className="cx-bank">
           <p className="cx-bank-title">Bank — tap to add to today&apos;s lineup{editing ? " · set default minutes" : ""}</p>
-          {bank.map((s) => (
-            <div key={s.id} className="cx-chip" onClick={() => !editing && addToLineup(s.id)} style={editing ? { cursor: "default" } : undefined}>
-              <span className="dot" style={{ background: s.color }} />
-              {s.label}
-              {soundUrls[`music:${s.id}`] && <span className="cx-music-tag">♪</span>}
-              {editing ? (
-                <input className="cx-min-in" type="number" min={1} max={120} value={s.minutes}
-                  onClick={(e) => e.stopPropagation()} onChange={(e) => editMinutes(s.id, Number(e.target.value))} />
-              ) : (
-                <span className="m">{s.minutes}m</span>
-              )}
-            </div>
-          ))}
+          <div className="cx-bank-groups">
+            {groupedBankSections.map((group) => (
+              <div className="cx-bank-group" key={group.id}>
+                <div className="cx-bank-group-head">
+                  <h2 className="cx-bank-group-title">{group.label}</h2>
+                  <span className="cx-bank-group-hint">{group.hint}</span>
+                </div>
+                <div className="cx-bank-chip-row">
+                  {group.states.map(renderBankChip)}
+                </div>
+              </div>
+            ))}
+            {ungroupedBankStates.length > 0 && (
+              <div className="cx-bank-group">
+                <div className="cx-bank-group-head">
+                  <h2 className="cx-bank-group-title">Other</h2>
+                  <span className="cx-bank-group-hint">Additional saved states</span>
+                </div>
+                <div className="cx-bank-chip-row">
+                  {ungroupedBankStates.map(renderBankChip)}
+                </div>
+              </div>
+            )}
+          </div>
         </section>
 
         {showSpinner && (
