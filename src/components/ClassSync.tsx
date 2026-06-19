@@ -8,31 +8,28 @@
 import { useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
+import {
+  LIVE_FLOW_MODE,
+  LIVE_FLOW_ROUTE,
+  STUDENT_SESSION_KEY,
+  getStoredStudentSessionId,
+} from "@/lib/liveClassFlow";
 
-const STUDENT_SESSION_KEY = "bdm-student-session";
 const TEACHER_ROUTE_PREFIXES = ["/teacher", "/control", "/session", "/roster"];
 const CLASS_MODE_TARGETS = new Set([
+  LIVE_FLOW_ROUTE,
   "/lesson",
   "/whiteboard",
   "/number-line-plus",
   "/percent-bar",
   "/equation-builder",
   "/order-of-operations",
+  "/fraction-bars",
+  "/algebra-tiles",
 ]);
 
 function isTeacherRoute(pathname: string) {
   return TEACHER_ROUTE_PREFIXES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
-}
-
-function getStoredSessionId() {
-  try {
-    const stored = localStorage.getItem(STUDENT_SESSION_KEY);
-    if (!stored) return null;
-    const session = JSON.parse(stored) as { sessionId?: unknown };
-    return typeof session.sessionId === "string" && session.sessionId ? session.sessionId : null;
-  } catch {
-    return null;
-  }
 }
 
 function clearStoredSession() {
@@ -58,27 +55,38 @@ export default function ClassSync() {
   useEffect(() => {
     if (!supabase) return;
     if (isTeacherPreview()) return;
-    const sessionId = getStoredSessionId();
+    const sessionId = getStoredStudentSessionId();
     if (!sessionId) return;
 
     let stop = false;
     const tick = async () => {
       const currentPath = pathRef.current || "";
       if (isTeacherRoute(currentPath)) return;
-      const { data, error } = await supabase.from("sessions").select("broadcast,status").eq("id", sessionId).maybeSingle();
+      const { data, error } = await supabase.from("sessions").select("broadcast,status,live_flow").eq("id", sessionId).maybeSingle();
       if (stop) return;
       if (error || !data) {
         clearStoredSession();
         return;
       }
-      const d = data as { broadcast: string | null; status: string };
+      const d = data as {
+        broadcast: string | null;
+        status: string;
+        live_flow: { tool?: { route?: string } | null } | null;
+      };
       if (d.status === "closed") {
         clearStoredSession();
         return;
       }
-      const target = d.broadcast;
+      const target = d.broadcast === LIVE_FLOW_MODE
+        ? d.live_flow?.tool?.route || LIVE_FLOW_ROUTE
+        : d.broadcast === "free"
+          ? null
+          : d.broadcast;
       if (target && CLASS_MODE_TARGETS.has(target) && currentPath !== target) {
         router.push(target);
+      }
+      if (!target && currentPath === LIVE_FLOW_ROUTE) {
+        router.push("/lesson");
       }
     };
     tick();

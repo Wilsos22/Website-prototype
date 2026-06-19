@@ -4,3 +4,7 @@
 -- joined students' screens follow it. null or 'free' = students browse freely.
 
 alter table public.sessions add column if not exists broadcast text;
+
+-- Read-only classroom state snapshot for the Live Class Flow student screen.
+-- The teacher control panel writes this only while broadcast = 'live-flow'.
+alter table public.sessions add column if not exists live_flow jsonb;

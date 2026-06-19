@@ -11,6 +11,7 @@
 // Durations, images/videos, and music are uploadable and saved on this computer.
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import type { DiscussionPhaseSnapshot } from "@/lib/liveClassFlow";
 
 interface Phase {
   id: string;
@@ -73,7 +74,13 @@ function fmt(s: number) {
 }
 function sample<T>(a: T[]): T | undefined { return a[Math.floor(Math.random() * a.length)]; }
 
-export default function DiscussionProtocol({ onClose }: { onClose?: () => void }) {
+export default function DiscussionProtocol({
+  onClose,
+  onFlowChange,
+}: {
+  onClose?: () => void;
+  onFlowChange?: (snapshot: DiscussionPhaseSnapshot) => void;
+}) {
   const [durations, setDurations] = useState<Record<string, number>>({});
   const [idx, setIdx] = useState(0);
   const [secondsLeft, setSecondsLeft] = useState(PHASES[0].defaultSecs);
@@ -96,6 +103,20 @@ export default function DiscussionProtocol({ onClose }: { onClose?: () => void }
 
   const phase = PHASES[idx];
   const phaseSecs = (id: string) => durations[id] ?? PHASES.find((p) => p.id === id)?.defaultSecs ?? 60;
+  const phaseTotalSeconds = durations[phase.id] ?? phase.defaultSecs;
+
+  useEffect(() => {
+    onFlowChange?.({
+      id: phase.id as DiscussionPhaseSnapshot["id"],
+      label: phase.label,
+      subtitle: phase.sub,
+      timed: phase.timed,
+      totalSeconds: phase.timed ? phaseTotalSeconds : null,
+      secondsLeft: phase.timed ? secondsLeft : null,
+      running,
+      finished,
+    });
+  }, [finished, onFlowChange, phase.id, phase.label, phase.sub, phase.timed, phaseTotalSeconds, running, secondsLeft]);
 
   // load durations + media + share class
   useEffect(() => {

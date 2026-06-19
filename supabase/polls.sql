@@ -6,10 +6,14 @@ create table if not exists polls (
   session_id  uuid not null references sessions(id) on delete cascade,
   question    text not null,
   choices     jsonb,                 -- array of strings for multiple choice; null = open response
+  kind        text not null default 'short-answer', -- short-answer | multiple-choice | fist-to-five
   status      text not null default 'open',  -- 'open' | 'closed'
   created_at  timestamptz not null default now()
 );
 create index if not exists polls_session_idx on polls(session_id);
+
+-- Existing projects already have the table, so add the typed poll column safely.
+alter table public.polls add column if not exists kind text not null default 'short-answer';
 
 create table if not exists poll_answers (
   id            uuid primary key default gen_random_uuid(),

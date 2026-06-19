@@ -5,7 +5,8 @@
 // missing (part / whole / percent), then solve with BENCHMARK scaling: find 10%,
 // then hop. The expression builds as you go; the bar fills to the answer.
 
-import { useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { LiveToolBanner, useLiveToolConfig } from "./useLiveToolConfig";
 
 type Unknown = "part" | "whole" | "percent";
 interface Problem { W: number; P: number; part: number; unknown: Unknown; }
@@ -25,6 +26,7 @@ const PRESETS: Problem[] = [
 ];
 
 export default function PercentBar() {
+  const liveTool = useLiveToolConfig("/percent-bar");
   const [prob, setProb] = useState<Problem>(PRESETS[0]);
   const [stepIdx, setStepIdx] = useState(0); // 0=q1, 1=q2, 2=solved
   const [a1, setA1] = useState<number | null>(null);
@@ -54,6 +56,16 @@ export default function PercentBar() {
   }, []);
 
   function load(p: Problem) { setProb(p); setStepIdx(0); setA1(null); setInput(""); setFeedback(""); setHint(null); setWrong(0); }
+
+  useEffect(() => {
+    if (!liveTool || liveTool.route !== "/percent-bar") return;
+    load({
+      W: liveTool.config.whole,
+      P: liveTool.config.percent,
+      part: liveTool.config.part,
+      unknown: liveTool.config.unknown,
+    });
+  }, [liveTool?.id]);
 
   // questions & answers per unknown
   function q1(): { text: string; ans: number } {
@@ -135,6 +147,7 @@ export default function PercentBar() {
       </header>
 
       <main className="pc-main">
+        <LiveToolBanner tool={liveTool} />
         <div className="pc-prompt">
           {unknown === "part" && <>What is <span className="u">{P}%</span> of <span>{W}</span>?</>}
           {unknown === "whole" && <><span>{part}</span> is <span className="u">{P}%</span> of what?</>}

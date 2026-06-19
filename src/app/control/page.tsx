@@ -10,9 +10,19 @@
 // • Upload your own sounds (warm-up music + cue sounds). They're remembered on
 //   this computer (stored in the browser). No upload = simple built-in beep.
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import StudentSpinner from "@/components/StudentSpinner";
 import DiscussionProtocol from "@/components/DiscussionProtocol";
+import { getSupabase } from "@/lib/supabase";
+import {
+  LIVE_FLOW_MODE,
+  getStoredTeacherSessionId,
+  type DiscussionPhaseSnapshot,
+  type LiveClassFlowSnapshot,
+  type LivePollKind,
+  type LiveToolConfig,
+  type LiveToolRoute,
+} from "@/lib/liveClassFlow";
 
 interface ClassState {
   id: string;
@@ -27,12 +37,76 @@ interface LineupItem {
   stateId: string;
 }
 
+interface TeacherSessionRow {
+  id: string;
+  status: string;
+  broadcast: string | null;
+}
+
+type InteractiveStateId = "question" | "poll";
+
+const TOOL_STATE_INFO = {
+  "tool-whiteboard": { route: "/whiteboard", label: "Whiteboard" },
+  "tool-number-line": { route: "/number-line-plus", label: "Number Line" },
+  "tool-percent-bar": { route: "/percent-bar", label: "Percent Bar" },
+  "tool-equation-builder": { route: "/equation-builder", label: "Equation Builder" },
+  "tool-gems": { route: "/order-of-operations", label: "GEMS" },
+  "tool-fraction-bars": { route: "/fraction-bars", label: "Fraction Bars" },
+  "tool-algebra-tiles": { route: "/algebra-tiles", label: "Algebra Tiles" },
+} as const satisfies Record<string, { route: LiveToolRoute; label: string }>;
+
+type ToolStateId = keyof typeof TOOL_STATE_INFO;
+
+interface ToolSetupValues {
+  prompt: string;
+  numberLineStart: string;
+  numberLineChange: string;
+  percentWhole: string;
+  percentValue: string;
+  percentPart: string;
+  percentUnknown: "part" | "whole" | "percent";
+  equationCoefficient: string;
+  equationConstant: string;
+  equationSolution: string;
+  gemsExpression: string;
+  algebraExpression: string;
+}
+
+interface PublishedTool {
+  stateId: ToolStateId;
+  tool: LiveToolConfig;
+}
+
+interface ControlPoll {
+  id: string;
+  stateId: InteractiveStateId;
+  kind: LivePollKind;
+  question: string;
+  choices: string[] | null;
+  stage: "responding" | "results";
+}
+
+interface ControlPollAnswer {
+  id: string;
+  display_name: string | null;
+  answer: string | null;
+}
+
 const DEFAULT_STATES: ClassState[] = [
   { id: "warmup", label: "Warm-Up", minutes: 10, color: "#4e6ef2", desc: "Silently begin your warm-up. Work on your own." },
   { id: "review", label: "Go Over / Review", minutes: 5, color: "#8b5cf6", desc: "Eyes up — we're going over the answers together." },
   { id: "i-do", label: "Direct Instruction (I do)", minutes: 15, color: "#0ea5e9", desc: "Watch and take notes. I'll model each step." },
   { id: "we-do", label: "Guided Practice (We do)", minutes: 10, color: "#14b8a6", desc: "We'll solve these together — try each step with me." },
   { id: "discussion", label: "Discussion (Think–Pair–Share)", minutes: 3, color: "#06b6d4", desc: "Think on your own, then talk it through with your group." },
+  { id: "question", label: "Question", minutes: 2, color: "#8b5cf6", desc: "Respond to the question before the timer ends." },
+  { id: "poll", label: "Live Poll", minutes: 1, color: "#ec4899", desc: "Share a quick check-in before results appear." },
+  { id: "tool-whiteboard", label: "Whiteboard", minutes: 5, color: "#0ea5e9", desc: "Use the whiteboard to show and explain your thinking." },
+  { id: "tool-number-line", label: "Number Line", minutes: 5, color: "#38bdf8", desc: "Model the problem on the number line." },
+  { id: "tool-percent-bar", label: "Percent Bar", minutes: 5, color: "#f472b6", desc: "Use the percent bar to make sense of the relationship." },
+  { id: "tool-equation-builder", label: "Equation Builder", minutes: 6, color: "#22c55e", desc: "Build and solve the equation one step at a time." },
+  { id: "tool-gems", label: "GEMS", minutes: 5, color: "#a78bfa", desc: "Use GEMS to decide which operation comes first." },
+  { id: "tool-fraction-bars", label: "Fraction Bars", minutes: 5, color: "#f59e0b", desc: "Model the fraction relationship with bars." },
+  { id: "tool-algebra-tiles", label: "Algebra Tiles", minutes: 6, color: "#fb7185", desc: "Build the expression with algebra tiles." },
   { id: "you-do", label: "Independent Practice (You do)", minutes: 15, color: "#22c55e", desc: "Work independently. Show all of your steps." },
   { id: "manip", label: "Manipulatives / Hands-On", minutes: 10, color: "#f59e0b", desc: "Use the manipulative to model the problem." },
   { id: "partner", label: "Partner / Group Work", minutes: 10, color: "#ec4899", desc: "Work with your partner — both of you explain your thinking." },
@@ -44,6 +118,21 @@ const DEFAULT_STATES: ClassState[] = [
 const LS_BANK = "bdm-control-bank-v2";
 const LS_LINEUP = "bdm-control-lineup-v1";
 const PERIOD_MIN = 55;
+
+const DEFAULT_TOOL_SETUP: ToolSetupValues = {
+  prompt: "",
+  numberLineStart: "-3",
+  numberLineChange: "6",
+  percentWhole: "80",
+  percentValue: "25",
+  percentPart: "20",
+  percentUnknown: "part",
+  equationCoefficient: "2",
+  equationConstant: "3",
+  equationSolution: "4",
+  gemsExpression: "3 + 4 × 2",
+  algebraExpression: "2x + 3 = 11",
+};
 
 type CueKey = "music" | "warn30" | "tick" | "end";
 const CUE_LABELS: Record<CueKey, string> = {
@@ -62,6 +151,71 @@ function fmt(totalSeconds: number): string {
 
 function uid(): string {
   return Math.random().toString(36).slice(2, 9);
+}
+
+function isToolStateId(value: string | undefined): value is ToolStateId {
+  return Boolean(value && value in TOOL_STATE_INFO);
+}
+
+function numericValue(value: string, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function buildLiveToolConfig(stateId: ToolStateId, values: ToolSetupValues): LiveToolConfig {
+  const info = TOOL_STATE_INFO[stateId];
+  const base = {
+    id: `${stateId}-${Date.now()}-${uid()}`,
+    label: info.label,
+    prompt: values.prompt.trim(),
+  };
+
+  switch (stateId) {
+    case "tool-whiteboard":
+      return { ...base, route: "/whiteboard", config: {} };
+    case "tool-fraction-bars":
+      return { ...base, route: "/fraction-bars", config: {} };
+    case "tool-number-line": {
+      const start = Math.round(clamp(numericValue(values.numberLineStart, -3), -10, 10));
+      const change = Math.round(clamp(numericValue(values.numberLineChange, 6), -10 - start, 10 - start));
+      return {
+        ...base,
+        route: "/number-line-plus",
+        config: {
+          start,
+          change,
+        },
+      };
+    }
+    case "tool-percent-bar": {
+      const unknown = values.percentUnknown;
+      let whole = Math.max(0.01, numericValue(values.percentWhole, 80));
+      let percent = Math.max(0.01, numericValue(values.percentValue, 25));
+      let part = Math.max(0, numericValue(values.percentPart, 20));
+      if (unknown === "part") part = (whole * percent) / 100;
+      if (unknown === "whole") whole = (part * 100) / percent;
+      if (unknown === "percent") percent = (part / whole) * 100;
+      return { ...base, route: "/percent-bar", config: { whole, percent, part, unknown } };
+    }
+    case "tool-equation-builder":
+      return {
+        ...base,
+        route: "/equation-builder",
+        config: {
+          coefficient: Math.max(1, Math.round(numericValue(values.equationCoefficient, 2))),
+          constant: numericValue(values.equationConstant, 3),
+          solution: Math.max(1, Math.round(numericValue(values.equationSolution, 4))),
+        },
+      };
+    case "tool-gems":
+      return { ...base, route: "/order-of-operations", config: { expression: values.gemsExpression.trim() } };
+    case "tool-algebra-tiles":
+      return { ...base, route: "/algebra-tiles", config: { expression: values.algebraExpression.trim() } };
+  }
 }
 
 // ── IndexedDB (stores uploaded sound files so they persist on this computer) ──
@@ -102,6 +256,7 @@ async function idbDel(key: string): Promise<void> {
 }
 
 export default function ControlPage() {
+  const supabase = getSupabase();
   const [bank, setBank] = useState<ClassState[]>(DEFAULT_STATES);
   const [lineup, setLineup] = useState<LineupItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(-1);
@@ -117,6 +272,17 @@ export default function ControlPage() {
   const [showDiscussion, setShowDiscussion] = useState(false);
   const [autoAdvance, setAutoAdvance] = useState(true);
   const [soundUrls, setSoundUrls] = useState<Record<string, string>>({});
+  const [teacherSession, setTeacherSession] = useState<TeacherSessionRow | null>(null);
+  const [discussionFlow, setDiscussionFlow] = useState<DiscussionPhaseSnapshot | null>(null);
+  const [controlPoll, setControlPoll] = useState<ControlPoll | null>(null);
+  const [pollKind, setPollKind] = useState<LivePollKind>("short-answer");
+  const [pollQuestion, setPollQuestion] = useState("");
+  const [pollChoices, setPollChoices] = useState(["", "", "", ""]);
+  const [pollAnswers, setPollAnswers] = useState<ControlPollAnswer[]>([]);
+  const [pollError, setPollError] = useState<string | null>(null);
+  const [toolSetup, setToolSetup] = useState<ToolSetupValues>(DEFAULT_TOOL_SETUP);
+  const [publishedTool, setPublishedTool] = useState<PublishedTool | null>(null);
+  const [toolError, setToolError] = useState<string | null>(null);
 
   const secRef = useRef(0);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -150,6 +316,56 @@ export default function ControlPage() {
       setSoundUrls(next);
     })();
   }, []);
+
+  // The session page records the current teacher session locally. When that is
+  // unavailable, use the open Live Class Flow session as a safe fallback.
+  useEffect(() => {
+    if (!supabase) return;
+    let stopped = false;
+    const setCurrentTeacherSession = (next: TeacherSessionRow | null) => {
+      setTeacherSession((current) => (
+        current?.id === next?.id
+        && current?.status === next?.status
+        && current?.broadcast === next?.broadcast
+          ? current
+          : next
+      ));
+    };
+
+    const findTeacherSession = async () => {
+      const storedSessionId = getStoredTeacherSessionId();
+      if (storedSessionId) {
+        const { data } = await supabase
+          .from("sessions")
+          .select("id,status,broadcast")
+          .eq("id", storedSessionId)
+          .maybeSingle();
+        if (stopped) return;
+        const storedSession = data as TeacherSessionRow | null;
+        if (storedSession?.status === "open") {
+          setCurrentTeacherSession(storedSession);
+          return;
+        }
+      }
+
+      const { data } = await supabase
+        .from("sessions")
+        .select("id,status,broadcast")
+        .eq("status", "open")
+        .eq("broadcast", LIVE_FLOW_MODE)
+        .order("started_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!stopped) setCurrentTeacherSession((data as TeacherSessionRow | null) ?? null);
+    };
+
+    void findTeacherSession();
+    const interval = window.setInterval(findTeacherSession, 1500);
+    return () => {
+      stopped = true;
+      window.clearInterval(interval);
+    };
+  }, [supabase]);
 
   const persistBank = useCallback((next: ClassState[]) => {
     setBank(next);
@@ -233,7 +449,7 @@ export default function ControlPage() {
 
   // ── Auto-advance to the next lineup item when time's up ─────────────────
   useEffect(() => {
-    if (!finished || !autoAdvance) return;
+    if (!finished || !autoAdvance || controlPoll) return;
     const ni = currentIndex + 1;
     if (ni >= lineup.length) return;
     const t = setTimeout(() => {
@@ -249,7 +465,7 @@ export default function ControlPage() {
       startMusicFor(st.id);
     }, 2600);
     return () => clearTimeout(t);
-  }, [finished, autoAdvance, currentIndex, lineup, bank, startMusicFor, stopMusic]);
+  }, [finished, autoAdvance, bank, controlPoll, currentIndex, lineup, startMusicFor, stopMusic]);
 
   const activeItem = currentIndex >= 0 ? lineup[currentIndex] : undefined;
   const activeState = activeItem ? bank.find((s) => s.id === activeItem.stateId) : undefined;
@@ -257,6 +473,216 @@ export default function ControlPage() {
     const st = bank.find((s) => s.id === it.stateId);
     return sum + (st?.minutes ?? 0);
   }, 0);
+  const activeInteractiveState: InteractiveStateId | null = activeState?.id === "question" || activeState?.id === "poll"
+    ? activeState.id
+    : null;
+  const activeToolState: ToolStateId | null = isToolStateId(activeState?.id) ? activeState.id : null;
+
+  useEffect(() => {
+    if (activeInteractiveState === "question") {
+      setPollKind("short-answer");
+    } else if (activeInteractiveState === "poll") {
+      setPollKind("fist-to-five");
+      setPollQuestion((current) => current || "How well do you understand this right now?");
+    }
+  }, [activeInteractiveState]);
+
+  const closeActivePoll = useCallback(() => {
+    if (!controlPoll || controlPoll.stage === "results") return;
+    setControlPoll((current) => current ? { ...current, stage: "results" } : null);
+    if (supabase) {
+      void supabase.from("polls").update({ status: "closed" }).eq("id", controlPoll.id);
+    }
+  }, [controlPoll, supabase]);
+
+  useEffect(() => {
+    if (!controlPoll || controlPoll.stateId === activeInteractiveState) return;
+    closeActivePoll();
+    setControlPoll(null);
+    setPollAnswers([]);
+  }, [activeInteractiveState, closeActivePoll, controlPoll]);
+
+  useEffect(() => {
+    if (publishedTool?.stateId !== activeToolState) {
+      setPublishedTool(null);
+    }
+    if (!activeToolState) {
+      setToolError(null);
+    }
+  }, [activeToolState, publishedTool?.stateId]);
+
+  useEffect(() => {
+    if (!controlPoll || !supabase) return;
+    let stopped = false;
+    const loadAnswers = async () => {
+      const { data } = await supabase
+        .from("poll_answers")
+        .select("id,display_name,answer")
+        .eq("poll_id", controlPoll.id)
+        .order("created_at");
+      if (!stopped) setPollAnswers((data as ControlPollAnswer[]) || []);
+    };
+    void loadAnswers();
+    const interval = window.setInterval(loadAnswers, 1000);
+    return () => {
+      stopped = true;
+      window.clearInterval(interval);
+    };
+  }, [controlPoll, supabase]);
+
+  useEffect(() => {
+    if (finished && controlPoll?.stage === "responding") {
+      closeActivePoll();
+    }
+  }, [closeActivePoll, controlPoll?.stage, finished]);
+
+  async function openControlPoll() {
+    if (!supabase || !teacherSession || !activeInteractiveState) {
+      setPollError("Start a session first, then open this question or poll.");
+      return;
+    }
+    const question = pollKind === "fist-to-five"
+      ? pollQuestion.trim() || "How well do you understand this right now?"
+      : pollQuestion.trim();
+    const choices = pollKind === "multiple-choice"
+      ? pollChoices.map((choice) => choice.trim()).filter(Boolean)
+      : pollKind === "fist-to-five"
+        ? ["0", "1", "2", "3", "4", "5"]
+        : null;
+    if (!question) {
+      setPollError("Add the question students should answer.");
+      return;
+    }
+    if (pollKind === "multiple-choice" && (!choices || choices.length < 2)) {
+      setPollError("Add at least two answer choices.");
+      return;
+    }
+
+    setPollError(null);
+    const { data, error } = await supabase.from("polls").insert({
+      session_id: teacherSession.id,
+      question,
+      choices,
+      kind: pollKind,
+      status: "open",
+    }).select("id").single();
+    if (error || !data) {
+      setPollError(error?.message || "The poll could not be opened.");
+      return;
+    }
+
+    setControlPoll({
+      id: (data as { id: string }).id,
+      stateId: activeInteractiveState,
+      kind: pollKind,
+      question,
+      choices,
+      stage: "responding",
+    });
+    setPollAnswers([]);
+    setFinished(false);
+    if (secondsLeft <= 0 && activeState) {
+      secRef.current = activeState.minutes * 60;
+      setSecondsLeft(secRef.current);
+    }
+  }
+
+  function prepareAnotherPoll() {
+    setControlPoll(null);
+    setPollAnswers([]);
+    setPollError(null);
+    setPollChoices(["", "", "", ""]);
+    setPollQuestion(activeInteractiveState === "poll" ? "How well do you understand this right now?" : "");
+    setFinished(false);
+  }
+
+  function updateToolSetup(key: keyof ToolSetupValues, value: string) {
+    setToolSetup((current) => ({ ...current, [key]: value } as ToolSetupValues));
+  }
+
+  function publishToolSetup() {
+    if (!teacherSession || teacherSession.broadcast !== LIVE_FLOW_MODE || !activeToolState) {
+      setToolError("Start a session, select Live Class Flow, then send this tool setup.");
+      return;
+    }
+
+    const tool = buildLiveToolConfig(activeToolState, toolSetup);
+    if ((tool.route === "/order-of-operations" || tool.route === "/algebra-tiles") && !tool.config.expression) {
+      setToolError("Add the expression students should build or solve.");
+      return;
+    }
+
+    setToolError(null);
+    setPublishedTool({ stateId: activeToolState, tool });
+  }
+
+  useEffect(() => {
+    if (activeState?.id !== "discussion" && showDiscussion) {
+      setShowDiscussion(false);
+      setDiscussionFlow(null);
+    }
+  }, [activeState?.id, showDiscussion]);
+
+  const liveFlowSignature = useMemo(() => {
+    const state = activeState
+      ? {
+          id: activeState.id,
+          label: activeState.label,
+          description: activeState.desc,
+          color: activeState.color,
+        }
+      : null;
+    const phase = activeState?.id === "discussion" && showDiscussion ? discussionFlow : null;
+    const poll = controlPoll?.stateId === activeInteractiveState
+      ? {
+          id: controlPoll.id,
+          kind: controlPoll.kind,
+          question: controlPoll.question,
+          choices: controlPoll.choices,
+          stage: controlPoll.stage,
+        }
+      : null;
+    const tool = publishedTool?.stateId === activeToolState ? publishedTool.tool : null;
+    const timer = poll?.stage === "results"
+      ? null
+      : phase?.timed && phase.totalSeconds !== null && phase.secondsLeft !== null
+      ? {
+          totalSeconds: phase.totalSeconds,
+          secondsLeft: phase.secondsLeft,
+          running: phase.running,
+          finished: phase.finished,
+        }
+      : activeState
+        ? {
+            totalSeconds: activeState.minutes * 60,
+            secondsLeft,
+            running,
+            finished,
+          }
+        : null;
+
+    return JSON.stringify({ version: 1, state, phase, timer, poll, tool });
+  }, [activeInteractiveState, activeState, activeToolState, controlPoll, discussionFlow, finished, publishedTool, running, secondsLeft, showDiscussion]);
+
+  // Keep student Chromebooks in sync with the existing /control state machine.
+  // The write is skipped unless the teacher explicitly selected Live Class Flow.
+  useEffect(() => {
+    if (!supabase || teacherSession?.broadcast !== LIVE_FLOW_MODE) return;
+    const snapshot = {
+      ...(JSON.parse(liveFlowSignature) as Omit<LiveClassFlowSnapshot, "updatedAt">),
+      updatedAt: new Date().toISOString(),
+    };
+    void supabase.from("sessions").update({ live_flow: snapshot }).eq("id", teacherSession.id);
+  }, [liveFlowSignature, supabase, teacherSession]);
+
+  const handleDiscussionFlowChange = useCallback((snapshot: DiscussionPhaseSnapshot) => {
+    setDiscussionFlow(snapshot);
+  }, []);
+
+  const closeDiscussion = useCallback(() => {
+    setShowDiscussion(false);
+    setDiscussionFlow(null);
+  }, []);
 
   // ── Lineup management ───────────────────────────────────────────────────
   function addToLineup(stateId: string) {
@@ -312,6 +738,12 @@ export default function ControlPage() {
     if (deltaSeconds > 0) setFinished(false);
   }
   function next() {
+    if (controlPoll?.stage === "responding") {
+      setRunning(false);
+      setFinished(true);
+      closeActivePoll();
+      return;
+    }
     stopMusic();
     if (currentIndex + 1 < lineup.length) loadIndex(currentIndex + 1);
     else { setRunning(false); setFinished(false); setCurrentIndex(-1); }
@@ -397,6 +829,34 @@ export default function ControlPage() {
         .cx-btn.pri { background:${accent}; border-color:${accent}; } .cx-btn.pri:hover { filter:brightness(1.08); }
         .cx-btn.next { background:#22c55e; border-color:#22c55e; }
         .cx-btn:disabled { opacity:0.32; cursor:not-allowed; transform:none; }
+        .cx-poll { width:min(94vw,760px); display:grid; gap:12px; padding:16px; border:1px solid #2a3045; border-radius:12px; background:#101522; text-align:left; }
+        .cx-poll-head { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+        .cx-poll-title { margin:0; color:#fff; font-size:0.9rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; }
+        .cx-poll-note { color:#8a93ad; font-size:0.82rem; font-weight:700; line-height:1.4; }
+        .cx-poll-grid { display:grid; grid-template-columns:180px minmax(0,1fr); gap:10px; align-items:center; }
+        .cx-poll-label { color:#c8cedd; font-size:0.82rem; font-weight:900; }
+        .cx-poll-input, .cx-poll-select { width:100%; border:1px solid #33405d; border-radius:8px; box-sizing:border-box; background:#0b0d14; color:#fff; padding:10px 12px; font:inherit; font-size:0.95rem; font-weight:700; }
+        .cx-poll-input { min-height:44px; }
+        .cx-poll-choices { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+        .cx-poll-error { color:#fca5a5; font-size:0.82rem; font-weight:800; }
+        .cx-poll-summary { color:#c8cedd; font-size:0.96rem; font-weight:800; }
+        .cx-poll-results { display:grid; gap:8px; }
+        .cx-poll-result { display:grid; grid-template-columns:minmax(110px,1fr) minmax(80px,2fr) auto; gap:10px; align-items:center; color:#dfe5f5; font-size:0.9rem; font-weight:800; }
+        .cx-poll-bar { height:10px; overflow:hidden; border-radius:999px; background:#20283b; }
+        .cx-poll-fill { height:100%; border-radius:inherit; background:${accent}; transition:width 220ms ease; }
+        .cx-poll-answers { display:flex; flex-wrap:wrap; gap:7px; }
+        .cx-poll-answer { border:1px solid #33405d; border-radius:999px; padding:6px 10px; color:#dfe5f5; font-size:0.78rem; font-weight:800; }
+        .cx-tool { width:min(94vw,760px); display:grid; gap:12px; padding:16px; border:1px solid #2d4d65; border-radius:12px; background:#0e1822; text-align:left; }
+        .cx-tool-head { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+        .cx-tool-title { margin:0; color:#e0f2fe; font-size:0.9rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; }
+        .cx-tool-note { color:#8fb4cf; font-size:0.82rem; font-weight:700; line-height:1.4; }
+        .cx-tool-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+        .cx-tool-field { display:grid; gap:5px; color:#c8e3f6; font-size:0.78rem; font-weight:900; }
+        .cx-tool-field.wide { grid-column:1 / -1; }
+        .cx-tool-input, .cx-tool-select { width:100%; min-height:42px; box-sizing:border-box; border:1px solid #33516b; border-radius:8px; background:#0a1219; color:#fff; padding:9px 10px; font:inherit; font-weight:750; }
+        .cx-tool-status { color:#a7f3d0; font-size:0.82rem; font-weight:800; }
+        @media (max-width:640px) { .cx-poll-grid { grid-template-columns:1fr; } .cx-poll-choices { grid-template-columns:1fr; } }
+        @media (max-width:640px) { .cx-tool-grid { grid-template-columns:1fr; } }
 
         .cx-lineup { border-top:1px solid #1f2332; padding:12px 20px; display:flex; gap:8px; align-items:center; overflow-x:auto; }
         .cx-lineup-title { font-size:0.72rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; color:#5a6280; flex:none; margin-right:4px; }
@@ -459,13 +919,197 @@ export default function ControlPage() {
                   ? (autoAdvance && hasNext ? "⏰ Time's up — moving on…" : hasNext ? "⏰ Time's up — tap Next ▶" : "✓ Lesson complete!")
                   : warnFlash ? "30 seconds!" : ""}
               </div>
+              {activeInteractiveState && (
+                <section className="cx-poll" aria-label={`${activeState.label} setup`}>
+                  {!controlPoll ? (
+                    <>
+                      <div className="cx-poll-head">
+                        <h2 className="cx-poll-title">{activeInteractiveState === "question" ? "Question setup" : "Live poll setup"}</h2>
+                        <span className="cx-poll-note">The state timer above is the response window. At 0:00, results appear.</span>
+                      </div>
+                      <div className="cx-poll-grid">
+                        <label className="cx-poll-label" htmlFor="control-poll-kind">Response type</label>
+                        <select
+                          id="control-poll-kind"
+                          className="cx-poll-select"
+                          value={pollKind}
+                          onChange={(event) => setPollKind(event.target.value as LivePollKind)}
+                        >
+                          {activeInteractiveState === "question" ? (
+                            <>
+                              <option value="short-answer">Short answer</option>
+                              <option value="multiple-choice">Multiple choice</option>
+                            </>
+                          ) : (
+                            <>
+                              <option value="fist-to-five">Fist to 5 slider</option>
+                              <option value="multiple-choice">Multiple choice</option>
+                            </>
+                          )}
+                        </select>
+                        <label className="cx-poll-label" htmlFor="control-poll-question">Question</label>
+                        <input
+                          id="control-poll-question"
+                          className="cx-poll-input"
+                          value={pollQuestion}
+                          onChange={(event) => setPollQuestion(event.target.value)}
+                          placeholder={pollKind === "fist-to-five" ? "How well do you understand this right now?" : "Type the question students should answer"}
+                        />
+                      </div>
+                      {pollKind === "multiple-choice" && (
+                        <div className="cx-poll-choices">
+                          {pollChoices.map((choice, index) => (
+                            <input
+                              key={index}
+                              className="cx-poll-input"
+                              value={choice}
+                              onChange={(event) => setPollChoices((current) => current.map((item, itemIndex) => itemIndex === index ? event.target.value : item))}
+                              placeholder={`Choice ${index + 1}`}
+                            />
+                          ))}
+                        </div>
+                      )}
+                      {pollError && <div className="cx-poll-error">{pollError}</div>}
+                      <div className="cx-actions" style={{ justifyContent: "flex-start" }}>
+                        <button className="cx-btn pri" onClick={openControlPoll}>Open to students</button>
+                      </div>
+                    </>
+                  ) : controlPoll.stage === "responding" ? (
+                    <>
+                      <div className="cx-poll-head">
+                        <h2 className="cx-poll-title">Responses open</h2>
+                        <span className="cx-poll-summary">{pollAnswers.length} response{pollAnswers.length === 1 ? "" : "s"}</span>
+                      </div>
+                      <div className="cx-poll-note">{controlPoll.question}</div>
+                      <div className="cx-poll-note">Students see results when the timer ends. Use “Show results” to end early.</div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="cx-poll-head">
+                        <h2 className="cx-poll-title">Results</h2>
+                        <span className="cx-poll-summary">{pollAnswers.length} response{pollAnswers.length === 1 ? "" : "s"}</span>
+                      </div>
+                      <div className="cx-poll-note">{controlPoll.question}</div>
+                      {controlPoll.kind === "short-answer" ? (
+                        <div className="cx-poll-answers">
+                          {pollAnswers.length === 0
+                            ? <span className="cx-poll-note">No responses yet.</span>
+                            : pollAnswers.map((answer) => <span className="cx-poll-answer" key={answer.id}>{answer.display_name || "Student"}: {answer.answer || "—"}</span>)}
+                        </div>
+                      ) : (
+                        <div className="cx-poll-results">
+                          {(controlPoll.choices || []).map((choice) => {
+                            const count = pollAnswers.filter((answer) => answer.answer === choice).length;
+                            const percent = pollAnswers.length ? Math.round((count / pollAnswers.length) * 100) : 0;
+                            return (
+                              <div className="cx-poll-result" key={choice}>
+                                <span>{controlPoll.kind === "fist-to-five" ? `${choice} / 5` : choice}</span>
+                                <div className="cx-poll-bar"><div className="cx-poll-fill" style={{ width: `${percent}%` }} /></div>
+                                <span>{count}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      <div className="cx-actions" style={{ justifyContent: "flex-start" }}>
+                        <button className="cx-btn" onClick={prepareAnotherPoll}>New {activeInteractiveState === "question" ? "question" : "poll"}</button>
+                      </div>
+                    </>
+                  )}
+                </section>
+              )}
+              {activeToolState && (
+                <section className="cx-tool" aria-label={`${activeState.label} student setup`}>
+                  <div className="cx-tool-head">
+                    <h2 className="cx-tool-title">{TOOL_STATE_INFO[activeToolState].label} setup</h2>
+                    <span className="cx-tool-note">This publishes the problem to the current Live Class Flow session and sends Chromebooks to the tool.</span>
+                  </div>
+                  <div className="cx-tool-grid">
+                    <label className="cx-tool-field wide" htmlFor="tool-prompt">
+                      Student directions or problem
+                      <input
+                        id="tool-prompt"
+                        className="cx-tool-input"
+                        value={toolSetup.prompt}
+                        onChange={(event) => updateToolSetup("prompt", event.target.value)}
+                        placeholder="What should students model, solve, or explain?"
+                      />
+                    </label>
+
+                    {activeToolState === "tool-number-line" && (
+                      <>
+                        <label className="cx-tool-field" htmlFor="number-line-start">Start at
+                          <input id="number-line-start" className="cx-tool-input" inputMode="decimal" value={toolSetup.numberLineStart} onChange={(event) => updateToolSetup("numberLineStart", event.target.value)} />
+                        </label>
+                        <label className="cx-tool-field" htmlFor="number-line-change">Change by
+                          <input id="number-line-change" className="cx-tool-input" inputMode="decimal" value={toolSetup.numberLineChange} onChange={(event) => updateToolSetup("numberLineChange", event.target.value)} />
+                        </label>
+                      </>
+                    )}
+
+                    {activeToolState === "tool-percent-bar" && (
+                      <>
+                        <label className="cx-tool-field" htmlFor="percent-whole">Whole
+                          <input id="percent-whole" className="cx-tool-input" inputMode="decimal" value={toolSetup.percentWhole} onChange={(event) => updateToolSetup("percentWhole", event.target.value)} />
+                        </label>
+                        <label className="cx-tool-field" htmlFor="percent-value">Percent
+                          <input id="percent-value" className="cx-tool-input" inputMode="decimal" value={toolSetup.percentValue} onChange={(event) => updateToolSetup("percentValue", event.target.value)} />
+                        </label>
+                        <label className="cx-tool-field" htmlFor="percent-part">Part
+                          <input id="percent-part" className="cx-tool-input" inputMode="decimal" value={toolSetup.percentPart} onChange={(event) => updateToolSetup("percentPart", event.target.value)} />
+                        </label>
+                        <label className="cx-tool-field" htmlFor="percent-unknown">Students solve for
+                          <select id="percent-unknown" className="cx-tool-select" value={toolSetup.percentUnknown} onChange={(event) => updateToolSetup("percentUnknown", event.target.value)}>
+                            <option value="part">the part</option>
+                            <option value="whole">the whole</option>
+                            <option value="percent">the percent</option>
+                          </select>
+                        </label>
+                      </>
+                    )}
+
+                    {activeToolState === "tool-equation-builder" && (
+                      <>
+                        <label className="cx-tool-field" htmlFor="equation-coefficient">x coefficient
+                          <input id="equation-coefficient" className="cx-tool-input" inputMode="decimal" value={toolSetup.equationCoefficient} onChange={(event) => updateToolSetup("equationCoefficient", event.target.value)} />
+                        </label>
+                        <label className="cx-tool-field" htmlFor="equation-constant">Constant
+                          <input id="equation-constant" className="cx-tool-input" inputMode="decimal" value={toolSetup.equationConstant} onChange={(event) => updateToolSetup("equationConstant", event.target.value)} />
+                        </label>
+                        <label className="cx-tool-field" htmlFor="equation-solution">Solution for x
+                          <input id="equation-solution" className="cx-tool-input" inputMode="decimal" value={toolSetup.equationSolution} onChange={(event) => updateToolSetup("equationSolution", event.target.value)} />
+                        </label>
+                      </>
+                    )}
+
+                    {activeToolState === "tool-gems" && (
+                      <label className="cx-tool-field wide" htmlFor="gems-expression">
+                        Expression (use +, -, ×, ÷, ^, and parentheses)
+                        <input id="gems-expression" className="cx-tool-input" value={toolSetup.gemsExpression} onChange={(event) => updateToolSetup("gemsExpression", event.target.value)} placeholder="4 × (2 + 3) − 6" />
+                      </label>
+                    )}
+
+                    {activeToolState === "tool-algebra-tiles" && (
+                      <label className="cx-tool-field wide" htmlFor="algebra-expression">
+                        Expression or equation
+                        <input id="algebra-expression" className="cx-tool-input" value={toolSetup.algebraExpression} onChange={(event) => updateToolSetup("algebraExpression", event.target.value)} placeholder="2x + 3 = 11" />
+                      </label>
+                    )}
+                  </div>
+                  {toolError && <div className="cx-poll-error">{toolError}</div>}
+                  {publishedTool?.stateId === activeToolState && <div className="cx-tool-status">Student screens are on this configured tool.</div>}
+                  <div className="cx-actions" style={{ justifyContent: "flex-start" }}>
+                    <button className="cx-btn pri" onClick={publishToolSetup}>{publishedTool?.stateId === activeToolState ? "Update student screens" : "Send tool setup to students"}</button>
+                  </div>
+                </section>
+              )}
               <div className="cx-actions">
                 <button className="cx-btn pri" onClick={toggleRun}>{running ? "⏸ Pause" : secondsLeft <= 0 ? "↻ Restart" : "▶ Start"}</button>
                 <button className="cx-btn" onClick={reset}>Reset</button>
                 <button className="cx-btn" onClick={() => adjust(60)}>+1 min</button>
                 <button className="cx-btn" onClick={() => adjust(-60)} disabled={secondsLeft < 60}>−1 min</button>
                 <button className="cx-btn" onClick={() => adjust(30)}>+30s</button>
-                <button className="cx-btn next" onClick={next} disabled={currentIndex + 1 >= lineup.length}>Next ▶</button>
+                <button className="cx-btn next" onClick={next} disabled={currentIndex + 1 >= lineup.length}>{controlPoll?.stage === "responding" ? "Show results" : "Next ▶"}</button>
                 {finished && activeState.id === "warmup" && (
                   <button className="cx-btn" style={{ background: "#f59e0b", borderColor: "#f59e0b" }} onClick={() => setShowSpinner(true)}>🎰 Pick readers</button>
                 )}
@@ -575,7 +1219,7 @@ export default function ControlPage() {
           <div className="cx-overlay"><StudentSpinner onClose={() => setShowSpinner(false)} /></div>
         )}
         {showDiscussion && (
-          <div className="cx-overlay"><DiscussionProtocol onClose={() => setShowDiscussion(false)} /></div>
+          <div className="cx-overlay"><DiscussionProtocol onClose={closeDiscussion} onFlowChange={handleDiscussionFlowChange} /></div>
         )}
       </div>
     </>

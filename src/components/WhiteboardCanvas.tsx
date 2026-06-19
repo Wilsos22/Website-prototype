@@ -3,6 +3,7 @@
 // Full-screen drawing board using Pointer Events for mouse, touch, and stylus input.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ToolHeader } from "./ToolHeader";
+import { LiveToolBanner, useLiveToolConfig } from "./useLiveToolConfig";
 
 type DrawTool = "pen" | "eraser";
 
@@ -12,6 +13,7 @@ interface Point {
 }
 
 export function WhiteboardCanvas() {
+  const liveTool = useLiveToolConfig("/whiteboard");
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const lastPointRef = useRef<Point | null>(null);
   const isDrawingRef = useRef(false);
@@ -246,6 +248,7 @@ export function WhiteboardCanvas() {
       </ToolHeader>
 
       <main className="board-shell whiteboard-shell">
+        <LiveToolBanner tool={liveTool} />
         <section className="whiteboard-area" aria-label="Drawing canvas">
           <canvas
             ref={canvasRef}

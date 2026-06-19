@@ -7,7 +7,8 @@
 // GEMS letters run vertically in the left gutter, aligned to the row whose
 // operation they describe, lighting red as each is completed.
 
-import { useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { LiveToolBanner, useLiveToolConfig } from "./useLiveToolConfig";
 
 type Tokens = string[];
 type Cat = "G" | "E" | "M" | "S";
@@ -27,6 +28,16 @@ const PRESETS: { label: string; tokens: Tokens }[] = [
   { label: "2 × 3 ^ 2 − 4", tokens: ["2", "×", "3", "^", "2", "−", "4"] },
   { label: "(8 − 3) × 2 ^ 2", tokens: ["(", "8", "−", "3", ")", "×", "2", "^", "2"] },
 ];
+
+function parseLiveExpression(expression: string): Tokens | null {
+  const normalized = expression
+    .replace(/[–—]/g, "-")
+    .replace(/[xX*]/g, "×")
+    .replace(/\//g, "÷")
+    .replace(/-/g, "−");
+  const tokens = normalized.match(/\d+(?:\.\d+)?|[()+−×÷^]/g) || [];
+  return tokens.length >= 3 ? tokens : null;
+}
 
 function compute(a: string, op: string, b: string): number {
   const x = Number(a), y = Number(b);
@@ -67,6 +78,7 @@ function categoryOf(t: Tokens): Cat | null {
 const CAT_SUB: Record<Cat, string> = { G: "Grouping", E: "Exponents", M: "Multiply / Divide", S: "Subtract / Add" };
 
 export default function OrderOfOperations() {
+  const liveTool = useLiveToolConfig("/order-of-operations");
   const [lines, setLines] = useState<Line[]>([{ tokens: PRESETS[0].tokens, note: "", cat: null }]);
   const [phase, setPhase] = useState<"pick" | "answer" | "solved">("pick");
   const [pending, setPending] = useState<{ k: number; a: string; op: string; b: string } | null>(null);
@@ -98,6 +110,12 @@ export default function OrderOfOperations() {
     setLines([{ tokens: t, note: "", cat: null }]); setPhase("pick"); setPending(null);
     setFeedback("Click the operation you should do FIRST."); setHint(null); setWrong(0);
   }
+
+  useEffect(() => {
+    if (!liveTool || liveTool.route !== "/order-of-operations") return;
+    const tokens = parseLiveExpression(liveTool.config.expression);
+    if (tokens) load(tokens);
+  }, [liveTool?.id]);
 
   function clickOp(k: number) {
     if (phase !== "pick") return;
@@ -216,6 +234,7 @@ export default function OrderOfOperations() {
       </header>
 
       <main className="oo-main">
+        <LiveToolBanner tool={liveTool} />
         <div className="oo-lines">
           {lines.map((ln, li) => {
             const active = li === lines.length - 1;

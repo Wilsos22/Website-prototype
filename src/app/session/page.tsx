@@ -6,6 +6,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
 import SiteNav from "@/components/SiteNav";
+import {
+  LIVE_FLOW_MODE,
+  clearStoredTeacherSession,
+  saveTeacherSession,
+} from "@/lib/liveClassFlow";
 
 interface Period { id: string; name: string; }
 interface Join { id: string; display_name: string | null; joined_at: string; }
@@ -66,12 +71,15 @@ export default function SessionPage() {
     const periodName = periods.find((p) => p.id === periodId)?.name || "";
     const { count } = await supabase.from("students").select("id", { count: "exact", head: true }).eq("period_id", periodId);
     setRosterCount(count || 0);
-    setSession({ id: (data as { id: string }).id, code, periodName });
+    const sessionId = (data as { id: string }).id;
+    saveTeacherSession(sessionId, code, periodName);
+    setSession({ id: sessionId, code, periodName });
     setJoins([]); setBroadcast(null);
   }
   async function end() {
     if (!supabase || !session) return;
     await supabase.from("sessions").update({ status: "closed", ended_at: new Date().toISOString(), broadcast: null }).eq("id", session.id);
+    clearStoredTeacherSession(session.id);
     setSession(null); setJoins([]); setPoll(null); setAnswers([]); setBroadcast(null);
   }
   async function setBroadcastTo(value: string | null) {
@@ -87,13 +95,20 @@ export default function SessionPage() {
     { label: "Percent Bar", value: "/percent-bar" },
     { label: "Equation Builder", value: "/equation-builder" },
     { label: "GEMS", value: "/order-of-operations" },
+    { label: "Live Class Flow", value: LIVE_FLOW_MODE },
   ];
 
   async function pushPoll() {
     if (!supabase || !session || !question.trim()) return;
     setError(null);
     const ch = mc ? choices.map((c) => c.trim()).filter(Boolean) : null;
-    const { data, error } = await supabase.from("polls").insert({ session_id: session.id, question: question.trim(), choices: ch, status: "open" }).select("id").single();
+    const { data, error } = await supabase.from("polls").insert({
+      session_id: session.id,
+      question: question.trim(),
+      choices: ch,
+      kind: ch && ch.length ? "multiple-choice" : "short-answer",
+      status: "open",
+    }).select("id").single();
     if (error) { setError(error.message); return; }
     setPoll({ id: (data as { id: string }).id, question: question.trim(), choices: ch && ch.length ? ch : null });
     setAnswers([]);
@@ -195,7 +210,9 @@ export default function SessionPage() {
                 ))}
               </div>
               <p className="se-empty" style={{ marginTop: 10 }}>
-                {broadcast && broadcast !== "free" ? `Joined students are following ${broadcast}.` : "Students are browsing freely."}
+                {broadcast && broadcast !== "free"
+                  ? `Joined students are following ${SENDS.find((mode) => mode.value === broadcast)?.label || broadcast}.`
+                  : "Students are browsing freely."}
               </p>
             </div>
 

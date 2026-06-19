@@ -6,7 +6,8 @@
 // out in red (squares stay — they don't vanish), the un-cancelled term carries
 // down with an arrow, and the result lands one row lower. Columns stay aligned.
 
-import { useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { LiveToolBanner, useLiveToolConfig } from "./useLiveToolConfig";
 
 type Op = "add" | "subtract" | "multiply" | "divide";
 type Phase = "build" | "goal" | "tap-var" | "ask-op" | "ask-term" | "animating" | "solved";
@@ -32,6 +33,7 @@ function shuffle<T>(a: T[]): T[] { return [...a].sort(() => Math.random() - 0.5)
 function opSign(v: number): string { return `${v > 0 ? "−" : "+"} ${Math.abs(v)}`; }
 
 export default function EquationBuilder() {
+  const liveTool = useLiveToolConfig("/equation-builder");
   const [a, setA] = useState(2);
   const [b, setB] = useState(3);
   const [xAns, setXAns] = useState(4);
@@ -74,6 +76,18 @@ export default function EquationBuilder() {
     else { setPhase("goal"); setFeedback(""); }
   }
   function loadPreset(p: [number, number, number]) { setA(p[0]); setB(p[1]); setXAns(p[2]); }
+
+  useEffect(() => {
+    if (!liveTool || liveTool.route !== "/equation-builder") return;
+    setA(liveTool.config.coefficient);
+    setB(liveTool.config.constant);
+    setXAns(liveTool.config.solution);
+    setPhase("build");
+    setRows([]);
+    setFeedback("");
+    setHint(null);
+    setWrong(0);
+  }, [liveTool?.id]);
 
   function pickGoal(correct: boolean) {
     if (correct) { sCorrect(); setFeedback(""); setPhase("tap-var"); }
@@ -267,6 +281,7 @@ export default function EquationBuilder() {
       </header>
 
       <main className="eqb-main">
+        <LiveToolBanner tool={liveTool} />
         {phase === "build" ? (
           <div className="eqb-build">
             <div className="eqb-preview">

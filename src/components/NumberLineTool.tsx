@@ -7,7 +7,8 @@
 // • Parts mode: 0…1 split into 16ths; the dot snaps to the nearest 16th and the
 //   readout rotates between fraction, decimal, and percent.
 
-import { useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { LiveToolBanner, useLiveToolConfig } from "./useLiveToolConfig";
 
 type Mode = "int" | "parts";
 type Rep = "fraction" | "decimal" | "percent";
@@ -18,6 +19,7 @@ function gcd(a: number, b: number): number { return b === 0 ? a : gcd(b, a % b);
 const PROBLEMS: [number, number][] = [[-3, 6], [5, -8], [-4, -3], [2, 7], [8, -10]];
 
 export default function NumberLineTool() {
+  const liveTool = useLiveToolConfig("/number-line-plus");
   const [mode, setMode] = useState<Mode>("int");
   const [rep, setRep] = useState<Rep>("fraction");
   const [absVal, setAbsVal] = useState(false);
@@ -62,7 +64,17 @@ export default function NumberLineTool() {
   function onMove(e: React.PointerEvent) { if (dragging) setFromClientX(e.clientX); }
   function onUp() { setDragging(false); }
 
-  function startProblem(p: [number, number]) { setMode("int"); setProblem(p); setValue(p[0]); setAbsVal(false); }
+  const startProblem = useCallback((p: [number, number]) => {
+    setMode("int");
+    setProblem(p);
+    setValue(p[0]);
+    setAbsVal(false);
+  }, []);
+
+  useEffect(() => {
+    if (!liveTool || liveTool.route !== "/number-line-plus") return;
+    startProblem([liveTool.config.start, liveTool.config.change]);
+  }, [liveTool?.id, startProblem]);
 
   // labels
   function repLabel(v: number): string {
@@ -138,6 +150,7 @@ export default function NumberLineTool() {
       </header>
 
       <main className="nl-main">
+        <LiveToolBanner tool={liveTool} />
         <div className="nl-controls">
           <div className="nl-seg">
             <button className={mode === "int" ? "on" : ""} onClick={() => { setMode("int"); setProblem(null); }}>Integers</button>

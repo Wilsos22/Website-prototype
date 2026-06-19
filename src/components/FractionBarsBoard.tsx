@@ -3,6 +3,7 @@
 // Draggable fraction bars with selected-piece duplicate, delete, and snap controls.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ToolHeader } from "./ToolHeader";
+import { LiveToolBanner, useLiveToolConfig } from "./useLiveToolConfig";
 
 interface FractionBar {
   id: string;
@@ -44,6 +45,7 @@ function snapToGuide(value: number, origin: number, step: number): number {
 }
 
 export function FractionBarsBoard() {
+  const liveTool = useLiveToolConfig("/fraction-bars");
   const stageRef = useRef<HTMLDivElement | null>(null);
   const rulerRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ id: string; offsetX: number; offsetY: number } | null>(null);
@@ -226,6 +228,7 @@ export function FractionBarsBoard() {
       </ToolHeader>
 
       <main className="fraction-board">
+        <LiveToolBanner tool={liveTool} />
         <div ref={rulerRef} className="fraction-ruler" aria-hidden="true">
           Whole width
         </div>

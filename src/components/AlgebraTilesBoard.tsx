@@ -1,8 +1,9 @@
 "use client";
 
 // Draggable algebra tiles with expression-building, duplicate, delete, and snap-to-grid controls.
-import { FormEvent, useCallback, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { ToolHeader } from "./ToolHeader";
+import { LiveToolBanner, useLiveToolConfig } from "./useLiveToolConfig";
 
 type TileKind = "unit" | "x" | "x2";
 type TileSign = "positive" | "negative";
@@ -463,6 +464,7 @@ function countTiles(side: ParsedSide): number {
 }
 
 export function AlgebraTilesBoard() {
+  const liveTool = useLiveToolConfig("/algebra-tiles");
   const boardRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ id: string; offsetX: number; offsetY: number } | null>(null);
   const [tiles, setTiles] = useState<AlgebraTile[]>(initialTiles);
@@ -544,11 +546,9 @@ export function AlgebraTilesBoard() {
     );
   }, []);
 
-  const buildExpressionTiles = useCallback(
-    (event: FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-
-      const expression = expressionInput.trim();
+  const buildTilesFromExpression = useCallback(
+    (rawExpression: string) => {
+      const expression = rawExpression.trim();
       const boardWidth = boardRef.current?.getBoundingClientRect().width ?? 960;
       const sides = expression.split("=");
 
@@ -605,8 +605,22 @@ export function AlgebraTilesBoard() {
       setModeledExpression(expression);
       setExpressionStatus("Built with tiles.");
     },
-    [expressionInput],
+    [],
   );
+
+  const buildExpressionTiles = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      buildTilesFromExpression(expressionInput);
+    },
+    [buildTilesFromExpression, expressionInput],
+  );
+
+  useEffect(() => {
+    if (!liveTool || liveTool.route !== "/algebra-tiles") return;
+    setExpressionInput(liveTool.config.expression);
+    buildTilesFromExpression(liveTool.config.expression);
+  }, [buildTilesFromExpression, liveTool?.id]);
 
   const resetTiles = useCallback(() => {
     setTiles(initialTiles);
@@ -701,6 +715,7 @@ export function AlgebraTilesBoard() {
       </ToolHeader>
 
       <main className="board-shell algebra-shell">
+        <LiveToolBanner tool={liveTool} />
         <form className="expression-panel" onSubmit={buildExpressionTiles}>
           <label className="field expression-field">
             Expression
