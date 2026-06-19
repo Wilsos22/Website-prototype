@@ -7,7 +7,7 @@ import { useState } from "react";
 type IconKey =
   | "control" | "timer" | "spinner" | "question"
   | "equation" | "gems" | "combine" | "proportion" | "percent" | "area"
-  | "whiteboard" | "algebra" | "fraction" | "numberline" | "hops" | "groupbars"
+  | "whiteboard" | "algebra" | "fraction" | "numberline" | "hops" | "groupbars" | "ladder" | "multiply"
   | "today" | "lessons" | "join" | "analytics";
 
 interface Tool {
@@ -55,6 +55,8 @@ const TOOL_GROUPS: Section[] = [
       { href: "/proportions", label: "Proportion Builder", icon: "proportion", color: "#ec4899" },
       { href: "/percent-bar", label: "Percent Bar", icon: "percent", color: "#f472b6" },
       { href: "/area-model", label: "Area Model", icon: "area", color: "#f97316" },
+      { href: "/ladder-method", label: "Ladder Method", icon: "ladder", color: "#14b8a6" },
+      { href: "/multiplication-fluency", label: "Multiplication Fluency", icon: "multiply", color: "#2563eb" },
     ],
   },
   {
@@ -99,6 +101,8 @@ function Icon({ name }: { name: IconKey }) {
     case "numberline": return <svg viewBox="0 0 24 24" {...p}><line x1="3" y1="14" x2="21" y2="14" /><line x1="6" y1="11" x2="6" y2="17" /><line x1="12" y1="11" x2="12" y2="17" /><line x1="18" y1="11" x2="18" y2="17" /><circle cx="12" cy="14" r="2.6" fill="currentColor" stroke="none" /></svg>;
     case "hops": return <svg viewBox="0 0 24 24" {...p}><line x1="3" y1="17" x2="21" y2="17" /><path d="M6 17 q4 -10 8 0" /><circle cx="6" cy="17" r="1.8" fill="currentColor" stroke="none" /><path d="M14 17 l-2 -2 m2 2 l-2 2" /></svg>;
     case "groupbars": return <svg viewBox="0 0 24 24" {...p}><line x1="3" y1="20" x2="21" y2="20" /><rect x="5" y="11" width="3.4" height="9" fill="currentColor" stroke="none" /><rect x="10.3" y="6" width="3.4" height="14" fill="currentColor" stroke="none" /><rect x="15.6" y="14" width="3.4" height="6" fill="currentColor" stroke="none" /></svg>;
+    case "ladder": return <svg viewBox="0 0 24 24" {...p}><line x1="7" y1="3" x2="7" y2="21" /><line x1="17" y1="3" x2="17" y2="21" /><line x1="7" y1="7" x2="17" y2="7" /><line x1="7" y1="12" x2="17" y2="12" /><line x1="7" y1="17" x2="17" y2="17" /></svg>;
+    case "multiply": return <svg viewBox="0 0 24 24" {...p}><line x1="7" y1="7" x2="17" y2="17" /><line x1="17" y1="7" x2="7" y2="17" /></svg>;
     case "today": return <svg viewBox="0 0 24 24" {...p}><path d="M6 3 h9 l4 4 v14 H6 Z" /><path d="M15 3 v4 h4" /><line x1="9" y1="13" x2="16" y2="13" /><line x1="9" y1="17" x2="16" y2="17" /></svg>;
     case "lessons": return <svg viewBox="0 0 24 24" {...p}><rect x="6" y="6" width="14" height="14" rx="2" /><path d="M4 16 V5 a1 1 0 0 1 1 -1 h11" /></svg>;
     case "join": return <svg viewBox="0 0 24 24" {...p}><circle cx="11" cy="9" r="3.2" /><path d="M5 19 a6 6 0 0 1 12 0" /><line x1="19" y1="7" x2="19" y2="12" /><line x1="16.5" y1="9.5" x2="21.5" y2="9.5" /></svg>;
