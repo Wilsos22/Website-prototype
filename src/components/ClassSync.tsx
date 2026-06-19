@@ -62,7 +62,18 @@ export default function ClassSync() {
     const tick = async () => {
       const currentPath = pathRef.current || "";
       if (isTeacherRoute(currentPath)) return;
-      const { data, error } = await supabase.from("sessions").select("broadcast,status,live_flow").eq("id", sessionId).maybeSingle();
+      const liveFlowQuery = await supabase
+        .from("sessions")
+        .select("broadcast,status,live_flow")
+        .eq("id", sessionId)
+        .maybeSingle();
+      // Keep the existing class-mode routing working until the optional
+      // live_flow column has been added to this project's Supabase database.
+      const fallbackQuery = liveFlowQuery.error
+        ? await supabase.from("sessions").select("broadcast,status").eq("id", sessionId).maybeSingle()
+        : null;
+      const data = liveFlowQuery.data ?? fallbackQuery?.data;
+      const error = liveFlowQuery.error && fallbackQuery?.error ? fallbackQuery.error : null;
       if (stop) return;
       if (error || !data) {
         clearStoredSession();

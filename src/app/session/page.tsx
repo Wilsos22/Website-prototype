@@ -102,13 +102,26 @@ export default function SessionPage() {
     if (!supabase || !session || !question.trim()) return;
     setError(null);
     const ch = mc ? choices.map((c) => c.trim()).filter(Boolean) : null;
-    const { data, error } = await supabase.from("polls").insert({
+    const payload = {
       session_id: session.id,
       question: question.trim(),
       choices: ch,
       kind: ch && ch.length ? "multiple-choice" : "short-answer",
       status: "open",
-    }).select("id").single();
+    };
+    let { data, error } = await supabase.from("polls").insert(payload).select("id").single();
+    // Existing poll tables do not yet have kind. Keep their original short
+    // answer / multiple-choice behavior working until the migration is run.
+    if (error) {
+      const fallback = await supabase.from("polls").insert({
+        session_id: session.id,
+        question: question.trim(),
+        choices: ch,
+        status: "open",
+      }).select("id").single();
+      data = fallback.data;
+      error = fallback.error;
+    }
     if (error) { setError(error.message); return; }
     setPoll({ id: (data as { id: string }).id, question: question.trim(), choices: ch && ch.length ? ch : null });
     setAnswers([]);

@@ -559,13 +559,24 @@ export default function ControlPage() {
     }
 
     setPollError(null);
-    const { data, error } = await supabase.from("polls").insert({
+    const payload = {
       session_id: teacherSession.id,
       question,
       choices,
       kind: pollKind,
       status: "open",
-    }).select("id").single();
+    };
+    let { data, error } = await supabase.from("polls").insert(payload).select("id").single();
+    if (error) {
+      const fallback = await supabase.from("polls").insert({
+        session_id: teacherSession.id,
+        question,
+        choices,
+        status: "open",
+      }).select("id").single();
+      data = fallback.data;
+      error = fallback.error;
+    }
     if (error || !data) {
       setPollError(error?.message || "The poll could not be opened.");
       return;
