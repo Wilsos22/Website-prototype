@@ -30,7 +30,7 @@ type DiscussionContent = {
 
 const DISCUSSION_CONTENT: Record<DiscussionPhaseId, DiscussionContent> = {
   think: {
-    title: "🤔 Thinking Time",
+    title: "🧠 Thinking Time",
     subtitle: "Silent — think on your own.",
     directions: ["Do not talk.", "Do not type.", "Think about your first move."],
   },

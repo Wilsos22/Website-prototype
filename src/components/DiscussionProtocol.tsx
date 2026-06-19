@@ -23,7 +23,7 @@ interface Phase {
 }
 
 const PHASES: Phase[] = [
-  { id: "think", label: "Thinking Time", sub: "Silent — think on your own", icon: "🤔", defaultSecs: 60, timed: true },
+  { id: "think", label: "Thinking Time", sub: "Silent — think on your own", icon: "🧠", defaultSecs: 60, timed: true },
   { id: "marker", label: "Marker to the Board", sub: "Show your thinking", icon: "✍️", defaultSecs: 60, timed: true },
   { id: "table", label: "Discuss with Your Table", sub: "Talk it through together", icon: "💬", defaultSecs: 30, timed: true },
   { id: "revise", label: "Revise Your Answer", sub: "Update your thinking", icon: "✏️", defaultSecs: 30, timed: true },
