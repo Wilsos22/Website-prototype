@@ -211,6 +211,7 @@ export default function LiveFlowPage() {
   const discussion = phase ? DISCUSSION_CONTENT[phase.id] : null;
   const title = discussion?.title ?? flow?.state?.label ?? "Waiting for the teacher.";
   const subtitle = discussion?.subtitle ?? flow?.state?.description ?? "";
+  const phaseMedia = phase?.media ?? null;
   const timer = flow?.timer ?? null;
   const showTimer = Boolean(timer && timer.totalSeconds > 0 && (!phase || phase.timed));
   const accent = flow?.state?.color ?? "#14b8a6";
@@ -225,6 +226,9 @@ export default function LiveFlowPage() {
         .lf-brand { margin:0; color:var(--lf-accent); font-size:0.76rem; font-weight:900; letter-spacing:0.14em; text-transform:uppercase; }
         .lf-title { margin:0; max-width:22ch; font-size:clamp(2.4rem,7vw,5.9rem); line-height:1.02; font-weight:900; letter-spacing:0; }
         .lf-subtitle { margin:0; max-width:34ch; color:#c8cedd; font-size:clamp(1.15rem,2.8vw,1.75rem); line-height:1.35; font-weight:700; }
+        .lf-media-wrap { width:min(100%,760px); display:grid; place-items:center; }
+        .lf-media { width:min(100%,720px); max-height:38vh; border:1px solid #29324a; border-radius:12px; background:#090b11; object-fit:contain; box-shadow:0 18px 48px rgb(0 0 0 / 30%); }
+        .lf-media.embed { aspect-ratio:16 / 9; height:auto; }
         .lf-timer { display:grid; justify-items:center; gap:10px; }
         .lf-time { color:#fff; font-size:clamp(4.6rem,15vw,10rem); font-variant-numeric:tabular-nums; font-weight:900; line-height:0.9; letter-spacing:0; }
         .lf-status { color:var(--lf-accent); font-size:0.78rem; font-weight:900; letter-spacing:0.13em; text-transform:uppercase; }
@@ -270,6 +274,23 @@ export default function LiveFlowPage() {
           <>
             {!activePoll && <h1 className="lf-title">{title}</h1>}
             {!activePoll && subtitle && <p className="lf-subtitle">{subtitle}</p>}
+            {!activePoll && phaseMedia && (
+              <div className="lf-media-wrap">
+                {phaseMedia.type === "video" ? (
+                  <video className="lf-media" src={phaseMedia.url} autoPlay muted loop playsInline />
+                ) : phaseMedia.type === "embed" ? (
+                  <iframe
+                    className="lf-media embed"
+                    src={phaseMedia.url}
+                    title={`${title} media`}
+                    allow="autoplay; fullscreen; picture-in-picture"
+                    allowFullScreen
+                  />
+                ) : (
+                  <img className="lf-media" src={phaseMedia.url} alt="" />
+                )}
+              </div>
+            )}
             {showTimer && timer && (
               <div className="lf-timer">
                 <div className="lf-time">{formatTime(timer.secondsLeft)}</div>

@@ -33,6 +33,7 @@ const PHASES: Phase[] = [
 const LS_DUR = "bdm-disc-durations-v1";
 const LS_CLASSES = "bdm-spinner-classes-v1";
 const LS_CURRENT = "bdm-spinner-current-v1";
+const LS_STUDENT_MEDIA = "bdm-disc-student-media-v1";
 
 // Shared IndexedDB (same store the control panel uses; keys namespaced "disc:")
 function idbOpen(): Promise<IDBDatabase> {
@@ -73,6 +74,33 @@ function fmt(s: number) {
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
 }
 function sample<T>(a: T[]): T | undefined { return a[Math.floor(Math.random() * a.length)]; }
+function inferStudentMediaType(url: string): "image" | "video" | "embed" {
+  const clean = url.split("?")[0].toLowerCase();
+  if (/\.(mp4|webm|ogg|mov|m4v)$/.test(clean)) return "video";
+  if (/\.(png|jpe?g|gif|webp|avif|svg)$/.test(clean)) return "image";
+  return "embed";
+}
+function normalizeStudentMediaUrl(rawUrl: string): string {
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return "";
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.hostname.includes("youtube.com") && parsed.searchParams.get("v")) {
+      return `https://www.youtube.com/embed/${parsed.searchParams.get("v")}`;
+    }
+    if (parsed.hostname === "youtu.be") {
+      const videoId = parsed.pathname.replace("/", "");
+      return videoId ? `https://www.youtube.com/embed/${videoId}` : trimmed;
+    }
+    if (parsed.hostname.includes("vimeo.com")) {
+      const videoId = parsed.pathname.split("/").filter(Boolean).pop();
+      return videoId ? `https://player.vimeo.com/video/${videoId}` : trimmed;
+    }
+  } catch {
+    return trimmed;
+  }
+  return trimmed;
+}
 
 export default function DiscussionProtocol({
   onClose,
@@ -88,6 +116,7 @@ export default function DiscussionProtocol({
   const [finished, setFinished] = useState(false);
   const [setup, setSetup] = useState(false);
   const [media, setMedia] = useState<Record<string, { url: string; type: string }>>({});
+  const [studentMediaUrls, setStudentMediaUrls] = useState<Record<string, string>>({});
 
   // share picker
   const [shareName, setShareName] = useState<string>("—");
@@ -106,6 +135,7 @@ export default function DiscussionProtocol({
   const phaseTotalSeconds = durations[phase.id] ?? phase.defaultSecs;
 
   useEffect(() => {
+    const studentMediaUrl = normalizeStudentMediaUrl(studentMediaUrls[phase.id] || "");
     onFlowChange?.({
       id: phase.id as DiscussionPhaseSnapshot["id"],
       label: phase.label,
@@ -115,14 +145,17 @@ export default function DiscussionProtocol({
       secondsLeft: phase.timed ? secondsLeft : null,
       running,
       finished,
+      media: studentMediaUrl ? { url: studentMediaUrl, type: inferStudentMediaType(studentMediaUrl) } : null,
     });
-  }, [finished, onFlowChange, phase.id, phase.label, phase.sub, phase.timed, phaseTotalSeconds, running, secondsLeft]);
+  }, [finished, onFlowChange, phase.id, phase.label, phase.sub, phase.timed, phaseTotalSeconds, running, secondsLeft, studentMediaUrls]);
 
   // load durations + media + share class
   useEffect(() => {
     try {
       const d = localStorage.getItem(LS_DUR);
       if (d) setDurations(JSON.parse(d));
+      const studentMedia = localStorage.getItem(LS_STUDENT_MEDIA);
+      if (studentMedia) setStudentMediaUrls(JSON.parse(studentMedia) as Record<string, string>);
       setShareClass(localStorage.getItem(LS_CURRENT) || "");
     } catch { /* ignore */ }
     (async () => {
@@ -205,6 +238,12 @@ export default function DiscussionProtocol({
     try { localStorage.setItem(LS_DUR, JSON.stringify(next)); } catch { /* ignore */ }
     if (id === phase.id && !running) { secRef.current = clamped; setSecondsLeft(clamped); }
   }
+  function saveStudentMediaUrl(id: string, url: string) {
+    const next = { ...studentMediaUrls, [id]: url };
+    if (!url.trim()) delete next[id];
+    setStudentMediaUrls(next);
+    try { localStorage.setItem(LS_STUDENT_MEDIA, JSON.stringify(next)); } catch { /* ignore */ }
+  }
   async function uploadMedia(key: string, file: File | undefined, isMusic = false) {
     if (!file) return;
     await idbPut(key, file);
@@ -282,6 +321,8 @@ export default function DiscussionProtocol({
         .dp-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
         .dp-rlabel { font-weight:800; color:#c8cedd; min-width:200px; }
         .dp-num { width:64px; background:#0b0d14; border:1px solid #2a3045; color:#fff; border-radius:6px; padding:5px 7px; font-weight:800; text-align:center; }
+        .dp-url { flex:1 1 280px; min-width:min(100%,280px); background:#0b0d14; border:1px solid #2a3045; color:#fff; border-radius:8px; padding:8px 10px; font:inherit; font-size:0.86rem; font-weight:750; }
+        .dp-url:focus { outline:none; border-color:${accent}; }
         .dp-up { font-size:0.78rem; font-weight:800; color:#67e8f9; background:rgba(6,182,212,0.1); border:1px solid rgba(6,182,212,0.3); border-radius:8px; padding:6px 11px; cursor:pointer; }
         .dp-clr { font-size:0.72rem; font-weight:800; color:#fca5a5; background:transparent; border:1px solid rgba(239,68,68,0.3); border-radius:6px; padding:5px 8px; cursor:pointer; }
         .dp-hint { color:#5a6280; font-size:0.8rem; font-weight:700; }
@@ -348,28 +389,40 @@ export default function DiscussionProtocol({
 
       {setup && (
         <section className="dp-setup">
-          <h3>Set up the discussion — durations &amp; media (saved on this computer)</h3>
-          {PHASES.filter((p) => p.timed).map((p) => {
+          <h3>Set up the discussion — durations, teacher media, and student screen media</h3>
+          {PHASES.map((p) => {
             const has = !!media[p.id];
             return (
               <div className="dp-row" key={p.id}>
                 <span className="dp-rlabel">{p.icon} {p.label}</span>
-                <label className="dp-hint">seconds
-                  <input className="dp-num" type="number" min={5} max={600} value={phaseSecs(p.id)}
-                    onChange={(e) => saveDurations(p.id, Number(e.target.value))} style={{ marginLeft: 8 }} />
-                </label>
-                <label className="dp-up">{has ? "Replace image/video" : "Upload image/video"}
-                  <input type="file" accept="image/*,video/*" style={{ display: "none" }} onChange={(e) => uploadMedia(`disc:${p.id}`, e.target.files?.[0])} />
-                </label>
-                {has && <button className="dp-clr" onClick={() => clearMedia(`disc:${p.id}`)}>Remove media</button>}
-                <label className="dp-up">Music
-                  <input type="file" accept="audio/*" style={{ display: "none" }} onChange={(e) => uploadMedia(`disc:${p.id}:music`, e.target.files?.[0], true)} />
-                </label>
-                <button className="dp-clr" onClick={() => clearMedia(`disc:${p.id}:music`, true)}>Clear music</button>
+                {p.timed && (
+                  <label className="dp-hint">seconds
+                    <input className="dp-num" type="number" min={5} max={600} value={phaseSecs(p.id)}
+                      onChange={(e) => saveDurations(p.id, Number(e.target.value))} style={{ marginLeft: 8 }} />
+                  </label>
+                )}
+                {p.timed && (
+                  <>
+                    <label className="dp-up">{has ? "Replace teacher image/video" : "Upload teacher image/video"}
+                      <input type="file" accept="image/*,video/*" style={{ display: "none" }} onChange={(e) => uploadMedia(`disc:${p.id}`, e.target.files?.[0])} />
+                    </label>
+                    {has && <button className="dp-clr" onClick={() => clearMedia(`disc:${p.id}`)}>Remove teacher media</button>}
+                    <label className="dp-up">Teacher music
+                      <input type="file" accept="audio/*" style={{ display: "none" }} onChange={(e) => uploadMedia(`disc:${p.id}:music`, e.target.files?.[0], true)} />
+                    </label>
+                    <button className="dp-clr" onClick={() => clearMedia(`disc:${p.id}:music`, true)}>Clear music</button>
+                  </>
+                )}
+                <input
+                  className="dp-url"
+                  value={studentMediaUrls[p.id] || ""}
+                  onChange={(e) => saveStudentMediaUrl(p.id, e.target.value)}
+                  placeholder="Student screen media URL: GIF, image, MP4/WebM, YouTube, Vimeo"
+                />
               </div>
             );
           })}
-          <p className="dp-hint">For Thinking Time, upload your “Abbie thinking” image. The Discuss phase accepts an image or a video. Music loops while that phase runs.</p>
+          <p className="dp-hint">Teacher uploads stay on this computer. Student screen media must be a web link students can load, such as a hosted GIF, image, MP4/WebM, YouTube, or Vimeo link.</p>
         </section>
       )}
     </div>

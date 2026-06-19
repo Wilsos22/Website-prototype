@@ -62,6 +62,10 @@ export interface DiscussionPhaseSnapshot {
   secondsLeft: number | null;
   running: boolean;
   finished: boolean;
+  media: {
+    url: string;
+    type: "image" | "video" | "embed";
+  } | null;
 }
 
 export interface LiveClassFlowSnapshot {
