@@ -16,6 +16,7 @@ import {
 } from "@/lib/liveClassFlow";
 
 const TEACHER_ROUTE_PREFIXES = ["/teacher", "/control", "/session", "/roster"];
+const STUDENT_SWITCH_ROUTE_PREFIXES = ["/join"];
 const CLASS_MODE_TARGETS = new Set([
   LIVE_FLOW_ROUTE,
   "/lesson",
@@ -30,6 +31,10 @@ const CLASS_MODE_TARGETS = new Set([
 
 function isTeacherRoute(pathname: string) {
   return TEACHER_ROUTE_PREFIXES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+}
+
+function isStudentSwitchRoute(pathname: string) {
+  return STUDENT_SWITCH_ROUTE_PREFIXES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
 }
 
 function clearStoredSession() {
@@ -61,6 +66,7 @@ export default function ClassSync() {
     let stop = false;
     const tick = async () => {
       const currentPath = pathRef.current || "";
+      if (isStudentSwitchRoute(currentPath)) return;
       if (isTeacherRoute(currentPath)) return;
       const liveFlowQuery = await supabase
         .from("sessions")

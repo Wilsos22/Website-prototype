@@ -225,6 +225,8 @@ export default function LiveFlowPage() {
         .lf-result-bar { height:13px; overflow:hidden; border-radius:999px; background:#20283b; }
         .lf-result-fill { height:100%; border-radius:inherit; background:var(--lf-accent); transition:width 220ms ease; }
         .lf-wait { color:#c8cedd; font-size:clamp(2rem,5vw,4.2rem); font-weight:900; line-height:1.1; }
+        .lf-switch { display:inline-flex; align-items:center; justify-content:center; min-height:48px; border:1px solid #29324a; border-radius:10px; background:#151a27; color:#5eead4; padding:0 18px; text-decoration:none; font-size:0.9rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; }
+        .lf-switch:hover, .lf-switch:focus-visible { border-color:#14b8a6; outline:none; }
         .lf-loading { color:#8a93ad; font-weight:800; }
         @media (max-width:600px) { .lf-frames { grid-template-columns:1fr; } .lf-page { padding:26px 18px; } }
       `}</style>
@@ -234,7 +236,10 @@ export default function LiveFlowPage() {
         {loading ? (
           <p className="lf-loading">Connecting to class…</p>
         ) : !flow?.state ? (
-          <h1 className="lf-wait">{emptyMessage}</h1>
+          <>
+            <h1 className="lf-wait">{emptyMessage}</h1>
+            <a className="lf-switch" href="/join">Join a different session</a>
+          </>
         ) : (
           <>
             {!activePoll && <h1 className="lf-title">{title}</h1>}

@@ -2,7 +2,7 @@
 
 // Redesigned student-facing join flow: code entry → dynamic session response (question or fist-to-five).
 // Anonymous question can be submitted at any time once a session is active.
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
 import {
@@ -45,6 +45,14 @@ export function JoinQuestion() {
   const [anonOpen, setAnonOpen] = useState(false);
   const [anonText, setAnonText] = useState("");
   const [anonStatus, setAnonStatus] = useState("");
+
+  useEffect(() => {
+    try {
+      localStorage.removeItem(STUDENT_SESSION_KEY);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const lookupSession = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
