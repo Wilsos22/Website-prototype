@@ -76,6 +76,7 @@ export default function LiveFlowPage() {
   const supabase = getSupabase();
   const [flow, setFlow] = useState<LiveClassFlowSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
+  const [emptyMessage, setEmptyMessage] = useState("Waiting for the teacher.");
   const [pollAnswers, setPollAnswers] = useState<PollAnswer[]>([]);
   const [pollAnswer, setPollAnswer] = useState("");
   const [fistRating, setFistRating] = useState(3);
@@ -84,6 +85,7 @@ export default function LiveFlowPage() {
   useEffect(() => {
     const sessionId = getStoredStudentSessionId();
     if (!supabase || !sessionId) {
+      setEmptyMessage(!supabase ? "Live sync is not set up." : "Join the class first.");
       setLoading(false);
       return;
     }
@@ -96,6 +98,15 @@ export default function LiveFlowPage() {
       if (stopped) return;
       window.clearTimeout(connectionFallback);
       const isLiveFlow = row?.status === "open" && row.broadcast === LIVE_FLOW_MODE;
+      if (!row) {
+        setEmptyMessage("This class session is not open.");
+      } else if (row.status !== "open") {
+        setEmptyMessage("This class session has ended.");
+      } else if (row.broadcast !== LIVE_FLOW_MODE) {
+        setEmptyMessage("Waiting for Live Class Flow.");
+      } else {
+        setEmptyMessage("Waiting for the teacher.");
+      }
       setFlow(isLiveFlow ? row.live_flow : null);
       setLoading(false);
     };
@@ -223,7 +234,7 @@ export default function LiveFlowPage() {
         {loading ? (
           <p className="lf-loading">Connecting to class…</p>
         ) : !flow?.state ? (
-          <h1 className="lf-wait">Waiting for the teacher.</h1>
+          <h1 className="lf-wait">{emptyMessage}</h1>
         ) : (
           <>
             {!activePoll && <h1 className="lf-title">{title}</h1>}

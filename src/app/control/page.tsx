@@ -280,6 +280,7 @@ export default function ControlPage() {
   const [pollChoices, setPollChoices] = useState(["", "", "", ""]);
   const [pollAnswers, setPollAnswers] = useState<ControlPollAnswer[]>([]);
   const [pollError, setPollError] = useState<string | null>(null);
+  const [flowSyncError, setFlowSyncError] = useState<string | null>(null);
   const [toolSetup, setToolSetup] = useState<ToolSetupValues>(DEFAULT_TOOL_SETUP);
   const [publishedTool, setPublishedTool] = useState<PublishedTool | null>(null);
   const [toolError, setToolError] = useState<string | null>(null);
@@ -292,16 +293,27 @@ export default function ControlPage() {
   // ── Load saved bank minutes + lineup + uploaded sounds ──────────────────
   useEffect(() => {
     try {
+      let loadedBank = DEFAULT_STATES;
       const rawBank = localStorage.getItem(LS_BANK);
       if (rawBank) {
         const saved = JSON.parse(rawBank) as ClassState[];
-        setBank(DEFAULT_STATES.map((d) => {
+        loadedBank = DEFAULT_STATES.map((d) => {
           const s = saved.find((x) => x.id === d.id);
           return s ? { ...d, minutes: s.minutes } : d;
-        }));
+        });
+        setBank(loadedBank);
       }
       const rawLine = localStorage.getItem(LS_LINEUP);
-      if (rawLine) setLineup(JSON.parse(rawLine) as LineupItem[]);
+      if (rawLine) {
+        const savedLineup = JSON.parse(rawLine) as LineupItem[];
+        setLineup(savedLineup);
+        const firstState = savedLineup[0] ? loadedBank.find((state) => state.id === savedLineup[0].stateId) : undefined;
+        if (firstState) {
+          setCurrentIndex(0);
+          secRef.current = firstState.minutes * 60;
+          setSecondsLeft(secRef.current);
+        }
+      }
     } catch { /* ignore */ }
 
     (async () => {
@@ -683,7 +695,12 @@ export default function ControlPage() {
       ...(JSON.parse(liveFlowSignature) as Omit<LiveClassFlowSnapshot, "updatedAt">),
       updatedAt: new Date().toISOString(),
     };
-    void supabase.from("sessions").update({ live_flow: snapshot }).eq("id", teacherSession.id);
+    let cancelled = false;
+    void (async () => {
+      const { error } = await supabase.from("sessions").update({ live_flow: snapshot }).eq("id", teacherSession.id);
+      if (!cancelled) setFlowSyncError(error?.message ?? null);
+    })();
+    return () => { cancelled = true; };
   }, [liveFlowSignature, supabase, teacherSession]);
 
   const handleDiscussionFlowChange = useCallback((snapshot: DiscussionPhaseSnapshot) => {
@@ -697,7 +714,20 @@ export default function ControlPage() {
 
   // ── Lineup management ───────────────────────────────────────────────────
   function addToLineup(stateId: string) {
-    persistLineup([...lineup, { uid: uid(), stateId }]);
+    const nextItem = { uid: uid(), stateId };
+    const nextLineup = [...lineup, nextItem];
+    persistLineup(nextLineup);
+    if (currentIndex < 0) {
+      const state = bank.find((item) => item.id === stateId);
+      if (state) {
+        setCurrentIndex(nextLineup.length - 1);
+        secRef.current = state.minutes * 60;
+        setSecondsLeft(secRef.current);
+        setRunning(false);
+        setFinished(false);
+        stopMusic();
+      }
+    }
   }
   function removeFromLineup(u: string) {
     const idx = lineup.findIndex((l) => l.uid === u);
@@ -734,6 +764,21 @@ export default function ControlPage() {
     setRunning(willRun);
     if (willRun) startMusicFor(activeState.id);
     else if (musicRef.current) musicRef.current.pause();
+  }
+  function runSequence() {
+    if (lineup.length === 0) return;
+    const nextIndex = currentIndex >= 0 ? currentIndex : 0;
+    const item = lineup[nextIndex];
+    const state = item ? bank.find((bankState) => bankState.id === item.stateId) : undefined;
+    if (!state) return;
+    setAutoAdvance(true);
+    setCurrentIndex(nextIndex);
+    secRef.current = secondsLeft > 0 && currentIndex === nextIndex ? secondsLeft : state.minutes * 60;
+    setSecondsLeft(secRef.current);
+    setFinished(false);
+    setRunning(true);
+    stopMusic();
+    startMusicFor(state.id);
   }
   function reset() {
     if (!activeState) return;
@@ -805,6 +850,14 @@ export default function ControlPage() {
   const pct = activeState ? Math.max(0, Math.min(100, (secondsLeft / denom) * 100)) : 0;
   const hasNext = currentIndex + 1 < lineup.length;
   const nextState = hasNext ? bank.find((s) => s.id === lineup[currentIndex + 1].stateId) : undefined;
+  const liveFlowConnected = teacherSession?.status === "open" && teacherSession.broadcast === LIVE_FLOW_MODE;
+  const liveFlowStatus = !supabase
+    ? "Live sync unavailable"
+    : flowSyncError
+      ? `Live sync error: ${flowSyncError}`
+      : liveFlowConnected
+        ? "Live Class Flow connected"
+        : "Select Live Class Flow in Session";
 
   return (
     <>
@@ -813,6 +866,7 @@ export default function ControlPage() {
         .cx-overlay { position:fixed; inset:0; z-index:50; overflow:auto; background:#0b0d14; }
         .cx-top { display:flex; align-items:center; justify-content:space-between; padding:14px 26px; border-bottom:1px solid #1f2332; flex-wrap:wrap; gap:8px; }
         .cx-mark { font-size:0.76rem; font-weight:900; letter-spacing:0.14em; text-transform:uppercase; color:${accent}; margin:0; transition:color 300ms ease; }
+        .cx-live-status { margin:0 auto 0 0; border:1px solid ${liveFlowConnected && !flowSyncError ? "rgba(20,184,166,0.45)" : "rgba(251,191,36,0.4)"}; background:${liveFlowConnected && !flowSyncError ? "rgba(20,184,166,0.12)" : "rgba(251,191,36,0.1)"}; color:${liveFlowConnected && !flowSyncError ? "#5eead4" : "#facc15"}; border-radius:999px; padding:6px 10px; font-size:0.72rem; font-weight:900; letter-spacing:0.07em; text-transform:uppercase; max-width:min(52vw,520px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .cx-tbtns { display:flex; gap:8px; flex-wrap:wrap; }
         .cx-sbtn { font-size:0.76rem; font-weight:800; letter-spacing:0.05em; text-transform:uppercase; color:#8a93ad; background:transparent; border:1px solid #1f2332; border-radius:7px; padding:7px 12px; cursor:pointer; text-decoration:none; transition:all 140ms ease; }
         .cx-sbtn:hover { border-color:${accent}; color:#fff; }
@@ -903,6 +957,7 @@ export default function ControlPage() {
       <div className="cx-root">
         <header className="cx-top">
           <p className="cx-mark">Big Dog Math — Classroom</p>
+          <p className="cx-live-status">{liveFlowStatus}</p>
           <div className="cx-tbtns">
             <button className="cx-sbtn" onClick={() => setShowSpinner(true)}>🎰 Spinner</button>
             <button className="cx-sbtn" style={autoAdvance ? { borderColor: accent, color: "#fff" } : undefined} onClick={() => setAutoAdvance((v) => !v)}>Auto-advance: {autoAdvance ? "on" : "off"}</button>
@@ -1115,12 +1170,13 @@ export default function ControlPage() {
                 </section>
               )}
               <div className="cx-actions">
+                <button className="cx-btn" onClick={runSequence}>▶ Run sequence</button>
                 <button className="cx-btn pri" onClick={toggleRun}>{running ? "⏸ Pause" : secondsLeft <= 0 ? "↻ Restart" : "▶ Start"}</button>
                 <button className="cx-btn" onClick={reset}>Reset</button>
                 <button className="cx-btn" onClick={() => adjust(60)}>+1 min</button>
                 <button className="cx-btn" onClick={() => adjust(-60)} disabled={secondsLeft < 60}>−1 min</button>
                 <button className="cx-btn" onClick={() => adjust(30)}>+30s</button>
-                <button className="cx-btn next" onClick={next} disabled={currentIndex + 1 >= lineup.length}>{controlPoll?.stage === "responding" ? "Show results" : "Next ▶"}</button>
+                <button className="cx-btn next" onClick={next} disabled={controlPoll?.stage !== "responding" && currentIndex + 1 >= lineup.length}>{controlPoll?.stage === "responding" ? "Show results" : "Next ▶"}</button>
                 {finished && activeState.id === "warmup" && (
                   <button className="cx-btn" style={{ background: "#f59e0b", borderColor: "#f59e0b" }} onClick={() => setShowSpinner(true)}>🎰 Pick readers</button>
                 )}
@@ -1133,11 +1189,13 @@ export default function ControlPage() {
                 : <div className="cx-upnext">Last step of the lesson</div>}
             </>
           ) : (
-            <p className="cx-note cx-idle">
-              Build today&apos;s lineup: tap states in the bank below to add them, then tap a
-              step in your lineup to load its timer. Hit “Sounds” to upload your warm-up
-              music and cue sounds.
-            </p>
+            <div style={{ display: "grid", justifyItems: "center", gap: 14 }}>
+              <p className="cx-note cx-idle">
+                Build today&apos;s lineup: tap states in the bank below to add them, then run the sequence.
+                Hit “Sounds” to upload your warm-up music and cue sounds.
+              </p>
+              {lineup.length > 0 && <button className="cx-btn pri" onClick={runSequence}>▶ Run sequence</button>}
+            </div>
           )}
         </main>
 
