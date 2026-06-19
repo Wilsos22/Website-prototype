@@ -8,3 +8,7 @@ alter table public.sessions add column if not exists broadcast text;
 -- Read-only classroom state snapshot for the Live Class Flow student screen.
 -- The teacher control panel writes this only while broadcast = 'live-flow'.
 alter table public.sessions add column if not exists live_flow jsonb;
+
+-- Refresh Supabase/PostgREST's schema cache so the web app can see live_flow
+-- immediately after this migration runs.
+notify pgrst, 'reload schema';

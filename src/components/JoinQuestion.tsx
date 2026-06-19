@@ -68,7 +68,7 @@ export function JoinQuestion() {
     if (supabase) {
       const { data: liveSession, error: liveError } = await supabase
         .from("sessions")
-        .select("id,period_id,broadcast,status,live_flow")
+        .select("id,period_id,broadcast,status")
         .eq("join_code", cleanCode)
         .eq("status", "open")
         .limit(1)
@@ -85,7 +85,6 @@ export function JoinQuestion() {
           period_id: string;
           broadcast: string | null;
           status: string;
-          live_flow: { tool?: { route?: string | null } | null } | null;
         };
         const { error: joinError } = await supabase.from("session_joins").insert({
           session_id: row.id,
@@ -109,7 +108,7 @@ export function JoinQuestion() {
         }
 
         const target = row.broadcast === LIVE_FLOW_MODE
-          ? row.live_flow?.tool?.route || LIVE_FLOW_ROUTE
+          ? LIVE_FLOW_ROUTE
           : row.broadcast && row.broadcast !== "free"
             ? row.broadcast
             : "/lesson";

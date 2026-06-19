@@ -218,6 +218,14 @@ function buildLiveToolConfig(stateId: ToolStateId, values: ToolSetupValues): Liv
   }
 }
 
+function formatLiveFlowError(message: string): string {
+  const lower = message.toLowerCase();
+  if (message.includes("live_flow") || lower.includes("schema cache") || lower.includes("column")) {
+    return "Live Flow database setup is missing. Run supabase/class-mode.sql.";
+  }
+  return `Live sync error: ${message}`;
+}
+
 // ── IndexedDB (stores uploaded sound files so they persist on this computer) ──
 function idbOpen(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -854,7 +862,7 @@ export default function ControlPage() {
   const liveFlowStatus = !supabase
     ? "Live sync unavailable"
     : flowSyncError
-      ? `Live sync error: ${flowSyncError}`
+      ? formatLiveFlowError(flowSyncError)
       : liveFlowConnected
         ? "Live Class Flow connected"
         : "Select Live Class Flow in Session";

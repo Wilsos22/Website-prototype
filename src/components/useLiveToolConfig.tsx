@@ -36,11 +36,20 @@ export function useLiveToolConfig(route: LiveToolRoute): LiveToolConfig | null {
       setTool(nextTool?.route === route ? nextTool : null);
     };
     const readSession = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("sessions")
         .select("status,broadcast,live_flow")
         .eq("id", sessionId)
         .maybeSingle();
+      if (error) {
+        const fallback = await supabase
+          .from("sessions")
+          .select("status,broadcast")
+          .eq("id", sessionId)
+          .maybeSingle();
+        applySession({ ...(fallback.data as Omit<SessionRow, "live_flow"> | null), live_flow: null } as SessionRow | null);
+        return;
+      }
       applySession(data as SessionRow | null);
     };
 

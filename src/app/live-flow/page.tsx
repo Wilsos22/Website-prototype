@@ -72,6 +72,12 @@ function formatTime(totalSeconds: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
+function missingLiveFlowColumn(message: string) {
+  return message.includes("live_flow")
+    || message.toLowerCase().includes("schema cache")
+    || message.toLowerCase().includes("column");
+}
+
 export default function LiveFlowPage() {
   const supabase = getSupabase();
   const [flow, setFlow] = useState<LiveClassFlowSnapshot | null>(null);
@@ -111,11 +117,31 @@ export default function LiveFlowPage() {
       setLoading(false);
     };
     const readSession = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("sessions")
         .select("status,broadcast,live_flow")
         .eq("id", sessionId)
         .maybeSingle();
+      if (error) {
+        const fallback = await supabase
+          .from("sessions")
+          .select("status,broadcast")
+          .eq("id", sessionId)
+          .maybeSingle();
+        if (fallback.error) {
+          setEmptyMessage(fallback.error.message);
+          setFlow(null);
+          setLoading(false);
+          return;
+        }
+        applySession({ ...(fallback.data as Omit<SessionRow, "live_flow"> | null), live_flow: null } as SessionRow | null);
+        setEmptyMessage(
+          error.message && missingLiveFlowColumn(error.message)
+            ? "Live Flow database setup is missing."
+            : error.message || "Live Flow could not load.",
+        );
+        return;
+      }
       applySession(data as SessionRow | null);
     };
 
