@@ -1,234 +1,255 @@
 "use client";
 
+// Warm-up insights — formative, fast.
+// Reads the pre-computed "Warm-Up Weekly Summaries" DB (triage: missing, low,
+// completion, status) plus links into each day's Google Forms summary.
+
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
-interface FormResponseData {
+interface WeeklySummary {
   id: string;
-  formTitle: string;
-  responseEmail: string;
-  submittedAt: string;
-  score: number | null;
-  maxScore: number | null;
+  student: string;
+  studentEmail: string;
+  period: string;
   week: string;
+  weekNumber: number | null;
+  weekStart: string;
+  expectedDays: string;
+  expectedNum: number | null;
+  submittedCount: number | null;
+  missingDays: string;
+  weeklyAvgScore: number | null;
+  completion: number | null;
+  status: string;
+}
+interface WarmupForm {
+  id: string;
+  name: string;
+  className: string;
+  date: string;
+  summaryUrl: string;
+  responseSheet: string;
 }
 
-interface WeeklyEmailStats {
-  email: string;
-  week: string;
-  formTitle: string;
-  submissions: number;
-  averageScore: number | null;
-  lowScoreCount: number;
+const SCOPES = [
+  { label: "Last 2 weeks", days: 14 },
+  { label: "This week", days: 7 },
+  { label: "Last 4 weeks", days: 28 },
+];
+
+function studentLabel(s: WeeklySummary) {
+  if (s.student && !/^week/i.test(s.student)) return s.student;
+  const email = s.studentEmail || "";
+  return email ? email.split("@")[0] : "Student";
+}
+function avgText(v: number | null) { return v === null ? "—" : v.toFixed(1); }
+function expectedText(s: WeeklySummary) {
+  const exp = s.expectedNum !== null ? String(s.expectedNum) : (s.expectedDays || "?");
+  return `${s.submittedCount ?? 0} / ${exp}`;
+}
+function fmtDate(iso: string) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+}
+function statusKind(status: string): "ok" | "warn" | "bad" {
+  const s = status.toLowerCase();
+  if (s.includes("complete")) return "ok";
+  if (s.includes("no submission")) return "bad";
+  return "warn";
 }
 
-interface WeeklyFormStats {
-  formTitle: string;
-  week: string;
-  submissions: number;
-  averageScore: number | null;
-  minScore: number | null;
-  maxScore: number | null;
-}
-
-function normalize(value: string) {
-  return value.trim().toLowerCase();
-}
-
-function key(...parts: string[]) {
-  return parts.map(normalize).join("||");
-}
-
-function scoreText(value: number | null) {
-  return value === null ? "-" : value.toFixed(1);
-}
-
-function getWeeklyEmailStats(responses: FormResponseData[], lowScoreThreshold: number): WeeklyEmailStats[] {
-  const groups = new Map<string, WeeklyEmailStats & { totalScore: number; scoreCount: number }>();
-
-  for (const response of responses) {
-    const groupKey = key(response.responseEmail, response.week, response.formTitle);
-    const existing = groups.get(groupKey) ?? {
-      email: response.responseEmail,
-      week: response.week,
-      formTitle: response.formTitle,
-      submissions: 0,
-      averageScore: null,
-      lowScoreCount: 0,
-      totalScore: 0,
-      scoreCount: 0,
-    };
-
-    existing.submissions += 1;
-    if (response.score !== null) {
-      existing.totalScore += response.score;
-      existing.scoreCount += 1;
-      existing.averageScore = existing.totalScore / existing.scoreCount;
-      if (response.score < lowScoreThreshold) existing.lowScoreCount += 1;
-    }
-    groups.set(groupKey, existing);
-  }
-
-  return Array.from(groups.values()).map((item) => ({
-    email: item.email,
-    week: item.week,
-    formTitle: item.formTitle,
-    submissions: item.submissions,
-    averageScore: item.scoreCount ? Number((item.averageScore ?? 0).toFixed(2)) : null,
-    lowScoreCount: item.lowScoreCount,
-  }));
-}
-
-function getWeeklyFormStats(responses: FormResponseData[]): WeeklyFormStats[] {
-  const groups = new Map<string, WeeklyFormStats & { totalScore: number; scoreCount: number }>();
-
-  for (const response of responses) {
-    const groupKey = key(response.formTitle, response.week);
-    const existing = groups.get(groupKey) ?? {
-      formTitle: response.formTitle,
-      week: response.week,
-      submissions: 0,
-      averageScore: null,
-      minScore: null,
-      maxScore: null,
-      totalScore: 0,
-      scoreCount: 0,
-    };
-
-    existing.submissions += 1;
-    if (response.score !== null) {
-      existing.totalScore += response.score;
-      existing.scoreCount += 1;
-      existing.averageScore = existing.totalScore / existing.scoreCount;
-      existing.minScore = existing.minScore === null ? response.score : Math.min(existing.minScore, response.score);
-      existing.maxScore = existing.maxScore === null ? response.score : Math.max(existing.maxScore, response.score);
-    }
-    groups.set(groupKey, existing);
-  }
-
-  return Array.from(groups.values()).map((item) => ({
-    formTitle: item.formTitle,
-    week: item.week,
-    submissions: item.submissions,
-    averageScore: item.scoreCount ? Number((item.averageScore ?? 0).toFixed(2)) : null,
-    minScore: item.minScore,
-    maxScore: item.maxScore,
-  }));
-}
-
-export default function TeacherAnalyticsPage() {
-  const [responses, setResponses] = useState<FormResponseData[]>([]);
-  const [selectedTitle, setSelectedTitle] = useState("");
-  const [selectedEmail, setSelectedEmail] = useState("");
-  const [lowScoreThreshold, setLowScoreThreshold] = useState(60);
+export default function WarmupInsightsPage() {
+  const [summaries, setSummaries] = useState<WeeklySummary[]>([]);
+  const [forms, setForms] = useState<WarmupForm[]>([]);
+  const [days, setDays] = useState(14);
+  const [period, setPeriod] = useState("");
+  const [threshold, setThreshold] = useState(3);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    async function load() {
+    let stop = false;
+    setLoading(true); setError("");
+    (async () => {
       try {
-        const res = await fetch("/api/form-responses", { cache: "no-store" });
-        const data = await res.json() as { responses?: FormResponseData[]; error?: string };
-        if (!res.ok || data.error) throw new Error(data.error || "Could not load form responses.");
-        setResponses(data.responses ?? []);
+        const res = await fetch(`/api/warmup-summaries?days=${days}`);
+        const data = await res.json() as { summaries?: WeeklySummary[]; forms?: WarmupForm[]; error?: string };
+        if (stop) return;
+        if (!res.ok || data.error) throw new Error(data.error || "Could not load warm-up insights.");
+        setSummaries(data.summaries ?? []);
+        setForms(data.forms ?? []);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not load form responses.");
+        if (!stop) setError(err instanceof Error ? err.message : "Could not load warm-up insights.");
       } finally {
-        setLoading(false);
+        if (!stop) setLoading(false);
       }
+    })();
+    return () => { stop = true; };
+  }, [days]);
+
+  const periods = useMemo(
+    () => Array.from(new Set(summaries.map((s) => s.period).filter(Boolean))).sort(),
+    [summaries]
+  );
+  const rows = useMemo(
+    () => summaries.filter((s) => !period || s.period === period),
+    [summaries, period]
+  );
+
+  const isFlagged = (s: WeeklySummary) =>
+    s.status.toLowerCase().includes("missing") ||
+    s.status.toLowerCase().includes("no submission") ||
+    (s.weeklyAvgScore !== null && s.weeklyAvgScore < threshold);
+
+  const needsFollowUp = useMemo(() => rows.filter(isFlagged).sort((a, b) =>
+    (b.weekStart || "").localeCompare(a.weekStart || "") ||
+    (a.weeklyAvgScore ?? 99) - (b.weeklyAvgScore ?? 99)
+  ), [rows, threshold]);
+
+  const missing = useMemo(() => rows.filter((s) =>
+    s.status && !s.status.toLowerCase().includes("complete")
+  ).sort((a, b) => studentLabel(a).localeCompare(studentLabel(b))), [rows]);
+
+  const lowAvg = useMemo(() => rows.filter((s) => s.weeklyAvgScore !== null)
+    .sort((a, b) => (a.weeklyAvgScore ?? 0) - (b.weeklyAvgScore ?? 0)), [rows]);
+
+  const periodOverview = useMemo(() => {
+    const map = new Map<string, { period: string; n: number; avgSum: number; avgN: number; compSum: number; compN: number; flagged: number }>();
+    for (const s of rows) {
+      const k = s.period || "—";
+      const e = map.get(k) ?? { period: k, n: 0, avgSum: 0, avgN: 0, compSum: 0, compN: 0, flagged: 0 };
+      e.n += 1;
+      if (s.weeklyAvgScore !== null) { e.avgSum += s.weeklyAvgScore; e.avgN += 1; }
+      if (s.completion !== null) { e.compSum += s.completion; e.compN += 1; }
+      if (isFlagged(s)) e.flagged += 1;
+      map.set(k, e);
     }
-    load();
-  }, []);
+    return Array.from(map.values()).sort((a, b) => a.period.localeCompare(b.period));
+  }, [rows, threshold]);
 
-  const titles = useMemo(() => Array.from(new Set(responses.map((item) => item.formTitle))).sort(), [responses]);
-  const filteredResponses = useMemo(() => responses.filter((response) => {
-    const matchesTitle = !selectedTitle || response.formTitle === selectedTitle;
-    const matchesEmail = !selectedEmail || response.responseEmail.toLowerCase().includes(selectedEmail.toLowerCase());
-    return matchesTitle && matchesEmail;
-  }), [responses, selectedEmail, selectedTitle]);
-
-  const weeklyEmailStats = useMemo(() => getWeeklyEmailStats(filteredResponses, lowScoreThreshold), [filteredResponses, lowScoreThreshold]);
-  const weeklyFormStats = useMemo(() => getWeeklyFormStats(filteredResponses), [filteredResponses]);
-  const lowRows = weeklyEmailStats.filter((row) => row.averageScore !== null && row.averageScore < lowScoreThreshold);
+  const formsByDate = useMemo(() => {
+    const map = new Map<string, WarmupForm[]>();
+    for (const f of forms) { const k = f.date || "—"; (map.get(k) ?? map.set(k, []).get(k)!).push(f); }
+    return Array.from(map.entries()).sort((a, b) => (b[0]).localeCompare(a[0]));
+  }, [forms]);
 
   return (
-    <main className="ta-page">
+    <div className="wi">
       <style>{`
-        .ta-page { min-height:100vh; background:#f6f8fb; color:#172033; font-family:Inter,ui-sans-serif,system-ui,sans-serif; padding:24px; box-sizing:border-box; }
-        .ta-shell { width:min(1120px,100%); margin:0 auto; display:grid; gap:18px; }
-        .ta-top { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
-        .ta-back { color:#42526b; font-weight:800; text-decoration:none; border:1px solid #d9e2ef; border-radius:8px; padding:9px 12px; background:#fff; }
-        .ta-title { margin:0; color:#111827; font-size:clamp(2rem,4vw,3rem); font-weight:950; line-height:1.05; }
-        .ta-sub { margin:6px 0 0; color:#64748b; font-weight:700; }
-        .ta-panel { background:#fff; border:1px solid #d9e2ef; border-radius:8px; padding:20px; box-shadow:0 16px 42px -34px rgba(15,23,42,0.42); overflow-x:auto; }
-        .ta-filters { display:flex; gap:12px; align-items:end; flex-wrap:wrap; }
-        .ta-field { display:grid; gap:6px; color:#475569; font-weight:850; font-size:0.88rem; }
-        .ta-field input, .ta-field select { min-height:40px; border:1px solid #cbd5e1; border-radius:8px; padding:8px 10px; font:inherit; min-width:180px; }
-        .ta-metric-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; }
-        .ta-metric { background:#102033; color:#fff; border-radius:8px; padding:18px; }
-        .ta-metric-label { margin:0 0 8px; color:#93c5fd; font-size:0.78rem; font-weight:900; text-transform:uppercase; letter-spacing:0.08em; }
-        .ta-metric-value { margin:0; font-size:2rem; font-weight:950; }
-        .ta-section-title { margin:0 0 14px; color:#0f172a; font-size:1.1rem; font-weight:950; }
-        .ta-note, .ta-empty { color:#64748b; font-weight:700; margin:0; }
-        .ta-error { color:#9f1239; background:#fff1f2; border:1px solid #fecdd3; border-radius:8px; padding:14px; white-space:pre-wrap; }
-        .ta-table { width:100%; border-collapse:collapse; font-size:0.92rem; }
-        .ta-table th, .ta-table td { border-bottom:1px solid #e2e8f0; padding:10px 12px; text-align:left; vertical-align:top; }
-        .ta-table th { color:#475569; font-size:0.75rem; font-weight:950; letter-spacing:0.08em; text-transform:uppercase; }
-        .ta-low { background:#fff7ed; }
-        @media (max-width:640px) {
-          .ta-page { padding:14px; }
-          .ta-field, .ta-field input, .ta-field select { width:100%; min-width:0; }
-        }
+        .wi { min-height:100vh; background:var(--bdb-ground); color:var(--bdb-ink); font-family:var(--bdb-font); }
+        .wi-wrap { max-width:1100px; margin:0 auto; padding:clamp(16px,3vw,30px) clamp(14px,3vw,28px) 56px; }
+        .wi-top { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:6px; }
+        .wi-h1 { margin:0; font-size:clamp(1.6rem,3.4vw,2.2rem); font-weight:700; letter-spacing:-0.02em; }
+        .wi-sub { margin:4px 0 0; color:var(--bdb-ink-soft); font-size:0.96rem; }
+        .wi-back { color:var(--bdb-ink-soft); font-weight:600; font-size:0.86rem; text-decoration:none; border:1px solid var(--bdb-line); background:var(--bdb-card); border-radius:var(--bdb-r-pill); padding:8px 14px; }
+
+        .wi-controls { display:flex; gap:10px; align-items:end; flex-wrap:wrap; margin:18px 0 6px; }
+        .wi-field { display:grid; gap:5px; font-size:0.74rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--bdb-ink-faint); }
+        .wi-field select, .wi-field input { min-height:40px; border:1px solid var(--bdb-line); border-radius:var(--bdb-r-sm); padding:8px 11px; font:inherit; font-weight:600; color:var(--bdb-ink); background:var(--bdb-card); min-width:150px; }
+        .wi-seg { display:inline-flex; background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:var(--bdb-r-pill); padding:3px; gap:3px; }
+        .wi-seg button { border:none; background:transparent; border-radius:var(--bdb-r-pill); padding:7px 14px; font:inherit; font-weight:600; font-size:0.86rem; color:var(--bdb-ink-soft); cursor:pointer; }
+        .wi-seg button.on { background:var(--bdb-ink); color:#fff; }
+
+        .wi-metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:16px 0 8px; }
+        .wi-metric { background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:var(--bdb-r); padding:14px 16px; box-shadow:var(--bdb-shadow-sm); }
+        .wi-metric .ml { margin:0 0 6px; font-size:0.72rem; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; color:var(--bdb-ink-faint); }
+        .wi-metric .mv { margin:0; font-size:1.7rem; font-weight:700; letter-spacing:-0.02em; }
+
+        .wi-card { background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:var(--bdb-r); box-shadow:var(--bdb-shadow-sm); padding:18px 20px; margin-top:18px; }
+        .wi-card.accent { border-left:5px solid var(--bdb-coral); }
+        .wi-card h2 { margin:0 0 3px; font-size:1.08rem; font-weight:700; }
+        .wi-card .ch { color:var(--bdb-ink-soft); font-size:0.86rem; margin:0 0 14px; }
+        .wi-empty { color:var(--bdb-ink-faint); font-size:0.92rem; }
+
+        .wi-table { width:100%; border-collapse:collapse; font-size:0.9rem; }
+        .wi-table th, .wi-table td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--bdb-line); white-space:nowrap; }
+        .wi-table th { font-size:0.7rem; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; color:var(--bdb-ink-faint); }
+        .wi-table td.num { font-variant-numeric:tabular-nums; }
+        .wi-table tr:last-child td { border-bottom:none; }
+        .wi-student { font-weight:600; }
+        .wi-email { color:var(--bdb-ink-faint); font-size:0.8rem; }
+
+        .badge { display:inline-block; padding:3px 10px; border-radius:var(--bdb-r-pill); font-size:0.76rem; font-weight:700; }
+        .badge.ok { background:color-mix(in srgb,var(--bdb-green) 16%,white); color:#1c6b4a; }
+        .badge.warn { background:color-mix(in srgb,var(--bdb-amber) 22%,white); color:#8a5a0b; }
+        .badge.bad { background:color-mix(in srgb,var(--bdb-coral) 16%,white); color:#9a3412; }
+
+        .wi-daily { display:grid; gap:14px; }
+        .wi-day h3 { margin:0 0 8px; font-size:0.82rem; font-weight:700; color:var(--bdb-ink-soft); }
+        .wi-forms { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; }
+        .wi-form { border:1px solid var(--bdb-line); border-radius:var(--bdb-r-sm); padding:12px 14px; background:var(--bdb-ground); }
+        .wi-form .fn { font-weight:600; font-size:0.92rem; margin:0 0 8px; }
+        .wi-form .fl { display:flex; gap:8px; flex-wrap:wrap; }
+        .wi-form a { font-size:0.8rem; font-weight:700; text-decoration:none; padding:6px 11px; border-radius:var(--bdb-r-pill); }
+        .wi-form a.primary { background:var(--bdb-teal); color:#fff; }
+        .wi-form a.ghost { border:1px solid var(--bdb-line); color:var(--bdb-ink-soft); }
+
+        .wi-err { background:color-mix(in srgb,var(--bdb-coral) 8%,white); border:1px solid color-mix(in srgb,var(--bdb-coral) 30%,white); color:#9a3412; border-radius:var(--bdb-r); padding:16px; white-space:pre-wrap; font-size:0.9rem; }
+        @media (max-width:640px){ .wi-card { overflow-x:auto; } }
       `}</style>
 
-      <div className="ta-shell">
-        <header className="ta-top">
+      <div className="wi-wrap">
+        <header className="wi-top">
           <div>
-            <h1 className="ta-title">Form Analytics</h1>
-            <p className="ta-sub">Warm-up submissions from Notion, grouped for quick follow-up.</p>
+            <h1 className="wi-h1">Warm-up insights</h1>
+            <p className="wi-sub">Who needs follow-up, who&apos;s missing, and how each class is trending.</p>
           </div>
-          <a className="ta-back" href="/teacher">Teacher tools</a>
+          <Link className="wi-back" href="/teacher">← Back to tools</Link>
         </header>
 
-        {loading && <section className="ta-panel"><p className="ta-note">Loading form responses...</p></section>}
-        {!loading && error && <section className="ta-panel"><pre className="ta-error">Failed to load analytics: {error}</pre></section>}
+        <div className="wi-controls">
+          <div className="wi-field">Scope
+            <div className="wi-seg">
+              {SCOPES.map((s) => (
+                <button key={s.days} className={days === s.days ? "on" : ""} onClick={() => setDays(s.days)}>{s.label}</button>
+              ))}
+            </div>
+          </div>
+          <label className="wi-field">Period
+            <select value={period} onChange={(e) => setPeriod(e.target.value)}>
+              <option value="">All periods</option>
+              {periods.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </label>
+          <label className="wi-field">Flag weekly avg below
+            <input type="number" min={0} max={5} step={0.5} value={threshold} onChange={(e) => setThreshold(Number(e.target.value) || 0)} />
+          </label>
+        </div>
+
+        {loading && <section className="wi-card"><p className="wi-empty">Loading warm-up insights…</p></section>}
+        {!loading && error && (
+          <section className="wi-card"><pre className="wi-err">{error}
+
+If this mentions sharing: open the “Warm-Up Weekly Summaries” database in Notion → ••• → Connections → add “Big Dog Math”.</pre></section>
+        )}
 
         {!loading && !error && (
           <>
-            <section className="ta-panel">
-              <div className="ta-filters">
-                <label className="ta-field">
-                  Form
-                  <select value={selectedTitle} onChange={(event) => setSelectedTitle(event.target.value)}>
-                    <option value="">All forms</option>
-                    {titles.map((title) => <option key={title} value={title}>{title}</option>)}
-                  </select>
-                </label>
-                <label className="ta-field">
-                  Email
-                  <input value={selectedEmail} onChange={(event) => setSelectedEmail(event.target.value)} placeholder="student email" />
-                </label>
-                <label className="ta-field">
-                  Low score threshold
-                  <input type="number" min={0} max={100} value={lowScoreThreshold} onChange={(event) => setLowScoreThreshold(Number(event.target.value) || 0)} />
-                </label>
-              </div>
+            <section className="wi-metrics">
+              <div className="wi-metric"><p className="ml">Flagged this window</p><p className="mv">{needsFollowUp.length}</p></div>
+              <div className="wi-metric"><p className="ml">Missing warm-ups</p><p className="mv">{missing.length}</p></div>
+              <div className="wi-metric"><p className="ml">Student-weeks</p><p className="mv">{rows.length}</p></div>
+              <div className="wi-metric"><p className="ml">Forms in range</p><p className="mv">{forms.length}</p></div>
             </section>
 
-            <section className="ta-metric-row">
-              <div className="ta-metric"><p className="ta-metric-label">Responses</p><p className="ta-metric-value">{filteredResponses.length}</p></div>
-              <div className="ta-metric"><p className="ta-metric-label">Forms</p><p className="ta-metric-value">{titles.length}</p></div>
-              <div className="ta-metric"><p className="ta-metric-label">Low-score groups</p><p className="ta-metric-value">{lowRows.length}</p></div>
-            </section>
-
-            <section className="ta-panel">
-              <h2 className="ta-section-title">Weekly Submissions by Email</h2>
-              {weeklyEmailStats.length === 0 ? <p className="ta-empty">No matching submissions.</p> : (
-                <table className="ta-table">
-                  <thead><tr><th>Email</th><th>Form</th><th>Week</th><th>Submissions</th><th>Average</th><th>Low Scores</th></tr></thead>
+            <section className="wi-card accent">
+              <h2>Needs follow-up</h2>
+              <p className="ch">Missing days, no submissions, or weekly average below {threshold}. Your action list.</p>
+              {needsFollowUp.length === 0 ? <p className="wi-empty">Nobody flagged in this window (or summaries haven&apos;t refreshed yet).</p> : (
+                <table className="wi-table">
+                  <thead><tr><th>Student</th><th>Period</th><th>Week</th><th>Submitted</th><th>Avg</th><th>Status</th></tr></thead>
                   <tbody>
-                    {weeklyEmailStats.map((row) => (
-                      <tr className={row.averageScore !== null && row.averageScore < lowScoreThreshold ? "ta-low" : ""} key={key(row.email, row.formTitle, row.week)}>
-                        <td>{row.email || "-"}</td><td>{row.formTitle}</td><td>{row.week || "-"}</td><td>{row.submissions}</td><td>{scoreText(row.averageScore)}</td><td>{row.lowScoreCount}</td>
+                    {needsFollowUp.map((s) => (
+                      <tr key={s.id}>
+                        <td><span className="wi-student">{studentLabel(s)}</span><br /><span className="wi-email">{s.studentEmail}</span></td>
+                        <td>{s.period || "—"}</td>
+                        <td>{s.week || "—"}</td>
+                        <td className="num">{expectedText(s)}</td>
+                        <td className="num">{avgText(s.weeklyAvgScore)}</td>
+                        <td><span className={`badge ${statusKind(s.status)}`}>{s.status || "—"}</span></td>
                       </tr>
                     ))}
                   </tbody>
@@ -236,25 +257,98 @@ export default function TeacherAnalyticsPage() {
               )}
             </section>
 
-            <section className="ta-panel">
-              <h2 className="ta-section-title">Weekly Average by Form</h2>
-              {weeklyFormStats.length === 0 ? <p className="ta-empty">No matching form averages.</p> : (
-                <table className="ta-table">
-                  <thead><tr><th>Form</th><th>Week</th><th>Submissions</th><th>Average</th><th>Min</th><th>Max</th></tr></thead>
+            <section className="wi-card">
+              <h2>Class overview</h2>
+              <p className="ch">Per-period averages and completion across the selected window.</p>
+              {periodOverview.length === 0 ? <p className="wi-empty">No data yet.</p> : (
+                <table className="wi-table">
+                  <thead><tr><th>Period</th><th>Student-weeks</th><th>Avg score</th><th>Avg completion</th><th>Flagged</th></tr></thead>
                   <tbody>
-                    {weeklyFormStats.map((row) => (
-                      <tr key={key(row.formTitle, row.week)}>
-                        <td>{row.formTitle}</td><td>{row.week || "-"}</td><td>{row.submissions}</td><td>{scoreText(row.averageScore)}</td><td>{scoreText(row.minScore)}</td><td>{scoreText(row.maxScore)}</td>
+                    {periodOverview.map((o) => (
+                      <tr key={o.period}>
+                        <td className="wi-student">{o.period}</td>
+                        <td className="num">{o.n}</td>
+                        <td className="num">{o.avgN ? (o.avgSum / o.avgN).toFixed(1) : "—"}</td>
+                        <td className="num">{o.compN ? `${Math.round(o.compSum / o.compN)}%` : "—"}</td>
+                        <td className="num">{o.flagged}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+              )}
+            </section>
+
+            <section className="wi-card">
+              <h2>Missing warm-ups</h2>
+              <p className="ch">Anyone not marked complete — submitted vs expected, and which days are missing.</p>
+              {missing.length === 0 ? <p className="wi-empty">No missing warm-ups in this window.</p> : (
+                <table className="wi-table">
+                  <thead><tr><th>Student</th><th>Period</th><th>Week</th><th>Submitted</th><th>Missing days</th></tr></thead>
+                  <tbody>
+                    {missing.map((s) => (
+                      <tr key={s.id}>
+                        <td><span className="wi-student">{studentLabel(s)}</span><br /><span className="wi-email">{s.studentEmail}</span></td>
+                        <td>{s.period || "—"}</td>
+                        <td>{s.week || "—"}</td>
+                        <td className="num">{expectedText(s)}</td>
+                        <td style={{ whiteSpace: "normal" }}>{s.missingDays || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </section>
+
+            <section className="wi-card">
+              <h2>Lowest weekly averages</h2>
+              <p className="ch">Sorted low to high — quick read on who&apos;s struggling.</p>
+              {lowAvg.length === 0 ? <p className="wi-empty">No scored weeks yet.</p> : (
+                <table className="wi-table">
+                  <thead><tr><th>Student</th><th>Period</th><th>Week</th><th>Avg</th><th>Completion</th></tr></thead>
+                  <tbody>
+                    {lowAvg.slice(0, 40).map((s) => (
+                      <tr key={s.id}>
+                        <td><span className="wi-student">{studentLabel(s)}</span><br /><span className="wi-email">{s.studentEmail}</span></td>
+                        <td>{s.period || "—"}</td>
+                        <td>{s.week || "—"}</td>
+                        <td className="num">{avgText(s.weeklyAvgScore)}</td>
+                        <td className="num">{s.completion === null ? "—" : `${s.completion}%`}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </section>
+
+            <section className="wi-card">
+              <h2>Daily summaries by period</h2>
+              <p className="ch">Open each day&apos;s Google Forms summary for the full charts.</p>
+              {forms.length === 0 ? (
+                <p className="wi-empty">No form links in range. (Share the “Warm up Links” database with the Big Dog Math integration to show these.)</p>
+              ) : (
+                <div className="wi-daily">
+                  {formsByDate.map(([date, list]) => (
+                    <div className="wi-day" key={date}>
+                      <h3>{fmtDate(date)}</h3>
+                      <div className="wi-forms">
+                        {list.map((f) => (
+                          <div className="wi-form" key={f.id}>
+                            <p className="fn">{f.className || f.name || "Warm-up"}</p>
+                            <div className="fl">
+                              {f.summaryUrl && <a className="primary" href={f.summaryUrl} target="_blank" rel="noopener noreferrer">Open summary ↗</a>}
+                              {f.responseSheet && <a className="ghost" href={f.responseSheet} target="_blank" rel="noopener noreferrer">Responses</a>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </section>
           </>
         )}
       </div>
-    </main>
+    </div>
   );
 }
-
