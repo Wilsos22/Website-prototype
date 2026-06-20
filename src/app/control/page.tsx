@@ -103,14 +103,14 @@ const DEFAULT_STATES: ClassState[] = [
   { id: "tool-whiteboard", label: "Whiteboard", minutes: 5, color: "#0ea5e9", desc: "Use the whiteboard to show and explain your thinking." },
   { id: "tool-number-line", label: "Number Line", minutes: 5, color: "#38bdf8", desc: "Model the problem on the number line." },
   { id: "tool-percent-bar", label: "Percent Bar", minutes: 5, color: "#f472b6", desc: "Use the percent bar to make sense of the relationship." },
-  { id: "tool-equation-builder", label: "Equation Builder", minutes: 6, color: "#22c55e", desc: "Build and solve the equation one step at a time." },
+  { id: "tool-equation-builder", label: "Equation Builder", minutes: 6, color: "#2f9e6f", desc: "Build and solve the equation one step at a time." },
   { id: "tool-gems", label: "GEMS", minutes: 5, color: "#a78bfa", desc: "Use GEMS to decide which operation comes first." },
   { id: "tool-fraction-bars", label: "Fraction Bars", minutes: 5, color: "#f59e0b", desc: "Model the fraction relationship with bars." },
   { id: "tool-algebra-tiles", label: "Algebra Tiles", minutes: 6, color: "#fb7185", desc: "Build the expression with algebra tiles." },
-  { id: "you-do", label: "Independent Practice (You do)", minutes: 15, color: "#22c55e", desc: "Work independently. Show all of your steps." },
+  { id: "you-do", label: "Independent Practice (You do)", minutes: 15, color: "#2f9e6f", desc: "Work independently. Show all of your steps." },
   { id: "manip", label: "Manipulatives / Hands-On", minutes: 10, color: "#f59e0b", desc: "Use the manipulative to model the problem." },
   { id: "partner", label: "Partner / Group Work", minutes: 10, color: "#ec4899", desc: "Work with your partner — both of you explain your thinking." },
-  { id: "exit", label: "Exit Ticket", minutes: 5, color: "#ef4444", desc: "Complete your exit ticket on your own and turn it in before the timer ends." },
+  { id: "exit", label: "Exit Ticket", minutes: 5, color: "#f95335", desc: "Complete your exit ticket on your own and turn it in before the timer ends." },
   { id: "cleanup", label: "Clean Up / Pack Up", minutes: 3, color: "#64748b", desc: "Clean your space and pack up quietly." },
   { id: "break", label: "Brain Break", minutes: 3, color: "#a3a3a3", desc: "Quick brain break — reset and get ready to focus." },
 ];
@@ -916,13 +916,13 @@ export default function ControlPage() {
   return (
     <>
       <style>{`
-        .cx-root { min-height:100vh; background:${finished ? "#2a0d0d" : warnFlash ? "#1a1c0d" : "#0b0d14"}; color:#fff; font-family:Inter,ui-sans-serif,system-ui,sans-serif; display:grid; grid-template-rows:auto 1fr auto auto; transition:background 300ms ease; }
-        .cx-overlay { position:fixed; inset:0; z-index:50; overflow:auto; background:#0b0d14; }
-        .cx-top { display:flex; align-items:center; justify-content:space-between; padding:14px 26px; border-bottom:1px solid #1f2332; flex-wrap:wrap; gap:8px; }
+        .cx-root { min-height:100vh; background:${finished ? "#2a0d0d" : warnFlash ? "#1c190d" : "#14110c"}; color:#fff; font-family:var(--bdb-font); display:grid; grid-template-rows:auto 1fr auto auto; transition:background 300ms ease; }
+        .cx-overlay { position:fixed; inset:0; z-index:50; overflow:auto; background:#14110c; }
+        .cx-top { display:flex; align-items:center; justify-content:space-between; padding:14px 26px; border-bottom:1px solid #2a241a; flex-wrap:wrap; gap:8px; }
         .cx-mark { font-size:0.76rem; font-weight:900; letter-spacing:0.14em; text-transform:uppercase; color:${accent}; margin:0; transition:color 300ms ease; }
-        .cx-live-status { margin:0 auto 0 0; border:1px solid ${liveFlowConnected && !flowSyncError ? "rgba(20,184,166,0.45)" : "rgba(251,191,36,0.4)"}; background:${liveFlowConnected && !flowSyncError ? "rgba(20,184,166,0.12)" : "rgba(251,191,36,0.1)"}; color:${liveFlowConnected && !flowSyncError ? "#5eead4" : "#facc15"}; border-radius:999px; padding:6px 10px; font-size:0.72rem; font-weight:900; letter-spacing:0.07em; text-transform:uppercase; max-width:min(52vw,520px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .cx-live-status { margin:0 auto 0 0; border:1px solid ${liveFlowConnected && !flowSyncError ? "rgba(20,184,166,0.45)" : "rgba(251,191,36,0.4)"}; background:${liveFlowConnected && !flowSyncError ? "rgba(20,184,166,0.12)" : "rgba(251,191,36,0.1)"}; color:${liveFlowConnected && !flowSyncError ? "#5eead4" : "#fcaf38"}; border-radius:999px; padding:6px 10px; font-size:0.72rem; font-weight:900; letter-spacing:0.07em; text-transform:uppercase; max-width:min(52vw,520px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .cx-tbtns { display:flex; gap:8px; flex-wrap:wrap; }
-        .cx-sbtn { font-size:0.76rem; font-weight:800; letter-spacing:0.05em; text-transform:uppercase; color:#8a93ad; background:transparent; border:1px solid #1f2332; border-radius:7px; padding:7px 12px; cursor:pointer; text-decoration:none; transition:all 140ms ease; }
+        .cx-sbtn { font-size:0.76rem; font-weight:800; letter-spacing:0.05em; text-transform:uppercase; color:#8a93ad; background:transparent; border:1px solid #2a241a; border-radius:7px; padding:7px 12px; cursor:pointer; text-decoration:none; transition:all 140ms ease; }
         .cx-sbtn:hover { border-color:${accent}; color:#fff; }
 
         .cx-main { display:grid; align-content:center; justify-items:center; gap:18px; padding:18px; text-align:center; }
@@ -930,31 +930,31 @@ export default function ControlPage() {
         .cx-pos { font-size:0.8rem; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:#5a6280; }
         .cx-clock { font-variant-numeric:tabular-nums; font-weight:900; line-height:0.9; letter-spacing:-0.02em;
           font-size:${inFinal10 ? "clamp(9rem,40vw,28rem)" : "clamp(5rem,20vw,15rem)"};
-          color:${inFinal10 ? "#fbbf24" : finished ? "#ef4444" : "#fff"};
+          color:${inFinal10 ? "#fbbf24" : finished ? "#f95335" : "#fff"};
           animation:${finished ? "cxFlash 0.7s steps(1) infinite" : inFinal10 ? "cxPulse 1s ease-in-out infinite" : "none"}; }
         @keyframes cxFlash { 50%{opacity:0.18;} }
         @keyframes cxPulse { 50%{opacity:0.55; transform:scale(1.04);} }
         .cx-note { font-size:1.1rem; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; min-height:1.3em; }
-        .cx-warn { color:#facc15; } .cx-fin { color:#ef4444; } .cx-idle { color:#3a4460; font-weight:700; max-width:440px; text-transform:none; letter-spacing:0; }
+        .cx-warn { color:#fcaf38; } .cx-fin { color:#f95335; } .cx-idle { color:#3a4460; font-weight:700; max-width:440px; text-transform:none; letter-spacing:0; }
         .cx-desc { font-size:clamp(1.1rem,3vw,1.9rem); font-weight:800; color:#dfe5f5; max-width:780px; line-height:1.3; }
-        .cx-progress { width:min(82vw,760px); height:16px; border-radius:999px; background:#1a1f30; overflow:hidden; border:1px solid #2a3045; }
+        .cx-progress { width:min(82vw,760px); height:16px; border-radius:999px; background:#1a1f30; overflow:hidden; border:1px solid #34301f; }
         .cx-progress-fill { height:100%; border-radius:999px; transition:width 1s linear, background 300ms ease; }
         .cx-upnext { font-size:0.82rem; font-weight:800; color:#5a6280; text-transform:uppercase; letter-spacing:0.07em; }
         .cx-upnext strong { color:#9aa3bd; }
 
         .cx-actions { display:flex; flex-wrap:wrap; gap:9px; justify-content:center; }
-        .cx-btn { font-size:1rem; font-weight:900; border-radius:11px; padding:13px 24px; cursor:pointer; border:1px solid #2a3045; background:#161a28; color:#fff; transition:transform 120ms ease, border-color 140ms ease, filter 140ms; }
+        .cx-btn { font-size:1rem; font-weight:900; border-radius:11px; padding:13px 24px; cursor:pointer; border:1px solid #34301f; background:#1d1810; color:#fff; transition:transform 120ms ease, border-color 140ms ease, filter 140ms; }
         .cx-btn:hover { transform:translateY(-1px); border-color:${accent}; }
         .cx-btn.pri { background:${accent}; border-color:${accent}; } .cx-btn.pri:hover { filter:brightness(1.08); }
-        .cx-btn.next { background:#22c55e; border-color:#22c55e; }
+        .cx-btn.next { background:#2f9e6f; border-color:#2f9e6f; }
         .cx-btn:disabled { opacity:0.32; cursor:not-allowed; transform:none; }
-        .cx-poll { width:min(94vw,760px); display:grid; gap:12px; padding:16px; border:1px solid #2a3045; border-radius:12px; background:#101522; text-align:left; }
+        .cx-poll { width:min(94vw,760px); display:grid; gap:12px; padding:16px; border:1px solid #34301f; border-radius:12px; background:#101522; text-align:left; }
         .cx-poll-head { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
         .cx-poll-title { margin:0; color:#fff; font-size:0.9rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; }
         .cx-poll-note { color:#8a93ad; font-size:0.82rem; font-weight:700; line-height:1.4; }
         .cx-poll-grid { display:grid; grid-template-columns:180px minmax(0,1fr); gap:10px; align-items:center; }
         .cx-poll-label { color:#c8cedd; font-size:0.82rem; font-weight:900; }
-        .cx-poll-input, .cx-poll-select { width:100%; border:1px solid #33405d; border-radius:8px; box-sizing:border-box; background:#0b0d14; color:#fff; padding:10px 12px; font:inherit; font-size:0.95rem; font-weight:700; }
+        .cx-poll-input, .cx-poll-select { width:100%; border:1px solid #33405d; border-radius:8px; box-sizing:border-box; background:#14110c; color:#fff; padding:10px 12px; font:inherit; font-size:0.95rem; font-weight:700; }
         .cx-poll-input { min-height:44px; }
         .cx-poll-choices { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
         .cx-poll-error { color:#fca5a5; font-size:0.82rem; font-weight:800; }
@@ -977,19 +977,19 @@ export default function ControlPage() {
         @media (max-width:640px) { .cx-poll-grid { grid-template-columns:1fr; } .cx-poll-choices { grid-template-columns:1fr; } }
         @media (max-width:640px) { .cx-tool-grid { grid-template-columns:1fr; } }
 
-        .cx-lineup { border-top:1px solid #1f2332; padding:12px 20px; display:flex; gap:8px; align-items:center; overflow-x:auto; }
+        .cx-lineup { border-top:1px solid #2a241a; padding:12px 20px; display:flex; gap:8px; align-items:center; overflow-x:auto; }
         .cx-lineup-title { font-size:0.72rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; color:#5a6280; flex:none; margin-right:4px; }
         .cx-budget { flex:none; font-size:0.78rem; font-weight:900; padding:4px 10px; border-radius:999px; margin-left:auto; background:${overBudget ? "rgba(239,68,68,0.15)" : "rgba(34,197,94,0.12)"}; color:${overBudget ? "#fca5a5" : "#86efac"}; border:1px solid ${overBudget ? "rgba(239,68,68,0.4)" : "rgba(34,197,94,0.3)"}; }
-        .cx-litem { flex:none; display:flex; align-items:center; gap:7px; background:#121520; border:1px solid #1f2332; border-radius:10px; padding:7px 10px; cursor:pointer; }
+        .cx-litem { flex:none; display:flex; align-items:center; gap:7px; background:#1a160f; border:1px solid #2a241a; border-radius:10px; padding:7px 10px; cursor:pointer; }
         .cx-litem.cur { border-color:#fff; background:rgba(255,255,255,0.05); }
         .cx-litem .dot { width:9px; height:9px; border-radius:50%; flex:none; }
         .cx-litem .lbl { font-size:0.82rem; font-weight:800; color:#c8cedd; white-space:nowrap; }
         .cx-litem .mins { font-size:0.72rem; font-weight:800; color:#5a6280; }
-        .cx-ibtn { background:#0b0d14; border:1px solid #2a3045; color:#8a93ad; border-radius:6px; width:22px; height:22px; cursor:pointer; font-weight:900; line-height:1; }
+        .cx-ibtn { background:#14110c; border:1px solid #34301f; color:#8a93ad; border-radius:6px; width:22px; height:22px; cursor:pointer; font-weight:900; line-height:1; }
         .cx-ibtn:hover { color:#fff; }
         .cx-empty-line { color:#3a4460; font-size:0.86rem; font-weight:700; }
 
-        .cx-bank { border-top:1px solid #1f2332; padding:12px 20px 22px; display:grid; gap:12px; }
+        .cx-bank { border-top:1px solid #2a241a; padding:12px 20px 22px; display:grid; gap:12px; }
         .cx-bank-title { width:100%; font-size:0.72rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; color:#5a6280; margin:0 0 2px; }
         .cx-bank-groups { display:grid; gap:12px; }
         .cx-bank-group { display:grid; gap:8px; padding:10px 12px 12px; border:1px solid #1b2131; border-radius:12px; background:#0e111b; }
@@ -997,14 +997,14 @@ export default function ControlPage() {
         .cx-bank-group-title { margin:0; font-size:0.76rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; color:#dfe5f5; }
         .cx-bank-group-hint { color:#5a6280; font-size:0.78rem; font-weight:750; }
         .cx-bank-chip-row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-        .cx-chip { display:inline-flex; align-items:center; gap:9px; background:#121520; border:1px solid #1f2332; border-radius:999px; padding:8px 14px; cursor:pointer; font-weight:800; font-size:0.9rem; color:#c8cedd; transition:border-color 140ms ease; }
+        .cx-chip { display:inline-flex; align-items:center; gap:9px; background:#1a160f; border:1px solid #2a241a; border-radius:999px; padding:8px 14px; cursor:pointer; font-weight:800; font-size:0.9rem; color:#c8cedd; transition:border-color 140ms ease; }
         .cx-chip:hover { border-color:#3a4460; }
         .cx-chip .dot { width:11px; height:11px; border-radius:50%; flex:none; }
-        .cx-chip .m { font-size:0.74rem; font-weight:800; color:#5a6280; background:#0b0d14; border-radius:6px; padding:2px 6px; }
-        .cx-min-in { width:44px; background:#0b0d14; border:1px solid #2a3045; color:#fff; border-radius:6px; padding:3px 5px; font-weight:800; font-size:0.8rem; text-align:center; }
-        .cx-music-tag { font-size:0.66rem; font-weight:900; color:#facc15; }
+        .cx-chip .m { font-size:0.74rem; font-weight:800; color:#5a6280; background:#14110c; border-radius:6px; padding:2px 6px; }
+        .cx-min-in { width:44px; background:#14110c; border:1px solid #34301f; color:#fff; border-radius:6px; padding:3px 5px; font-weight:800; font-size:0.8rem; text-align:center; }
+        .cx-music-tag { font-size:0.66rem; font-weight:900; color:#fcaf38; }
 
-        .cx-sounds { border-top:1px solid #1f2332; padding:16px 22px 22px; display:grid; gap:12px; background:#0d1018; }
+        .cx-sounds { border-top:1px solid #2a241a; padding:16px 22px 22px; display:grid; gap:12px; background:#0d1018; }
         .cx-sounds h3 { margin:0; font-size:0.8rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; color:#8a93ad; }
         .cx-srow { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
         .cx-slabel { font-size:0.9rem; font-weight:800; color:#c8cedd; min-width:220px; }
@@ -1038,7 +1038,7 @@ export default function ControlPage() {
               <div className="cx-desc">{activeState.desc}</div>
               <div className="cx-clock">{inFinal10 ? secondsLeft : fmt(secondsLeft)}</div>
               <div className="cx-progress">
-                <div className="cx-progress-fill" style={{ width: `${pct}%`, background: finished ? "#ef4444" : inFinal10 ? "#fbbf24" : accent }} />
+                <div className="cx-progress-fill" style={{ width: `${pct}%`, background: finished ? "#f95335" : inFinal10 ? "#fbbf24" : accent }} />
               </div>
               <div className={`cx-note ${finished ? "cx-fin" : warnFlash ? "cx-warn" : ""}`}>
                 {finished
