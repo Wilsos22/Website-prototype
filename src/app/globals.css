@@ -1,3 +1,6 @@
+/* Big Dog Board design-system font (Albert Sans). Must stay at the top of the file. */
+@import url("https://fonts.googleapis.com/css2?family=Albert+Sans:wght@400;500;600;700;800&display=swap");
+
 * {
   box-sizing: border-box;
 }
@@ -15,6 +18,31 @@
   --negative: #d95555;
   --warning: #d89028;
   --purple: #6f5fbf;
+
+  /* --- Big Dog Board design system (Minimal Adult UI) --- */
+  /* Warm, rounded, flat-not-pastel. Anchored to the colours.cafe scheme. */
+  --bdb-ground: #faf6ee;      /* off-white page ground */
+  --bdb-ground-2: #f3ecdd;    /* slightly deeper warm neutral */
+  --bdb-card: #ffffff;        /* white rounded cards */
+  --bdb-ink: #201e1a;         /* primary ink */
+  --bdb-ink-soft: #6f675c;    /* secondary text */
+  --bdb-ink-faint: #a59c8d;   /* tertiary / field labels */
+  --bdb-line: #ece4d4;        /* hairline borders on cream */
+  --bdb-amber: #fcaf38;       /* brand highlight */
+  --bdb-teal: #50a3a4;        /* accent / math meaning */
+  --bdb-brown: #674a40;       /* accent / ink-warm */
+  --bdb-coral: #f95335;       /* action / alert */
+  --bdb-green: #2f9e6f;       /* ready / positive status */
+  /* soft warm elevation */
+  --bdb-shadow-sm: 0 1px 2px rgba(32, 30, 26, 0.05), 0 1px 1px rgba(32, 30, 26, 0.04);
+  --bdb-shadow: 0 10px 24px -16px rgba(103, 74, 64, 0.45), 0 2px 6px rgba(32, 30, 26, 0.05);
+  --bdb-shadow-lg: 0 22px 48px -24px rgba(103, 74, 64, 0.5);
+  /* corner radii */
+  --bdb-r-sm: 10px;
+  --bdb-r: 16px;
+  --bdb-r-lg: 22px;
+  --bdb-r-pill: 999px;
+  --bdb-font: "Albert Sans", Inter, ui-sans-serif, system-ui, sans-serif;
 }
 
 html,
