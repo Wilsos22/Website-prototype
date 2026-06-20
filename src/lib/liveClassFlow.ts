@@ -4,6 +4,7 @@ export const LIVE_FLOW_MODE = "live-flow";
 export const LIVE_FLOW_ROUTE = "/live-flow";
 export const STUDENT_SESSION_KEY = "bdm-student-session";
 export const TEACHER_SESSION_KEY = "bdm-teacher-session";
+export const CLASS_MODE_EXIT_KEY = "bdm-class-mode-exited";
 
 export type DiscussionPhaseId = "think" | "marker" | "table" | "revise" | "share";
 export type LivePollKind = "short-answer" | "multiple-choice" | "fist-to-five";
@@ -117,6 +118,47 @@ export function getStoredStudentSession(): StoredStudentSession | null {
 
 export function getStoredStudentSessionId(): string | null {
   return getStoredStudentSession()?.sessionId ?? null;
+}
+
+export function clearStoredStudentSession(sessionId?: string): void {
+  try {
+    if (sessionId) {
+      const stored = getStoredStudentSessionId();
+      if (stored && stored !== sessionId) return;
+    }
+    localStorage.removeItem(STUDENT_SESSION_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function markClassModeExited(): void {
+  try {
+    localStorage.setItem(CLASS_MODE_EXIT_KEY, "1");
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearClassModeExitMarker(): void {
+  try {
+    localStorage.removeItem(CLASS_MODE_EXIT_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function hasClassModeExitMarker(): boolean {
+  try {
+    return localStorage.getItem(CLASS_MODE_EXIT_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function leaveClassMode(): void {
+  clearStoredStudentSession();
+  markClassModeExited();
 }
 
 export function getStoredTeacherSessionId(): string | null {
