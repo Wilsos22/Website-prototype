@@ -98,7 +98,14 @@ export default function OrderOfOperations() {
 
   function initRows(t: Tokens, m: Mode): Row[] {
     const r: Row[] = LEVELS.map(() => ({ tokens: [] as Tokens, status: "upcoming" as Status }));
-    r[0] = { tokens: t, status: m === "beginner" ? "gate" : "working" };
+    if (m === "beginner") {
+      r[0] = { tokens: t, status: "gate" };
+    } else {
+      // advanced starts on the first operation's level; earlier levels are skipped
+      const startIdx = categoryStart(t);
+      for (let i = 0; i < startIdx; i++) r[i] = { tokens: [], status: "skipped" };
+      r[startIdx] = { tokens: t, status: "working" };
+    }
     return r;
   }
 
@@ -373,7 +380,7 @@ export default function OrderOfOperations() {
                   <span className="S">{lv.sub}</span>
                 </div>
                 <div className="oo-cell" style={{ ["--c" as string]: lv.color }}>
-                  {st === "upcoming" ? <span className="oo-placeholder" /> : <div className="oo-expr">{renderExpr(row.tokens, interactive)}</div>}
+                  {(st === "upcoming" || row.tokens.length === 0) ? <span className="oo-placeholder" /> : <div className="oo-expr">{renderExpr(row.tokens, interactive)}</div>}
                 </div>
               </div>
             );
