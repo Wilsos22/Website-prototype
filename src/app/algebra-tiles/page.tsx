@@ -1,6 +1,11 @@
-// Algebra tiles route: draggable positive and negative math tiles.
+import ToolNav from "@/components/ToolNav";
 import { AlgebraTilesBoard } from "@/components/AlgebraTilesBoard";
 
 export default function AlgebraTilesPage() {
-  return <AlgebraTilesBoard />;
+  return (
+    <>
+      <ToolNav title="Algebra Tiles" />
+      <AlgebraTilesBoard />
+    </>
+  );
 }

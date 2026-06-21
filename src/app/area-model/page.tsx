@@ -1,6 +1,11 @@
-// Route page for the student-facing rectangle area model multiplication tool.
+import ToolNav from "@/components/ToolNav";
 import AreaModelTrainer from "@/components/AreaModelTrainer";
 
 export default function AreaModelPage() {
-  return <AreaModelTrainer />;
+  return (
+    <>
+      <ToolNav title="Area Model" />
+      <AreaModelTrainer />
+    </>
+  );
 }

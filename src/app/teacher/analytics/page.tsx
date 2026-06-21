@@ -6,6 +6,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import SiteNav from "@/components/SiteNav";
 
 interface WeeklySummary {
   id: string;
@@ -138,6 +139,7 @@ export default function WarmupInsightsPage() {
 
   return (
     <div className="wi">
+      <SiteNav variant="teacher" />
       <style>{`
         .wi { min-height:100vh; background:var(--bdb-ground); color:var(--bdb-ink); font-family:var(--bdb-font); }
         .wi-wrap { max-width:1100px; margin:0 auto; padding:clamp(16px,3vw,30px) clamp(14px,3vw,28px) 56px; }

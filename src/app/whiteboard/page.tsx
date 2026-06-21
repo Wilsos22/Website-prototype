@@ -1,6 +1,11 @@
-// Whiteboard route: hosts the interactive canvas client component.
+import ToolNav from "@/components/ToolNav";
 import { WhiteboardCanvas } from "@/components/WhiteboardCanvas";
 
 export default function WhiteboardPage() {
-  return <WhiteboardCanvas />;
+  return (
+    <>
+      <ToolNav title="Whiteboard" />
+      <WhiteboardCanvas />
+    </>
+  );
 }

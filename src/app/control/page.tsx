@@ -921,9 +921,11 @@ export default function ControlPage() {
         .cx-top { display:flex; align-items:center; justify-content:space-between; padding:14px 26px; border-bottom:1px solid #2a241a; flex-wrap:wrap; gap:8px; }
         .cx-mark { font-size:0.76rem; font-weight:900; letter-spacing:0.14em; text-transform:uppercase; color:${accent}; margin:0; transition:color 300ms ease; }
         .cx-live-status { margin:0 auto 0 0; border:1px solid ${liveFlowConnected && !flowSyncError ? "rgba(20,184,166,0.45)" : "rgba(251,191,36,0.4)"}; background:${liveFlowConnected && !flowSyncError ? "rgba(20,184,166,0.12)" : "rgba(251,191,36,0.1)"}; color:${liveFlowConnected && !flowSyncError ? "#5eead4" : "#fcaf38"}; border-radius:999px; padding:6px 10px; font-size:0.72rem; font-weight:900; letter-spacing:0.07em; text-transform:uppercase; max-width:min(52vw,520px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-        .cx-tbtns { display:flex; gap:8px; flex-wrap:wrap; }
+        .cx-tbtns { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
         .cx-sbtn { font-size:0.76rem; font-weight:800; letter-spacing:0.05em; text-transform:uppercase; color:#a39a88; background:transparent; border:1px solid #2a241a; border-radius:7px; padding:7px 12px; cursor:pointer; text-decoration:none; transition:all 140ms ease; }
         .cx-sbtn:hover { border-color:${accent}; color:#fff; }
+        .cx-home { border-color:#3a3228; color:#d8d2c5; }
+        .cx-divider { width:1px; height:22px; background:#2a241a; flex:none; margin:0 2px; }
 
         .cx-main { display:grid; align-content:center; justify-items:center; gap:18px; padding:18px; text-align:center; }
         .cx-state { font-size:clamp(1.2rem,3.5vw,2.2rem); font-weight:900; color:${accent}; min-height:1.2em; transition:color 300ms ease; }
@@ -1019,14 +1021,15 @@ export default function ControlPage() {
           <p className="cx-mark">Big Dog Math — Classroom</p>
           <p className="cx-live-status">{liveFlowStatus}</p>
           <div className="cx-tbtns">
+            <a className="cx-sbtn cx-home" href="/teacher">🏠 Home</a>
+            <a className="cx-sbtn" href="/session">📡 Session</a>
+            <a className="cx-sbtn" href="/roster">👥 Rosters</a>
+            <span className="cx-divider" />
             <button className="cx-sbtn" onClick={() => setShowSpinner(true)}>🎰 Spinner</button>
-            <button className="cx-sbtn" style={autoAdvance ? { borderColor: accent, color: "#fff" } : undefined} onClick={() => setAutoAdvance((v) => !v)}>Auto-advance: {autoAdvance ? "on" : "off"}</button>
-            <button className="cx-sbtn" onClick={() => setShowSounds((v) => !v)}>{showSounds ? "Close sounds" : "Sounds"}</button>
-            <button className="cx-sbtn" onClick={() => setEditing((v) => !v)}>{editing ? "Done editing" : "Edit times"}</button>
-            <button className="cx-sbtn" onClick={toggleFullscreen}>Fullscreen</button>
-            <a className="cx-sbtn" href="/session">👥 Session</a>
-            <a className="cx-sbtn" href="/roster">👤 Rosters</a>
-            <a className="cx-sbtn" href="/teacher">🧰 Tools</a>
+            <button className="cx-sbtn" style={autoAdvance ? { borderColor: accent, color: "#fff" } : undefined} onClick={() => setAutoAdvance((v) => !v)}>Auto {autoAdvance ? "✓" : "off"}</button>
+            <button className="cx-sbtn" onClick={() => setShowSounds((v) => !v)}>🎵 Sounds</button>
+            <button className="cx-sbtn" onClick={() => setEditing((v) => !v)}>{editing ? "✓ Done" : "Edit times"}</button>
+            <button className="cx-sbtn" onClick={toggleFullscreen}>⛶ Full</button>
           </div>
         </header>
 
