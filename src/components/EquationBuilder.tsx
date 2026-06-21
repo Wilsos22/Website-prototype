@@ -1,22 +1,22 @@
 "use client";
 
-// Guided Equation Builder & Solver — vertical worked-solution layout.
-// Build ax + b = c, then solve step by step. When you subtract from both sides,
-// the opposite value drops in UNDERNEATH each side, the zero pair gets crossed
-// out in red (squares stay — they don't vanish), the un-cancelled term carries
-// down with an arrow, and the result lands one row lower. Columns stay aligned.
+// Guided Equation Builder & Solver — aligned worked-solution on a fixed grid.
+// Build ax + b = c, then solve. When you subtract (or add) to both sides, the
+// opposite value stacks under each side; on the variable side the +b and −b
+// form a zero pair that a red box animates over (the boxes STAY, they don't
+// vanish); the result then drops one row lower. Columns stay aligned on a grid.
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { LiveToolBanner, useLiveToolConfig } from "./useLiveToolConfig";
 
 type Op = "add" | "subtract" | "multiply" | "divide";
 type Phase = "build" | "goal" | "tap-var" | "ask-op" | "ask-term" | "animating" | "solved";
-interface Eq { coef: number; constant: number; rhs: number; }
-interface StepOp { kind: "cancel" | "divide"; val: number; }
-interface Row { eq: Eq; op?: StepOp; }
+interface Eq { coef: number; constant: number; rhs: number }
+interface StepOp { kind: "cancel" | "divide"; val: number }
+interface Row { eq: Eq; op?: StepOp }
 
 const OP_LABEL: Record<Op, string> = { add: "Add", subtract: "Subtract", multiply: "Multiply", divide: "Divide" };
-const PRESETS: [number, number, number][] = [ [1, 5, 7], [2, 3, 4], [3, -4, 5], [4, 6, 3], [2, -7, 9] ];
+const PRESETS: [number, number, number][] = [[1, 5, 7], [2, 3, 4], [3, -4, 5], [4, 6, 3], [2, -7, 9]];
 const GOAL_CHOICES: { label: string; correct: boolean }[] = [
   { label: "Isolate the variable", correct: true },
   { label: "Make both sides as big as possible", correct: false },
@@ -44,6 +44,7 @@ export default function EquationBuilder() {
   const [feedback, setFeedback] = useState("");
   const [hint, setHint] = useState<string | null>(null);
   const [wrong, setWrong] = useState(0);
+  const [mode, setMode] = useState<"beginner" | "advanced">("beginner");
 
   const audioRef = useRef<AudioContext | null>(null);
   const eq = rows.length ? rows[rows.length - 1].eq : null;
@@ -73,7 +74,8 @@ export default function EquationBuilder() {
     setRows([{ eq: e }]);
     setWrong(0); setHint(null);
     if (stepOf(e) === "done") { setPhase("solved"); sSolved(); }
-    else { setPhase("goal"); setFeedback(""); }
+    else if (mode === "beginner") { setPhase("goal"); setFeedback(""); }
+    else { setPhase("ask-op"); setFeedback(askOpText(e)); }
   }
   function loadPreset(p: [number, number, number]) { setA(p[0]); setB(p[1]); setXAns(p[2]); }
 
@@ -82,12 +84,8 @@ export default function EquationBuilder() {
     setA(liveTool.config.coefficient);
     setB(liveTool.config.constant);
     setXAns(liveTool.config.solution);
-    setPhase("build");
-    setRows([]);
-    setFeedback("");
-    setHint(null);
-    setWrong(0);
-  }, [liveTool?.id]);
+    setPhase("build"); setRows([]); setFeedback(""); setHint(null); setWrong(0);
+  }, [liveTool?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function pickGoal(correct: boolean) {
     if (correct) { sCorrect(); setFeedback(""); setPhase("tap-var"); }
@@ -118,11 +116,11 @@ export default function EquationBuilder() {
     if (phase === "ask-op") {
       setHint(step === "constant"
         ? `The constant is ${eq.constant > 0 ? "+" : "−"}${Math.abs(eq.constant)}. To undo it, do the OPPOSITE operation on both sides.`
-        : `${eq.coef} is multiplying x. The opposite of multiplying is…`);
+        : `The ${eq.coef} sits right beside x, so it's multiplying it. A number beside the variable → divide (a number underneath would mean multiply).`);
     } else if (phase === "ask-term") {
       setHint(step === "constant"
         ? `You're undoing ${eq.constant > 0 ? "+" : "−"}${Math.abs(eq.constant)} — which number cancels it to make a zero pair?`
-        : `x is being multiplied by ${eq.coef}, so divide both sides by ${eq.coef}.`);
+        : `x is multiplied by ${eq.coef} (it's beside x), so divide both sides by ${eq.coef}.`);
     }
   }
 
@@ -147,7 +145,7 @@ export default function EquationBuilder() {
         : { coef: 1, constant: 0, rhs: eq.rhs / eq.coef };
       const op: StepOp = step === "constant" ? { kind: "cancel", val: eq.constant } : { kind: "divide", val: eq.coef };
       setRows((r) => [...r, { eq: ne, op }]);
-      window.setTimeout(() => advance(ne), 1100);
+      window.setTimeout(() => advance(ne), 1300);
     } else {
       sWrong(); setWrong((w) => w + 1); giveHint();
       setFeedback("Close — that number won't cancel it. Peek at the hint.");
@@ -164,41 +162,68 @@ export default function EquationBuilder() {
   function varChip(coef: number, clickable = false) {
     return <span className={`eqb-chip eqb-x${clickable ? " eqb-x-click" : ""}`} onClick={clickable ? tapVar : undefined}>{coef === 1 ? "x" : `${coef}x`}</span>;
   }
-  function constChip(v: number, strike = false) {
+  function constChip(v: number) {
     const pos = v > 0;
-    return <span className={`eqb-chip ${pos ? "eqb-pos" : "eqb-neg"}${strike ? " eqb-strike" : ""}`}>{pos ? "+" : "−"}{Math.abs(v)}</span>;
+    return <span className={`eqb-chip ${pos ? "eqb-pos" : "eqb-neg"}`}>{pos ? "+" : "−"}{Math.abs(v)}</span>;
   }
   function numChip(v: number) { return <span className="eqb-chip eqb-rhs">{v}</span>; }
-  function underChip(label: string, strike = false) { return <span className={`eqb-under-chip${strike ? " eqb-strike" : ""}`}>{label}</span>; }
+  function underChip(label: string) { return <span className="eqb-under-chip">{label}</span>; }
 
-  // Build the aligned worked-solution cells (4 columns: coef | const | = | rhs)
+  // Aligned worked-solution cells. 4 fixed columns: coef | const | = | rhs.
+  function fracCoef(coef: number) {
+    return (
+      <span className="eqb-frac">
+        <span className="num"><span className="eqb-canc">{coef}</span><span className="eqb-xkeep">x</span></span>
+        <span className="bar" />
+        <span className="den"><span className="eqb-canc">{coef}</span></span>
+      </span>
+    );
+  }
+  function fracRhs(rhs: number, a: number) {
+    return (
+      <span className="eqb-frac">
+        <span className="num">{rhs}</span>
+        <span className="bar" />
+        <span className="den">{a}</span>
+      </span>
+    );
+  }
   function workedCells(): React.ReactNode[] {
     const cells: React.ReactNode[] = [];
     rows.forEach((row, i) => {
       const e = row.eq;
       const nextOp = rows[i + 1]?.op;
-      const constStrike = nextOp?.kind === "cancel";
+      const cancel = nextOp?.kind === "cancel";
+      const divide = nextOp?.kind === "divide";
       const isLast = i === rows.length - 1;
-      // equation row
-      cells.push(<div className="gc coef" key={`e${i}c`}>{varChip(e.coef, isLast && phase === "tap-var")}</div>);
-      cells.push(<div className="gc const" key={`e${i}k`}>{e.constant !== 0 ? constChip(e.constant, constStrike) : null}</div>);
+
+      // ── equation row ──
+      cells.push(<div className="gc coef" key={`e${i}c`}>{divide ? fracCoef(e.coef) : varChip(e.coef, isLast && phase === "tap-var")}</div>);
+      cells.push(
+        <div className="gc const" key={`e${i}k`}>
+          {e.constant !== 0 ? (
+            cancel ? (
+              <span className="eqb-zero">
+                {constChip(e.constant)}
+                <span className="eqb-zero-neg">{opSign(nextOp!.val)}</span>
+                <span className="eqb-redbox" />
+              </span>
+            ) : constChip(e.constant)
+          ) : null}
+        </div>
+      );
       cells.push(<div className="gc eq" key={`e${i}q`}><span className="eqb-eqsign">=</span></div>);
-      cells.push(<div className="gc right" key={`e${i}r`}>{numChip(e.rhs)}</div>);
-      // operation row (the step that creates the NEXT line)
-      const op = rows[i + 1]?.op;
-      if (op) {
-        if (op.kind === "cancel") {
-          cells.push(<div className="gc coef arrow" key={`o${i}c`}>↓</div>);
-          cells.push(<div className="gc const" key={`o${i}k`}>{underChip(opSign(op.val), true)}</div>);
-          cells.push(<div className="gc eq" key={`o${i}q`} />);
-          cells.push(<div className="gc right" key={`o${i}r`}>{underChip(opSign(op.val))}</div>);
-        } else {
-          cells.push(<div className="gc coef" key={`o${i}c`}>{underChip(`÷ ${op.val}`)}</div>);
-          cells.push(<div className="gc const" key={`o${i}k`} />);
-          cells.push(<div className="gc eq" key={`o${i}q`} />);
-          cells.push(<div className="gc right" key={`o${i}r`}>{underChip(`÷ ${op.val}`)}</div>);
-        }
-        // horizontal line between the operation and the result below it
+      cells.push(<div className="gc right" key={`e${i}r`}>{divide ? fracRhs(e.rhs, nextOp!.val) : numChip(e.rhs)}</div>);
+
+      // ── operation row (creates the NEXT line) ──
+      if (cancel) {
+        cells.push(<div className="gc coef arrow" key={`o${i}c`}>↓</div>);
+        cells.push(<div className="gc const" key={`o${i}k`} />);
+        cells.push(<div className="gc eq" key={`o${i}q`} />);
+        cells.push(<div className="gc right" key={`o${i}r`}>{underChip(opSign(nextOp!.val))}</div>);
+        cells.push(<div className="gc hr" key={`o${i}hr`} />);
+      } else if (divide) {
+        // the fraction bars above already show the ÷ on both sides — just rule the line
         cells.push(<div className="gc hr" key={`o${i}hr`} />);
       }
     });
@@ -206,77 +231,93 @@ export default function EquationBuilder() {
   }
 
   const solved = phase === "solved" && eq;
-  const animMsg = rows[rows.length - 1]?.op?.kind === "divide" ? "Dividing both sides…" : "Subtracting from both sides — the zero pair cancels…";
+  const animMsg = rows[rows.length - 1]?.op?.kind === "divide" ? "Dividing both sides…" : "The zero pair is covered — it cancels to 0…";
 
   return (
     <div className="eqb-root">
       <style>{`
-        .eqb-root { min-height:100vh; background:#0b0d14; color:#fff; font-family:Inter,ui-sans-serif,system-ui,sans-serif; display:grid; grid-template-rows:auto 1fr auto; }
-        .eqb-top { display:flex; align-items:center; justify-content:space-between; padding:14px 24px; border-bottom:1px solid #1f2332; flex-wrap:wrap; gap:8px; }
-        .eqb-mark { font-size:0.76rem; font-weight:900; letter-spacing:0.14em; text-transform:uppercase; color:#22c55e; margin:0; }
-        .eqb-btn { font-size:0.8rem; font-weight:800; color:#8a93ad; background:transparent; border:1px solid #1f2332; border-radius:7px; padding:8px 13px; cursor:pointer; text-decoration:none; }
-        .eqb-btn:hover { border-color:#22c55e; color:#fff; }
+        .eqb-root { min-height:100vh; background:var(--bdb-ground); color:var(--bdb-ink); font-family:var(--bdb-font); display:flex; flex-direction:column; }
+        .eqb-top { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; padding:14px clamp(16px,3vw,30px); border-bottom:1px solid var(--bdb-line); }
+        .eqb-mark { font-size:0.74rem; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--bdb-ink-faint); margin:0; }
+        .eqb-btn { font-size:0.84rem; font-weight:600; color:var(--bdb-ink-soft); background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:var(--bdb-r-pill); padding:8px 14px; cursor:pointer; text-decoration:none; }
+        .eqb-btn:hover { border-color:var(--bdb-ink-faint); color:var(--bdb-ink); }
 
-        .eqb-main { padding:24px; display:grid; gap:24px; align-content:start; justify-items:center; max-width:920px; margin:0 auto; width:100%; }
+        .eqb-main { flex:1; padding:clamp(18px,3vw,34px); display:flex; flex-direction:column; gap:clamp(16px,3vw,28px); align-items:center; max-width:920px; margin:0 auto; width:100%; box-sizing:border-box; }
 
-        .eqb-build { display:grid; gap:16px; justify-items:center; width:100%; }
+        .eqb-build { display:grid; gap:18px; justify-items:center; }
         .eqb-preview { display:flex; align-items:center; gap:12px; justify-content:center; }
         .eqb-steppers { display:flex; gap:22px; flex-wrap:wrap; justify-content:center; }
         .eqb-stp { display:grid; justify-items:center; gap:6px; }
-        .eqb-stp-label { font-size:0.72rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; color:#5a6280; }
+        .eqb-stp-label { font-size:0.7rem; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; color:var(--bdb-ink-faint); }
         .eqb-stp-ctl { display:flex; align-items:center; gap:10px; }
-        .eqb-stp-btn { width:38px; height:38px; border-radius:9px; border:1px solid #2a3045; background:#161a28; color:#fff; font-size:1.3rem; font-weight:900; cursor:pointer; }
-        .eqb-stp-val { min-width:42px; text-align:center; font-size:1.5rem; font-weight:900; }
+        .eqb-stp-btn { width:38px; height:38px; border-radius:10px; border:1px solid var(--bdb-line); background:var(--bdb-card); color:var(--bdb-ink); font-size:1.3rem; font-weight:700; cursor:pointer; }
+        .eqb-stp-val { min-width:42px; text-align:center; font-size:1.5rem; font-weight:800; }
         .eqb-presets { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
-        .eqb-preset { font-size:0.85rem; font-weight:800; color:#c8cedd; background:#121520; border:1px solid #1f2332; border-radius:999px; padding:7px 14px; cursor:pointer; }
-        .eqb-preset:hover { border-color:#22c55e; }
-        .eqb-start { font-size:1.2rem; font-weight:900; color:#fff; background:#22c55e; border:none; border-radius:13px; padding:15px 40px; cursor:pointer; box-shadow:0 10px 26px -10px #22c55e; }
+        .eqb-preset { font-size:0.85rem; font-weight:600; color:var(--bdb-ink-soft); background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:999px; padding:7px 14px; cursor:pointer; }
+        .eqb-preset:hover { border-color:var(--bdb-ink-faint); }
+        .eqb-start { font-size:1.15rem; font-weight:700; color:#fff; background:var(--bdb-teal); border:none; border-radius:14px; padding:14px 38px; cursor:pointer; }
 
-        /* Worked solution — aligned columns, centered */
+        /* Worked solution — fixed columns so every row lines up */
         .eqb-work { display:flex; justify-content:center; width:100%; }
-        .eqb-grid { display:grid; grid-template-columns:auto auto auto auto; align-items:center; gap:10px 14px; }
+        .eqb-grid { display:grid; grid-template-columns:clamp(82px,15vw,128px) clamp(78px,14vw,120px) clamp(40px,7vw,54px) clamp(78px,14vw,120px); align-items:center; gap:14px 12px; }
         .gc { display:flex; align-items:center; min-height:1px; animation:eqbDrop 0.4s ease; }
         @keyframes eqbDrop { from{opacity:0; transform:translateY(-10px);} to{opacity:1; transform:none;} }
         .gc.coef { justify-content:flex-end; }
         .gc.const { justify-content:flex-start; }
         .gc.eq { justify-content:center; }
         .gc.right { justify-content:flex-start; }
-        .gc.arrow { justify-content:flex-end; color:#22c55e; font-weight:900; font-size:1.7rem; }
-        .gc.hr { grid-column:1 / -1; height:0; border-top:3px solid #6b7392; margin:3px 0; transform-origin:center; animation:eqbLineIn 0.45s ease; }
+        .gc.arrow { justify-content:flex-end; color:var(--bdb-teal); font-weight:800; font-size:1.7rem; }
+        .gc.hr { grid-column:1 / -1; height:0; border-top:3px solid var(--bdb-ink-faint); margin:2px 0; animation:eqbLineIn 0.45s ease; }
         @keyframes eqbLineIn { from{opacity:0; transform:scaleX(0.15);} to{opacity:1; transform:scaleX(1);} }
 
-        .eqb-eqsign { font-size:clamp(1.8rem,5vw,2.8rem); font-weight:900; color:#8a93ad; }
-        .eqb-chip { display:inline-flex; align-items:center; justify-content:center; font-weight:900; border-radius:11px; padding:10px 14px; font-size:clamp(1.3rem,3.6vw,2rem); min-width:48px; box-shadow:0 4px 12px -6px rgba(0,0,0,0.6); }
-        .eqb-x { background:#22c55e; color:#04230f; }
-        .eqb-x-click { cursor:pointer; outline:3px solid #bbf7d0; outline-offset:2px; animation:eqbPulse 0.9s ease-in-out infinite; }
-        .eqb-pos { background:#f59e0b; color:#3a2503; }
-        .eqb-neg { background:#ef4444; color:#3a0606; }
-        .eqb-rhs { background:#4e6ef2; color:#06122e; }
-        .eqb-under-chip { font-weight:900; color:#fca5a5; font-size:clamp(1.2rem,3.2vw,1.8rem); position:relative; padding:6px 12px; }
-        .eqb-strike { position:relative; }
-        .eqb-strike::after { content:""; position:absolute; left:0; right:0; top:50%; height:4px; background:#ef4444; border-radius:2px; transform:scaleX(0); transform-origin:left; animation:eqbStrike 0.5s ease forwards; animation-delay:0.3s; }
-        @keyframes eqbStrike { to{transform:scaleX(1);} }
-        @keyframes eqbPulse { 50%{opacity:0.5;} }
+        .eqb-eqsign { font-size:clamp(1.8rem,5vw,2.6rem); font-weight:800; color:var(--bdb-ink-soft); }
+        .eqb-chip { display:inline-flex; align-items:center; justify-content:center; font-weight:800; border-radius:12px; padding:10px 14px; font-size:clamp(1.3rem,3.6vw,2rem); min-width:46px; border:2px solid transparent; }
+        .eqb-x { background:color-mix(in srgb,var(--bdb-teal) 20%,white); color:color-mix(in srgb,var(--bdb-teal) 80%,black); border-color:var(--bdb-teal); }
+        .eqb-x-click { cursor:pointer; box-shadow:0 0 0 3px color-mix(in srgb,var(--bdb-teal) 45%,white); animation:eqbPulse 1s ease-in-out infinite; }
+        .eqb-pos { background:color-mix(in srgb,var(--bdb-amber) 22%,white); color:#8a5a0b; border-color:var(--bdb-amber); }
+        .eqb-neg { background:color-mix(in srgb,var(--bdb-coral) 18%,white); color:#9a3412; border-color:var(--bdb-coral); }
+        .eqb-rhs { background:color-mix(in srgb,#4d8df6 18%,white); color:#0c447c; border-color:#4d8df6; }
+        .eqb-under-chip { font-weight:800; color:var(--bdb-coral); font-size:clamp(1.15rem,3.2vw,1.7rem); padding:4px 10px; }
 
-        .eqb-modal { position:fixed; inset:0; background:rgba(5,7,12,0.82); display:grid; place-items:center; z-index:40; padding:20px; }
-        .eqb-modal-card { background:#121520; border:1px solid #2a3045; border-radius:18px; padding:26px 28px; max-width:520px; width:100%; display:grid; gap:16px; box-shadow:0 30px 80px -20px #000; }
-        .eqb-q { font-size:clamp(1.1rem,2.8vw,1.5rem); font-weight:800; text-align:center; color:#e8ecf5; min-height:1.4em; }
+        /* division shown as a fraction with the coefficient cancelling */
+        .eqb-frac { display:inline-grid; justify-items:center; gap:3px; }
+        .eqb-frac .num, .eqb-frac .den { font-weight:800; font-size:clamp(1.3rem,3.6vw,2rem); display:inline-flex; }
+        .eqb-frac .bar { width:100%; min-width:46px; height:3px; background:var(--bdb-ink); border-radius:2px; }
+        .eqb-xkeep { color:color-mix(in srgb,var(--bdb-teal) 80%,black); }
+        .eqb-canc { position:relative; color:var(--bdb-ink-soft); }
+        .eqb-canc::after { content:""; position:absolute; left:-3px; right:-3px; top:45%; height:3px; background:var(--bdb-coral); border-radius:2px; transform:rotate(-18deg) scaleX(0); transform-origin:center; animation:eqbStrike 0.5s ease 0.25s forwards; }
+        @keyframes eqbStrike { to{ transform:rotate(-18deg) scaleX(1); } }
+        .eqb-rule { font-size:0.86rem; font-weight:600; color:#0f5e5f; background:color-mix(in srgb,var(--bdb-teal) 12%,white); border:1px solid color-mix(in srgb,var(--bdb-teal) 30%,white); border-radius:10px; padding:8px 14px; text-align:center; max-width:520px; }
+        .eqb-modepick { display:grid; gap:7px; justify-items:center; }
+        .eqb-modes { display:inline-flex; background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:var(--bdb-r-pill); padding:3px; }
+        .eqb-modes button { border:none; background:transparent; border-radius:var(--bdb-r-pill); padding:8px 20px; font:inherit; font-weight:600; font-size:0.9rem; color:var(--bdb-ink-soft); cursor:pointer; }
+        .eqb-modes button.on { background:var(--bdb-ink); color:#fff; }
+
+        /* zero pair: +b with −b stacked under it, red box covers BOTH (they stay) */
+        .eqb-zero { position:relative; display:inline-flex; }
+        .eqb-zero-neg { position:absolute; left:50%; top:calc(100% + 16px); transform:translateX(-50%); font-weight:800; color:var(--bdb-coral); font-size:clamp(1.15rem,3.2vw,1.7rem); white-space:nowrap; }
+        .eqb-redbox { position:absolute; left:-9px; right:-9px; top:-9px; height:calc(200% + 34px); border:3px solid var(--bdb-coral); background:color-mix(in srgb,var(--bdb-coral) 14%,transparent); border-radius:13px; transform-origin:top center; animation:eqbCover 0.5s ease forwards; pointer-events:none; }
+        @keyframes eqbCover { from{opacity:0; transform:scale(0.6);} to{opacity:1; transform:scale(1);} }
+        @keyframes eqbPulse { 50%{opacity:0.55;} }
+
+        .eqb-modal { position:fixed; inset:0; background:rgba(32,30,26,0.55); display:grid; place-items:center; z-index:40; padding:20px; }
+        .eqb-modal-card { background:var(--bdb-card); border-radius:18px; padding:26px 28px; max-width:520px; width:100%; display:grid; gap:16px; box-shadow:var(--bdb-shadow-lg); }
+        .eqb-q { font-size:clamp(1.1rem,2.8vw,1.45rem); font-weight:700; text-align:center; color:var(--bdb-ink); min-height:1.3em; }
         .eqb-choices { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
-        .eqb-choice { font-size:1.15rem; font-weight:900; color:#fff; background:#161a28; border:1px solid #2a3045; border-radius:12px; padding:14px 26px; cursor:pointer; min-width:64px; transition:transform 120ms ease, border-color 140ms; }
-        .eqb-choice:hover { transform:translateY(-1px); border-color:#22c55e; }
-        .eqb-feedback { font-size:0.95rem; font-weight:700; color:#9aa3bd; text-align:center; min-height:1.3em; }
-        .eqb-hint { background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.35); color:#fcd34d; border-radius:10px; padding:11px 16px; font-weight:700; font-size:0.92rem; max-width:560px; text-align:center; }
-        .eqb-hintbtn { font-size:0.82rem; font-weight:800; color:#fcd34d; background:transparent; border:1px solid rgba(245,158,11,0.4); border-radius:8px; padding:8px 14px; cursor:pointer; }
+        .eqb-choice { font-size:1.1rem; font-weight:700; color:var(--bdb-ink); background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:12px; padding:13px 24px; cursor:pointer; min-width:64px; transition:transform 120ms ease, border-color 140ms; }
+        .eqb-choice:hover { transform:translateY(-1px); border-color:var(--bdb-teal); }
+        .eqb-feedback { font-size:0.95rem; font-weight:600; color:var(--bdb-ink-soft); text-align:center; min-height:1.2em; }
+        .eqb-hint { background:color-mix(in srgb,var(--bdb-amber) 16%,white); border:1px solid color-mix(in srgb,var(--bdb-amber) 40%,white); color:#8a5a0b; border-radius:12px; padding:11px 16px; font-weight:600; font-size:0.93rem; max-width:560px; text-align:center; }
+        .eqb-hintbtn { font-size:0.84rem; font-weight:600; color:#8a5a0b; background:transparent; border:1px solid color-mix(in srgb,var(--bdb-amber) 45%,white); border-radius:10px; padding:8px 14px; cursor:pointer; }
         .eqb-solved { display:grid; justify-items:center; gap:14px; }
-        .eqb-solved-eq { font-size:clamp(2.4rem,8vw,5rem); font-weight:900; color:#22c55e; }
-        .eqb-foot { padding:12px 24px; border-top:1px solid #1f2332; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+        .eqb-solved-eq { font-size:clamp(2.4rem,8vw,4.6rem); font-weight:800; color:var(--bdb-green); }
       `}</style>
 
       <header className="eqb-top">
         <p className="eqb-mark">Equation Builder</p>
         <div style={{ display: "flex", gap: 8 }}>
           {phase !== "build" && <button className="eqb-btn" onClick={reset}>↻ New equation</button>}
-          <a className="eqb-btn" href="/">Home</a>
+          <a className="eqb-btn" href="/teacher">Tools</a>
         </div>
       </header>
 
@@ -286,6 +327,13 @@ export default function EquationBuilder() {
           <div className="eqb-build">
             <div className="eqb-preview">
               {varChip(a)}{b !== 0 && constChip(b)}<span className="eqb-eqsign">=</span>{numChip(c)}
+            </div>
+            <div className="eqb-modepick">
+              <span className="eqb-stp-label">Mode for this lesson</span>
+              <div className="eqb-modes">
+                <button className={mode === "beginner" ? "on" : ""} onClick={() => setMode("beginner")}>Beginner</button>
+                <button className={mode === "advanced" ? "on" : ""} onClick={() => setMode("advanced")}>Advanced</button>
+              </div>
             </div>
             <div className="eqb-steppers">
               {([["coefficient (a)", a, setA, 1, 6], ["constant (b)", b, setB, -10, 10], ["answer x", xAns, setXAns, 1, 12]] as [string, number, (n: number) => void, number, number][]).map(([labelText, val, set, min, max]) => (
@@ -313,14 +361,14 @@ export default function EquationBuilder() {
 
             {solved ? (
               <div className="eqb-solved">
-                <div className="eqb-solved-eq">x = {eq!.rhs} 🎉</div>
+                <div className="eqb-solved-eq">x = {eq!.rhs}</div>
                 <p className="eqb-feedback">Solved{wrong === 0 ? " with no mistakes — nice!" : "!"} The variable is isolated.</p>
                 <button className="eqb-start" onClick={reset}>↻ New equation</button>
               </div>
             ) : phase === "goal" ? (
               <div className="eqb-modal">
                 <div className="eqb-modal-card">
-                  <p className="eqb-q">First — what is your <strong>goal</strong> when solving an equation?</p>
+                  <p className="eqb-q">First — what is your goal when solving an equation?</p>
                   <div className="eqb-choices" style={{ flexDirection: "column" }}>
                     {GOAL_CHOICES.map((g, i) => (
                       <button className="eqb-choice" key={i} onClick={() => pickGoal(g.correct)}>{g.label}</button>
@@ -330,7 +378,7 @@ export default function EquationBuilder() {
                 </div>
               </div>
             ) : phase === "tap-var" ? (
-              <p className="eqb-q">👆 Now <strong>tap the variable</strong> you’re solving for to begin.</p>
+              <p className="eqb-q">Now tap the variable you&apos;re solving for to begin.</p>
             ) : phase === "animating" ? (
               <p className="eqb-q">{animMsg}</p>
             ) : (
@@ -345,17 +393,13 @@ export default function EquationBuilder() {
                         <button className="eqb-choice" key={t} onClick={() => pickTerm(t)}>{t}</button>
                       ))}
                 </div>
-                {hint ? <div className="eqb-hint">💡 {hint}</div> : <button className="eqb-hintbtn" onClick={giveHint}>Need a hint?</button>}
+                {step === "coefficient" && <div className="eqb-rule">Beside the variable → divide. Underneath → multiply.</div>}
+                {hint ? <div className="eqb-hint">{hint}</div> : <button className="eqb-hintbtn" onClick={giveHint}>Need a hint?</button>}
               </>
             )}
           </>
         )}
       </main>
-
-      <footer className="eqb-foot">
-        <span className="eqb-feedback" style={{ minHeight: 0 }}>{phase !== "build" && !solved ? "Pick the operation, then the number. The opposite value drops under both sides and the zero pair crosses out." : ""}</span>
-        <a className="eqb-btn" href="/control">Control panel</a>
-      </footer>
     </div>
   );
 }
