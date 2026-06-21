@@ -10,9 +10,9 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { LiveToolBanner, useLiveToolConfig } from "./useLiveToolConfig";
 
 type Op = "add" | "subtract" | "multiply" | "divide";
-type Phase = "build" | "goal" | "tap-var" | "ask-op" | "ask-term" | "animating" | "solved";
-interface Eq { coef: number; constant: number; rhs: number }
-interface StepOp { kind: "cancel" | "divide"; val: number }
+type Phase = "build" | "goal" | "tap-var" | "ask-op" | "ask-term" | "compute" | "animating" | "solved";
+interface Eq { coef: number; divisor: number; constant: number; rhs: number }
+interface StepOp { kind: "cancel" | "divide" | "multiply"; val: number }
 interface Row { eq: Eq; op?: StepOp }
 
 const OP_LABEL: Record<Op, string> = { add: "Add", subtract: "Subtract", multiply: "Multiply", divide: "Divide" };
@@ -24,9 +24,10 @@ const GOAL_CHOICES: { label: string; correct: boolean }[] = [
   { label: "Remove the variable", correct: false },
 ];
 
-function stepOf(eq: Eq): "constant" | "coefficient" | "done" {
+function stepOf(eq: Eq): "constant" | "coefficient" | "divisor" | "done" {
   if (eq.constant !== 0) return "constant";
   if (eq.coef !== 1) return "coefficient";
+  if (eq.divisor !== 1) return "divisor";
   return "done";
 }
 function shuffle<T>(a: T[]): T[] { return [...a].sort(() => Math.random() - 0.5); }
@@ -37,7 +38,10 @@ export default function EquationBuilder() {
   const [a, setA] = useState(2);
   const [b, setB] = useState(3);
   const [xAns, setXAns] = useState(4);
-  const c = a * xAns + b;
+  const [varOp, setVarOp] = useState<"×" | "÷">("×");
+  const isDiv = varOp === "÷";
+  const xUse = isDiv ? Math.max(a, Math.round(xAns / a) * a) : xAns;
+  const c = isDiv ? xUse / a + b : a * xUse + b;
 
   const [phase, setPhase] = useState<Phase>("build");
   const [rows, setRows] = useState<Row[]>([]);
@@ -45,6 +49,8 @@ export default function EquationBuilder() {
   const [hint, setHint] = useState<string | null>(null);
   const [wrong, setWrong] = useState(0);
   const [mode, setMode] = useState<"beginner" | "advanced">("beginner");
+  const [pending, setPending] = useState<{ ne: Eq; op: StepOp; expr: string; answer: number } | null>(null);
+  const [computeInput, setComputeInput] = useState("");
 
   const audioRef = useRef<AudioContext | null>(null);
   const eq = rows.length ? rows[rows.length - 1].eq : null;
@@ -70,20 +76,21 @@ export default function EquationBuilder() {
   const sSolved = useCallback(() => tone([523, 659, 784, 1047], 0.1, 0.2), [tone]);
 
   function startSolve() {
-    const e: Eq = { coef: a, constant: b, rhs: c };
+    const e: Eq = { coef: isDiv ? 1 : a, divisor: isDiv ? a : 1, constant: b, rhs: c };
     setRows([{ eq: e }]);
     setWrong(0); setHint(null);
     if (stepOf(e) === "done") { setPhase("solved"); sSolved(); }
     else if (mode === "beginner") { setPhase("goal"); setFeedback(""); }
     else { setPhase("ask-op"); setFeedback(askOpText(e)); }
   }
-  function loadPreset(p: [number, number, number]) { setA(p[0]); setB(p[1]); setXAns(p[2]); }
+  function loadPreset(p: [number, number, number]) { setVarOp("×"); setA(p[0]); setB(p[1]); setXAns(p[2]); }
 
   useEffect(() => {
     if (!liveTool || liveTool.route !== "/equation-builder") return;
     setA(liveTool.config.coefficient);
     setB(liveTool.config.constant);
     setXAns(liveTool.config.solution);
+    setVarOp("×");
     setPhase("build"); setRows([]); setFeedback(""); setHint(null); setWrong(0);
   }, [liveTool?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -100,13 +107,20 @@ export default function EquationBuilder() {
     return stepOf(e) === "constant" ? "What inverse operation gets the variable term by itself?" : "What operation isolates x now?";
   }
   function correctOp(e: Eq): Op {
-    if (stepOf(e) === "constant") return e.constant > 0 ? "subtract" : "add";
+    const s = stepOf(e);
+    if (s === "constant") return e.constant > 0 ? "subtract" : "add";
+    if (s === "divisor") return "multiply";
     return "divide";
   }
-  function correctTerm(e: Eq): number { return stepOf(e) === "constant" ? Math.abs(e.constant) : e.coef; }
+  function correctTerm(e: Eq): number {
+    const s = stepOf(e);
+    if (s === "constant") return Math.abs(e.constant);
+    if (s === "divisor") return e.divisor;
+    return e.coef;
+  }
   function termChoices(e: Eq): number[] {
     const correct = correctTerm(e);
-    const pool = [e.coef, Math.abs(e.constant), Math.abs(e.rhs), correct + 1, Math.max(2, correct - 1)].filter((n) => n > 0 && n !== correct);
+    const pool = [e.coef, e.divisor, Math.abs(e.constant), Math.abs(e.rhs), correct + 1, Math.max(2, correct - 1)].filter((n) => n > 0 && n !== correct);
     const distractors = shuffle(Array.from(new Set(pool))).slice(0, 3);
     return shuffle([correct, ...distractors]);
   }
@@ -116,11 +130,15 @@ export default function EquationBuilder() {
     if (phase === "ask-op") {
       setHint(step === "constant"
         ? `The constant is ${eq.constant > 0 ? "+" : "−"}${Math.abs(eq.constant)}. To undo it, do the OPPOSITE operation on both sides.`
-        : `The ${eq.coef} sits right beside x, so it's multiplying it. A number beside the variable → divide (a number underneath would mean multiply).`);
+        : step === "divisor"
+        ? `The ${eq.divisor} is underneath x (it's dividing x). Underneath it, multiply it.`
+        : `The ${eq.coef} is beside x (it's multiplying x). Beside it, divide it.`);
     } else if (phase === "ask-term") {
       setHint(step === "constant"
         ? `You're undoing ${eq.constant > 0 ? "+" : "−"}${Math.abs(eq.constant)} — which number cancels it to make a zero pair?`
-        : `x is multiplied by ${eq.coef} (it's beside x), so divide both sides by ${eq.coef}.`);
+        : step === "divisor"
+        ? `x is divided by ${eq.divisor}, so multiply both sides by ${eq.divisor}.`
+        : `x is multiplied by ${eq.coef}, so divide both sides by ${eq.coef}.`);
     }
   }
 
@@ -138,17 +156,45 @@ export default function EquationBuilder() {
 
   function pickTerm(t: number) {
     if (!eq) return;
-    if (t === correctTerm(eq)) {
-      sCorrect(); setHint(null); setPhase("animating"); sCancel();
-      const ne: Eq = step === "constant"
-        ? { coef: eq.coef, constant: 0, rhs: eq.rhs - eq.constant }
-        : { coef: 1, constant: 0, rhs: eq.rhs / eq.coef };
-      const op: StepOp = step === "constant" ? { kind: "cancel", val: eq.constant } : { kind: "divide", val: eq.coef };
+    if (t !== correctTerm(eq)) {
+      sWrong(); setWrong((w) => w + 1); giveHint();
+      setFeedback("Close — that number won't isolate x. Peek at the hint.");
+      return;
+    }
+    sCorrect(); setHint(null);
+    // build the resulting equation AND the arithmetic the student still has to do
+    let ne: Eq, op: StepOp, expr: string, answer: number;
+    if (step === "constant") {
+      answer = eq.rhs - eq.constant;
+      ne = { coef: eq.coef, divisor: eq.divisor, constant: 0, rhs: answer };
+      op = { kind: "cancel", val: eq.constant };
+      expr = `${eq.rhs} ${eq.constant > 0 ? "−" : "+"} ${Math.abs(eq.constant)}`;
+    } else if (step === "divisor") {
+      answer = eq.rhs * eq.divisor;
+      ne = { coef: 1, divisor: 1, constant: 0, rhs: answer };
+      op = { kind: "multiply", val: eq.divisor };
+      expr = `${eq.rhs} × ${eq.divisor}`;
+    } else {
+      answer = eq.rhs / eq.coef;
+      ne = { coef: 1, divisor: 1, constant: 0, rhs: answer };
+      op = { kind: "divide", val: eq.coef };
+      expr = `${eq.rhs} ÷ ${eq.coef}`;
+    }
+    setPending({ ne, op, expr, answer });
+    setComputeInput(""); setFeedback(""); setPhase("compute");
+  }
+
+  function submitCompute() {
+    if (!pending) return;
+    if (Number(computeInput) === pending.answer) {
+      sCorrect(); setPhase("animating"); sCancel();
+      const { ne, op } = pending;
       setRows((r) => [...r, { eq: ne, op }]);
+      setPending(null);
       window.setTimeout(() => advance(ne), 1300);
     } else {
-      sWrong(); setWrong((w) => w + 1); giveHint();
-      setFeedback("Close — that number won't cancel it. Peek at the hint.");
+      sWrong(); setWrong((w) => w + 1);
+      setFeedback(`Not yet — recompute ${pending.expr}.`);
     }
   }
 
@@ -188,6 +234,17 @@ export default function EquationBuilder() {
       </span>
     );
   }
+  // x over a divisor; when cancel, the divisor is struck (it's being multiplied away)
+  function varFrac(divisor: number, cancel: boolean, clickable: boolean) {
+    const f = (
+      <span className="eqb-frac">
+        <span className="num"><span className="eqb-xkeep">x</span></span>
+        <span className="bar" />
+        <span className="den">{cancel ? <span className="eqb-canc">{divisor}</span> : divisor}</span>
+      </span>
+    );
+    return clickable ? <span className="eqb-x-click eqb-fracwrap" onClick={tapVar}>{f}</span> : f;
+  }
   function workedCells(): React.ReactNode[] {
     const cells: React.ReactNode[] = [];
     rows.forEach((row, i) => {
@@ -195,10 +252,16 @@ export default function EquationBuilder() {
       const nextOp = rows[i + 1]?.op;
       const cancel = nextOp?.kind === "cancel";
       const divide = nextOp?.kind === "divide";
+      const multiply = nextOp?.kind === "multiply";
       const isLast = i === rows.length - 1;
 
       // ── equation row ──
-      cells.push(<div className="gc coef" key={`e${i}c`}>{divide ? fracCoef(e.coef) : varChip(e.coef, isLast && phase === "tap-var")}</div>);
+      const coefContent = divide
+        ? fracCoef(e.coef)
+        : e.divisor > 1
+        ? varFrac(e.divisor, multiply, isLast && phase === "tap-var")
+        : varChip(e.coef, isLast && phase === "tap-var");
+      cells.push(<div className="gc coef" key={`e${i}c`}>{coefContent}</div>);
       cells.push(
         <div className="gc const" key={`e${i}k`}>
           {e.constant !== 0 ? (
@@ -225,13 +288,20 @@ export default function EquationBuilder() {
       } else if (divide) {
         // the fraction bars above already show the ÷ on both sides — just rule the line
         cells.push(<div className="gc hr" key={`o${i}hr`} />);
+      } else if (multiply) {
+        cells.push(<div className="gc coef" key={`o${i}c`}>{underChip(`× ${nextOp!.val}`)}</div>);
+        cells.push(<div className="gc const" key={`o${i}k`} />);
+        cells.push(<div className="gc eq" key={`o${i}q`} />);
+        cells.push(<div className="gc right" key={`o${i}r`}>{underChip(`× ${nextOp!.val}`)}</div>);
+        cells.push(<div className="gc hr" key={`o${i}hr`} />);
       }
     });
     return cells;
   }
 
   const solved = phase === "solved" && eq;
-  const animMsg = rows[rows.length - 1]?.op?.kind === "divide" ? "Dividing both sides…" : "The zero pair is covered — it cancels to 0…";
+  const lastKind = rows[rows.length - 1]?.op?.kind;
+  const animMsg = lastKind === "divide" ? "Dividing both sides…" : lastKind === "multiply" ? "Multiplying both sides…" : "The zero pair is covered — it cancels to 0…";
 
   return (
     <div className="eqb-root">
@@ -309,6 +379,8 @@ export default function EquationBuilder() {
         .eqb-feedback { font-size:0.95rem; font-weight:600; color:var(--bdb-ink-soft); text-align:center; min-height:1.2em; }
         .eqb-hint { background:color-mix(in srgb,var(--bdb-amber) 16%,white); border:1px solid color-mix(in srgb,var(--bdb-amber) 40%,white); color:#8a5a0b; border-radius:12px; padding:11px 16px; font-weight:600; font-size:0.93rem; max-width:560px; text-align:center; }
         .eqb-hintbtn { font-size:0.84rem; font-weight:600; color:#8a5a0b; background:transparent; border:1px solid color-mix(in srgb,var(--bdb-amber) 45%,white); border-radius:10px; padding:8px 14px; cursor:pointer; }
+        .eqb-cinput { font-size:1.7rem; font-weight:800; text-align:center; background:var(--bdb-ground); border:2px solid var(--bdb-line); border-radius:12px; color:var(--bdb-ink); padding:12px; width:160px; margin:0 auto; }
+        .eqb-fracwrap { cursor:pointer; display:inline-flex; padding:4px 8px; border-radius:10px; }
         .eqb-solved { display:grid; justify-items:center; gap:14px; }
         .eqb-solved-eq { font-size:clamp(2.4rem,8vw,4.6rem); font-weight:800; color:var(--bdb-green); }
       `}</style>
@@ -326,7 +398,7 @@ export default function EquationBuilder() {
         {phase === "build" ? (
           <div className="eqb-build">
             <div className="eqb-preview">
-              {varChip(a)}{b !== 0 && constChip(b)}<span className="eqb-eqsign">=</span>{numChip(c)}
+              {isDiv ? varFrac(a, false, false) : varChip(a)}{b !== 0 && constChip(b)}<span className="eqb-eqsign">=</span>{numChip(c)}
             </div>
             <div className="eqb-modepick">
               <span className="eqb-stp-label">Mode for this lesson</span>
@@ -336,16 +408,34 @@ export default function EquationBuilder() {
               </div>
             </div>
             <div className="eqb-steppers">
-              {([["coefficient (a)", a, setA, 1, 6], ["constant (b)", b, setB, -10, 10], ["answer x", xAns, setXAns, 1, 12]] as [string, number, (n: number) => void, number, number][]).map(([labelText, val, set, min, max]) => (
-                <div className="eqb-stp" key={labelText}>
-                  <span className="eqb-stp-label">{labelText}</span>
-                  <div className="eqb-stp-ctl">
-                    <button className="eqb-stp-btn" onClick={() => set(Math.max(min, val - 1))}>−</button>
-                    <span className="eqb-stp-val">{val}</span>
-                    <button className="eqb-stp-btn" onClick={() => set(Math.min(max, val + 1))}>+</button>
+              <div className="eqb-stp">
+                <span className="eqb-stp-label">x term</span>
+                <div className="eqb-stp-ctl">
+                  <div className="eqb-modes" style={{ marginRight: 4 }}>
+                    <button className={!isDiv ? "on" : ""} onClick={() => setVarOp("×")}>× a</button>
+                    <button className={isDiv ? "on" : ""} onClick={() => { setVarOp("÷"); if (a < 2) setA(2); }}>÷ a</button>
                   </div>
+                  <button className="eqb-stp-btn" onClick={() => setA(Math.max(isDiv ? 2 : 1, a - 1))}>−</button>
+                  <span className="eqb-stp-val">{a}</span>
+                  <button className="eqb-stp-btn" onClick={() => setA(Math.min(6, a + 1))}>+</button>
                 </div>
-              ))}
+              </div>
+              <div className="eqb-stp">
+                <span className="eqb-stp-label">constant (b)</span>
+                <div className="eqb-stp-ctl">
+                  <button className="eqb-stp-btn" onClick={() => setB(Math.max(-10, b - 1))}>−</button>
+                  <span className="eqb-stp-val">{b}</span>
+                  <button className="eqb-stp-btn" onClick={() => setB(Math.min(10, b + 1))}>+</button>
+                </div>
+              </div>
+              <div className="eqb-stp">
+                <span className="eqb-stp-label">answer x</span>
+                <div className="eqb-stp-ctl">
+                  <button className="eqb-stp-btn" onClick={() => setXAns(Math.max(1, xAns - 1))}>−</button>
+                  <span className="eqb-stp-val">{xUse}</span>
+                  <button className="eqb-stp-btn" onClick={() => setXAns(Math.min(24, xAns + 1))}>+</button>
+                </div>
+              </div>
             </div>
             <div className="eqb-presets">
               {PRESETS.map((p, i) => (
@@ -379,6 +469,18 @@ export default function EquationBuilder() {
               </div>
             ) : phase === "tap-var" ? (
               <p className="eqb-q">Now tap the variable you&apos;re solving for to begin.</p>
+            ) : phase === "compute" && pending ? (
+              <div className="eqb-modal">
+                <div className="eqb-modal-card">
+                  <p className="eqb-feedback" style={{ minHeight: 0 }}>Now do the math:</p>
+                  <p className="eqb-q" style={{ fontSize: "clamp(1.6rem,5vw,2.4rem)" }}>{pending.expr} = ?</p>
+                  <input className="eqb-cinput" type="number" autoFocus value={computeInput}
+                    onChange={(e) => setComputeInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") submitCompute(); }} />
+                  {feedback && <p className="eqb-feedback" style={{ color: "var(--bdb-coral)" }}>{feedback}</p>}
+                  <button className="eqb-start" onClick={submitCompute}>Check →</button>
+                </div>
+              </div>
             ) : phase === "animating" ? (
               <p className="eqb-q">{animMsg}</p>
             ) : (
@@ -393,7 +495,7 @@ export default function EquationBuilder() {
                         <button className="eqb-choice" key={t} onClick={() => pickTerm(t)}>{t}</button>
                       ))}
                 </div>
-                {step === "coefficient" && <div className="eqb-rule">Beside the variable → divide. Underneath → multiply.</div>}
+                {(step === "coefficient" || step === "divisor") && <div className="eqb-rule">Beside it, divide it. Underneath it, multiply it.</div>}
                 {hint ? <div className="eqb-hint">{hint}</div> : <button className="eqb-hintbtn" onClick={giveHint}>Need a hint?</button>}
               </>
             )}

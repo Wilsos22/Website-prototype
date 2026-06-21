@@ -114,3 +114,38 @@ A running list so nothing from brainstorming gets lost. Nothing here is urgent.
 - Live **Poll / Question** + **Join Session** states (Supabase — see `supabase/SETUP.md`).
 - **Student homebase + today's warm-up link** from the "Warm up Links" Notion DB.
 - **Gradebook capture** (answers per period, AI-assisted grading) — schema already in `supabase/`.
+
+## 📝 Revisions brainstormed (June 2026 session) — backlog
+Captured so nothing gets lost. Roughly in priority order.
+
+- **Push level + problem during class.** Use class mode + `liveTool` config so when the teacher
+  launches a tool, every student opens the **same problem at the chosen level** (Beginner/Advanced).
+  Lead them through once, then release them to try → capture results as formative data.
+- **Capture tool work as formative data.** Log attempts/correct on GEMS, Combine Like Terms,
+  Equation Builder (and others) into the warm-up analytics → "grade from manipulatives".
+- **Problem of the day (Carnegie).** Teacher manually pastes ONE error-analysis or word problem
+  from the Carnegie lesson into a Notion field (copyright: teacher-entered, not scraped). App reads
+  it, pushes to students to work in-system, captures responses. Add **grouping** (Random now;
+  formative-based grouping once warm-up sync is flowing).
+- **Reskin remaining tools** to the design system (cream + Albert Sans + system accents):
+  number line, percent bar, fraction bars, proportions, area model, ladder method, group bars,
+  algebra tiles, multiplication fluency, whiteboard, spinner, timer.
+- **Control panel: vertical, draggable sequence bar** — make the lineup vertical so the teacher can
+  drag the state/component order around.
+- **Term Identifier tool (new).** Students drag parts of an expression into the right bucket:
+  coefficient, constant, operation, variable.
+- **Ladder Method tool — reformat.** Current version is confusing/unintuitive; redesign for clarity.
+
+### Done this session
+- GEMS rebuilt (left rail, beginner yes/no walk + advanced select-only; fixed advanced/random bug).
+- Combining Like Terms rebuilt (arrange-into-boxes gate, then combine animations).
+- Equation Builder: fixed grid, red-box zero pair, division-as-fraction, Beginner/Advanced toggle,
+  **x/d (divide) problems**, **type-the-math compute step**, "beside it divide / underneath multiply" rule.
+- Design-system migration: /teacher dashboard, /, /lesson, /control, SiteNav.
+- Warm-up analytics rebuilt to read pre-computed Weekly Summaries (fast) + Google Form summary links.
+
+### Open loops (blockers for formative data)
+- **Fix the warm-up Notion sync:** the form-submit trigger calls `syncSubmissionToNotion`, which
+  doesn't exist (real handler is `syncSubmissionToNotionSafely_`). Add a public wrapper / repoint the
+  trigger, and clean up the duplicate triggers.
+- **Share the "Warm-Up Weekly Summaries" + "Warm up Links" Notion DBs** with the Big Dog Math integration.
