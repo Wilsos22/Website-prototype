@@ -30,6 +30,7 @@ const CLASS_MODE_TARGETS = new Set([
   "/order-of-operations",
   "/fraction-bars",
   "/algebra-tiles",
+  "/challenge",
 ]);
 
 function isTeacherRoute(pathname: string) {

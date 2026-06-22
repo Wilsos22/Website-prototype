@@ -23,6 +23,7 @@ const TOOLS: Tool[] = [
   { href: "/fraction-bars", label: "Fraction Bars", letter: "F", color: "#fcaf38", desc: "Compare fractions, decimals, and percents", group: "board" },
   { href: "/session", label: "Warm-Up Session", letter: "W", color: "#f95335", desc: "Run live forms and view student responses", group: "board" },
   { href: "/number-line-plus", label: "Number Line", letter: "N", color: "#674a40", desc: "Single or double number-line workspace", group: "board" },
+  { href: "/coordinate-grid", label: "Coordinate Grid", letter: "+", color: "#4d8df6", desc: "Plot and identify points on the plane", group: "board" },
   { href: "/timer", label: "Timer", letter: "T", color: "#6f675c", desc: "Large classroom countdown display", group: "board" },
   // Guided practice (compact cards)
   { href: "/equation-builder", label: "Equation Builder", letter: "E", color: "#2f9e6f", desc: "Guided solve, step by step", group: "guided" },

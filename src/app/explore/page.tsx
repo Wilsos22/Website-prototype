@@ -6,6 +6,7 @@ type Tool = { href: string; label: string; letter: string; color: string; desc: 
 
 const TOOLS: Tool[] = [
   { href: "/number-line-plus", label: "Number Line", letter: "N", color: "#674a40", desc: "Integers, hops, and fractions" },
+  { href: "/coordinate-grid", label: "Coordinate Grid", letter: "+", color: "#4d8df6", desc: "Plot and identify points" },
   { href: "/percent-bar", label: "Percent Bar", letter: "%", color: "#50a3a4", desc: "Parts, wholes, and benchmarks" },
   { href: "/fraction-bars", label: "Fraction Bars", letter: "F", color: "#fcaf38", desc: "Fractions, decimals, percents" },
   { href: "/group-bars", label: "Group Bars", letter: "G", color: "#2f9e6f", desc: "Equal groups and ratios" },
@@ -37,7 +38,18 @@ export default function ExplorePage() {
 
         .ex-wrap { max-width:960px; margin:0 auto; padding:clamp(18px,4vw,34px) 16px; }
         .ex-h1 { margin:0 0 4px; font-size:clamp(1.6rem,4.5vw,2.4rem); font-weight:800; letter-spacing:-0.02em; }
-        .ex-sub { margin:0 0 22px; color:var(--bdb-ink-soft); font-weight:500; font-size:1rem; }
+        .ex-sub { margin:0 0 20px; color:var(--bdb-ink-soft); font-weight:500; font-size:1rem; }
+        .ex-h2 { margin:26px 0 12px; font-size:0.82rem; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:var(--bdb-ink-faint); }
+
+        .ex-lesson { display:flex; align-items:center; gap:16px; text-decoration:none; border:none; border-radius:var(--bdb-r-lg);
+          background:var(--bdb-coral); color:#fff; padding:20px 22px; box-shadow:0 16px 30px -18px rgba(249,83,53,0.7); }
+        .ex-lesson:hover { filter:brightness(1.03); }
+        .ex-lesson-ico { width:52px; height:52px; flex:none; border-radius:13px; background:rgba(255,255,255,0.22);
+          display:grid; place-items:center; }
+        .ex-lesson-ico svg { width:28px; height:28px; }
+        .ex-lesson-label { display:block; font-size:1.2rem; font-weight:800; letter-spacing:-0.01em; }
+        .ex-lesson-desc { display:block; font-size:0.9rem; font-weight:500; color:rgba(255,255,255,0.92); margin-top:2px; }
+        .ex-lesson-go { margin-left:auto; font-size:1.6rem; font-weight:800; }
 
         .ex-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(210px, 1fr)); gap:14px; }
         .ex-card { display:flex; align-items:center; gap:14px; text-decoration:none; background:var(--bdb-card);
@@ -59,9 +71,21 @@ export default function ExplorePage() {
       </header>
 
       <div className="ex-wrap">
-        <h1 className="ex-h1">Math tools</h1>
-        <p className="ex-sub">Practice anything you want — no code needed.</p>
+        <h1 className="ex-h1">Explore</h1>
+        <p className="ex-sub">Catch up on a lesson, or practice any tool — no code needed.</p>
 
+        <a className="ex-lesson" href="/lesson">
+          <span className="ex-lesson-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3 h9 l4 4 v14 H6 Z" /><path d="M15 3 v4 h4" /><line x1="9" y1="13" x2="16" y2="13" /><line x1="9" y1="17" x2="16" y2="17" /></svg>
+          </span>
+          <span>
+            <span className="ex-lesson-label">Today&apos;s Lesson</span>
+            <span className="ex-lesson-desc">Warm-up, agenda, and today&apos;s work</span>
+          </span>
+          <span className="ex-lesson-go" aria-hidden="true">→</span>
+        </a>
+
+        <h2 className="ex-h2">Math tools</h2>
         <div className="ex-grid">
           {TOOLS.map((t) => (
             <a key={t.href} className="ex-card" href={t.href}>
