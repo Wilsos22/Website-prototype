@@ -34,6 +34,7 @@ const TOOLS: Tool[] = [
   { href: "/ladder-method", label: "Ladder Method", letter: "L", color: "#674a40", desc: "GCF, LCM, and prime factors", group: "guided" },
   { href: "/multiplication-fluency", label: "Multiplication Fluency", letter: "×", color: "#3b7fc4", desc: "Fast facts practice", group: "guided" },
   { href: "/group-bars", label: "Group Bars", letter: "G", color: "#2f9e6f", desc: "Equal groups and ratios", group: "guided" },
+  { href: "/term-identifier", label: "Identify Terms", letter: "T", color: "#50a3a4", desc: "Sort coefficient, variable, operation, constant", group: "guided" },
 ];
 
 const NAV: { label: string; href: string; active?: boolean }[] = [

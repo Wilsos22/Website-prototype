@@ -14,6 +14,7 @@ import {
   getStoredStudentSessionId,
   getStoredTeacherSessionId,
   hasClassModeExitMarker,
+  isStudentTab,
   leaveClassMode,
 } from "@/lib/liveClassFlow";
 
@@ -69,7 +70,10 @@ export default function ClassSync() {
       router.replace(currentPath === LIVE_FLOW_ROUTE ? "/" : currentPath);
       return;
     }
-    if (getStoredTeacherSessionId()) return;
+    // A device that's running the teacher session shouldn't be controlled by
+    // its own broadcast — UNLESS this specific tab joined as a student (lets one
+    // browser test teacher + student side by side).
+    if (getStoredTeacherSessionId() && !isStudentTab()) return;
     if (hasClassModeExitMarker()) return;
     const sessionId = getStoredStudentSessionId();
     if (!sessionId) return;

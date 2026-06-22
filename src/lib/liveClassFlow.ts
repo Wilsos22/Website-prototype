@@ -161,6 +161,28 @@ export function leaveClassMode(): void {
   markClassModeExited();
 }
 
+// Per-TAB marker (sessionStorage is not shared across tabs/windows). Set when a
+// device joins as a student, so a single browser can run a teacher tab AND a
+// student tab at once for testing: the joined tab follows class mode even though
+// the browser also has a teacher session stored.
+export const STUDENT_TAB_KEY = "bdm-student-tab";
+
+export function markStudentTab(): void {
+  try {
+    sessionStorage.setItem(STUDENT_TAB_KEY, "1");
+  } catch {
+    /* ignore */
+  }
+}
+
+export function isStudentTab(): boolean {
+  try {
+    return sessionStorage.getItem(STUDENT_TAB_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function getStoredTeacherSessionId(): string | null {
   try {
     const stored = localStorage.getItem(TEACHER_SESSION_KEY);
