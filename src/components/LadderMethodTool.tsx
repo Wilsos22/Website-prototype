@@ -1,632 +1,452 @@
 "use client";
 
-import Link from "next/link";
+import { Fragment, useState } from "react";
 import type { FormEvent } from "react";
-import { useMemo, useState } from "react";
 
-type Step = {
-  divisor: number;
-  left: number;
-  right: number;
-};
+type Step = { divisor: number; left: number; right: number };
+type Phase = "divide" | "gcf" | "lcm" | "done";
 
-type Phase = "choose" | "divide" | "gcf" | "lcm" | "done";
+const PROBLEMS: [number, number][] = [
+  [24, 36], [28, 42], [36, 90], [40, 60], [45, 75], [48, 64],
+  [54, 72], [56, 98], [63, 84], [70, 90], [72, 120], [84, 126],
+];
 
-const DIVISOR_OPTIONS = [2, 3, 5, 6, 7, 10];
-const PROBLEMS = [
-  [24, 36],
-  [28, 42],
-  [36, 90],
-  [40, 60],
-  [45, 75],
-  [48, 64],
-  [54, 72],
-  [56, 98],
-  [63, 84],
-  [70, 90],
-  [72, 120],
-  [84, 126],
-] as [number, number][];
-
+function gcdOf(a: number, b: number) {
+  a = Math.abs(a);
+  b = Math.abs(b);
+  while (b) {
+    const t = b;
+    b = a % b;
+    a = t;
+  }
+  return a;
+}
 function product(values: number[]) {
-  return values.reduce((total, value) => total * value, 1);
+  return values.reduce((t, v) => t * v, 1);
+}
+function pickProblem(current?: [number, number]): [number, number] {
+  const pool = PROBLEMS.filter(([a, b]) => !current || a !== current[0] || b !== current[1]);
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
-function chooseProblem(current?: [number, number]): [number, number] {
-  const choices = PROBLEMS.filter(([a, b]) => !current || current[0] !== a || current[1] !== b);
-  return choices[Math.floor(Math.random() * choices.length)] as [number, number];
-}
-
-function commonDivisors(left: number, right: number) {
-  return DIVISOR_OPTIONS.filter((divisor) => left % divisor === 0 && right % divisor === 0);
-}
-
-function divisionRule(divisor: number) {
-  if (divisor === 2) return "Divisible by 2 means the number is even.";
-  if (divisor === 3) return "Divisible by 3 means the sum of the digits is divisible by 3.";
-  if (divisor === 5) return "Divisible by 5 means the number ends in 0 or 5.";
-  if (divisor === 6) return "Divisible by 6 means the number is divisible by both 2 and 3.";
-  if (divisor === 7) return "For 7, check whether groups of 7 divide evenly with no remainder.";
-  return "Divisible by 10 means the number ends in 0.";
-}
-
-function failedReason(left: number, right: number, divisor: number) {
-  const leftWorks = left % divisor === 0;
-  const rightWorks = right % divisor === 0;
-  const parts = [
-    `${left} ÷ ${divisor} ${leftWorks ? "is whole" : `has remainder ${left % divisor}`}`,
-    `${right} ÷ ${divisor} ${rightWorks ? "is whole" : `has remainder ${right % divisor}`}`,
-  ];
-  return `${divisionRule(divisor)} ${parts.join(". ")}.`;
-}
+const START_MSG = "Type a number that divides BOTH numbers, then press Divide.";
 
 export default function LadderMethodTool() {
-  const [problem, setProblem] = useState<[number, number]>(PROBLEMS[0]);
+  const [problem, setProblem] = useState<[number, number]>(() => PROBLEMS[0]);
   const [steps, setSteps] = useState<Step[]>([]);
-  const [phase, setPhase] = useState<Phase>("choose");
-  const [pickerOpen, setPickerOpen] = useState(true);
-  const [pendingDivisor, setPendingDivisor] = useState<number | null>(null);
-  const [leftQuotient, setLeftQuotient] = useState("");
-  const [rightQuotient, setRightQuotient] = useState("");
-  const [gcfInput, setGcfInput] = useState("");
-  const [lcmInput, setLcmInput] = useState("");
-  const [feedback, setFeedback] = useState("Choose a divisor that divides both numbers.");
+  const [phase, setPhase] = useState<Phase>("divide");
+  const [divisorDraft, setDivisorDraft] = useState("");
+  const [feedback, setFeedback] = useState(START_MSG);
 
-  const currentPair = useMemo(() => {
-    const last = steps[steps.length - 1];
-    return last ? [last.left, last.right] : problem;
-  }, [problem, steps]) as [number, number];
-  const divisorsLeft = commonDivisors(currentPair[0], currentPair[1]);
-  const ladderDivisors = steps.map((step) => step.divisor);
-  const bottomPair = currentPair;
-  const gcf = product(ladderDivisors);
-  const lcm = gcf * bottomPair[0] * bottomPair[1];
+  // GCF guided multiply
+  const [gcfRunning, setGcfRunning] = useState(0);
+  const [gcfIdx, setGcfIdx] = useState(1);
+  const [gcfDraft, setGcfDraft] = useState("");
+  // LCM guided multiply
+  const [lcmRunning, setLcmRunning] = useState(0);
+  const [lcmIdx, setLcmIdx] = useState(1);
+  const [lcmDraft, setLcmDraft] = useState("");
 
-  function reset(nextProblem = problem) {
-    setProblem(nextProblem);
+  const divisors = steps.map((s) => s.divisor);
+  const bottom: [number, number] = steps.length
+    ? [steps[steps.length - 1].left, steps[steps.length - 1].right]
+    : problem;
+  const gcf = product(divisors);
+  const lcmFactors = [gcf, bottom[0], bottom[1]];
+  const rows: [number, number][] = [problem, ...steps.map((s) => [s.left, s.right] as [number, number])];
+
+  const gcfComplete = phase !== "divide" && gcfIdx >= divisors.length;
+
+  function resetAll(next: [number, number]) {
+    setProblem(next);
     setSteps([]);
-    setPhase("choose");
-    setPickerOpen(true);
-    setPendingDivisor(null);
-    setLeftQuotient("");
-    setRightQuotient("");
-    setGcfInput("");
-    setLcmInput("");
-    setFeedback("Choose a divisor that divides both numbers.");
-  }
-
-  function newProblem() {
-    reset(chooseProblem(problem));
-  }
-
-  function chooseDivisor(divisor: number) {
-    if (currentPair[0] % divisor !== 0 || currentPair[1] % divisor !== 0) {
-      setFeedback(failedReason(currentPair[0], currentPair[1], divisor));
-      return;
-    }
-
-    setPendingDivisor(divisor);
-    setPickerOpen(false);
     setPhase("divide");
-    setLeftQuotient("");
-    setRightQuotient("");
-    setFeedback(`${divisor} works. Divide both numbers by ${divisor}.`);
+    setDivisorDraft("");
+    setGcfRunning(0);
+    setGcfIdx(1);
+    setGcfDraft("");
+    setLcmRunning(0);
+    setLcmIdx(1);
+    setLcmDraft("");
+    setFeedback(START_MSG);
   }
 
-  function submitQuotients(event: FormEvent<HTMLFormElement>) {
+  function submitDivisor(event: FormEvent) {
     event.preventDefault();
-    if (!pendingDivisor) return;
-    const left = Number(leftQuotient);
-    const right = Number(rightQuotient);
-    const expectedLeft = currentPair[0] / pendingDivisor;
-    const expectedRight = currentPair[1] / pendingDivisor;
-
-    if (left !== expectedLeft || right !== expectedRight) {
-      setFeedback(`${currentPair[0]} ÷ ${pendingDivisor} = ${expectedLeft} and ${currentPair[1]} ÷ ${pendingDivisor} = ${expectedRight}.`);
+    const d = Number(divisorDraft);
+    if (!d || d < 2) {
+      setFeedback("Enter a whole number 2 or greater.");
+      return;
+    }
+    const [l, r] = bottom;
+    if (l % d !== 0 || r % d !== 0) {
+      const lr = l % d;
+      const rr = r % d;
+      setFeedback(
+        `${d} doesn't divide both — ${l} ÷ ${d} ${lr ? `leaves ${lr}` : "is whole"}, ${r} ÷ ${d} ${rr ? `leaves ${rr}` : "is whole"}.`,
+      );
       return;
     }
 
-    const nextSteps = [...steps, { divisor: pendingDivisor, left, right }];
-    setSteps(nextSteps);
-    setPendingDivisor(null);
-    setLeftQuotient("");
-    setRightQuotient("");
+    const nl = l / d;
+    const nr = r / d;
+    const next = [...steps, { divisor: d, left: nl, right: nr }];
+    setSteps(next);
+    setDivisorDraft("");
 
-    if (commonDivisors(left, right).length === 0) {
+    if (gcdOf(nl, nr) === 1) {
+      const ds = next.map((s) => s.divisor);
+      setGcfRunning(ds[0]);
+      setGcfIdx(1);
       setPhase("gcf");
-      setFeedback("No common divisor is left. Multiply the left ladder.");
-      return;
+      setFeedback(
+        ds.length === 1
+          ? `Prime! Just one divisor, so the GCF is ${ds[0]}.`
+          : "Both prime! Multiply the divisors down the left to get the GCF.",
+      );
+    } else {
+      setFeedback(`Nice — ${l} ÷ ${d} = ${nl} and ${r} ÷ ${d} = ${nr}. They still share a factor — keep going.`);
     }
-
-    setPhase("choose");
-    setPickerOpen(true);
-    setFeedback("Choose another divisor that divides both numbers.");
   }
 
-  function submitGcf(event: FormEvent<HTMLFormElement>) {
+  function submitGcf(event: FormEvent) {
     event.preventDefault();
-    if (Number(gcfInput) !== gcf) {
-      setFeedback(`Multiply the left ladder: ${ladderDivisors.join(" x ")} = ${gcf}.`);
+    const factor = divisors[gcfIdx];
+    const expected = gcfRunning * factor;
+    if (Number(gcfDraft) !== expected) {
+      setFeedback(`${gcfRunning} × ${factor} = ${expected}.`);
       return;
     }
+    const ni = gcfIdx + 1;
+    setGcfRunning(expected);
+    setGcfIdx(ni);
+    setGcfDraft("");
+    setFeedback(ni >= divisors.length ? `GCF = ${expected}. Now build the LCM.` : "Keep multiplying the next divisor.");
+  }
+
+  function startLcm() {
     setPhase("lcm");
-    setFeedback("GCF is set. Multiply the L shape for LCM.");
+    setLcmRunning(gcf);
+    setLcmIdx(1);
+    setLcmDraft("");
+    setFeedback("The LCM starts with the GCF. Multiply it by each bottom number.");
   }
 
-  function submitLcm(event: FormEvent<HTMLFormElement>) {
+  function submitLcm(event: FormEvent) {
     event.preventDefault();
-    if (Number(lcmInput) !== lcm) {
-      setFeedback(`${ladderDivisors.join(" x ")} x ${bottomPair[0]} x ${bottomPair[1]} = ${lcm}.`);
+    const factor = lcmFactors[lcmIdx];
+    const expected = lcmRunning * factor;
+    if (Number(lcmDraft) !== expected) {
+      setFeedback(`${lcmRunning} × ${factor} = ${expected}.`);
       return;
     }
-    setPhase("done");
-    setFeedback(`GCF ${gcf}. LCM ${lcm}.`);
+    const ni = lcmIdx + 1;
+    setLcmRunning(expected);
+    setLcmIdx(ni);
+    setLcmDraft("");
+    if (ni >= lcmFactors.length) {
+      setPhase("done");
+      setFeedback(`GCF ${gcf} • LCM ${expected}. Nice work!`);
+    } else {
+      setFeedback("One more — multiply by the other bottom number.");
+    }
   }
+
+  const flick = phase !== "divide";
 
   return (
-    <main className="lm-root">
+    <main className="lad-wrap">
       <style>{`
-        .lm-root {
-          min-height: 100vh;
-          background: #fff;
-          color: #20242d;
-          font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-        }
-        .lm-top {
-          display: grid;
-          grid-template-columns: auto minmax(0, 1fr) auto;
-          align-items: center;
-          gap: 14px;
-          padding: 14px clamp(14px, 3vw, 28px);
-          border-bottom: 1px solid #d8dee8;
-          background: #fff;
-          backdrop-filter: blur(12px);
-          position: sticky;
-          top: 0;
-          z-index: 10;
-        }
-        .lm-home,
-        .lm-button,
-        .lm-option {
-          border: 2px solid #d6deea;
-          border-radius: 4px;
-          background: #fff;
-          color: #20242d;
-          cursor: pointer;
-          font-weight: 900;
-          text-decoration: none;
-          transition: transform 140ms ease, border-color 140ms ease, background-color 140ms ease;
-        }
-        .lm-home {
-          min-height: 44px;
-          min-width: 86px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          padding: 8px 14px;
-        }
-        .lm-home:hover,
-        .lm-button:hover,
-        .lm-option:hover {
-          border-color: #245caa;
-          transform: translateY(-1px);
-        }
-        .lm-title-wrap { min-width: 0; text-align: center; }
-        .lm-kicker {
-          margin: 0 0 2px;
-          color: #245caa;
-          font-size: 0.72rem;
-          font-weight: 950;
-          letter-spacing: 0.14em;
-          text-transform: uppercase;
-        }
-        .lm-title {
-          margin: 0;
-          color: #1f2937;
-          font-size: clamp(1.25rem, 3.2vw, 2rem);
-          font-weight: 950;
-          line-height: 1.05;
-        }
-        .lm-logo {
-          width: clamp(56px, 10vw, 94px);
-          height: auto;
-          border-radius: 4px;
-          display: block;
-
-        }
-        .lm-main {
-          width: min(1160px, 100%);
+        .lad-wrap {
+          font-family: var(--bdb-font);
+          color: var(--bdb-ink);
+          background: var(--bdb-ground);
+          min-height: 100%;
+          padding: clamp(14px, 3vw, 30px);
+          width: min(820px, 100%);
           margin: 0 auto;
-          padding: clamp(14px, 3vw, 28px);
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) minmax(290px, 350px);
-          gap: 18px;
-          align-items: start;
-        }
-        .lm-board,
-        .lm-panel {
-          border: 2px solid #dde4ee;
-          border-radius: 4px;
-          background: #fff;
-
-        }
-        .lm-board {
-          min-height: 660px;
-          padding: clamp(16px, 3vw, 28px);
-          display: grid;
-          gap: 18px;
-          align-content: start;
-        }
-        .lm-problem {
-          display: grid;
-          grid-template-columns: 1fr auto 1fr;
-          align-items: center;
-          gap: 12px;
-        }
-        .lm-number {
-          min-height: 110px;
-          border: 3px solid #20242d;
-          border-radius: 4px;
-          background: #fff;
-          display: grid;
-          place-items: center;
-          color: #111827;
-          font-size: clamp(3rem, 10vw, 6rem);
-          font-weight: 950;
-          box-shadow: 0 12px 0 #20242d;
-          font-variant-numeric: tabular-nums;
-        }
-        .lm-and {
-          color: #245caa;
-          font-size: clamp(2rem, 6vw, 4rem);
-          font-weight: 950;
-        }
-        .lm-ladder-wrap {
-          display: grid;
-          justify-content: center;
-          overflow-x: auto;
-          padding: 14px 0;
-        }
-        .lm-ladder {
-          min-width: min(100%, 460px);
-          display: grid;
-          grid-template-columns: 90px 1fr 1fr;
-          gap: 0;
-          font-size: clamp(1.35rem, 4vw, 2.3rem);
-          font-weight: 950;
-          color: #111827;
-          font-variant-numeric: tabular-nums;
-        }
-        .lm-cell {
-          min-height: 64px;
-          display: grid;
-          place-items: center;
-          border-bottom: 3px solid #20242d;
-          background: rgba(255,255,255,0.75);
-        }
-        .lm-divisor {
-          border-right: 3px solid #20242d;
-          color: #245caa;
-        }
-        .lm-empty {
-          border-right: 3px solid transparent;
-        }
-        .lm-bottom {
-          background: #eff6ff;
-        }
-        .lm-feedback {
-          min-height: 58px;
-          border: 2px solid #d6deea;
-          border-radius: 4px;
-          background: #f8fafc;
-          color: #334155;
-          display: grid;
-          align-items: center;
-          padding: 12px 14px;
-          font-weight: 850;
-          line-height: 1.35;
-        }
-        .lm-work {
-          display: grid;
-          gap: 12px;
-          border: 2px solid #dde4ee;
-          border-radius: 4px;
-          background: #fff;
-          padding: 16px;
-        }
-        .lm-work-title,
-        .lm-panel-title {
-          margin: 0;
-          color: #64748b;
-          font-size: 0.74rem;
-          font-weight: 950;
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
-        }
-        .lm-division-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 12px;
-        }
-        .lm-input-row {
-          display: grid;
-          grid-template-columns: 1fr auto;
-          gap: 10px;
-          align-items: center;
-        }
-        .lm-input {
-          min-width: 0;
-          min-height: 54px;
-          border: 2px solid #cbd5e1;
-          border-radius: 4px;
-          background: #f8fafc;
-          color: #111827;
-          padding: 0 12px;
-          font-size: 1.35rem;
-          font-weight: 950;
-          text-align: center;
-          font-variant-numeric: tabular-nums;
-        }
-        .lm-input:focus {
-          border-color: #245caa;
-          outline: 4px solid rgba(36, 92, 170, 0.16);
-        }
-        .lm-divide-label {
-          color: #475569;
-          font-size: 1.1rem;
-          font-weight: 950;
-          white-space: nowrap;
-        }
-        .lm-button {
-          min-height: 52px;
-          padding: 8px 12px;
-        }
-        .lm-button.primary {
-          background: #245caa;
-          border-color: #245caa;
-          color: #fff;
-        }
-        .lm-panel {
-          padding: 16px;
-          display: grid;
-          gap: 12px;
-        }
-        .lm-side-actions {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 10px;
-        }
-        .lm-factor-line {
-          min-height: 48px;
-          border: 2px solid #e2e8f0;
-          border-radius: 4px;
-          background: #f8fafc;
-          display: grid;
-          align-items: center;
-          padding: 10px 12px;
-          color: #334155;
-          font-weight: 900;
-          overflow-wrap: anywhere;
-        }
-        .lm-results {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 10px;
-        }
-        .lm-result-card {
-          min-height: 96px;
-          border: 2px solid #d6deea;
-          border-radius: 4px;
-          background: #f8fafc;
-          display: grid;
-          place-items: center;
-          gap: 4px;
-          padding: 10px;
-        }
-        .lm-result-number {
-          color: #111827;
-          font-size: 2rem;
-          line-height: 1;
-          font-weight: 950;
-        }
-        .lm-result-label {
-          color: #64748b;
-          font-size: 0.74rem;
-          font-weight: 950;
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
-        }
-        .lm-modal-backdrop {
-          position: fixed;
-          inset: 0;
-          z-index: 30;
-          background: rgba(15, 23, 42, 0.36);
-          display: grid;
-          place-items: center;
-          padding: 16px;
-        }
-        .lm-modal {
-          width: min(100%, 480px);
-          border: 3px solid #20242d;
-          border-radius: 4px;
-          background: #fff;
-          box-shadow: 0 18px 0 #20242d, 0 30px 70px rgba(15, 23, 42, 0.3);
-          padding: clamp(18px, 4vw, 28px);
           display: grid;
           gap: 16px;
         }
-        .lm-modal-title {
-          margin: 0;
-          color: #111827;
-          font-size: 1.55rem;
-          line-height: 1.1;
-          font-weight: 950;
+        .lad-kicker {
+          margin: 0; text-align: center;
+          font-size: 0.74rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
+          color: var(--bdb-ink-faint);
+        }
+        .lad-feedback {
+          min-height: 50px;
+          border: 1px solid var(--bdb-line);
+          border-radius: var(--bdb-r);
+          background: var(--bdb-card);
+          color: var(--bdb-ink-soft);
+          display: grid; align-items: center;
+          padding: 12px 16px;
+          font-weight: 600; line-height: 1.35;
           text-align: center;
         }
-        .lm-options {
+        .lad-stack { display: grid; gap: 4px; justify-items: stretch; }
+        .lad-row, .lad-band, .lad-entry {
           display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
+          grid-template-columns: 110px 1fr 1fr;
           gap: 10px;
-        }
-        .lm-option {
-          min-height: 66px;
-          font-size: 1.55rem;
-          color: #111827;
-        }
-        .lm-modal-feedback {
-          min-height: 56px;
-          border: 2px solid #fed7aa;
-          border-radius: 4px;
-          background: #fff7ed;
-          color: #9a3412;
-          display: grid;
           align-items: center;
-          padding: 10px 12px;
-          font-weight: 850;
-          line-height: 1.35;
         }
-
-        @media (max-width: 900px) {
-          .lm-main { grid-template-columns: 1fr; }
+        .lad-row { animation: ladPop 240ms ease; }
+        @keyframes ladPop { from { opacity: 0; transform: translateY(-8px) scale(.96); } to { opacity: 1; transform: none; } }
+        .lad-num {
+          min-height: 78px;
+          border: 2px solid var(--bdb-ink);
+          border-radius: var(--bdb-r);
+          background: var(--bdb-card);
+          display: grid; place-items: center;
+          font-weight: 800; font-variant-numeric: tabular-nums;
+          font-size: clamp(2rem, 7vw, 3.4rem);
+          box-shadow: 0 4px 0 var(--bdb-ink);
         }
-        @media (max-width: 620px) {
-          .lm-top { grid-template-columns: auto minmax(0, 1fr); }
-          .lm-logo { display: none; }
-          .lm-title-wrap { text-align: left; }
-          .lm-main { padding: 12px; }
-          .lm-problem,
-          .lm-division-grid,
-          .lm-results,
-          .lm-side-actions { grid-template-columns: 1fr; }
-          .lm-and { display: none; }
-          .lm-ladder { grid-template-columns: 64px 1fr 1fr; }
-          .lm-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .lad-row.big .lad-num {
+          min-height: 104px;
+          font-size: clamp(2.6rem, 10vw, 5rem);
+        }
+        .lad-row.bottomrow .lad-num { border-color: var(--bdb-teal); box-shadow: 0 4px 0 var(--bdb-teal); }
+        .lad-side { display: grid; place-items: center; }
+        .lad-divisor {
+          min-height: 56px; align-self: center;
+          border: 2px solid var(--bdb-amber);
+          border-radius: var(--bdb-r);
+          background: color-mix(in srgb, var(--bdb-amber) 18%, var(--bdb-card));
+          color: var(--bdb-brown);
+          font-weight: 800; font-size: clamp(1.3rem, 4vw, 2rem);
+          display: inline-flex; align-items: center; gap: 4px;
+          padding: 6px 14px;
+          font-variant-numeric: tabular-nums;
+        }
+        .lad-dx { color: var(--bdb-ink-faint); font-weight: 800; }
+        .flick { animation: ladFlick 1.05s ease-in-out infinite; }
+        @keyframes ladFlick {
+          0%, 100% { opacity: 1; box-shadow: 0 0 0 3px color-mix(in srgb, var(--bdb-amber) 45%, transparent); }
+          50% { opacity: 0.55; box-shadow: 0 0 0 3px transparent; }
+        }
+        .lad-arrow {
+          display: grid; place-items: center;
+          color: var(--bdb-ink-faint);
+          font-size: 1.5rem; font-weight: 800;
+          animation: ladPop 240ms ease;
+        }
+        .lad-input-wrap {
+          display: inline-flex; align-items: center; gap: 6px;
+          border: 2px dashed var(--bdb-amber);
+          border-radius: var(--bdb-r);
+          background: var(--bdb-card);
+          padding: 6px 10px;
+        }
+        .lad-input {
+          width: 64px; min-height: 46px;
+          border: none; outline: none; background: transparent;
+          font-family: inherit; font-weight: 800; text-align: center;
+          font-size: clamp(1.4rem, 5vw, 2.1rem);
+          color: var(--bdb-ink); font-variant-numeric: tabular-nums;
+        }
+        .lad-go {
+          grid-column: 2 / span 2;
+          min-height: 56px;
+          border: none; border-radius: var(--bdb-r);
+          background: var(--bdb-coral); color: #fff;
+          font-family: inherit; font-weight: 800; font-size: 1.05rem;
+          cursor: pointer; letter-spacing: 0.01em;
+          transition: filter 120ms;
+        }
+        .lad-go:hover { filter: brightness(1.05); }
+        .lad-card {
+          border: 1px solid var(--bdb-line);
+          border-radius: var(--bdb-r-lg);
+          background: var(--bdb-card);
+          padding: clamp(14px, 3vw, 22px);
+          display: grid; gap: 12px;
+        }
+        .lad-h { margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--bdb-ink); }
+        .lad-h .tag {
+          font-size: 0.7rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+          padding: 3px 9px; border-radius: 999px; margin-left: 8px; vertical-align: middle;
+        }
+        .tag.gcf { background: color-mix(in srgb, var(--bdb-amber) 22%, transparent); color: var(--bdb-brown); }
+        .tag.lcm { background: color-mix(in srgb, var(--bdb-teal) 20%, transparent); color: var(--bdb-teal); }
+        .lad-chain { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-weight: 800; font-size: 1.2rem; }
+        .lad-chip {
+          min-width: 44px; padding: 6px 12px; border-radius: 10px;
+          background: color-mix(in srgb, var(--bdb-amber) 16%, var(--bdb-ground));
+          border: 1px solid var(--bdb-line); text-align: center;
+          font-variant-numeric: tabular-nums;
+        }
+        .lad-chip.bottomf { background: color-mix(in srgb, var(--bdb-teal) 16%, var(--bdb-ground)); }
+        .lad-times { color: var(--bdb-ink-faint); }
+        .lad-mult { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-weight: 800; font-size: 1.2rem; }
+        .lad-mult input {
+          width: 96px; min-height: 50px;
+          border: 2px solid var(--bdb-line); border-radius: 10px;
+          background: var(--bdb-ground); text-align: center;
+          font-family: inherit; font-weight: 800; font-size: 1.3rem;
+          color: var(--bdb-ink); font-variant-numeric: tabular-nums;
+        }
+        .lad-mult input:focus { outline: none; border-color: var(--bdb-teal); }
+        .lad-check {
+          min-height: 50px; padding: 0 18px;
+          border: none; border-radius: 10px;
+          background: var(--bdb-ink); color: #fff;
+          font-family: inherit; font-weight: 800; cursor: pointer;
+        }
+        .lad-answer { font-weight: 800; font-size: 1.35rem; color: var(--bdb-green); }
+        .lad-results { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        .lad-result {
+          border-radius: var(--bdb-r-lg); padding: 18px; display: grid; place-items: center; gap: 4px;
+        }
+        .lad-result.gcf { background: color-mix(in srgb, var(--bdb-amber) 22%, var(--bdb-card)); }
+        .lad-result.lcm { background: color-mix(in srgb, var(--bdb-teal) 18%, var(--bdb-card)); }
+        .lad-result b { font-size: 2.4rem; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--bdb-ink); }
+        .lad-result span { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--bdb-ink-soft); }
+        .lad-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+        .lad-btn {
+          min-height: 48px; padding: 0 20px;
+          border: 1px solid var(--bdb-line); border-radius: 999px;
+          background: var(--bdb-card); color: var(--bdb-ink);
+          font-family: inherit; font-weight: 700; cursor: pointer;
+        }
+        .lad-btn.primary { background: var(--bdb-teal); border-color: var(--bdb-teal); color: #fff; }
+        .lad-btn:hover { filter: brightness(1.03); }
+        @media (max-width: 560px) {
+          .lad-row, .lad-band, .lad-entry { grid-template-columns: 76px 1fr 1fr; gap: 8px; }
+          .lad-results { grid-template-columns: 1fr; }
         }
       `}</style>
 
-      <header className="lm-top">
-        <Link className="lm-home" href="/">
-          Home
-        </Link>
-        <div className="lm-title-wrap">
-          <p className="lm-kicker">GCF and LCM</p>
-          <h1 className="lm-title">Ladder Method</h1>
-        </div>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img className="lm-logo" src="/big-dog-logo.png" alt="Big Dog Math" />
-      </header>
+      <p className="lad-kicker">GCF &amp; LCM · Ladder Method</p>
 
-      <div className="lm-main">
-        <section className="lm-board">
-          <div className="lm-problem">
-            <div className="lm-number">{problem[0]}</div>
-            <div className="lm-and">&</div>
-            <div className="lm-number">{problem[1]}</div>
-          </div>
-
-          <div className="lm-ladder-wrap">
-            <div className="lm-ladder" aria-label="Ladder model">
-              <div className="lm-cell lm-empty" />
-              <div className="lm-cell">{problem[0]}</div>
-              <div className="lm-cell">{problem[1]}</div>
-              {steps.map((step, index) => (
-                <div style={{ display: "contents" }} key={`${step.divisor}-${index}`}>
-                  <div className="lm-cell lm-divisor">{step.divisor}</div>
-                  <div className={`lm-cell${index === steps.length - 1 ? " lm-bottom" : ""}`}>{step.left}</div>
-                  <div className={`lm-cell${index === steps.length - 1 ? " lm-bottom" : ""}`}>{step.right}</div>
+      <div className="lad-stack">
+        {rows.map((pair, i) => {
+          const isBottom = phase !== "divide" && i === rows.length - 1;
+          return (
+            <Fragment key={i}>
+              <div className={`lad-row${i === 0 ? " big" : ""}${isBottom ? " bottomrow" : ""}`}>
+                <div className="lad-side" />
+                <div className="lad-num">{pair[0]}</div>
+                <div className="lad-num">{pair[1]}</div>
+              </div>
+              {i < steps.length && (
+                <div className="lad-band">
+                  <div className={`lad-side`}>
+                    <span className={`lad-divisor${flick ? " flick" : ""}`}>
+                      <span className="lad-dx">÷</span>
+                      {steps[i].divisor}
+                    </span>
+                  </div>
+                  <div className="lad-arrow">↓</div>
+                  <div className="lad-arrow">↓</div>
                 </div>
-              ))}
+              )}
+            </Fragment>
+          );
+        })}
+
+        {phase === "divide" && (
+          <form className="lad-entry" onSubmit={submitDivisor}>
+            <div className="lad-side">
+              <span className="lad-input-wrap">
+                <span className="lad-dx">÷</span>
+                <input
+                  className="lad-input"
+                  inputMode="numeric"
+                  value={divisorDraft}
+                  onChange={(e) => setDivisorDraft(e.target.value.replace(/\D/g, ""))}
+                  aria-label="Divisor that divides both numbers"
+                  autoFocus
+                />
+              </span>
             </div>
-          </div>
-
-          <div className="lm-feedback">{feedback}</div>
-
-          {phase === "divide" && pendingDivisor !== null && (
-            <form className="lm-work" onSubmit={submitQuotients}>
-              <p className="lm-work-title">Divide by {pendingDivisor}</p>
-              <div className="lm-division-grid">
-                <label className="lm-input-row">
-                  <span className="lm-divide-label">{currentPair[0]} ÷ {pendingDivisor}</span>
-                  <input className="lm-input" value={leftQuotient} inputMode="numeric" onChange={(event) => setLeftQuotient(event.target.value.replace(/\D/g, ""))} />
-                </label>
-                <label className="lm-input-row">
-                  <span className="lm-divide-label">{currentPair[1]} ÷ {pendingDivisor}</span>
-                  <input className="lm-input" value={rightQuotient} inputMode="numeric" onChange={(event) => setRightQuotient(event.target.value.replace(/\D/g, ""))} />
-                </label>
-              </div>
-              <button className="lm-button primary" type="submit">Add Row</button>
-            </form>
-          )}
-
-          {phase === "gcf" && (
-            <form className="lm-work" onSubmit={submitGcf}>
-              <p className="lm-work-title">Left ladder product</p>
-              <label className="lm-input-row">
-                <span className="lm-divide-label">{ladderDivisors.join(" x ")}</span>
-                <input className="lm-input" value={gcfInput} inputMode="numeric" onChange={(event) => setGcfInput(event.target.value.replace(/\D/g, ""))} />
-              </label>
-              <button className="lm-button primary" type="submit">Check GCF</button>
-            </form>
-          )}
-
-          {phase === "lcm" && (
-            <form className="lm-work" onSubmit={submitLcm}>
-              <p className="lm-work-title">L shape product</p>
-              <label className="lm-input-row">
-                <span className="lm-divide-label">{[...ladderDivisors, bottomPair[0], bottomPair[1]].join(" x ")}</span>
-                <input className="lm-input" value={lcmInput} inputMode="numeric" onChange={(event) => setLcmInput(event.target.value.replace(/\D/g, ""))} />
-              </label>
-              <button className="lm-button primary" type="submit">Check LCM</button>
-            </form>
-          )}
-
-          {phase === "done" && (
-            <div className="lm-results">
-              <div className="lm-result-card">
-                <span className="lm-result-number">{gcf}</span>
-                <span className="lm-result-label">GCF</span>
-              </div>
-              <div className="lm-result-card">
-                <span className="lm-result-number">{lcm}</span>
-                <span className="lm-result-label">LCM</span>
-              </div>
-            </div>
-          )}
-        </section>
-
-        <aside className="lm-panel">
-          <p className="lm-panel-title">Products</p>
-          <div className="lm-factor-line">Left ladder: {ladderDivisors.length ? ladderDivisors.join(" x ") : "..."}</div>
-          <div className="lm-factor-line">Bottom row: {bottomPair[0]} and {bottomPair[1]}</div>
-          <div className="lm-factor-line">L shape: {[...ladderDivisors, bottomPair[0], bottomPair[1]].join(" x ")}</div>
-          <div className="lm-side-actions">
-            <button className="lm-button primary" onClick={() => setPickerOpen(true)} disabled={phase !== "choose"}>
-              Divisor
-            </button>
-            <button className="lm-button" onClick={newProblem}>
-              New
-            </button>
-          </div>
-        </aside>
+            <button className="lad-go" type="submit">Divide ↓</button>
+          </form>
+        )}
       </div>
 
-      {pickerOpen && phase === "choose" && (
-        <div className="lm-modal-backdrop" role="dialog" aria-modal="true" aria-label="Choose a common divisor">
-          <div className="lm-modal">
-            <h2 className="lm-modal-title">{currentPair[0]} and {currentPair[1]}</h2>
-            <div className="lm-options">
-              {DIVISOR_OPTIONS.map((divisor) => (
-                <button className="lm-option" key={divisor} onClick={() => chooseDivisor(divisor)}>
-                  {divisor}
-                </button>
-              ))}
+      <div className="lad-feedback">{feedback}</div>
+
+      {(phase === "gcf" || phase === "lcm" || phase === "done") && (
+        <div className="lad-card">
+          <p className="lad-h">Greatest Common Factor<span className="tag gcf">GCF</span></p>
+          <div className="lad-chain">
+            {divisors.map((d, i) => (
+              <Fragment key={i}>
+                {i > 0 && <span className="lad-times">×</span>}
+                <span className="lad-chip">{d}</span>
+              </Fragment>
+            ))}
+          </div>
+          {!gcfComplete ? (
+            <form className="lad-mult" onSubmit={submitGcf}>
+              <span>{gcfRunning} × {divisors[gcfIdx]} =</span>
+              <input
+                inputMode="numeric"
+                value={gcfDraft}
+                onChange={(e) => setGcfDraft(e.target.value.replace(/\D/g, ""))}
+                aria-label="Product so far"
+                autoFocus
+              />
+              <button className="lad-check" type="submit">Check</button>
+            </form>
+          ) : (
+            <div className="lad-answer">GCF = {gcf}</div>
+          )}
+          {phase === "gcf" && gcfComplete && (
+            <div className="lad-actions">
+              <button className="lad-btn primary" onClick={startLcm}>Build the LCM →</button>
             </div>
-            <div className="lm-modal-feedback">
-              {divisorsLeft.length ? feedback : "No common divisor is left."}
-            </div>
+          )}
+        </div>
+      )}
+
+      {(phase === "lcm" || phase === "done") && (
+        <div className="lad-card">
+          <p className="lad-h">Least Common Multiple<span className="tag lcm">LCM</span></p>
+          <div className="lad-chain">
+            <span className="lad-chip">{gcf}</span>
+            <span className="lad-times">×</span>
+            <span className="lad-chip bottomf">{bottom[0]}</span>
+            <span className="lad-times">×</span>
+            <span className="lad-chip bottomf">{bottom[1]}</span>
+          </div>
+          {phase === "lcm" ? (
+            <form className="lad-mult" onSubmit={submitLcm}>
+              <span>{lcmRunning} × {lcmFactors[lcmIdx]} =</span>
+              <input
+                inputMode="numeric"
+                value={lcmDraft}
+                onChange={(e) => setLcmDraft(e.target.value.replace(/\D/g, ""))}
+                aria-label="LCM product so far"
+                autoFocus
+              />
+              <button className="lad-check" type="submit">Check</button>
+            </form>
+          ) : (
+            <div className="lad-answer">LCM = {lcmRunning}</div>
+          )}
+        </div>
+      )}
+
+      {phase === "done" && (
+        <div className="lad-results">
+          <div className="lad-result gcf">
+            <b>{gcf}</b>
+            <span>GCF</span>
+          </div>
+          <div className="lad-result lcm">
+            <b>{lcmRunning}</b>
+            <span>LCM</span>
           </div>
         </div>
       )}
+
+      <div className="lad-actions">
+        <button className="lad-btn" onClick={() => resetAll(problem)}>Start over</button>
+        <button className="lad-btn" onClick={() => resetAll(pickProblem(problem))}>New numbers</button>
+      </div>
     </main>
   );
 }

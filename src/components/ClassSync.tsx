@@ -11,8 +11,10 @@ import { getSupabase } from "@/lib/supabase";
 import {
   LIVE_FLOW_MODE,
   LIVE_FLOW_ROUTE,
-  STUDENT_SESSION_KEY,
   getStoredStudentSessionId,
+  getStoredTeacherSessionId,
+  hasClassModeExitMarker,
+  leaveClassMode,
 } from "@/lib/liveClassFlow";
 
 const TEACHER_ROUTE_PREFIXES = ["/teacher", "/control", "/session", "/roster"];
@@ -37,12 +39,13 @@ function isStudentSwitchRoute(pathname: string) {
   return STUDENT_SWITCH_ROUTE_PREFIXES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
 }
 
-function clearStoredSession() {
-  try {
-    localStorage.removeItem(STUDENT_SESSION_KEY);
-  } catch {
-    /* ignore */
-  }
+function isNormalSiteEntry(pathname: string) {
+  return pathname === "/";
+}
+
+function shouldLeaveClassMode() {
+  return typeof window !== "undefined"
+    && new URLSearchParams(window.location.search).has("leaveClass");
 }
 
 function isTeacherPreview() {
@@ -60,6 +63,14 @@ export default function ClassSync() {
   useEffect(() => {
     if (!supabase) return;
     if (isTeacherPreview()) return;
+    if (shouldLeaveClassMode()) {
+      leaveClassMode();
+      const currentPath = pathRef.current || "/";
+      router.replace(currentPath === LIVE_FLOW_ROUTE ? "/" : currentPath);
+      return;
+    }
+    if (getStoredTeacherSessionId()) return;
+    if (hasClassModeExitMarker()) return;
     const sessionId = getStoredStudentSessionId();
     if (!sessionId) return;
 
@@ -68,6 +79,7 @@ export default function ClassSync() {
       const currentPath = pathRef.current || "";
       if (isStudentSwitchRoute(currentPath)) return;
       if (isTeacherRoute(currentPath)) return;
+      if (isNormalSiteEntry(currentPath)) return;
       const liveFlowQuery = await supabase
         .from("sessions")
         .select("broadcast,status,live_flow")
@@ -82,7 +94,7 @@ export default function ClassSync() {
       const error = liveFlowQuery.error && fallbackQuery?.error ? fallbackQuery.error : null;
       if (stop) return;
       if (error || !data) {
-        clearStoredSession();
+        leaveClassMode();
         return;
       }
       const d = data as {
@@ -91,7 +103,7 @@ export default function ClassSync() {
         live_flow: { tool?: { route?: string } | null } | null;
       };
       if (d.status === "closed") {
-        clearStoredSession();
+        leaveClassMode();
         return;
       }
       const target = d.broadcast === LIVE_FLOW_MODE
@@ -109,7 +121,7 @@ export default function ClassSync() {
     tick();
     const id = setInterval(tick, 3000);
     return () => { stop = true; clearInterval(id); };
-  }, [supabase, router]);
+  }, [supabase, router, pathname]);
 
   return null;
 }

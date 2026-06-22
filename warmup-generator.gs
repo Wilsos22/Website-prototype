@@ -41,8 +41,7 @@ function createWarmupFormFromPdfBank_(weekConfig, dayIndex, requestedTopic) {
   const dailyTopic = String(requestedTopic || "").trim() || defaultTopicForDay_(dayIndex);
   const questionSet = buildGrade5PdfQuestionSet_(dailyTopic, safeConfig, dayIndex);
 
-  const titleTopic = cleanTitlePart_(dailyTopic);
-  const title = `M6.W${safeConfig.number}.${dayInfo.dateShort}.${dayInfo.yy} ${dayInfo.dayName} ${titleTopic}`;
+  const title = `${dayInfo.dayName} ${dayInfo.dateShort}-${dayInfo.yy}`;
   const weekLabel = buildWeekLabel_(safeConfig.number);
   const weekFolderName = buildWeekFolderName_(safeConfig.number, safeConfig.startDate);
 
@@ -57,7 +56,8 @@ function createWarmupFormFromPdfBank_(weekConfig, dayIndex, requestedTopic) {
     questionSet.questions,
     weekFolder,
     responseSpreadsheet,
-    dayInfo.tabName
+    dayInfo.tabName,
+    weekLabel
   );
 
   const triggerStatus = callIfAvailable_(
@@ -117,13 +117,16 @@ function createWarmupFormFromPdfBank_(weekConfig, dayIndex, requestedTopic) {
 }
 
 // Form builder
-function buildForm_(title, topic, questions, weekFolder, responseSpreadsheet, responseTabName) {
+function buildForm_(title, topic, questions, weekFolder, responseSpreadsheet, responseTabName, weekLabel) {
   const copy = DriveApp.getFileById(TEMPLATE_FORM_ID).makeCopy(title, weekFolder);
   const form = FormApp.openById(copy.getId());
   const safeQuestions = normalizeWarmupQuestions_(questions);
 
+  // Week + topic live in the description so the title can stay clean ("Friday 05-15-26").
+  // The submission sync reads them back from here via parseWarmupDescription_.
+  const descPrefix = weekLabel ? `${weekLabel} • ` : "";
   form.setTitle(title)
-    .setDescription(`Topic: ${topic}\nSource bank: ${GRADE5_PDF_SOURCE}`)
+    .setDescription(`${descPrefix}Topic: ${topic}\nSource bank: ${GRADE5_PDF_SOURCE}`)
     .setIsQuiz(true)
     .setCollectEmail(true);
 
@@ -147,6 +150,9 @@ function buildForm_(title, topic, questions, weekFolder, responseSpreadsheet, re
 
       if (q.feedback) {
         item.setFeedbackForIncorrect(FormApp.createFeedback().setText(q.feedback).build());
+      }
+      if (q.correctFeedback) {
+        item.setFeedbackForCorrect(FormApp.createFeedback().setText(q.correctFeedback).build());
       }
     } else {
       const item = form.addTextItem();
@@ -513,6 +519,7 @@ function normalizeWarmupQuestions_(questions) {
         choices,
         correct: normalizeCorrectChoice_(choices, q.correct, i + 1),
         feedback: String(q.feedback || "").trim(),
+        correctFeedback: String(q.correctFeedback || "").trim(),
         points: 1
       };
     }

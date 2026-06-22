@@ -106,8 +106,8 @@ export default function NumberLineTool() {
     for (let i = problem[0]; i !== value; i += dir) {
       const x1 = valueToX(i), x2 = valueToX(i + dir);
       const mx = (x1 + x2) / 2;
-      hops.push(<path key={`h${i}`} d={`M ${x1} ${Y} Q ${mx} ${Y - 46} ${x2} ${Y}`} fill="none" stroke="#22c55e" strokeWidth={3} markerEnd="url(#arrow)" />);
-      hops.push(<text key={`ht${i}`} x={mx} y={Y - 50} fill="#86efac" fontSize="13" fontWeight="800" textAnchor="middle">{dir > 0 ? "+1" : "−1"}</text>);
+      hops.push(<path key={`h${i}`} d={`M ${x1} ${Y} Q ${mx} ${Y - 46} ${x2} ${Y}`} fill="none" stroke="var(--bdb-green)" strokeWidth={3} markerEnd="url(#arrow)" />);
+      hops.push(<text key={`ht${i}`} x={mx} y={Y - 50} fill="var(--bdb-green)" fontSize="13" fontWeight="800" textAnchor="middle">{dir > 0 ? "+1" : "−1"}</text>);
     }
   }
   // absolute-value skip line
@@ -116,32 +116,32 @@ export default function NumberLineTool() {
     const d = value > 0 ? -1 : 1;
     for (let i = value; i !== 0; i += d) {
       const x1 = valueToX(i), x2 = valueToX(i + d); const mx = (x1 + x2) / 2;
-      absArcs.push(<path key={`a${i}`} d={`M ${x1} ${Y} Q ${mx} ${Y - 38} ${x2} ${Y}`} fill="none" stroke="#f59e0b" strokeWidth={2.5} strokeDasharray="5 4" />);
+      absArcs.push(<path key={`a${i}`} d={`M ${x1} ${Y} Q ${mx} ${Y - 38} ${x2} ${Y}`} fill="none" stroke="var(--bdb-amber)" strokeWidth={2.5} strokeDasharray="5 4" />);
     }
   }
 
   return (
     <div className="nl-root">
       <style>{`
-        .nl-root { min-height:100vh; background:#0b0d14; color:#fff; font-family:Inter,ui-sans-serif,system-ui,sans-serif; display:grid; grid-template-rows:auto 1fr auto; }
-        .nl-top { display:flex; align-items:center; justify-content:space-between; padding:14px 24px; border-bottom:1px solid #1f2332; flex-wrap:wrap; gap:8px; }
-        .nl-mark { font-size:0.76rem; font-weight:900; letter-spacing:0.14em; text-transform:uppercase; color:#38bdf8; margin:0; }
-        .nl-btn { font-size:0.8rem; font-weight:800; color:#8a93ad; background:transparent; border:1px solid #1f2332; border-radius:7px; padding:8px 13px; cursor:pointer; text-decoration:none; }
-        .nl-btn:hover { border-color:#38bdf8; color:#fff; }
+        .nl-root { min-height:100vh; background:var(--bdb-ground); color:var(--bdb-ink); font-family:var(--bdb-font); display:grid; grid-template-rows:auto 1fr auto; }
+        .nl-top { display:flex; align-items:center; justify-content:space-between; padding:14px 24px; border-bottom:1px solid var(--bdb-line); flex-wrap:wrap; gap:8px; }
+        .nl-mark { font-size:0.76rem; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; color:var(--bdb-teal); margin:0; }
+        .nl-btn { font-size:0.8rem; font-weight:700; color:var(--bdb-ink-soft); background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:999px; padding:8px 13px; cursor:pointer; text-decoration:none; }
+        .nl-btn:hover { border-color:var(--bdb-teal); color:var(--bdb-ink); }
         .nl-main { padding:22px 18px; display:grid; gap:18px; justify-items:center; max-width:920px; margin:0 auto; width:100%; }
         .nl-controls { display:flex; gap:16px; flex-wrap:wrap; justify-content:center; align-items:center; }
-        .nl-seg { display:inline-flex; border:1px solid #2a3045; border-radius:9px; overflow:hidden; }
-        .nl-seg button { background:#121520; border:none; color:#8a93ad; font-weight:800; font-size:0.84rem; padding:8px 13px; cursor:pointer; }
-        .nl-seg button.on { background:#38bdf8; color:#04222e; }
-        .nl-toggle { font-size:0.82rem; font-weight:800; color:#fcd34d; background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.4); border-radius:8px; padding:8px 13px; cursor:pointer; }
-        .nl-toggle.on { background:#f59e0b; color:#3a2503; }
-        .nl-readout { font-size:clamp(1.6rem,5vw,2.8rem); font-weight:900; text-align:center; }
-        .nl-sub { font-size:1rem; font-weight:700; color:#9aa3bd; text-align:center; min-height:1.3em; }
+        .nl-seg { display:inline-flex; border:1px solid var(--bdb-line); border-radius:9px; overflow:hidden; }
+        .nl-seg button { background:var(--bdb-card); border:none; color:var(--bdb-ink-soft); font-weight:700; font-size:0.84rem; padding:8px 13px; cursor:pointer; }
+        .nl-seg button.on { background:var(--bdb-teal); color:#fff; }
+        .nl-toggle { font-size:0.82rem; font-weight:700; color:var(--bdb-brown); background:color-mix(in srgb, var(--bdb-amber) 14%, var(--bdb-card)); border:1px solid color-mix(in srgb, var(--bdb-amber) 45%, transparent); border-radius:8px; padding:8px 13px; cursor:pointer; }
+        .nl-toggle.on { background:var(--bdb-amber); color:var(--bdb-ink); }
+        .nl-readout { font-size:clamp(1.6rem,5vw,2.8rem); font-weight:800; text-align:center; }
+        .nl-sub { font-size:1rem; font-weight:600; color:var(--bdb-ink-soft); text-align:center; min-height:1.3em; }
         .nl-svg { width:100%; max-width:760px; touch-action:none; cursor:pointer; user-select:none; }
         .nl-presets { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
-        .nl-preset { font-size:0.85rem; font-weight:800; color:#c8cedd; background:#121520; border:1px solid #1f2332; border-radius:999px; padding:7px 13px; cursor:pointer; }
-        .nl-preset:hover { border-color:#38bdf8; }
-        .nl-foot { padding:12px 24px; border-top:1px solid #1f2332; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+        .nl-preset { font-size:0.85rem; font-weight:700; color:var(--bdb-ink-soft); background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:999px; padding:7px 13px; cursor:pointer; }
+        .nl-preset:hover { border-color:var(--bdb-teal); color:var(--bdb-ink); }
+        .nl-foot { padding:12px 24px; border-top:1px solid var(--bdb-line); display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
       `}</style>
 
       <header className="nl-top">
@@ -169,9 +169,9 @@ export default function NumberLineTool() {
 
         <div className="nl-readout">
           {problem
-            ? <>{problem[0]} {problem[1] >= 0 ? "+" : "−"} {Math.abs(problem[1])} = {solvedProblem ? <span style={{ color: "#22c55e" }}>{target} ✓</span> : <span style={{ color: "#9aa3bd" }}>?</span>}</>
+            ? <>{problem[0]} {problem[1] >= 0 ? "+" : "−"} {Math.abs(problem[1])} = {solvedProblem ? <span style={{ color: "var(--bdb-green)" }}>{target} ✓</span> : <span style={{ color: "var(--bdb-ink-soft)" }}>?</span>}</>
             : mode === "int"
-              ? <>{value}{absVal && value !== 0 ? <span style={{ color: "#f59e0b" }}>　|{value}| = {Math.abs(value)}</span> : ""}</>
+              ? <>{value}{absVal && value !== 0 ? <span style={{ color: "var(--bdb-amber)" }}>　|{value}| = {Math.abs(value)}</span> : ""}</>
               : repLabel(value)}
         </div>
         <div className="nl-sub">
@@ -184,33 +184,33 @@ export default function NumberLineTool() {
 
         <svg ref={svgRef} className="nl-svg" viewBox={`0 0 ${W} ${H}`} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp}>
           <defs>
-            <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#22c55e" /></marker>
+            <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--bdb-green)" /></marker>
           </defs>
           {/* main line */}
-          <line x1={L} y1={Y} x2={R} y2={Y} stroke="#5a6280" strokeWidth={3} />
-          <path d={`M ${L} ${Y} l 10 -6 l 0 12 Z`} fill="#5a6280" />
-          <path d={`M ${R} ${Y} l -10 -6 l 0 12 Z`} fill="#5a6280" />
+          <line x1={L} y1={Y} x2={R} y2={Y} stroke="var(--bdb-ink-soft)" strokeWidth={3} />
+          <path d={`M ${L} ${Y} l 10 -6 l 0 12 Z`} fill="var(--bdb-ink-soft)" />
+          <path d={`M ${R} ${Y} l -10 -6 l 0 12 Z`} fill="var(--bdb-ink-soft)" />
           {/* ticks */}
           {ticks.map((t, i) => {
             const x = valueToX(t.v);
             return (
               <g key={i}>
-                <line x1={x} y1={Y - (t.major ? 12 : 7)} x2={x} y2={Y + (t.major ? 12 : 7)} stroke={t.major ? "#8a93ad" : "#3a4460"} strokeWidth={t.major ? 2.5 : 1.5} />
-                {t.label !== undefined && <text x={x} y={Y + 34} fill="#9aa3bd" fontSize={mode === "int" ? "14" : "15"} fontWeight="700" textAnchor="middle">{t.label}</text>}
+                <line x1={x} y1={Y - (t.major ? 12 : 7)} x2={x} y2={Y + (t.major ? 12 : 7)} stroke={t.major ? "var(--bdb-ink-soft)" : "var(--bdb-line)"} strokeWidth={t.major ? 2.5 : 1.5} />
+                {t.label !== undefined && <text x={x} y={Y + 34} fill="var(--bdb-ink-soft)" fontSize={mode === "int" ? "14" : "15"} fontWeight="700" textAnchor="middle">{t.label}</text>}
               </g>
             );
           })}
           {/* zero emphasis (int) */}
-          {mode === "int" && <line x1={valueToX(0)} y1={Y - 16} x2={valueToX(0)} y2={Y + 16} stroke="#e8ecf5" strokeWidth={3} />}
+          {mode === "int" && <line x1={valueToX(0)} y1={Y - 16} x2={valueToX(0)} y2={Y + 16} stroke="var(--bdb-ink)" strokeWidth={3} />}
           {absArcs}
           {hops}
           {/* dot */}
-          <circle cx={valueToX(value)} cy={Y} r={dragging ? 16 : 13} fill="#38bdf8" stroke="#fff" strokeWidth={3} style={{ transition: dragging ? "none" : "cx 120ms ease" }} />
-          {problem && <circle cx={valueToX(problem[0])} cy={Y} r={7} fill="#a78bfa" />}
+          <circle cx={valueToX(value)} cy={Y} r={dragging ? 16 : 13} fill="var(--bdb-teal)" stroke="#fff" strokeWidth={3} style={{ transition: dragging ? "none" : "cx 120ms ease" }} />
+          {problem && <circle cx={valueToX(problem[0])} cy={Y} r={7} fill="var(--bdb-coral)" />}
         </svg>
 
         <div className="nl-presets">
-          <span style={{ color: "#5a6280", fontWeight: 800, fontSize: "0.8rem", alignSelf: "center" }}>Problems:</span>
+          <span style={{ color: "var(--bdb-ink-soft)", fontWeight: 800, fontSize: "0.8rem", alignSelf: "center" }}>Problems:</span>
           {PROBLEMS.map((p, i) => <button className="nl-preset" key={i} onClick={() => startProblem(p)}>{p[0]} {p[1] >= 0 ? "+" : "−"} {Math.abs(p[1])}</button>)}
         </div>
       </main>

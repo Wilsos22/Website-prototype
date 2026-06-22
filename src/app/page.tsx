@@ -51,10 +51,10 @@ export default function StudentHome() {
     <main className="st-page">
       <style>{`
         .st-page { min-height:100vh; background:var(--bdb-ground); font-family:var(--bdb-font); color:var(--bdb-ink); padding:clamp(18px,4vw,44px) 16px; box-sizing:border-box; display:flex; flex-direction:column; align-items:center; }
-        .st-banner { width:100%; max-width:560px; }
-        .st-banner img { width:100%; height:auto; border-radius:var(--bdb-r-lg); display:block; box-shadow:var(--bdb-shadow); }
-        .st-hello { margin:18px 0 4px; font-family:var(--bdb-font); font-size:clamp(1.5rem,4vw,2.2rem); font-weight:700; letter-spacing:-0.02em; color:var(--bdb-ink); text-align:center; }
-        .st-hello-sub { margin:0 0 clamp(20px,4vw,32px); color:var(--bdb-ink-soft); font-weight:500; font-size:clamp(0.95rem,2.4vw,1.1rem); text-align:center; }
+        .st-banner { width:100%; max-width:min(480px, 90vw); margin-top:clamp(2px,1.5vw,12px); }
+        .st-banner img { width:100%; height:auto; display:block; }
+        .st-hello { margin:2px 0 2px; font-family:var(--bdb-font); font-size:clamp(1.5rem,4vw,2.2rem); font-weight:700; letter-spacing:-0.02em; color:var(--bdb-ink); text-align:center; }
+        .st-hello-sub { margin:0 0 clamp(12px,2.5vw,18px); color:var(--bdb-ink-soft); font-weight:500; font-size:clamp(0.95rem,2.4vw,1.1rem); text-align:center; }
 
         .st-cards { width:100%; max-width:460px; display:grid; gap:14px; }
         .st-card { text-align:left; border:1px solid var(--bdb-line); background:var(--bdb-card); border-radius:var(--bdb-r); padding:18px 20px; cursor:pointer; transition:transform 130ms ease, box-shadow 130ms ease, border-color 130ms; display:flex; align-items:center; gap:16px; box-shadow:var(--bdb-shadow-sm); }
@@ -79,7 +79,7 @@ export default function StudentHome() {
 
       <div className="st-banner">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/big-dog-logo.png" alt="Big Dog Math — Abbie" />
+        <img src="/big-dog-logo.svg" alt="Big Dog Math" />
       </div>
       <h1 className="st-hello">{name ? `Hey ${name}!` : "Welcome!"}</h1>
       <p className="st-hello-sub">Tap “Today’s Lesson” to get started.</p>
@@ -130,6 +130,9 @@ export default function StudentHome() {
         )}
       </div>
 
+      <div className="st-foot">
+        <a className="st-teacher" href="/teacher">Teacher →</a>
+      </div>
     </main>
   );
 }

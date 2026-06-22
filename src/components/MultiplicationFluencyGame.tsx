@@ -34,10 +34,10 @@ const LEADERBOARD_KEY = "bdm-multiplication-mastery-leaderboard";
 const PLAYER_NAME_KEY = "bdm-multiplication-player-name";
 const INITIAL_PRACTICE_FACT: Fact = { a: 2, b: 2 };
 const MEDAL_TARGETS = [
-  { medal: "Platinum" as const, seconds: 180, color: "#64748b" },
-  { medal: "Gold" as const, seconds: 300, color: "#d89028" },
-  { medal: "Silver" as const, seconds: 420, color: "#94a3b8" },
-  { medal: "Bronze" as const, seconds: 600, color: "#b7793e" },
+  { medal: "Platinum" as const, seconds: 180, color: "var(--bdb-ink-soft)" },
+  { medal: "Gold" as const, seconds: 300, color: "var(--bdb-amber)" },
+  { medal: "Silver" as const, seconds: 420, color: "var(--bdb-ink-soft)" },
+  { medal: "Bronze" as const, seconds: 600, color: "var(--bdb-brown)" },
 ];
 
 function randomInt(max: number) {
@@ -95,7 +95,7 @@ function getMedal(seconds: number): Medal {
 }
 
 function medalColor(medal: Medal) {
-  return MEDAL_TARGETS.find((target) => target.medal === medal)?.color ?? "#168978";
+  return MEDAL_TARGETS.find((target) => target.medal === medal)?.color ?? "var(--bdb-teal)";
 }
 
 function medalMessage(medal: Medal) {
@@ -366,7 +366,7 @@ function PracticeGame() {
           {phase === "summary" ? (
             <SummaryCard
               title="Practice Complete"
-              accent="#168978"
+              accent="var(--bdb-teal)"
               stats={[
                 ["Correct", String(correct)],
                 ["Accuracy", `${accuracy}%`],
@@ -883,8 +883,8 @@ export default function MultiplicationFluencyGame() {
         .mf-root {
           min-height: 100vh;
           background: #fff;
-          color: #20242d;
-          font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+          color: var(--bdb-ink);
+          font-family: var(--bdb-font);
           display: grid;
           grid-template-rows: auto 1fr;
         }
@@ -894,7 +894,7 @@ export default function MultiplicationFluencyGame() {
           align-items: center;
           gap: 14px;
           padding: 14px clamp(14px, 3vw, 28px);
-          border-bottom: 1px solid #d8dee8;
+          border-bottom: 1px solid var(--bdb-line);
           background: #fff;
           backdrop-filter: blur(12px);
           position: sticky;
@@ -908,10 +908,10 @@ export default function MultiplicationFluencyGame() {
         .mf-save,
         .mf-choice,
         .mf-mode-tab {
-          border: 2px solid #d6deea;
+          border: 2px solid var(--bdb-line);
           border-radius: 4px;
           background: #fff;
-          color: #20242d;
+          color: var(--bdb-ink);
           cursor: pointer;
           font-weight: 900;
           letter-spacing: 0;
@@ -933,13 +933,13 @@ export default function MultiplicationFluencyGame() {
         .mf-save:hover,
         .mf-choice:hover,
         .mf-mode-tab:hover {
-          border-color: #168978;
+          border-color: var(--bdb-teal);
           transform: translateY(-1px);
         }
         .mf-title-wrap { min-width: 0; text-align: center; }
         .mf-kicker {
           margin: 0 0 2px;
-          color: #168978;
+          color: var(--bdb-teal);
           font-size: 0.72rem;
           font-weight: 950;
           letter-spacing: 0.14em;
@@ -947,7 +947,7 @@ export default function MultiplicationFluencyGame() {
         }
         .mf-title {
           margin: 0;
-          color: #1f2937;
+          color: var(--bdb-ink);
           font-size: clamp(1.25rem, 3.2vw, 2rem);
           font-weight: 950;
           line-height: 1.05;
@@ -971,8 +971,8 @@ export default function MultiplicationFluencyGame() {
           font-size: 1rem;
         }
         .mf-mode-tab.active {
-          background: #168978;
-          border-color: #168978;
+          background: var(--bdb-teal);
+          border-color: var(--bdb-teal);
           color: #fff;
         }
         .mf-main {
@@ -986,7 +986,7 @@ export default function MultiplicationFluencyGame() {
         }
         .mf-game,
         .mf-panel {
-          border: 2px solid #dde4ee;
+          border: 2px solid var(--bdb-line);
           border-radius: 4px;
           background: #fff;
 
@@ -1007,15 +1007,15 @@ export default function MultiplicationFluencyGame() {
         }
         .mf-track {
           height: 20px;
-          border: 2px solid #d6deea;
+          border: 2px solid var(--bdb-line);
           border-radius: 2px;
-          background: #eef3f8;
+          background: var(--bdb-ground);
           overflow: hidden;
         }
         .mf-track-fill {
           height: 100%;
           border-radius: 2px;
-          background: linear-gradient(90deg, #168978, #2f80ed, #f97316);
+          background: linear-gradient(90deg, var(--bdb-teal), var(--bdb-teal), var(--bdb-coral));
           transition: width 180ms ease;
         }
         .mf-time,
@@ -1029,11 +1029,11 @@ export default function MultiplicationFluencyGame() {
           font-weight: 950;
           font-variant-numeric: tabular-nums;
         }
-        .mf-time { background: #20242d; color: #fff; }
+        .mf-time { background: var(--bdb-ink); color: #fff; }
         .mf-count {
-          background: #fff7ed;
-          color: #9a3412;
-          border: 2px solid #fed7aa;
+          background: color-mix(in srgb, var(--bdb-amber) 14%, #fff);
+          color: var(--bdb-brown);
+          border: 2px solid color-mix(in srgb, var(--bdb-amber) 35%, #fff);
         }
         .mf-problem-zone {
           display: grid;
@@ -1057,21 +1057,21 @@ export default function MultiplicationFluencyGame() {
           width: clamp(10px, 2vw, 22px);
           aspect-ratio: 1;
           border-radius: 2px;
-          background: #168978;
+          background: var(--bdb-teal);
         }
-        .mf-dot:nth-child(3n) { background: #f97316; }
-        .mf-dot:nth-child(4n) { background: #2f80ed; }
-        .mf-dot:nth-child(5n) { background: #7c3aed; }
+        .mf-dot:nth-child(3n) { background: var(--bdb-coral); }
+        .mf-dot:nth-child(4n) { background: var(--bdb-teal); }
+        .mf-dot:nth-child(5n) { background: var(--bdb-brown); }
         .mf-card,
         .mf-summary {
           position: relative;
           z-index: 1;
           width: min(100%, 580px);
-          border: 3px solid #20242d;
+          border: 3px solid var(--bdb-ink);
           border-radius: 4px;
           background: #fff;
           padding: clamp(18px, 4vw, 34px);
-          box-shadow: 0 18px 0 #20242d;
+          box-shadow: 0 18px 0 var(--bdb-ink);
         }
         .mf-card {
           min-height: 338px;
@@ -1080,22 +1080,22 @@ export default function MultiplicationFluencyGame() {
           justify-items: center;
           gap: 20px;
         }
-        .mf-card.correct { border-color: #168978; box-shadow: 0 18px 0 #168978; }
-        .mf-card.miss { border-color: #c2410c; box-shadow: 0 18px 0 #c2410c; }
+        .mf-card.correct { border-color: var(--bdb-teal); box-shadow: 0 18px 0 var(--bdb-teal); }
+        .mf-card.miss { border-color: var(--bdb-brown); box-shadow: 0 18px 0 var(--bdb-brown); }
         .mf-equation {
           display: grid;
           grid-template-columns: minmax(74px, 1fr) auto minmax(74px, 1fr);
           align-items: center;
           gap: clamp(10px, 3vw, 28px);
           width: 100%;
-          color: #15171d;
+          color: var(--bdb-ink);
           font-size: clamp(4.3rem, 13vw, 8.8rem);
           line-height: 0.9;
           font-weight: 950;
           text-align: center;
           font-variant-numeric: tabular-nums;
         }
-        .mf-times { color: #f97316; font-size: 0.66em; }
+        .mf-times { color: var(--bdb-coral); font-size: 0.66em; }
         .mf-answer-form {
           display: grid;
           grid-template-columns: minmax(120px, 220px) minmax(92px, auto);
@@ -1105,15 +1105,15 @@ export default function MultiplicationFluencyGame() {
         .mf-answer,
         .mf-name {
           min-width: 0;
-          border: 2px solid #cbd5e1;
+          border: 2px solid var(--bdb-line);
           border-radius: 4px;
           background: #fff;
-          color: #111827;
+          color: var(--bdb-ink);
           font-weight: 900;
         }
         .mf-answer {
           height: 58px;
-          background: #f8fafc;
+          background: var(--bdb-ground);
           font-size: 1.7rem;
           text-align: center;
           font-variant-numeric: tabular-nums;
@@ -1125,27 +1125,27 @@ export default function MultiplicationFluencyGame() {
         }
         .mf-answer:focus,
         .mf-name:focus {
-          border-color: #168978;
+          border-color: var(--bdb-teal);
           outline: 4px solid rgba(22, 137, 120, 0.18);
         }
         .mf-submit {
           min-height: 58px;
           padding: 0 16px;
-          background: #168978;
-          border-color: #168978;
+          background: var(--bdb-teal);
+          border-color: var(--bdb-teal);
           color: #fff;
         }
         .mf-feedback {
           min-height: 38px;
           display: grid;
           place-items: center;
-          color: #64748b;
+          color: var(--bdb-ink-soft);
           font-size: 1.05rem;
           font-weight: 950;
           text-align: center;
         }
-        .mf-feedback.correct { color: #168978; }
-        .mf-feedback.miss { color: #c2410c; }
+        .mf-feedback.correct { color: var(--bdb-teal); }
+        .mf-feedback.miss { color: var(--bdb-brown); }
         .mf-summary {
           display: grid;
           gap: 18px;
@@ -1168,7 +1168,7 @@ export default function MultiplicationFluencyGame() {
         }
         .mf-summary-title {
           margin: 0;
-          color: #1f2937;
+          color: var(--bdb-ink);
           font-size: clamp(2rem, 7vw, 4rem);
           line-height: 1;
           font-weight: 950;
@@ -1176,7 +1176,7 @@ export default function MultiplicationFluencyGame() {
         }
         .mf-summary-note {
           margin: 0;
-          color: #475569;
+          color: var(--bdb-ink-soft);
           font-weight: 850;
           line-height: 1.4;
           text-align: center;
@@ -1190,9 +1190,9 @@ export default function MultiplicationFluencyGame() {
         .mf-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .mf-summary-stat,
         .mf-stat {
-          border: 2px solid #d6deea;
+          border: 2px solid var(--bdb-line);
           border-radius: 4px;
-          background: #f8fafc;
+          background: var(--bdb-ground);
           display: grid;
           align-content: center;
           justify-items: center;
@@ -1203,7 +1203,7 @@ export default function MultiplicationFluencyGame() {
         .mf-stat { min-height: 86px; }
         .mf-summary-number,
         .mf-stat-number {
-          color: #111827;
+          color: var(--bdb-ink);
           line-height: 1;
           font-weight: 950;
           font-variant-numeric: tabular-nums;
@@ -1214,7 +1214,7 @@ export default function MultiplicationFluencyGame() {
         .mf-summary-label,
         .mf-stat-label,
         .mf-panel-title {
-          color: #64748b;
+          color: var(--bdb-ink-soft);
           font-size: 0.74rem;
           font-weight: 950;
           letter-spacing: 0.1em;
@@ -1229,11 +1229,11 @@ export default function MultiplicationFluencyGame() {
         .mf-key {
           min-height: 52px;
           padding: 0 10px;
-          background: #f8fafc;
-          color: #1f2937;
+          background: var(--bdb-ground);
+          color: var(--bdb-ink);
           font-size: 1.1rem;
         }
-        .mf-key.enter { background: #2f80ed; border-color: #2f80ed; color: #fff; }
+        .mf-key.enter { background: var(--bdb-teal); border-color: var(--bdb-teal); color: #fff; }
         .mf-side {
           display: grid;
           gap: 14px;
@@ -1246,7 +1246,7 @@ export default function MultiplicationFluencyGame() {
         .mf-mode-pill {
           min-height: 42px;
           border-radius: 4px;
-          background: #20242d;
+          background: var(--bdb-ink);
           color: #fff;
           display: grid;
           place-items: center;
@@ -1275,11 +1275,11 @@ export default function MultiplicationFluencyGame() {
         .mf-choice.active,
         .mf-action.primary,
         .mf-save {
-          background: #f97316;
-          border-color: #f97316;
+          background: var(--bdb-coral);
+          border-color: var(--bdb-coral);
           color: #fff;
         }
-        .mf-choice.active { background: #168978; border-color: #168978; }
+        .mf-choice.active { background: var(--bdb-teal); border-color: var(--bdb-teal); }
         .mf-medal-grid,
         .mf-board {
           display: grid;
@@ -1288,7 +1288,7 @@ export default function MultiplicationFluencyGame() {
         .mf-target,
         .mf-board-row {
           min-height: 42px;
-          border: 2px solid #e2e8f0;
+          border: 2px solid var(--bdb-line);
           border-radius: 4px;
           background: #fff;
           display: grid;
@@ -1296,7 +1296,7 @@ export default function MultiplicationFluencyGame() {
           gap: 8px;
           padding: 8px 10px;
           font-weight: 900;
-          color: #334155;
+          color: var(--bdb-ink-soft);
         }
         .mf-target { grid-template-columns: 1fr auto auto; }
         .mf-target-dot {
@@ -1310,7 +1310,7 @@ export default function MultiplicationFluencyGame() {
           width: 26px;
           height: 26px;
           border-radius: 4px;
-          background: #20242d;
+          background: var(--bdb-ink);
           color: #fff;
           display: grid;
           place-items: center;
@@ -1324,7 +1324,7 @@ export default function MultiplicationFluencyGame() {
         }
         .mf-empty {
           margin: 0;
-          color: #64748b;
+          color: var(--bdb-ink-soft);
           font-weight: 800;
           text-align: center;
         }
@@ -1342,9 +1342,9 @@ export default function MultiplicationFluencyGame() {
           .mf-progress-row { grid-template-columns: 1fr auto; }
           .mf-count { grid-column: 1 / -1; }
           .mf-card,
-          .mf-summary { box-shadow: 0 12px 0 #20242d; }
-          .mf-card.correct { box-shadow: 0 12px 0 #168978; }
-          .mf-card.miss { box-shadow: 0 12px 0 #c2410c; }
+          .mf-summary { box-shadow: 0 12px 0 var(--bdb-ink); }
+          .mf-card.correct { box-shadow: 0 12px 0 var(--bdb-teal); }
+          .mf-card.miss { box-shadow: 0 12px 0 var(--bdb-brown); }
           .mf-answer-form,
           .mf-side,
           .mf-summary-grid,

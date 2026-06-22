@@ -108,36 +108,36 @@ export default function ProportionBuilder() {
   return (
     <div className="pb-root">
       <style>{`
-        .pb-root { min-height:100vh; background:#0b0d14; color:#fff; font-family:Inter,ui-sans-serif,system-ui,sans-serif; display:grid; grid-template-rows:auto 1fr auto; }
-        .pb-top { display:flex; align-items:center; justify-content:space-between; padding:14px 24px; border-bottom:1px solid #1f2332; flex-wrap:wrap; gap:8px; }
-        .pb-mark { font-size:0.76rem; font-weight:900; letter-spacing:0.14em; text-transform:uppercase; color:#ec4899; margin:0; }
-        .pb-btn { font-size:0.8rem; font-weight:800; color:#8a93ad; background:transparent; border:1px solid #1f2332; border-radius:7px; padding:8px 13px; cursor:pointer; text-decoration:none; }
-        .pb-btn:hover { border-color:#ec4899; color:#fff; }
+        .pb-root { min-height:100vh; background:var(--bdb-ground); color:var(--bdb-ink); font-family:var(--bdb-font); display:grid; grid-template-rows:auto 1fr auto; }
+        .pb-top { display:flex; align-items:center; justify-content:space-between; padding:14px 24px; border-bottom:1px solid var(--bdb-line); flex-wrap:wrap; gap:8px; }
+        .pb-mark { font-size:0.76rem; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; color:var(--bdb-coral); margin:0; }
+        .pb-btn { font-size:0.8rem; font-weight:700; color:var(--bdb-ink-soft); background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:999px; padding:8px 13px; cursor:pointer; text-decoration:none; }
+        .pb-btn:hover { border-color:var(--bdb-coral); color:var(--bdb-ink); }
 
         .pb-main { padding:28px 24px; display:grid; gap:26px; align-content:start; justify-items:center; max-width:820px; margin:0 auto; width:100%; }
 
         .pb-prop { display:grid; grid-template-columns:auto auto auto; grid-template-rows:auto auto auto; align-items:center; gap:6px 20px; }
-        .pb-cell { font-size:clamp(2rem,7vw,3.6rem); font-weight:900; text-align:center; min-width:74px; }
-        .pb-num { color:#f9a8d4; } .pb-den { color:#93c5fd; }
-        .pb-bar-l, .pb-bar-r { border-top:4px solid #5a6280; align-self:center; height:0; }
-        .pb-eq { font-size:clamp(1.8rem,5vw,2.8rem); font-weight:900; color:#8a93ad; text-align:center; }
-        .pb-blank { display:inline-grid; place-items:center; min-width:74px; height:64px; border:3px dashed #ec4899; border-radius:12px; color:#ec4899; }
-        .pb-blank input { width:80px; background:#0b0d14; border:none; color:#fff; font-size:2rem; font-weight:900; text-align:center; }
+        .pb-cell { font-size:clamp(2rem,7vw,3.6rem); font-weight:800; text-align:center; min-width:74px; }
+        .pb-num { color:var(--bdb-coral); } .pb-den { color:var(--bdb-teal); }
+        .pb-bar-l, .pb-bar-r { border-top:4px solid var(--bdb-ink-soft); align-self:center; height:0; }
+        .pb-eq { font-size:clamp(1.8rem,5vw,2.8rem); font-weight:800; color:var(--bdb-ink-soft); text-align:center; }
+        .pb-blank { display:inline-grid; place-items:center; min-width:74px; height:64px; border:3px dashed var(--bdb-coral); border-radius:12px; color:var(--bdb-coral); }
+        .pb-blank input { width:80px; background:var(--bdb-card); border:none; color:var(--bdb-ink); font-size:2rem; font-weight:800; text-align:center; }
 
-        .pb-scale { font-size:1.2rem; font-weight:900; color:#67e8f9; background:rgba(6,182,212,0.1); border:1px solid rgba(6,182,212,0.35); border-radius:9px; padding:5px 10px; white-space:nowrap; display:flex; align-items:center; gap:2px; justify-content:center; }
-        .pb-scale.done { color:#86efac; background:rgba(34,197,94,0.12); border-color:rgba(34,197,94,0.4); }
-        .pb-scale.live { border-color:#ec4899; color:#f9a8d4; }
-        .pb-kin { width:54px; background:#0b0d14; border:none; color:#fff; font-size:1.2rem; font-weight:900; text-align:center; }
+        .pb-scale { font-size:1.2rem; font-weight:800; color:var(--bdb-teal); background:color-mix(in srgb, var(--bdb-teal) 12%, var(--bdb-card)); border:1px solid color-mix(in srgb, var(--bdb-teal) 38%, transparent); border-radius:9px; padding:5px 10px; white-space:nowrap; display:flex; align-items:center; gap:2px; justify-content:center; }
+        .pb-scale.done { color:var(--bdb-green); background:color-mix(in srgb, var(--bdb-green) 14%, var(--bdb-card)); border-color:color-mix(in srgb, var(--bdb-green) 40%, transparent); }
+        .pb-scale.live { border-color:var(--bdb-coral); color:var(--bdb-coral); }
+        .pb-kin { width:54px; background:var(--bdb-card); border:none; color:var(--bdb-ink); font-size:1.2rem; font-weight:800; text-align:center; }
 
-        .pb-q { font-size:clamp(1.05rem,2.6vw,1.4rem); font-weight:800; text-align:center; color:#e8ecf5; min-height:1.4em; }
-        .pb-go { font-size:1.05rem; font-weight:900; color:#fff; background:#ec4899; border:none; border-radius:12px; padding:12px 26px; cursor:pointer; }
-        .pb-hint { background:rgba(236,72,153,0.12); border:1px solid rgba(236,72,153,0.4); color:#f9a8d4; border-radius:10px; padding:11px 16px; font-weight:700; font-size:0.92rem; max-width:520px; text-align:center; }
-        .pb-hintbtn { font-size:0.82rem; font-weight:800; color:#f9a8d4; background:transparent; border:1px solid rgba(236,72,153,0.4); border-radius:8px; padding:8px 14px; cursor:pointer; }
-        .pb-solved { font-size:clamp(1.1rem,2.8vw,1.5rem); font-weight:900; color:#22c55e; text-align:center; }
+        .pb-q { font-size:clamp(1.05rem,2.6vw,1.4rem); font-weight:700; text-align:center; color:var(--bdb-ink); min-height:1.4em; }
+        .pb-go { font-size:1.05rem; font-weight:800; color:#fff; background:var(--bdb-coral); border:none; border-radius:12px; padding:12px 26px; cursor:pointer; }
+        .pb-hint { background:color-mix(in srgb, var(--bdb-coral) 12%, var(--bdb-card)); border:1px solid color-mix(in srgb, var(--bdb-coral) 40%, transparent); color:var(--bdb-brown); border-radius:10px; padding:11px 16px; font-weight:600; font-size:0.92rem; max-width:520px; text-align:center; }
+        .pb-hintbtn { font-size:0.82rem; font-weight:700; color:var(--bdb-coral); background:transparent; border:1px solid var(--bdb-line); border-radius:999px; padding:8px 14px; cursor:pointer; }
+        .pb-solved { font-size:clamp(1.1rem,2.8vw,1.5rem); font-weight:800; color:var(--bdb-green); text-align:center; }
         .pb-presets { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
-        .pb-preset { font-size:0.85rem; font-weight:800; color:#c8cedd; background:#121520; border:1px solid #1f2332; border-radius:999px; padding:7px 13px; cursor:pointer; }
-        .pb-preset:hover { border-color:#ec4899; }
-        .pb-foot { padding:12px 24px; border-top:1px solid #1f2332; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+        .pb-preset { font-size:0.85rem; font-weight:700; color:var(--bdb-ink-soft); background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:999px; padding:7px 13px; cursor:pointer; }
+        .pb-preset:hover { border-color:var(--bdb-coral); color:var(--bdb-ink); }
+        .pb-foot { padding:12px 24px; border-top:1px solid var(--bdb-line); display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
       `}</style>
 
       <header className="pb-top">
@@ -183,7 +183,7 @@ export default function ProportionBuilder() {
             </p>
             <button className="pb-go" onClick={phase === "scale" ? checkScale : checkVal}>Check →</button>
             {hint ? <div className="pb-hint">💡 {hint}</div> : <button className="pb-hintbtn" onClick={() => setHint(phase === "scale" ? "Find the side where you know BOTH numbers, and ask: times what?" : `Use the same scale factor on the other part.`)}>Need a hint?</button>}
-            {feedback && !hint && <p className="pb-q" style={{ minHeight: 0, color: "#9aa3bd", fontSize: "0.95rem" }}>{feedback}</p>}
+            {feedback && !hint && <p className="pb-q" style={{ minHeight: 0, color: "var(--bdb-ink-soft)", fontSize: "0.95rem" }}>{feedback}</p>}
           </>
         )}
 
