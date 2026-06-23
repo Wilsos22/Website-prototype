@@ -67,6 +67,8 @@ export interface DiscussionPhaseSnapshot {
     url: string;
     type: "image" | "video" | "embed";
   } | null;
+  sentenceStems?: string[];
+  keyVocabulary?: string[];
 }
 
 export interface LiveClassFlowSnapshot {

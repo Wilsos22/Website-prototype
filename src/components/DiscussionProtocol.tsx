@@ -22,6 +22,11 @@ interface Phase {
   timed: boolean;
 }
 
+type StudentSupports = {
+  sentenceStems: string;
+  keyVocabulary: string;
+};
+
 const PHASES: Phase[] = [
   { id: "think", label: "Thinking Time", sub: "Silent — think on your own", icon: "🧠", defaultSecs: 60, timed: true },
   { id: "marker", label: "Marker to the Board", sub: "Show your thinking", icon: "✍️", defaultSecs: 60, timed: true },
@@ -34,6 +39,28 @@ const LS_DUR = "bdm-disc-durations-v1";
 const LS_CLASSES = "bdm-spinner-classes-v1";
 const LS_CURRENT = "bdm-spinner-current-v1";
 const LS_STUDENT_MEDIA = "bdm-disc-student-media-v1";
+const LS_STUDENT_SUPPORTS = "bdm-disc-student-supports-v1";
+
+const DEFAULT_STUDENT_SUPPORTS: Record<string, StudentSupports> = {
+  table: {
+    sentenceStems: [
+      "I agree with ___ because...",
+      "I disagree because...",
+      "Can you explain how you got...?",
+      "My strategy was...",
+      "I want to add on by...",
+      "I changed my thinking because...",
+    ].join("\n"),
+    keyVocabulary: [
+      "strategy",
+      "evidence",
+      "justify",
+      "represent",
+      "equivalent",
+      "revise",
+    ].join("\n"),
+  },
+};
 
 // Shared IndexedDB (same store the control panel uses; keys namespaced "disc:")
 function idbOpen(): Promise<IDBDatabase> {
@@ -101,6 +128,18 @@ function normalizeStudentMediaUrl(rawUrl: string): string {
   }
   return trimmed;
 }
+function parseSentenceStems(rawText: string): string[] {
+  return rawText
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+function parseVocabulary(rawText: string): string[] {
+  return rawText
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
 
 export default function DiscussionProtocol({
   onClose,
@@ -117,6 +156,7 @@ export default function DiscussionProtocol({
   const [setup, setSetup] = useState(false);
   const [media, setMedia] = useState<Record<string, { url: string; type: string }>>({});
   const [studentMediaUrls, setStudentMediaUrls] = useState<Record<string, string>>({});
+  const [studentSupports, setStudentSupports] = useState<Record<string, StudentSupports>>(DEFAULT_STUDENT_SUPPORTS);
 
   // share picker
   const [shareName, setShareName] = useState<string>("—");
@@ -133,6 +173,7 @@ export default function DiscussionProtocol({
   const phase = PHASES[idx];
   const phaseSecs = (id: string) => durations[id] ?? PHASES.find((p) => p.id === id)?.defaultSecs ?? 60;
   const phaseTotalSeconds = durations[phase.id] ?? phase.defaultSecs;
+  const currentSupport = studentSupports[phase.id] ?? { sentenceStems: "", keyVocabulary: "" };
 
   useEffect(() => {
     const studentMediaUrl = normalizeStudentMediaUrl(studentMediaUrls[phase.id] || "");
@@ -146,8 +187,10 @@ export default function DiscussionProtocol({
       running,
       finished,
       media: studentMediaUrl ? { url: studentMediaUrl, type: inferStudentMediaType(studentMediaUrl) } : null,
+      sentenceStems: parseSentenceStems(currentSupport.sentenceStems),
+      keyVocabulary: parseVocabulary(currentSupport.keyVocabulary),
     });
-  }, [finished, onFlowChange, phase.id, phase.label, phase.sub, phase.timed, phaseTotalSeconds, running, secondsLeft, studentMediaUrls]);
+  }, [currentSupport.keyVocabulary, currentSupport.sentenceStems, finished, onFlowChange, phase.id, phase.label, phase.sub, phase.timed, phaseTotalSeconds, running, secondsLeft, studentMediaUrls]);
 
   // load durations + media + share class
   useEffect(() => {
@@ -156,6 +199,13 @@ export default function DiscussionProtocol({
       if (d) setDurations(JSON.parse(d));
       const studentMedia = localStorage.getItem(LS_STUDENT_MEDIA);
       if (studentMedia) setStudentMediaUrls(JSON.parse(studentMedia) as Record<string, string>);
+      const supports = localStorage.getItem(LS_STUDENT_SUPPORTS);
+      if (supports) {
+        setStudentSupports({
+          ...DEFAULT_STUDENT_SUPPORTS,
+          ...(JSON.parse(supports) as Record<string, StudentSupports>),
+        });
+      }
       setShareClass(localStorage.getItem(LS_CURRENT) || "");
     } catch { /* ignore */ }
     (async () => {
@@ -244,6 +294,17 @@ export default function DiscussionProtocol({
     setStudentMediaUrls(next);
     try { localStorage.setItem(LS_STUDENT_MEDIA, JSON.stringify(next)); } catch { /* ignore */ }
   }
+  function saveStudentSupport(id: string, field: keyof StudentSupports, value: string) {
+    const next = {
+      ...studentSupports,
+      [id]: {
+        ...(studentSupports[id] ?? { sentenceStems: "", keyVocabulary: "" }),
+        [field]: value,
+      },
+    };
+    setStudentSupports(next);
+    try { localStorage.setItem(LS_STUDENT_SUPPORTS, JSON.stringify(next)); } catch { /* ignore */ }
+  }
   async function uploadMedia(key: string, file: File | undefined, isMusic = false) {
     if (!file) return;
     await idbPut(key, file);
@@ -323,10 +384,15 @@ export default function DiscussionProtocol({
         .dp-num { width:64px; background:#0b0d14; border:1px solid #2a3045; color:#fff; border-radius:6px; padding:5px 7px; font-weight:800; text-align:center; }
         .dp-url { flex:1 1 280px; min-width:min(100%,280px); background:#0b0d14; border:1px solid #2a3045; color:#fff; border-radius:8px; padding:8px 10px; font:inherit; font-size:0.86rem; font-weight:750; }
         .dp-url:focus { outline:none; border-color:${accent}; }
+        .dp-supports { width:calc(100% - 212px); display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-left:212px; }
+        .dp-support-field { display:grid; gap:6px; color:#c8cedd; font-size:0.76rem; font-weight:900; letter-spacing:0.06em; text-transform:uppercase; }
+        .dp-support-text { min-height:112px; resize:vertical; background:#0b0d14; border:1px solid #2a3045; color:#fff; border-radius:8px; padding:10px 12px; font:inherit; font-size:0.86rem; font-weight:750; line-height:1.35; text-transform:none; letter-spacing:0; }
+        .dp-support-text:focus { outline:none; border-color:${accent}; }
         .dp-up { font-size:0.78rem; font-weight:800; color:#67e8f9; background:rgba(6,182,212,0.1); border:1px solid rgba(6,182,212,0.3); border-radius:8px; padding:6px 11px; cursor:pointer; }
         .dp-clr { font-size:0.72rem; font-weight:800; color:#fca5a5; background:transparent; border:1px solid rgba(239,68,68,0.3); border-radius:6px; padding:5px 8px; cursor:pointer; }
         .dp-hint { color:#5a6280; font-size:0.8rem; font-weight:700; }
         .dp-sel { background:#121520; border:1px solid #2a3045; color:#fff; border-radius:8px; padding:8px 12px; font-weight:800; }
+        @media (max-width:760px) { .dp-supports { width:100%; grid-template-columns:1fr; margin-left:0; } }
       `}</style>
 
       <header className="dp-top">
@@ -392,6 +458,7 @@ export default function DiscussionProtocol({
           <h3>Set up the discussion — durations, teacher media, and student screen media</h3>
           {PHASES.map((p) => {
             const has = !!media[p.id];
+            const support = studentSupports[p.id] ?? { sentenceStems: "", keyVocabulary: "" };
             return (
               <div className="dp-row" key={p.id}>
                 <span className="dp-rlabel">{p.icon} {p.label}</span>
@@ -419,6 +486,28 @@ export default function DiscussionProtocol({
                   onChange={(e) => saveStudentMediaUrl(p.id, e.target.value)}
                   placeholder="Student screen media URL: GIF, image, MP4/WebM, YouTube, Vimeo"
                 />
+                {p.id === "table" && (
+                  <div className="dp-supports">
+                    <label className="dp-support-field">
+                      Sentence stems
+                      <textarea
+                        className="dp-support-text"
+                        value={support.sentenceStems}
+                        onChange={(e) => saveStudentSupport(p.id, "sentenceStems", e.target.value)}
+                        placeholder="One stem per line"
+                      />
+                    </label>
+                    <label className="dp-support-field">
+                      Key vocabulary
+                      <textarea
+                        className="dp-support-text"
+                        value={support.keyVocabulary}
+                        onChange={(e) => saveStudentSupport(p.id, "keyVocabulary", e.target.value)}
+                        placeholder="One word per line, or separate with commas"
+                      />
+                    </label>
+                  </div>
+                )}
               </div>
             );
           })}
