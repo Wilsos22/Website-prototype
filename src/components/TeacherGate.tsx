@@ -45,8 +45,7 @@ export default function TeacherGate({ children }: { children: ReactNode }) {
           border-radius:var(--bdb-r-lg); padding:clamp(22px,5vw,32px); display:grid; gap:14px;
           box-shadow:var(--bdb-shadow); text-align:center;
         }
-        .tg-mark { width:46px; height:46px; margin:0 auto; border-radius:13px; background:var(--bdb-ink);
-          color:var(--bdb-amber); display:grid; place-items:center; font-weight:800; font-size:1.3rem; }
+        .tg-mark { width:56px; height:56px; margin:0 auto; display:block; object-fit:contain; }
         .tg-title { margin:0; font-size:1.3rem; font-weight:800; letter-spacing:-0.01em; }
         .tg-sub { margin:0; color:var(--bdb-ink-soft); font-size:0.92rem; font-weight:500; }
         .tg-form { display:flex; gap:8px; margin-top:4px; }
@@ -66,7 +65,7 @@ export default function TeacherGate({ children }: { children: ReactNode }) {
         .tg-back:hover { color:var(--bdb-ink-soft); }
       `}</style>
       <form className="tg-card" onSubmit={submit}>
-        <span className="tg-mark">b</span>
+        <img className="tg-mark" src="/big-dog-mark.png" alt="" />
         <h1 className="tg-title">Teacher access</h1>
         <p className="tg-sub">Enter the teacher PIN to open the control area.</p>
         <div className="tg-form">

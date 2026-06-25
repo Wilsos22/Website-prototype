@@ -85,8 +85,7 @@ export default function TeacherHome() {
           padding:14px clamp(16px,3vw,32px); background:color-mix(in srgb, var(--bdb-ground) 88%, transparent);
           backdrop-filter:saturate(1.1) blur(8px); border-bottom:1px solid var(--bdb-line); }
         .bd-brand { display:flex; align-items:center; gap:10px; font-weight:700; font-size:1.06rem; letter-spacing:-0.01em; flex:none; }
-        .bd-mark { width:30px; height:30px; border-radius:9px; background:var(--bdb-ink); color:var(--bdb-amber);
-          display:grid; place-items:center; font-weight:800; font-size:0.95rem; }
+        .bd-mark { width:32px; height:32px; display:block; object-fit:contain; flex:none; }
         .bd-search { flex:1; max-width:560px; display:flex; align-items:center; gap:9px; background:var(--bdb-card);
           border:1px solid var(--bdb-line); border-radius:var(--bdb-r-pill); padding:9px 16px; box-shadow:var(--bdb-shadow-sm); }
         .bd-search input { border:none; outline:none; background:transparent; flex:1; font:inherit; color:var(--bdb-ink); }
@@ -154,7 +153,7 @@ export default function TeacherHome() {
 
       <header className="bd-top">
         <div className="bd-brand">
-          <span className="bd-mark">b</span>
+          <img className="bd-mark" src="/big-dog-mark.png" alt="" />
           <span>bigdogmath</span>
         </div>
         <div className="bd-search">

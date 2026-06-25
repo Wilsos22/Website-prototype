@@ -953,9 +953,8 @@ export default function MultiplicationFluencyGame() {
           line-height: 1.05;
         }
         .mf-logo {
-          width: clamp(56px, 10vw, 94px);
+          width: clamp(48px, 8vw, 72px);
           height: auto;
-          border-radius: 4px;
           display: block;
 
         }
@@ -1363,7 +1362,7 @@ export default function MultiplicationFluencyGame() {
           <h1 className="mf-title">Multiplication Fluency</h1>
         </div>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img className="mf-logo" src="/big-dog-logo.png" alt="Big Dog Math" />
+        <img className="mf-logo" src="/big-dog-mark.png" alt="Big Dog Math" />
       </header>
 
       <div className="mf-mode-tabs" aria-label="Game mode">

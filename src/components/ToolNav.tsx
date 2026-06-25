@@ -25,8 +25,7 @@ export default function ToolNav({ title }: { title?: string }) {
           font-family:var(--bdb-font);
         }
         .tn-brand { display:inline-flex; align-items:center; gap:8px; text-decoration:none; flex:none; }
-        .tn-logo { width:26px; height:26px; border-radius:8px; background:var(--bdb-ink); color:var(--bdb-amber);
-          display:grid; place-items:center; font-weight:800; font-size:0.85rem; }
+        .tn-logo { width:28px; height:28px; display:block; object-fit:contain; flex:none; }
         .tn-title { font-weight:700; font-size:0.92rem; color:var(--bdb-ink); letter-spacing:-0.01em; }
         .tn-sep { width:1px; height:18px; background:var(--bdb-line); flex:none; }
         .tn-links { display:flex; gap:4px; flex-wrap:wrap; }
@@ -39,7 +38,7 @@ export default function ToolNav({ title }: { title?: string }) {
         .tn-link.on { background:var(--bdb-ink); color:#fff; }
       `}</style>
       <a className="tn-brand" href="/teacher">
-        <span className="tn-logo">b</span>
+        <img className="tn-logo" src="/big-dog-mark.png" alt="" />
         {title && <span className="tn-title">{title}</span>}
       </a>
       <div className="tn-sep" />

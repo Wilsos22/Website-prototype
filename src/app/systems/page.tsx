@@ -86,12 +86,9 @@ export default function SystemsCaseStudyPage() {
         .sys-mark {
           width: 32px;
           height: 32px;
-          border-radius: 9px;
-          display: grid;
-          place-items: center;
-          background: var(--bdb-ink);
-          color: var(--bdb-amber);
-          font-weight: 900;
+          display: block;
+          object-fit: contain;
+          flex: none;
         }
         .sys-nav {
           display: flex;
@@ -188,9 +185,8 @@ export default function SystemsCaseStudyPage() {
         .sys-logo {
           width: 100%;
           max-width: 360px;
-          border-radius: var(--bdb-r);
           justify-self: center;
-          box-shadow: var(--bdb-shadow);
+          filter: drop-shadow(0 18px 24px rgba(63, 49, 41, 0.16));
         }
         .sys-metrics {
           display: grid;
@@ -424,7 +420,7 @@ export default function SystemsCaseStudyPage() {
       <div className="sys-shell">
         <header className="sys-top">
           <Link className="sys-brand" href="/">
-            <span className="sys-mark">b</span>
+            <img className="sys-mark" src="/big-dog-mark.png" alt="" />
             <span>bigdogmath</span>
           </Link>
           <nav className="sys-nav" aria-label="Case study routes">

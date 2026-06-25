@@ -29,8 +29,7 @@ export default function ExplorePage() {
         .ex-top { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
           padding:14px clamp(16px,4vw,28px); border-bottom:1px solid var(--bdb-line); }
         .ex-brand { display:inline-flex; align-items:center; gap:9px; text-decoration:none; }
-        .ex-logo { width:28px; height:28px; border-radius:8px; background:var(--bdb-ink); color:var(--bdb-amber);
-          display:grid; place-items:center; font-weight:800; font-size:0.9rem; }
+        .ex-logo { width:30px; height:30px; display:block; object-fit:contain; flex:none; }
         .ex-brand-name { font-weight:800; color:var(--bdb-ink); letter-spacing:-0.01em; }
         .ex-back { color:var(--bdb-ink-soft); font-weight:600; font-size:0.9rem; text-decoration:none;
           border:1px solid var(--bdb-line); border-radius:999px; padding:8px 14px; background:var(--bdb-card); }
@@ -64,7 +63,7 @@ export default function ExplorePage() {
 
       <header className="ex-top">
         <a className="ex-brand" href="/explore">
-          <span className="ex-logo">b</span>
+          <img className="ex-logo" src="/big-dog-mark.png" alt="" />
           <span className="ex-brand-name">bigdogmath</span>
         </a>
         <a className="ex-back" href="/">← Join a class</a>

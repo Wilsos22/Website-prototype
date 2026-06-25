@@ -23,6 +23,13 @@ import {
   type LiveToolConfig,
   type LiveToolRoute,
 } from "@/lib/liveClassFlow";
+import {
+  listLessonPresets,
+  getLessonPreset,
+  saveLessonPreset,
+  deleteLessonPreset,
+  type LessonPreset,
+} from "@/lib/lessonPresets";
 
 interface ClassState {
   id: string;
@@ -304,6 +311,12 @@ export default function ControlPage() {
   const [editing, setEditing] = useState(false);
   const [showSounds, setShowSounds] = useState(false);
   const [showSpinner, setShowSpinner] = useState(false);
+  const [showLessons, setShowLessons] = useState(false);
+  const [presets, setPresets] = useState<LessonPreset[]>([]);
+  const [presetSearch, setPresetSearch] = useState("");
+  const [saveCode, setSaveCode] = useState("");
+  const [saveTitle, setSaveTitle] = useState("");
+  const [lessonMsg, setLessonMsg] = useState<string | null>(null);
   const [showDiscussion, setShowDiscussion] = useState(false);
   const [autoAdvance, setAutoAdvance] = useState(true);
   const [soundUrls, setSoundUrls] = useState<Record<string, string>>({});
@@ -515,6 +528,10 @@ export default function ControlPage() {
   }, [finished, autoAdvance, bank, controlPoll, currentIndex, lineup, startMusicFor, stopMusic]);
 
   const activeItem = currentIndex >= 0 ? lineup[currentIndex] : undefined;
+  const filteredPresets = presets.filter((p) => {
+    const t = presetSearch.trim().toLowerCase();
+    return !t || p.code.toLowerCase().includes(t) || p.title.toLowerCase().includes(t);
+  });
   const activeState = activeItem ? bank.find((s) => s.id === activeItem.stateId) : undefined;
   const totalMin = lineup.reduce((sum, it) => {
     const st = bank.find((s) => s.id === it.stateId);
@@ -791,6 +808,62 @@ export default function ControlPage() {
     stopMusic();
   }
 
+  // ── Lesson presets (saved sequences) ────────────────────────────────────
+  const refreshPresets = useCallback(async () => {
+    setPresets(await listLessonPresets());
+  }, []);
+
+  function loadPreset(p: LessonPreset) {
+    const newBank = DEFAULT_STATES.map((d) => ({
+      ...d,
+      minutes: typeof p.minutes[d.id] === "number" ? p.minutes[d.id] : d.minutes,
+    }));
+    const newLineup = p.lineup.map((s) => ({ uid: uid(), stateId: s.stateId }));
+    persistBank(newBank);
+    persistLineup(newLineup);
+    const first = newLineup[0] ? newBank.find((s) => s.id === newLineup[0].stateId) : undefined;
+    setCurrentIndex(newLineup.length ? 0 : -1);
+    if (first) { secRef.current = first.minutes * 60; setSecondsLeft(first.minutes * 60); }
+    setRunning(false);
+    setFinished(false);
+    stopMusic();
+    setShowLessons(false);
+    setLessonMsg(null);
+  }
+
+  async function saveCurrentLesson() {
+    const code = saveCode.trim();
+    if (!code) { setLessonMsg("Add a code first (e.g. M1.T1.L1)."); return; }
+    if (lineup.length === 0) { setLessonMsg("Build a lineup before saving."); return; }
+    const minutes: Record<string, number> = {};
+    bank.forEach((b) => { minutes[b.id] = b.minutes; });
+    const res = await saveLessonPreset({
+      code,
+      title: saveTitle.trim(),
+      lineup: lineup.map((l) => ({ stateId: l.stateId })),
+      minutes,
+    });
+    if (!res.ok) { setLessonMsg(res.error || "Couldn't save."); return; }
+    setLessonMsg("Saved ✓");
+    setSaveCode("");
+    setSaveTitle("");
+    refreshPresets();
+  }
+
+  async function removePreset(id: string) {
+    await deleteLessonPreset(id);
+    refreshPresets();
+  }
+
+  useEffect(() => {
+    refreshPresets();
+    try {
+      const lessonId = new URLSearchParams(window.location.search).get("lesson");
+      if (lessonId) getLessonPreset(lessonId).then((p) => { if (p) loadPreset(p); });
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── Timer controls ──────────────────────────────────────────────────────
   function toggleRun() {
     if (!activeState) return;
@@ -1014,6 +1087,23 @@ export default function ControlPage() {
         .cx-sset { font-size:0.78rem; font-weight:800; color:#86efac; }
         .cx-sclear { font-size:0.74rem; font-weight:800; color:#fca5a5; background:transparent; border:1px solid rgba(239,68,68,0.3); border-radius:6px; padding:5px 9px; cursor:pointer; }
         .cx-hint { color:#7c7363; font-size:0.82rem; font-weight:600; }
+
+        .cx-lessons-head { display:flex; align-items:center; justify-content:space-between; padding:16px 24px; border-bottom:1px solid #2a241a; position:sticky; top:0; background:#14110c; z-index:2; }
+        .cx-lessons-title { margin:0; font-size:1rem; font-weight:900; color:#fff; }
+        .cx-lessons-body { max-width:760px; margin:0 auto; padding:20px; display:grid; gap:16px; }
+        .cx-lessons-save { border:1px solid #2a241a; border-radius:12px; background:#18140d; padding:14px; display:grid; gap:10px; }
+        .cx-lessons-sub { margin:0; font-size:0.74rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; color:#a39a88; }
+        .cx-lessons-saverow { display:flex; gap:8px; flex-wrap:wrap; }
+        .cx-lessons-in { flex:1; min-width:150px; background:#14110c; border:1px solid #34301f; color:#fff; border-radius:8px; padding:10px 12px; font:inherit; font-weight:700; }
+        .cx-lessons-msg { margin:0; font-size:0.84rem; font-weight:800; color:#86efac; }
+        .cx-lessons-search { width:100%; box-sizing:border-box; background:#14110c; border:1px solid #34301f; color:#fff; border-radius:10px; padding:11px 14px; font:inherit; font-weight:700; }
+        .cx-lessons-list { display:grid; gap:10px; }
+        .cx-lesson-card { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; border:1px solid #2a241a; border-radius:12px; background:#1a160f; padding:12px 14px; }
+        .cx-lesson-meta { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
+        .cx-lesson-code { font-weight:900; color:#fff; font-size:1rem; }
+        .cx-lesson-name { color:#d8d2c5; font-weight:700; font-size:0.9rem; }
+        .cx-lesson-stats { color:#7c7363; font-weight:800; font-size:0.78rem; }
+        .cx-lesson-actions { display:flex; gap:8px; align-items:center; }
       `}</style>
 
       <div className="cx-root">
@@ -1025,6 +1115,7 @@ export default function ControlPage() {
             <a className="cx-sbtn" href="/session">📡 Session</a>
             <a className="cx-sbtn" href="/roster">👥 Rosters</a>
             <span className="cx-divider" />
+            <button className="cx-sbtn" onClick={() => { setShowLessons(true); setLessonMsg(null); }}>📚 Lessons</button>
             <button className="cx-sbtn" onClick={() => setShowSpinner(true)}>🎰 Spinner</button>
             <button className="cx-sbtn" style={autoAdvance ? { borderColor: accent, color: "#fff" } : undefined} onClick={() => setAutoAdvance((v) => !v)}>Auto {autoAdvance ? "✓" : "off"}</button>
             <button className="cx-sbtn" onClick={() => setShowSounds((v) => !v)}>🎵 Sounds</button>
@@ -1357,6 +1448,51 @@ export default function ControlPage() {
             )}
           </div>
         </section>
+
+        {showLessons && (
+          <div className="cx-overlay cx-lessons">
+            <div className="cx-lessons-head">
+              <h2 className="cx-lessons-title">📚 Lesson Library</h2>
+              <button className="cx-sbtn" onClick={() => setShowLessons(false)}>✕ Close</button>
+            </div>
+            <div className="cx-lessons-body">
+              <div className="cx-lessons-save">
+                <p className="cx-lessons-sub">Save the current sequence as a lesson</p>
+                <div className="cx-lessons-saverow">
+                  <input className="cx-lessons-in" placeholder="Code (e.g. M1.T1.L1)" value={saveCode} onChange={(e) => setSaveCode(e.target.value)} />
+                  <input className="cx-lessons-in" placeholder="Title (optional)" value={saveTitle} onChange={(e) => setSaveTitle(e.target.value)} />
+                  <button className="cx-btn pri" onClick={saveCurrentLesson}>Save</button>
+                </div>
+                {lessonMsg && <p className="cx-lessons-msg">{lessonMsg}</p>}
+              </div>
+
+              <input className="cx-lessons-search" placeholder="Search by code or title…" value={presetSearch} onChange={(e) => setPresetSearch(e.target.value)} />
+
+              <div className="cx-lessons-list">
+                {filteredPresets.length === 0 ? (
+                  <p className="cx-hint">No saved lessons yet. Build a sequence in the bank below, then save it above.</p>
+                ) : (
+                  filteredPresets.map((p) => {
+                    const total = p.lineup.reduce((sum, s) => sum + (typeof p.minutes[s.stateId] === "number" ? p.minutes[s.stateId] : 0), 0);
+                    return (
+                      <div className="cx-lesson-card" key={p.id}>
+                        <div className="cx-lesson-meta">
+                          <span className="cx-lesson-code">{p.code || "Untitled"}</span>
+                          {p.title && <span className="cx-lesson-name">{p.title}</span>}
+                          <span className="cx-lesson-stats">{p.lineup.length} steps · {total} min</span>
+                        </div>
+                        <div className="cx-lesson-actions">
+                          <button className="cx-btn next" onClick={() => loadPreset(p)}>Load →</button>
+                          <button className="cx-sclear" onClick={() => removePreset(p.id)}>Delete</button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {showSpinner && (
           <div className="cx-overlay"><StudentSpinner onClose={() => setShowSpinner(false)} /></div>
