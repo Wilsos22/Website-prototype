@@ -6,6 +6,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { listLessonPresets, type LessonPreset } from "@/lib/lessonPresets";
 
 interface Tool {
   href: string;
@@ -59,9 +60,11 @@ function greetingFor(hour: number): string {
 export default function TeacherHome() {
   const [query, setQuery] = useState("");
   const [greeting, setGreeting] = useState("Welcome");
+  const [presets, setPresets] = useState<LessonPreset[]>([]);
 
   useEffect(() => {
     setGreeting(greetingFor(new Date().getHours()));
+    listLessonPresets().then(setPresets);
   }, []);
 
   const q = query.trim().toLowerCase();
@@ -72,6 +75,10 @@ export default function TeacherHome() {
   const guided = useMemo(
     () => TOOLS.filter((t) => t.group === "guided" && (!q || t.label.toLowerCase().includes(q) || t.desc.toLowerCase().includes(q))),
     [q]
+  );
+  const lessons = useMemo(
+    () => presets.filter((p) => !q || p.code.toLowerCase().includes(q) || p.title.toLowerCase().includes(q)),
+    [presets, q]
   );
 
   return (
@@ -183,6 +190,24 @@ export default function TeacherHome() {
         <main className="bd-main">
           <h1 className="bd-greet">{greeting}, Mr. Wilson</h1>
           <p className="bd-sub">Pick a board tool, or jump back into this week&apos;s warm-ups.</p>
+
+          {presets.length > 0 && (
+            <>
+              <h2 className="bd-section-label" style={{ marginTop: 6 }}>Lessons — load &amp; start</h2>
+              <div className="bd-grid compact">
+                {lessons.length === 0 ? (
+                  <div className="bd-empty">No lessons match “{query}”.</div>
+                ) : (
+                  lessons.map((p) => (
+                    <Link key={p.id} href={`/control?lesson=${p.id}`} className="bd-card compact" style={{ ["--c" as string]: "#fcaf38" }}>
+                      <span className="bd-tile">📚</span>
+                      <h3>{p.code || "Lesson"}{p.title ? ` · ${p.title}` : ""}</h3>
+                    </Link>
+                  ))
+                )}
+              </div>
+            </>
+          )}
 
           <div className="bd-grid">
             {board.length === 0 ? (

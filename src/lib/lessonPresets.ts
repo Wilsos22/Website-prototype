@@ -44,18 +44,20 @@ function rowToPreset(r: PresetRow): LessonPreset {
 
 export async function listLessonPresets(search?: string): Promise<LessonPreset[]> {
   const supabase = getSupabase();
-  if (!supabase) return [];
-  const { data, error } = await supabase
-    .from("lesson_presets")
-    .select("id,code,title,sequence,updated_at")
-    .order("code", { ascending: true });
-  if (error || !data) return [];
-  let rows = (data as PresetRow[]).map(rowToPreset);
+  let saved: LessonPreset[] = [];
+  if (supabase) {
+    const { data, error } = await supabase
+      .from("lesson_presets")
+      .select("id,code,title,sequence,updated_at")
+      .order("code", { ascending: true });
+    if (!error && data) saved = (data as PresetRow[]).map(rowToPreset);
+  }
+  let all = saved;
   const term = (search ?? "").trim().toLowerCase();
   if (term) {
-    rows = rows.filter((r) => r.code.toLowerCase().includes(term) || r.title.toLowerCase().includes(term));
+    all = all.filter((r) => r.code.toLowerCase().includes(term) || r.title.toLowerCase().includes(term));
   }
-  return rows;
+  return all;
 }
 
 export async function getLessonPreset(id: string): Promise<LessonPreset | null> {
