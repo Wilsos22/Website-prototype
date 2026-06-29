@@ -31,6 +31,15 @@ const CLASS_MODE_TARGETS = new Set([
   "/fraction-bars",
   "/algebra-tiles",
   "/challenge",
+  "/area-model",
+  "/multiplication-fluency",
+  "/combine-like-terms",
+  "/ladder-method",
+  "/group-bars",
+  "/proportions",
+  "/coordinate-grid",
+  "/term-identifier",
+  "/exit-ticket",
 ]);
 
 function isTeacherRoute(pathname: string) {
@@ -39,10 +48,6 @@ function isTeacherRoute(pathname: string) {
 
 function isStudentSwitchRoute(pathname: string) {
   return STUDENT_SWITCH_ROUTE_PREFIXES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
-}
-
-function isNormalSiteEntry(pathname: string) {
-  return pathname === "/";
 }
 
 function shouldLeaveClassMode() {
@@ -84,7 +89,6 @@ export default function ClassSync() {
       const currentPath = pathRef.current || "";
       if (isStudentSwitchRoute(currentPath)) return;
       if (isTeacherRoute(currentPath)) return;
-      if (isNormalSiteEntry(currentPath)) return;
       const liveFlowQuery = await supabase
         .from("sessions")
         .select("broadcast,status,live_flow")
@@ -99,7 +103,9 @@ export default function ClassSync() {
       const error = liveFlowQuery.error && fallbackQuery?.error ? fallbackQuery.error : null;
       if (stop) return;
       if (error || !data) {
-        leaveClassMode();
+        // Transient read error or a momentary empty result — keep the student in
+        // the session and retry on the next tick instead of kicking them out
+        // (that was what made students get asked to re-join mid-class).
         return;
       }
       const d = data as {
@@ -111,15 +117,23 @@ export default function ClassSync() {
         leaveClassMode();
         return;
       }
-      const target = d.broadcast === LIVE_FLOW_MODE
-        ? d.live_flow?.tool?.route || LIVE_FLOW_ROUTE
-        : d.broadcast === "free"
-          ? null
-          : d.broadcast;
-      if (target && CLASS_MODE_TARGETS.has(target) && currentPath !== target) {
-        router.push(target);
+      // Decide where this joined student should be. While the session is open
+      // they're held in class — they can only roam when the teacher explicitly
+      // sets "Free (browse)". Ending the session (status closed, above) is the
+      // only thing that fully releases them.
+      let target: string | null;
+      if (d.broadcast === LIVE_FLOW_MODE) {
+        target = d.live_flow?.tool?.route || LIVE_FLOW_ROUTE;
+      } else if (d.broadcast === "free") {
+        target = null; // teacher released students to browse on their own
+      } else if (d.broadcast && CLASS_MODE_TARGETS.has(d.broadcast)) {
+        target = d.broadcast; // explicit destination (lesson or a tool)
+      } else {
+        target = "/lesson"; // joined but no destination yet → hold on the lesson
       }
-      if (!target && currentPath === LIVE_FLOW_ROUTE) {
+      if (target && currentPath !== target) {
+        router.push(target);
+      } else if (!target && currentPath === LIVE_FLOW_ROUTE) {
         router.push("/lesson");
       }
     };

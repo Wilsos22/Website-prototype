@@ -15,12 +15,34 @@ export type LiveToolRoute =
   | "/equation-builder"
   | "/order-of-operations"
   | "/fraction-bars"
-  | "/algebra-tiles";
+  | "/algebra-tiles"
+  | "/area-model"
+  | "/multiplication-fluency"
+  | "/combine-like-terms"
+  | "/ladder-method"
+  | "/group-bars"
+  | "/proportions"
+  | "/coordinate-grid"
+  | "/term-identifier"
+  | "/challenge"
+  | "/exit-ticket";
 
 export type LiveToolConfig =
   | {
       id: string;
-      route: "/whiteboard" | "/fraction-bars";
+      route:
+        | "/whiteboard"
+        | "/fraction-bars"
+        | "/area-model"
+        | "/multiplication-fluency"
+        | "/combine-like-terms"
+        | "/ladder-method"
+        | "/group-bars"
+        | "/proportions"
+        | "/coordinate-grid"
+        | "/term-identifier"
+        | "/challenge"
+        | "/exit-ticket";
       label: string;
       prompt: string;
       config: Record<string, never>;
@@ -191,6 +213,22 @@ export function getStoredTeacherSessionId(): string | null {
     if (!stored) return null;
     const session = JSON.parse(stored) as { sessionId?: unknown };
     return typeof session.sessionId === "string" && session.sessionId ? session.sessionId : null;
+  } catch {
+    return null;
+  }
+}
+
+export function getStoredTeacherSession(): { sessionId: string; code: string; periodName: string } | null {
+  try {
+    const stored = localStorage.getItem(TEACHER_SESSION_KEY);
+    if (!stored) return null;
+    const s = JSON.parse(stored) as { sessionId?: unknown; code?: unknown; periodName?: unknown };
+    if (typeof s.sessionId !== "string" || !s.sessionId) return null;
+    return {
+      sessionId: s.sessionId,
+      code: typeof s.code === "string" ? s.code : "",
+      periodName: typeof s.periodName === "string" ? s.periodName : "",
+    };
   } catch {
     return null;
   }

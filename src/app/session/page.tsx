@@ -9,6 +9,7 @@ import SiteNav from "@/components/SiteNav";
 import {
   LIVE_FLOW_MODE,
   clearStoredTeacherSession,
+  getStoredTeacherSession,
   saveTeacherSession,
 } from "@/lib/liveClassFlow";
 import { SKILLS } from "@/lib/challengeSkills";
@@ -73,6 +74,39 @@ export default function SessionPage() {
     });
   }, [supabase]);
 
+  // Restore an already-open session if the teacher navigated away (e.g. to the
+  // Control panel) and came back — otherwise the page looks empty and a second
+  // "Start session" click spawns a duplicate with a new code, which is what made
+  // it keep asking to start/join a new session.
+  useEffect(() => {
+    if (!supabase) return;
+    const stored = getStoredTeacherSession();
+    if (!stored) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("sessions")
+        .select("id,status,period_id,broadcast")
+        .eq("id", stored.sessionId)
+        .maybeSingle();
+      if (cancelled) return;
+      const s = data as { id: string; status: string; period_id: string; broadcast: string | null } | null;
+      if (error || !s || s.status !== "open") {
+        clearStoredTeacherSession(stored.sessionId);
+        return;
+      }
+      const { count } = await supabase
+        .from("students")
+        .select("id", { count: "exact", head: true })
+        .eq("period_id", s.period_id);
+      if (cancelled) return;
+      setRosterCount(count || 0);
+      setBroadcast(s.broadcast ?? null);
+      setSession({ id: s.id, code: stored.code, periodName: stored.periodName });
+    })();
+    return () => { cancelled = true; };
+  }, [supabase]);
+
   const pollJoins = useCallback(async (sessionId: string) => {
     if (!supabase) return;
     const { data } = await supabase.from("session_joins").select("id,display_name,joined_at").eq("session_id", sessionId).order("joined_at");
@@ -90,7 +124,9 @@ export default function SessionPage() {
     if (!supabase || !periodId) return;
     setError(null);
     const code = makeCode();
-    const { data, error } = await supabase.from("sessions").insert({ period_id: periodId, join_code: code, status: "open" }).select("id").single();
+    // Start held on the lesson page so joined students are locked in from the
+    // moment they join (not free to wander) until you pick a tool or release them.
+    const { data, error } = await supabase.from("sessions").insert({ period_id: periodId, join_code: code, status: "open", broadcast: "/lesson" }).select("id").single();
     if (error) { setError(error.message); return; }
     const periodName = periods.find((p) => p.id === periodId)?.name || "";
     const { count } = await supabase.from("students").select("id", { count: "exact", head: true }).eq("period_id", periodId);
@@ -98,7 +134,7 @@ export default function SessionPage() {
     const sessionId = (data as { id: string }).id;
     saveTeacherSession(sessionId, code, periodName);
     setSession({ id: sessionId, code, periodName });
-    setJoins([]); setBroadcast(null);
+    setJoins([]); setBroadcast("/lesson");
   }
   async function end() {
     if (!supabase || !session) return;
@@ -131,7 +167,7 @@ export default function SessionPage() {
     if (!supabase || !challenge) return;
     await endChallenge(supabase, challenge.id);
     setChallenge(null);
-    await setBroadcastTo(null);
+    await setBroadcastTo("/lesson");
   }
 
   // Poll the live leaderboard while a challenge is running.
@@ -293,7 +329,7 @@ export default function SessionPage() {
               <h3 className="se-qh">Class mode — send screens to</h3>
               <div className="se-sends">
                 {SENDS.map((s) => (
-                  <button key={s.value} className={`se-send${(broadcast || "free") === s.value ? " on" : ""}`} onClick={() => setBroadcastTo(s.value === "free" ? null : s.value)}>{s.label}</button>
+                  <button key={s.value} className={`se-send${(broadcast || "free") === s.value ? " on" : ""}`} onClick={() => setBroadcastTo(s.value)}>{s.label}</button>
                 ))}
               </div>
               <p className="se-empty" style={{ marginTop: 10 }}>
@@ -303,7 +339,7 @@ export default function SessionPage() {
               </p>
             </div>
 
-            <div className="se-card">
+            <div className="se-card" id="challenge" style={{ scrollMarginTop: 80 }}>
               <h3 className="se-qh">🎮 Challenge — live game</h3>
               {chSetup && (
                 <div className="se-warn" style={{ marginBottom: 12 }}>

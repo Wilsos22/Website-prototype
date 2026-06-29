@@ -2,6 +2,8 @@
 // Reached from the landing's "Just looking around?" link. No class link here;
 // to follow the teacher's screen, students join with a code on the home page.
 
+import StudentAssignments from "@/components/StudentAssignments";
+
 type Tool = { href: string; label: string; letter: string; color: string; desc: string };
 
 const TOOLS: Tool[] = [
@@ -50,6 +52,12 @@ export default function ExplorePage() {
         .ex-lesson-desc { display:block; font-size:0.9rem; font-weight:500; color:rgba(255,255,255,0.92); margin-top:2px; }
         .ex-lesson-go { margin-left:auto; font-size:1.6rem; font-weight:800; }
 
+        .ex-games { display:flex; align-items:center; gap:16px; text-decoration:none; border:none; border-radius:var(--bdb-r-lg);
+          background:var(--bdb-teal); color:#fff; padding:18px 22px; margin-top:14px; box-shadow:0 16px 30px -18px rgba(80,163,164,0.7); }
+        .ex-games:hover { filter:brightness(1.03); }
+        .ex-games-ico { width:52px; height:52px; flex:none; border-radius:13px; background:rgba(255,255,255,0.22);
+          display:grid; place-items:center; font-size:1.7rem; }
+
         .ex-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(210px, 1fr)); gap:14px; }
         .ex-card { display:flex; align-items:center; gap:14px; text-decoration:none; background:var(--bdb-card);
           border:1px solid var(--bdb-line); border-radius:var(--bdb-r); padding:16px; box-shadow:var(--bdb-shadow-sm);
@@ -83,6 +91,17 @@ export default function ExplorePage() {
           </span>
           <span className="ex-lesson-go" aria-hidden="true">→</span>
         </a>
+
+        <a className="ex-games" href="/practice">
+          <span className="ex-games-ico">🎮</span>
+          <span>
+            <span className="ex-lesson-label">Practice Games</span>
+            <span className="ex-lesson-desc">Beat your score — GEMS, integers, percents & more</span>
+          </span>
+          <span className="ex-lesson-go" aria-hidden="true">→</span>
+        </a>
+
+        <StudentAssignments />
 
         <h2 className="ex-h2">Math tools</h2>
         <div className="ex-grid">

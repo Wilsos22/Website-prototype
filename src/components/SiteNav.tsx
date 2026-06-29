@@ -10,6 +10,8 @@ const TEACHER = [
   { href: "/control",   label: "🎛 Control" },
   { href: "/session",   label: "📡 Session" },
   { href: "/teacher/challenges", label: "🎮 Games" },
+  { href: "/teacher/assignments", label: "📝 Practice" },
+  { href: "/teacher/exit-tickets", label: "🎟 Exit" },
   { href: "/roster",    label: "👥 Rosters" },
   { href: "/",          label: "Student view" },
 ];

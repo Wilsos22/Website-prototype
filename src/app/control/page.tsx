@@ -30,6 +30,9 @@ import {
   deleteLessonPreset,
   type LessonPreset,
 } from "@/lib/lessonPresets";
+import { SKILLS } from "@/lib/challengeSkills";
+import { launchChallenge, endChallenge, type ChallengeRow } from "@/lib/challenges";
+import { launchExitTicket, type ExitKind } from "@/lib/exitTickets";
 
 interface ClassState {
   id: string;
@@ -60,6 +63,16 @@ const TOOL_STATE_INFO = {
   "tool-gems": { route: "/order-of-operations", label: "GEMS" },
   "tool-fraction-bars": { route: "/fraction-bars", label: "Fraction Bars" },
   "tool-algebra-tiles": { route: "/algebra-tiles", label: "Algebra Tiles" },
+  "tool-area-model": { route: "/area-model", label: "Area Model" },
+  "tool-combine": { route: "/combine-like-terms", label: "Combine Like Terms" },
+  "tool-ladder": { route: "/ladder-method", label: "Ladder Method" },
+  "tool-proportions": { route: "/proportions", label: "Proportions" },
+  "tool-group-bars": { route: "/group-bars", label: "Group Bars" },
+  "tool-coordinate-grid": { route: "/coordinate-grid", label: "Coordinate Grid" },
+  "tool-term-identifier": { route: "/term-identifier", label: "Identify Terms" },
+  "tool-multiplication": { route: "/multiplication-fluency", label: "Multiplication Facts" },
+  "tool-game": { route: "/challenge", label: "Live Game" },
+  "tool-exit-ticket": { route: "/exit-ticket", label: "Exit Ticket" },
 } as const satisfies Record<string, { route: LiveToolRoute; label: string }>;
 
 type ToolStateId = keyof typeof TOOL_STATE_INFO;
@@ -77,6 +90,12 @@ interface ToolSetupValues {
   equationSolution: string;
   gemsExpression: string;
   algebraExpression: string;
+  gameSkill: string;
+  gameLevel: string;
+  gameDuration: string;
+  exitPrompt: string;
+  exitKind: ExitKind;
+  exitChoices: string;
 }
 
 interface PublishedTool {
@@ -114,6 +133,16 @@ const DEFAULT_STATES: ClassState[] = [
   { id: "tool-gems", label: "GEMS", minutes: 5, color: "#a78bfa", desc: "Use GEMS to decide which operation comes first." },
   { id: "tool-fraction-bars", label: "Fraction Bars", minutes: 5, color: "#f59e0b", desc: "Model the fraction relationship with bars." },
   { id: "tool-algebra-tiles", label: "Algebra Tiles", minutes: 6, color: "#fb7185", desc: "Build the expression with algebra tiles." },
+  { id: "tool-area-model", label: "Area Model", minutes: 6, color: "#fcaf38", desc: "Build the rectangle and split it into partial products." },
+  { id: "tool-combine", label: "Combine Like Terms", minutes: 6, color: "#f95335", desc: "Group like terms and simplify the expression." },
+  { id: "tool-ladder", label: "Ladder Method", minutes: 6, color: "#674a40", desc: "Divide down the ladder to find GCF and LCM." },
+  { id: "tool-proportions", label: "Proportions", minutes: 6, color: "#50a3a4", desc: "Find the scale factor and the missing value." },
+  { id: "tool-group-bars", label: "Group Bars", minutes: 5, color: "#2f9e6f", desc: "Build equal groups — fractions, decimals, percents." },
+  { id: "tool-coordinate-grid", label: "Coordinate Grid", minutes: 6, color: "#4d8df6", desc: "Plot and identify points on the plane." },
+  { id: "tool-term-identifier", label: "Identify Terms", minutes: 5, color: "#50a3a4", desc: "Sort coefficient, variable, operation, and constant." },
+  { id: "tool-multiplication", label: "Multiplication Facts", minutes: 6, color: "#4d8df6", desc: "Fast multiplication facts practice." },
+  { id: "tool-game", label: "🎮 Live Game", minutes: 5, color: "#7c5cd6", desc: "Compete in a quick auto-scored challenge — live leaderboard." },
+  { id: "tool-exit-ticket", label: "📝 Exit Ticket (collect)", minutes: 5, color: "#f95335", desc: "Answer the exit ticket on your own and turn it in." },
   { id: "you-do", label: "Independent Practice (You do)", minutes: 15, color: "#2f9e6f", desc: "Work independently. Show all of your steps." },
   { id: "manip", label: "Manipulatives / Hands-On", minutes: 10, color: "#f59e0b", desc: "Use the manipulative to model the problem." },
   { id: "partner", label: "Partner / Group Work", minutes: 10, color: "#ec4899", desc: "Work with your partner — both of you explain your thinking." },
@@ -131,21 +160,21 @@ const BANK_GROUPS = [
   },
   {
     id: "feedback",
-    label: "Feedback",
-    hint: "Questions, checks for understanding, and polls",
-    stateIds: ["question", "poll"],
+    label: "Feedback & Games",
+    hint: "Questions, checks for understanding, polls, and live games",
+    stateIds: ["question", "poll", "tool-game", "tool-exit-ticket"],
   },
   {
     id: "process",
     label: "Guided Processes",
     hint: "Step-by-step math thinking routines",
-    stateIds: ["tool-gems", "tool-equation-builder"],
+    stateIds: ["tool-gems", "tool-equation-builder", "tool-combine", "tool-ladder", "tool-proportions", "tool-term-identifier"],
   },
   {
     id: "manipulatives",
     label: "Manipulatives",
     hint: "Student screens switch to digital math tools",
-    stateIds: ["tool-whiteboard", "tool-number-line", "tool-percent-bar", "tool-fraction-bars", "tool-algebra-tiles", "manip"],
+    stateIds: ["tool-whiteboard", "tool-number-line", "tool-percent-bar", "tool-fraction-bars", "tool-algebra-tiles", "tool-area-model", "tool-group-bars", "tool-coordinate-grid", "tool-multiplication", "manip"],
   },
 ] as const;
 
@@ -166,6 +195,12 @@ const DEFAULT_TOOL_SETUP: ToolSetupValues = {
   equationSolution: "4",
   gemsExpression: "3 + 4 × 2",
   algebraExpression: "2x + 3 = 11",
+  gameSkill: SKILLS[0].key,
+  gameLevel: "1",
+  gameDuration: "180",
+  exitPrompt: "",
+  exitKind: "short-answer",
+  exitChoices: "",
 };
 
 type CueKey = "music" | "warn30" | "tick" | "end";
@@ -249,6 +284,26 @@ function buildLiveToolConfig(stateId: ToolStateId, values: ToolSetupValues): Liv
       return { ...base, route: "/order-of-operations", config: { expression: values.gemsExpression.trim() } };
     case "tool-algebra-tiles":
       return { ...base, route: "/algebra-tiles", config: { expression: values.algebraExpression.trim() } };
+    case "tool-area-model":
+      return { ...base, route: "/area-model", config: {} };
+    case "tool-combine":
+      return { ...base, route: "/combine-like-terms", config: {} };
+    case "tool-ladder":
+      return { ...base, route: "/ladder-method", config: {} };
+    case "tool-proportions":
+      return { ...base, route: "/proportions", config: {} };
+    case "tool-group-bars":
+      return { ...base, route: "/group-bars", config: {} };
+    case "tool-coordinate-grid":
+      return { ...base, route: "/coordinate-grid", config: {} };
+    case "tool-term-identifier":
+      return { ...base, route: "/term-identifier", config: {} };
+    case "tool-multiplication":
+      return { ...base, route: "/multiplication-fluency", config: {} };
+    case "tool-game":
+      return { ...base, route: "/challenge", config: {} };
+    case "tool-exit-ticket":
+      return { ...base, route: "/exit-ticket", config: {} };
   }
 }
 
@@ -332,6 +387,7 @@ export default function ControlPage() {
   const [toolSetup, setToolSetup] = useState<ToolSetupValues>(DEFAULT_TOOL_SETUP);
   const [publishedTool, setPublishedTool] = useState<PublishedTool | null>(null);
   const [toolError, setToolError] = useState<string | null>(null);
+  const [liveChallenge, setLiveChallenge] = useState<ChallengeRow | null>(null);
 
   const secRef = useRef(0);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -575,6 +631,16 @@ export default function ControlPage() {
     }
   }, [activeToolState, publishedTool?.stateId]);
 
+  // When the lineup moves off the Live Game state, close out the running
+  // challenge round so it doesn't linger open for the session.
+  useEffect(() => {
+    if (activeToolState === "tool-game") return;
+    if (liveChallenge && supabase) {
+      void endChallenge(supabase, liveChallenge.id);
+      setLiveChallenge(null);
+    }
+  }, [activeToolState, liveChallenge, supabase]);
+
   useEffect(() => {
     if (!controlPoll || !supabase) return;
     let stopped = false;
@@ -675,9 +741,58 @@ export default function ControlPage() {
     setToolSetup((current) => ({ ...current, [key]: value } as ToolSetupValues));
   }
 
-  function publishToolSetup() {
+  async function publishToolSetup() {
     if (!teacherSession || teacherSession.broadcast !== LIVE_FLOW_MODE || !activeToolState) {
       setToolError("Start a session, select Live Class Flow, then send this tool setup.");
+      return;
+    }
+
+    // The Live Game state launches an actual auto-scored challenge round for the
+    // session (its own Supabase row + leaderboard) and points students at the
+    // /challenge surface, which plays whatever round is open for the session.
+    if (activeToolState === "tool-game") {
+      if (!supabase) { setToolError("Supabase isn't connected."); return; }
+      const skill = SKILLS.find((s) => s.key === toolSetup.gameSkill) || SKILLS[0];
+      const level = clamp(Math.round(numericValue(toolSetup.gameLevel, 1)), 1, skill.levels.length);
+      const durationSeconds = Math.round(numericValue(toolSetup.gameDuration, 180));
+      const title = `${skill.label} · ${skill.levels[level - 1] || `Level ${level}`}`;
+      const { challenge, error } = await launchChallenge(supabase, {
+        sessionId: teacherSession.id, skill: skill.key, title, level, durationSeconds,
+      });
+      if (error === "SETUP") {
+        setToolError("One-time setup: run supabase/challenges.sql in Supabase, then try again.");
+        return;
+      }
+      if (error || !challenge) {
+        setToolError(error || "The game could not be launched.");
+        return;
+      }
+      setLiveChallenge(challenge);
+      setToolError(null);
+      setPublishedTool({ stateId: "tool-game", tool: buildLiveToolConfig("tool-game", toolSetup) });
+      return;
+    }
+
+    // The Exit Ticket state opens a saved exit-ticket question for the session and
+    // sends students to /exit-ticket to answer; responses land in Supabase.
+    if (activeToolState === "tool-exit-ticket") {
+      if (!supabase) { setToolError("Supabase isn't connected."); return; }
+      const prompt = toolSetup.exitPrompt.trim();
+      if (!prompt) { setToolError("Type the exit-ticket question first."); return; }
+      const kind = toolSetup.exitKind;
+      const choices = kind === "multiple-choice"
+        ? toolSetup.exitChoices.split(/[\n,]/).map((c) => c.trim()).filter(Boolean)
+        : null;
+      if (kind === "multiple-choice" && (!choices || choices.length < 2)) {
+        setToolError("Add at least two answer choices (one per line)."); return;
+      }
+      const { ticket, error } = await launchExitTicket(supabase, {
+        sessionId: teacherSession.id, periodId: null, lessonCode: null, prompt, kind, choices,
+      });
+      if (error === "SETUP") { setToolError("One-time setup: run supabase/formative.sql in Supabase, then try again."); return; }
+      if (error || !ticket) { setToolError(error || "The exit ticket could not be sent."); return; }
+      setToolError(null);
+      setPublishedTool({ stateId: "tool-exit-ticket", tool: buildLiveToolConfig("tool-exit-ticket", toolSetup) });
       return;
     }
 
@@ -1113,6 +1228,7 @@ export default function ControlPage() {
           <div className="cx-tbtns">
             <a className="cx-sbtn cx-home" href="/teacher">🏠 Home</a>
             <a className="cx-sbtn" href="/session">📡 Session</a>
+            <a className="cx-sbtn" href="/session#challenge">🎮 Games</a>
             <a className="cx-sbtn" href="/roster">👥 Rosters</a>
             <span className="cx-divider" />
             <button className="cx-sbtn" onClick={() => { setShowLessons(true); setLessonMsg(null); }}>📚 Lessons</button>
@@ -1315,11 +1431,69 @@ export default function ControlPage() {
                         <input id="algebra-expression" className="cx-tool-input" value={toolSetup.algebraExpression} onChange={(event) => updateToolSetup("algebraExpression", event.target.value)} placeholder="2x + 3 = 11" />
                       </label>
                     )}
+
+                    {activeToolState === "tool-game" && (
+                      <>
+                        <label className="cx-tool-field" htmlFor="game-skill">Game
+                          <select id="game-skill" className="cx-tool-select" value={toolSetup.gameSkill} onChange={(event) => { updateToolSetup("gameSkill", event.target.value); updateToolSetup("gameLevel", "1"); }}>
+                            {SKILLS.map((s) => <option key={s.key} value={s.key}>{s.emoji} {s.label}</option>)}
+                          </select>
+                        </label>
+                        <label className="cx-tool-field" htmlFor="game-level">Level
+                          <select id="game-level" className="cx-tool-select" value={toolSetup.gameLevel} onChange={(event) => updateToolSetup("gameLevel", event.target.value)}>
+                            {(SKILLS.find((s) => s.key === toolSetup.gameSkill) || SKILLS[0]).levels.map((lvl, i) => (
+                              <option key={i} value={String(i + 1)}>{i + 1}. {lvl}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="cx-tool-field" htmlFor="game-duration">Length
+                          <select id="game-duration" className="cx-tool-select" value={toolSetup.gameDuration} onChange={(event) => updateToolSetup("gameDuration", event.target.value)}>
+                            <option value="120">2 min</option>
+                            <option value="180">3 min</option>
+                            <option value="300">5 min</option>
+                          </select>
+                        </label>
+                      </>
+                    )}
+
+                    {activeToolState === "tool-exit-ticket" && (
+                      <>
+                        <label className="cx-tool-field wide" htmlFor="exit-prompt">Exit-ticket question
+                          <input id="exit-prompt" className="cx-tool-input" value={toolSetup.exitPrompt} onChange={(event) => updateToolSetup("exitPrompt", event.target.value)} placeholder="Solve 3x + 4 = 19, then explain your first step." />
+                        </label>
+                        <label className="cx-tool-field" htmlFor="exit-kind">Answer type
+                          <select id="exit-kind" className="cx-tool-select" value={toolSetup.exitKind} onChange={(event) => updateToolSetup("exitKind", event.target.value)}>
+                            <option value="short-answer">Short answer</option>
+                            <option value="multiple-choice">Multiple choice</option>
+                            <option value="fist-to-five">Fist to five (0–5)</option>
+                          </select>
+                        </label>
+                        {toolSetup.exitKind === "multiple-choice" && (
+                          <label className="cx-tool-field wide" htmlFor="exit-choices">Choices (comma-separated)
+                            <input id="exit-choices" className="cx-tool-input" value={toolSetup.exitChoices} onChange={(event) => updateToolSetup("exitChoices", event.target.value)} placeholder="Yes, No, Not sure" />
+                          </label>
+                        )}
+                      </>
+                    )}
                   </div>
                   {toolError && <div className="cx-poll-error">{toolError}</div>}
-                  {publishedTool?.stateId === activeToolState && <div className="cx-tool-status">Student screens are on this configured tool.</div>}
+                  {publishedTool?.stateId === activeToolState && (
+                    <div className="cx-tool-status">
+                      {activeToolState === "tool-game"
+                        ? "The live game is running — watch the leaderboard on the Session page."
+                        : activeToolState === "tool-exit-ticket"
+                          ? "Exit ticket sent — responses are saving. Review them under 📝 Practice → Exit tickets."
+                          : "Student screens are on this configured tool."}
+                    </div>
+                  )}
                   <div className="cx-actions" style={{ justifyContent: "flex-start" }}>
-                    <button className="cx-btn pri" onClick={publishToolSetup}>{publishedTool?.stateId === activeToolState ? "Update student screens" : "Send tool setup to students"}</button>
+                    <button className="cx-btn pri" onClick={publishToolSetup}>
+                      {activeToolState === "tool-game"
+                        ? (publishedTool?.stateId === activeToolState ? "Relaunch game" : "🎮 Launch game")
+                        : activeToolState === "tool-exit-ticket"
+                          ? (publishedTool?.stateId === activeToolState ? "Re-send exit ticket" : "📝 Send exit ticket")
+                          : (publishedTool?.stateId === activeToolState ? "Update student screens" : "Send tool setup to students")}
+                    </button>
                   </div>
                 </section>
               )}
