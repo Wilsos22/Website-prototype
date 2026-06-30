@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 
 const TEACHER = [
   { href: "/teacher",   label: "🏠 Home" },
+  { href: "/builder",   label: "🧱 Builder" },
   { href: "/control",   label: "🎛 Control" },
   { href: "/session",   label: "📡 Session" },
   { href: "/teacher/challenges", label: "🎮 Games" },
