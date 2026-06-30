@@ -20,6 +20,8 @@ export default function IpadPage() {
   const [erase, setErase] = useState(false);
   const [penWidth, setPenWidth] = useState(6);
   const [background, setBackground] = useState<string | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [showProblem, setShowProblem] = useState(false);
   const [clearSignal, setClearSignal] = useState(0);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
@@ -60,6 +62,8 @@ export default function IpadPage() {
         .ip-btn.on { background:var(--bdb-ink); color:#fff; border-color:var(--bdb-ink); }
         .ip-btn.warn { color:var(--bdb-coral); border-color:color-mix(in srgb, var(--bdb-coral) 40%, var(--bdb-line)); }
         .ip-divider { width:1px; align-self:stretch; background:var(--bdb-line); margin:2px 4px; }
+        .ip-problem { display:flex; gap:10px; align-items:center; padding:8px 14px; background:var(--bdb-card); border-bottom:1px solid var(--bdb-line); }
+        .ip-problem-in { flex:1; resize:vertical; min-height:42px; border:1px solid var(--bdb-line); border-radius:10px; padding:10px 12px; font-family:var(--bdb-font); font-size:0.95rem; color:var(--bdb-ink); }
         .ip-stage { position:relative; flex:1; }
         .ip-spacer { flex:1; }
       `}</style>
@@ -92,6 +96,7 @@ export default function IpadPage() {
         </div>
         <span className="ip-divider" />
 
+        <button className={`ip-btn${showProblem ? " on" : ""}`} onClick={() => setShowProblem((v) => !v)}>Problem</button>
         <button className="ip-btn" onClick={() => fileRef.current?.click()}>Background</button>
         {background && <button className="ip-btn warn" onClick={() => setBackground(null)}>Remove bg</button>}
         <button className="ip-btn warn" onClick={() => setClearSignal((n) => n + 1)}>Clear</button>
@@ -101,6 +106,19 @@ export default function IpadPage() {
         <input ref={fileRef} type="file" accept="image/*" onChange={onPickFile} style={{ display: "none" }} />
       </div>
 
+      {showProblem && (
+        <div className="ip-problem">
+          <textarea
+            className="ip-problem-in"
+            placeholder="One problem per line — they show on the board with space to solve."
+            value={problem ?? ""}
+            onChange={(e) => setProblem(e.target.value ? e.target.value : null)}
+            rows={2}
+          />
+          <button className="ip-btn warn" onClick={() => setProblem(null)}>Clear problem</button>
+        </div>
+      )}
+
       <div className="ip-stage">
         <InkBoard
           room={room}
@@ -109,6 +127,7 @@ export default function IpadPage() {
           erase={erase}
           penWidth={penWidth}
           background={background}
+          problem={problem}
           clearSignal={clearSignal}
         />
       </div>

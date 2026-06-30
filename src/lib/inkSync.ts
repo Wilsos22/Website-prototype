@@ -28,8 +28,9 @@ export type InkMessage =
   | { t: "seg"; id: string; color: string; erase: boolean; widthFrac: number; pts: InkPoint[]; start?: boolean }
   | { t: "clear" }
   | { t: "bg"; url: string | null }
+  | { t: "problem"; text: string | null } // problem(s) to show with space to solve
   | { t: "hello" } // a display just opened — please resend current state
-  | { t: "state"; strokes: InkStroke[]; bg: string | null };
+  | { t: "state"; strokes: InkStroke[]; bg: string | null; problem: string | null };
 
 export interface InkChannel {
   send: (m: InkMessage) => void;

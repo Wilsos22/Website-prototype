@@ -16,6 +16,7 @@ interface InkBoardProps {
   erase?: boolean;
   penWidth?: number; // px on this surface
   background?: string | null; // data URL, controlled by the pen page
+  problem?: string | null; // problem(s) to show with space to solve
   clearSignal?: number; // bump to clear
 }
 
@@ -26,10 +27,12 @@ export default function InkBoard({
   erase = false,
   penWidth = 5,
   background = null,
+  problem = null,
   clearSignal = 0,
 }: InkBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [bgUrl, setBgUrl] = useState<string | null>(null);
+  const [problemText, setProblemText] = useState<string | null>(null);
 
   const channelRef = useRef<InkChannel | null>(null);
   const strokesRef = useRef<InkStroke[]>([]);
@@ -142,8 +145,9 @@ export default function InkBoard({
       if (m.t === "seg") applySeg(m);
       else if (m.t === "clear") clearLocal();
       else if (m.t === "bg") setBgUrl(m.url);
+      else if (m.t === "problem") setProblemText(m.text);
       else if (m.t === "hello" && interactive) {
-        channel.send({ t: "state", strokes: strokesRef.current, bg: bgUrlRef.current });
+        channel.send({ t: "state", strokes: strokesRef.current, bg: bgUrlRef.current, problem: problemRef.current });
       } else if (m.t === "state" && !interactive) {
         clearLocal();
         for (const s of m.strokes) {
@@ -151,6 +155,7 @@ export default function InkBoard({
           strokesRef.current.push(s);
         }
         setBgUrl(m.bg);
+        setProblemText(m.problem);
         redraw();
       }
     });
@@ -162,6 +167,8 @@ export default function InkBoard({
 
   const bgUrlRef = useRef<string | null>(null);
   useEffect(() => { bgUrlRef.current = bgUrl; }, [bgUrl]);
+  const problemRef = useRef<string | null>(null);
+  useEffect(() => { problemRef.current = problemText; }, [problemText]);
 
   useEffect(() => {
     resize();
@@ -175,6 +182,13 @@ export default function InkBoard({
     setBgUrl(background);
     channelRef.current?.send({ t: "bg", url: background });
   }, [background, interactive]);
+
+  // Pen page controls the problem(s); broadcast them.
+  useEffect(() => {
+    if (!interactive) return;
+    setProblemText(problem);
+    channelRef.current?.send({ t: "problem", text: problem });
+  }, [problem, interactive]);
 
   // Clear signal from the toolbar.
   const lastClearRef = useRef(0);
@@ -243,6 +257,29 @@ export default function InkBoard({
           alt=""
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none", userSelect: "none" }}
         />
+      )}
+      {problemText && problemText.trim() && (
+        <div
+          style={{
+            position: "absolute", inset: 0, padding: "clamp(18px,3.5vw,44px)",
+            display: "flex", flexDirection: "column", gap: "clamp(22px,7vh,80px)",
+            pointerEvents: "none", userSelect: "none",
+          }}
+        >
+          {problemText.split("\n").map((line) => line.trim()).filter(Boolean).map((line, i) => (
+            <div
+              key={i}
+              style={{
+                alignSelf: "flex-start", maxWidth: "74%",
+                background: "#fbf7ef", border: "1px solid #ece4d4", borderRadius: 14,
+                padding: "12px 22px", fontFamily: "var(--bdb-font)", fontWeight: 700,
+                fontSize: "clamp(1.25rem,2.7vw,2.1rem)", lineHeight: 1.25, color: "#201e1a",
+              }}
+            >
+              {line}
+            </div>
+          ))}
+        </div>
       )}
       <canvas
         ref={canvasRef}
