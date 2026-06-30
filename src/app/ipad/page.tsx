@@ -23,6 +23,7 @@ export default function IpadPage() {
   const [problem, setProblem] = useState<string | null>(null);
   const [showProblem, setShowProblem] = useState(false);
   const [clearSignal, setClearSignal] = useState(0);
+  const [exportSignal, setExportSignal] = useState(0);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -102,6 +103,7 @@ export default function IpadPage() {
         <button className="ip-btn warn" onClick={() => setClearSignal((n) => n + 1)}>Clear</button>
 
         <span className="ip-spacer" />
+        <button className="ip-btn" onClick={() => setExportSignal((n) => n + 1)}>Export PNG</button>
         <button className="ip-btn" onClick={toggleFullscreen}>Full screen</button>
         <input ref={fileRef} type="file" accept="image/*" onChange={onPickFile} style={{ display: "none" }} />
       </div>
@@ -129,6 +131,7 @@ export default function IpadPage() {
           background={background}
           problem={problem}
           clearSignal={clearSignal}
+          exportSignal={exportSignal}
         />
       </div>
     </main>

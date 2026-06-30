@@ -18,6 +18,7 @@ interface InkBoardProps {
   background?: string | null; // data URL, controlled by the pen page
   problem?: string | null; // problem(s) to show with space to solve
   clearSignal?: number; // bump to clear
+  exportSignal?: number; // bump to download the board as a PNG
 }
 
 export default function InkBoard({
@@ -29,8 +30,10 @@ export default function InkBoard({
   background = null,
   problem = null,
   clearSignal = 0,
+  exportSignal = 0,
 }: InkBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const bgImgRef = useRef<HTMLImageElement | null>(null);
   const [bgUrl, setBgUrl] = useState<string | null>(null);
   const [problemText, setProblemText] = useState<string | null>(null);
 
@@ -200,6 +203,82 @@ export default function InkBoard({
     channelRef.current?.send({ t: "clear" });
   }, [clearSignal, clearLocal]);
 
+  // Flatten everything (white + background + problems + ink) to a PNG.
+  const buildExportCanvas = useCallback((): HTMLCanvasElement | null => {
+    const live = canvasRef.current;
+    if (!live) return null;
+    const rect = live.getBoundingClientRect();
+    const W = rect.width, H = rect.height, scale = 2;
+    const out = document.createElement("canvas");
+    out.width = Math.max(1, Math.floor(W * scale));
+    out.height = Math.max(1, Math.floor(H * scale));
+    const o = out.getContext("2d");
+    if (!o) return null;
+    o.scale(scale, scale);
+    o.fillStyle = "#ffffff";
+    o.fillRect(0, 0, W, H);
+
+    const img = bgImgRef.current;
+    if (img && img.complete && img.naturalWidth > 0) {
+      const r = Math.min(W / img.naturalWidth, H / img.naturalHeight);
+      const iw = img.naturalWidth * r, ih = img.naturalHeight * r;
+      o.drawImage(img, (W - iw) / 2, (H - ih) / 2, iw, ih);
+    }
+
+    const text = problemRef.current;
+    if (text && text.trim()) {
+      const clamp = (lo: number, v: number, hi: number) => Math.max(lo, Math.min(v, hi));
+      const pad = clamp(18, 0.035 * W, 44);
+      const gap = clamp(22, 0.07 * H, 80);
+      const fontPx = clamp(20, 0.027 * W, 33.6);
+      const cardPadX = 22, cardPadY = 12, lineH = fontPx * 1.25, maxCardW = 0.74 * W;
+      o.textBaseline = "top";
+      o.font = `700 ${fontPx}px "Albert Sans", system-ui, sans-serif`;
+      let y = pad;
+      for (const line of text.split("\n").map((l) => l.trim()).filter(Boolean)) {
+        const maxTextW = maxCardW - 2 * cardPadX;
+        const words = line.split(/\s+/);
+        const wrapped: string[] = [];
+        let cur = "";
+        for (const w of words) {
+          const t = cur ? `${cur} ${w}` : w;
+          if (o.measureText(t).width > maxTextW && cur) { wrapped.push(cur); cur = w; }
+          else cur = t;
+        }
+        if (cur) wrapped.push(cur);
+        const textW = Math.min(maxTextW, Math.max(...wrapped.map((t) => o.measureText(t).width)));
+        const cardW = textW + 2 * cardPadX, cardH = wrapped.length * lineH + 2 * cardPadY;
+        o.fillStyle = "#fbf7ef";
+        o.strokeStyle = "#ece4d4";
+        o.lineWidth = 1;
+        o.beginPath();
+        if (o.roundRect) o.roundRect(pad, y, cardW, cardH, 14);
+        else o.rect(pad, y, cardW, cardH);
+        o.fill();
+        o.stroke();
+        o.fillStyle = "#201e1a";
+        wrapped.forEach((t, i) => o.fillText(t, pad + cardPadX, y + cardPadY + i * lineH));
+        y += cardH + gap;
+      }
+    }
+
+    o.drawImage(live, 0, 0, W, H); // ink (pen + eraser already baked in)
+    return out;
+  }, []);
+
+  const lastExportRef = useRef(0);
+  useEffect(() => {
+    if (exportSignal === lastExportRef.current) return;
+    lastExportRef.current = exportSignal;
+    if (exportSignal === 0) return;
+    const out = buildExportCanvas();
+    if (!out) return;
+    const a = document.createElement("a");
+    a.href = out.toDataURL("image/png");
+    a.download = `big-dog-board-${new Date().toISOString().slice(0, 10)}.png`;
+    a.click();
+  }, [exportSignal, buildExportCanvas]);
+
   // ── Pointer drawing (pen surface only) ──────────────────────────────────────
   const toNorm = useCallback((e: React.PointerEvent<HTMLCanvasElement>): InkPoint => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -253,6 +332,7 @@ export default function InkBoard({
       {bgUrl && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
+          ref={bgImgRef}
           src={bgUrl}
           alt=""
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none", userSelect: "none" }}
