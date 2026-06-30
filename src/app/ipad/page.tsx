@@ -6,6 +6,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import InkBoard from "@/components/InkBoard";
+import { getSupabase } from "@/lib/supabase";
+
+function classroomDate(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(new Date());
+  const v = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+  return `${v.year}-${v.month}-${v.day}`;
+}
 
 const COLORS = ["#111827", "#f95335", "#4d8df6", "#2f9e6f", "#fcaf38"];
 const WIDTHS: { label: string; px: number }[] = [
@@ -24,7 +33,35 @@ export default function IpadPage() {
   const [showProblem, setShowProblem] = useState(false);
   const [clearSignal, setClearSignal] = useState(0);
   const [exportSignal, setExportSignal] = useState(0);
+  const [toast, setToast] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+
+  function flashToast(message: string) {
+    setToast(message);
+    window.setTimeout(() => setToast((t) => (t === message ? null : t)), 4500);
+  }
+
+  // Export downloads a copy AND publishes the board to today's lesson (for absent
+  // students). Publishing needs Supabase + a public "boards" storage bucket.
+  async function handleExport(dataUrl: string) {
+    const date = classroomDate();
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = `big-dog-board-${date}.png`;
+    a.click();
+
+    const supabase = getSupabase();
+    if (!supabase) { flashToast("Exported. (Saving to the lesson works once deployed.)"); return; }
+    try {
+      const blob = await (await fetch(dataUrl)).blob();
+      const path = `${date}/${Date.now()}.png`;
+      const { error } = await supabase.storage.from("boards").upload(path, blob, { contentType: "image/png" });
+      if (error) flashToast(`Exported — couldn't save to lesson: ${error.message}`);
+      else flashToast("Saved to today's lesson ✓");
+    } catch {
+      flashToast("Exported. (Couldn't reach the lesson to save.)");
+    }
+  }
 
   useEffect(() => {
     try {
@@ -103,7 +140,7 @@ export default function IpadPage() {
         <button className="ip-btn warn" onClick={() => setClearSignal((n) => n + 1)}>Clear</button>
 
         <span className="ip-spacer" />
-        <button className="ip-btn" onClick={() => setExportSignal((n) => n + 1)}>Export PNG</button>
+        <button className="ip-btn" onClick={() => setExportSignal((n) => n + 1)}>Export</button>
         <button className="ip-btn" onClick={toggleFullscreen}>Full screen</button>
         <input ref={fileRef} type="file" accept="image/*" onChange={onPickFile} style={{ display: "none" }} />
       </div>
@@ -132,8 +169,23 @@ export default function IpadPage() {
           problem={problem}
           clearSignal={clearSignal}
           exportSignal={exportSignal}
+          onExport={handleExport}
         />
       </div>
+
+      {toast && (
+        <div
+          role="status"
+          style={{
+            position: "fixed", left: "50%", bottom: 18, transform: "translateX(-50%)", zIndex: 50,
+            background: "#201e1a", color: "#fff", padding: "11px 18px", borderRadius: 12,
+            fontFamily: "var(--bdb-font)", fontWeight: 700, fontSize: "0.92rem",
+            boxShadow: "0 12px 30px rgba(0,0,0,0.3)",
+          }}
+        >
+          {toast}
+        </div>
+      )}
     </main>
   );
 }

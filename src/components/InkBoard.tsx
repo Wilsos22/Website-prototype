@@ -18,7 +18,8 @@ interface InkBoardProps {
   background?: string | null; // data URL, controlled by the pen page
   problem?: string | null; // problem(s) to show with space to solve
   clearSignal?: number; // bump to clear
-  exportSignal?: number; // bump to download the board as a PNG
+  exportSignal?: number; // bump to export the board as a PNG
+  onExport?: (dataUrl: string) => void; // receives the flattened PNG; if absent, downloads
 }
 
 export default function InkBoard({
@@ -31,6 +32,7 @@ export default function InkBoard({
   problem = null,
   clearSignal = 0,
   exportSignal = 0,
+  onExport,
 }: InkBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const bgImgRef = useRef<HTMLImageElement | null>(null);
@@ -273,11 +275,13 @@ export default function InkBoard({
     if (exportSignal === 0) return;
     const out = buildExportCanvas();
     if (!out) return;
+    const dataUrl = out.toDataURL("image/png");
+    if (onExport) { onExport(dataUrl); return; }
     const a = document.createElement("a");
-    a.href = out.toDataURL("image/png");
+    a.href = dataUrl;
     a.download = `big-dog-board-${new Date().toISOString().slice(0, 10)}.png`;
     a.click();
-  }, [exportSignal, buildExportCanvas]);
+  }, [exportSignal, buildExportCanvas, onExport]);
 
   // ── Pointer drawing (pen surface only) ──────────────────────────────────────
   const toNorm = useCallback((e: React.PointerEvent<HTMLCanvasElement>): InkPoint => {
