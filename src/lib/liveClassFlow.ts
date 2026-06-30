@@ -25,7 +25,8 @@ export type LiveToolRoute =
   | "/coordinate-grid"
   | "/term-identifier"
   | "/challenge"
-  | "/exit-ticket";
+  | "/exit-ticket"
+  | "/checkpoint";
 
 export type LiveToolConfig =
   | {
@@ -42,7 +43,8 @@ export type LiveToolConfig =
         | "/coordinate-grid"
         | "/term-identifier"
         | "/challenge"
-        | "/exit-ticket";
+        | "/exit-ticket"
+        | "/checkpoint";
       label: string;
       prompt: string;
       config: Record<string, never>;

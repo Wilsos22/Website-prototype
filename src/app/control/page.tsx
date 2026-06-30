@@ -33,6 +33,8 @@ import {
 import { SKILLS } from "@/lib/challengeSkills";
 import { launchChallenge, endChallenge, type ChallengeRow } from "@/lib/challenges";
 import { launchExitTicket, type ExitKind } from "@/lib/exitTickets";
+import { SBAC_CHECKPOINTS, getCheckpoint } from "@/lib/sbacCheckpoints";
+import { launchCheckpoint } from "@/lib/checkpoints";
 
 interface ClassState {
   id: string;
@@ -73,6 +75,7 @@ const TOOL_STATE_INFO = {
   "tool-multiplication": { route: "/multiplication-fluency", label: "Multiplication Facts" },
   "tool-game": { route: "/challenge", label: "Live Game" },
   "tool-exit-ticket": { route: "/exit-ticket", label: "Exit Ticket" },
+  "tool-checkpoint": { route: "/checkpoint", label: "SBAC Checkpoint" },
 } as const satisfies Record<string, { route: LiveToolRoute; label: string }>;
 
 type ToolStateId = keyof typeof TOOL_STATE_INFO;
@@ -96,6 +99,8 @@ interface ToolSetupValues {
   exitPrompt: string;
   exitKind: ExitKind;
   exitChoices: string;
+  checkpointId: string;
+  checkpointItem: string;
 }
 
 interface PublishedTool {
@@ -143,6 +148,7 @@ const DEFAULT_STATES: ClassState[] = [
   { id: "tool-multiplication", label: "Multiplication Facts", minutes: 6, color: "#4d8df6", desc: "Fast multiplication facts practice." },
   { id: "tool-game", label: "🎮 Live Game", minutes: 5, color: "#7c5cd6", desc: "Compete in a quick auto-scored challenge — live leaderboard." },
   { id: "tool-exit-ticket", label: "📝 Exit Ticket (collect)", minutes: 5, color: "#f95335", desc: "Answer the exit ticket on your own and turn it in." },
+  { id: "tool-checkpoint", label: "✅ SBAC Checkpoint", minutes: 5, color: "#50a3a4", desc: "Answer the checkpoint question — it shows what you've mastered." },
   { id: "you-do", label: "Independent Practice (You do)", minutes: 15, color: "#2f9e6f", desc: "Work independently. Show all of your steps." },
   { id: "manip", label: "Manipulatives / Hands-On", minutes: 10, color: "#f59e0b", desc: "Use the manipulative to model the problem." },
   { id: "partner", label: "Partner / Group Work", minutes: 10, color: "#ec4899", desc: "Work with your partner — both of you explain your thinking." },
@@ -162,7 +168,7 @@ const BANK_GROUPS = [
     id: "feedback",
     label: "Feedback & Games",
     hint: "Questions, checks for understanding, polls, and live games",
-    stateIds: ["question", "poll", "tool-game", "tool-exit-ticket"],
+    stateIds: ["question", "poll", "tool-game", "tool-exit-ticket", "tool-checkpoint"],
   },
   {
     id: "process",
@@ -201,6 +207,8 @@ const DEFAULT_TOOL_SETUP: ToolSetupValues = {
   exitPrompt: "",
   exitKind: "short-answer",
   exitChoices: "",
+  checkpointId: SBAC_CHECKPOINTS[0].id,
+  checkpointItem: String(Math.max(0, SBAC_CHECKPOINTS[0].items.findIndex((it) => it.digital))),
 };
 
 type CueKey = "music" | "warn30" | "tick" | "end";
@@ -304,6 +312,8 @@ function buildLiveToolConfig(stateId: ToolStateId, values: ToolSetupValues): Liv
       return { ...base, route: "/challenge", config: {} };
     case "tool-exit-ticket":
       return { ...base, route: "/exit-ticket", config: {} };
+    case "tool-checkpoint":
+      return { ...base, route: "/checkpoint", config: {} };
   }
 }
 
@@ -793,6 +803,27 @@ export default function ControlPage() {
       if (error || !ticket) { setToolError(error || "The exit ticket could not be sent."); return; }
       setToolError(null);
       setPublishedTool({ stateId: "tool-exit-ticket", tool: buildLiveToolConfig("tool-exit-ticket", toolSetup) });
+      return;
+    }
+
+    // The SBAC Checkpoint state launches one bank item for the session; students
+    // answer on /checkpoint and it's auto-graded against the answer key.
+    if (activeToolState === "tool-checkpoint") {
+      if (!supabase) { setToolError("Supabase isn't connected."); return; }
+      const cp = getCheckpoint(toolSetup.checkpointId);
+      if (!cp) { setToolError("Pick a checkpoint."); return; }
+      const idx = clamp(Math.round(numericValue(toolSetup.checkpointItem, 0)), 0, cp.items.length - 1);
+      const item = cp.items[idx];
+      if (!item) { setToolError("Pick a checkpoint question."); return; }
+      const { run, error } = await launchCheckpoint(supabase, {
+        sessionId: teacherSession.id, periodId: null, lessonKey: cp.lessonKey,
+        checkpointId: cp.id, itemIndex: idx, ccss: item.ccss,
+        prompt: item.q, correctAnswer: item.a, misses: item.misses,
+      });
+      if (error === "SETUP") { setToolError("One-time setup: run supabase/checkpoints.sql in Supabase, then try again."); return; }
+      if (error || !run) { setToolError(error || "The checkpoint could not be sent."); return; }
+      setToolError(null);
+      setPublishedTool({ stateId: "tool-checkpoint", tool: buildLiveToolConfig("tool-checkpoint", toolSetup) });
       return;
     }
 
@@ -1475,6 +1506,35 @@ export default function ControlPage() {
                         )}
                       </>
                     )}
+
+                    {activeToolState === "tool-checkpoint" && (() => {
+                      const cp = getCheckpoint(toolSetup.checkpointId) || SBAC_CHECKPOINTS[0];
+                      const items = cp.items.map((it, i) => ({ it, i }));
+                      const digital = items.filter((x) => x.it.digital);
+                      const choices = digital.length ? digital : items;
+                      const idx = Math.max(0, Math.min(cp.items.length - 1, Math.round(Number(toolSetup.checkpointItem) || 0)));
+                      const sel = cp.items[idx];
+                      return (
+                        <>
+                          <label className="cx-tool-field wide" htmlFor="cp-pick">Checkpoint (standard set)
+                            <select id="cp-pick" className="cx-tool-select" value={toolSetup.checkpointId} onChange={(event) => {
+                              updateToolSetup("checkpointId", event.target.value);
+                              const ncp = getCheckpoint(event.target.value);
+                              const first = ncp ? ncp.items.findIndex((it) => it.digital) : 0;
+                              updateToolSetup("checkpointItem", String(first < 0 ? 0 : first));
+                            }}>
+                              {SBAC_CHECKPOINTS.map((c) => <option key={c.id} value={c.id}>{c.id} · {c.covers}</option>)}
+                            </select>
+                          </label>
+                          <label className="cx-tool-field wide" htmlFor="cp-item">Question (auto-graded)
+                            <select id="cp-item" className="cx-tool-select" value={toolSetup.checkpointItem} onChange={(event) => updateToolSetup("checkpointItem", event.target.value)}>
+                              {choices.map(({ it, i }) => <option key={i} value={String(i)}>{it.ccss} — {it.q.length > 64 ? it.q.slice(0, 64) + "…" : it.q}</option>)}
+                            </select>
+                          </label>
+                          {sel && <div style={{ gridColumn: "1 / -1", fontSize: "0.82rem", fontWeight: 700, color: "#8b8170" }}>Answer key: {sel.a}{sel.digital ? "" : "  ·  (paper item — grade by eye)"}</div>}
+                        </>
+                      );
+                    })()}
                   </div>
                   {toolError && <div className="cx-poll-error">{toolError}</div>}
                   {publishedTool?.stateId === activeToolState && (
@@ -1483,7 +1543,9 @@ export default function ControlPage() {
                         ? "The live game is running — watch the leaderboard on the Session page."
                         : activeToolState === "tool-exit-ticket"
                           ? "Exit ticket sent — responses are saving. Review them under 📝 Practice → Exit tickets."
-                          : "Student screens are on this configured tool."}
+                          : activeToolState === "tool-checkpoint"
+                            ? "Checkpoint sent — auto-graded answers are saving. Review under ✅ Checkpoints."
+                            : "Student screens are on this configured tool."}
                     </div>
                   )}
                   <div className="cx-actions" style={{ justifyContent: "flex-start" }}>
@@ -1492,7 +1554,9 @@ export default function ControlPage() {
                         ? (publishedTool?.stateId === activeToolState ? "Relaunch game" : "🎮 Launch game")
                         : activeToolState === "tool-exit-ticket"
                           ? (publishedTool?.stateId === activeToolState ? "Re-send exit ticket" : "📝 Send exit ticket")
-                          : (publishedTool?.stateId === activeToolState ? "Update student screens" : "Send tool setup to students")}
+                          : activeToolState === "tool-checkpoint"
+                            ? (publishedTool?.stateId === activeToolState ? "Re-send checkpoint" : "✅ Send checkpoint")
+                            : (publishedTool?.stateId === activeToolState ? "Update student screens" : "Send tool setup to students")}
                     </button>
                   </div>
                 </section>

@@ -40,6 +40,7 @@ const CLASS_MODE_TARGETS = new Set([
   "/coordinate-grid",
   "/term-identifier",
   "/exit-ticket",
+  "/checkpoint",
 ]);
 
 function isTeacherRoute(pathname: string) {
