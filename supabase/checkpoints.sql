@@ -18,6 +18,7 @@ create table if not exists checkpoint_runs (
   correct_answer text not null,
   misses         jsonb,
   status         text not null default 'open',
+  notion_summary_url text,                  -- set by the daily Notion sync (summary page)
   created_at     timestamptz not null default now()
 );
 create index if not exists checkpoint_runs_session_idx on checkpoint_runs(session_id);
@@ -32,6 +33,7 @@ create table if not exists checkpoint_results (
   is_correct    boolean not null default false,
   misconception text,
   ccss          text,
+  notion_synced boolean not null default false,  -- daily Notion sync marks rows as pushed
   created_at    timestamptz not null default now()
 );
 create index if not exists checkpoint_results_run_idx on checkpoint_results(run_id);
