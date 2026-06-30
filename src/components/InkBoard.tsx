@@ -9,6 +9,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { joinInkRoom, type InkChannel, type InkMessage, type InkPoint, type InkStroke } from "@/lib/inkSync";
 
+// Smoothing + pressure helpers (module scope so render callbacks stay stable).
+function midPoint(a: InkPoint, b: InkPoint): InkPoint { return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
+function pressureOf(p?: number): number { return p && p > 0 && p <= 1 ? p : 0.5; }
+
 interface InkBoardProps {
   room: string;
   interactive: boolean; // the iPad draws; the board display does not
@@ -60,39 +64,64 @@ export default function InkBoard({
     return { w: r?.width ?? 1, h: r?.height ?? 1 };
   }, []);
 
-  const strokeSegment = useCallback(
-    (s: { color: string; erase: boolean; widthFrac: number }, a: InkPoint, b: InkPoint) => {
+  // Line width in CSS px at a point: pen width scales with Pencil pressure; eraser stays constant.
+  const lwPx = useCallback(
+    (s: { erase: boolean; widthFrac: number }, p: InkPoint, w: number) =>
+      Math.max(1, s.widthFrac * w * (s.erase ? 1 : 0.45 + 0.95 * pressureOf(p.p))),
+    [],
+  );
+
+  const stamp = useCallback(
+    (s: { color: string; erase: boolean }, lw: number, draw: (c: CanvasRenderingContext2D) => void) => {
       const context = ctx();
       if (!context) return;
-      const { w, h } = size();
       context.globalCompositeOperation = s.erase ? "destination-out" : "source-over";
       context.strokeStyle = s.color;
-      context.lineWidth = Math.max(1, s.widthFrac * w);
+      context.fillStyle = s.color;
+      context.lineWidth = lw;
       context.lineCap = "round";
       context.lineJoin = "round";
-      context.beginPath();
-      context.moveTo(a.x * w, a.y * h);
-      context.lineTo(b.x * w, b.y * h);
-      context.stroke();
+      draw(context);
     },
-    [ctx, size],
+    [ctx],
   );
 
-  const drawDot = useCallback(
-    (s: { color: string; erase: boolean; widthFrac: number }, p: InkPoint) => {
-      const context = ctx();
-      if (!context || s.erase) return;
-      const { w, h } = size();
-      context.globalCompositeOperation = "source-over";
-      context.fillStyle = s.color;
-      context.beginPath();
-      context.arc(p.x * w, p.y * h, Math.max(0.5, (s.widthFrac * w) / 2), 0, Math.PI * 2);
-      context.fill();
+  // Draw the smoothed piece of a stroke that ends at point index i (quadratic through midpoints).
+  const drawIndex = useCallback(
+    (s: InkStroke, i: number, w: number, h: number) => {
+      const pts = s.points;
+      if (i <= 0) {
+        const lw = lwPx(s, pts[0], w);
+        stamp(s, lw, (c) => { c.beginPath(); c.arc(pts[0].x * w, pts[0].y * h, lw / 2, 0, Math.PI * 2); c.fill(); });
+        return;
+      }
+      if (i === 1) {
+        const a = pts[0], b = midPoint(pts[0], pts[1]);
+        stamp(s, lwPx(s, pts[1], w), (c) => { c.beginPath(); c.moveTo(a.x * w, a.y * h); c.lineTo(b.x * w, b.y * h); c.stroke(); });
+        return;
+      }
+      const a = midPoint(pts[i - 2], pts[i - 1]), ctrl = pts[i - 1], b = midPoint(pts[i - 1], pts[i]);
+      stamp(s, lwPx(s, ctrl, w), (c) => {
+        c.beginPath();
+        c.moveTo(a.x * w, a.y * h);
+        c.quadraticCurveTo(ctrl.x * w, ctrl.y * h, b.x * w, b.y * h);
+        c.stroke();
+      });
     },
-    [ctx, size],
+    [lwPx, stamp],
   );
 
-  // Apply one incoming/local segment: draw it and append to the stored stroke.
+  const drawEnd = useCallback(
+    (s: InkStroke, w: number, h: number) => {
+      const pts = s.points;
+      if (pts.length < 2) return;
+      const a = midPoint(pts[pts.length - 2], pts[pts.length - 1]), b = pts[pts.length - 1];
+      stamp(s, lwPx(s, b, w), (c) => { c.beginPath(); c.moveTo(a.x * w, a.y * h); c.lineTo(b.x * w, b.y * h); c.stroke(); });
+    },
+    [lwPx, stamp],
+  );
+
+  // Apply one incoming/local segment: append points and draw their smoothed pieces.
   const applySeg = useCallback(
     (seg: Extract<InkMessage, { t: "seg" }>) => {
       let stroke = byIdRef.current.get(seg.id);
@@ -101,15 +130,14 @@ export default function InkBoard({
         byIdRef.current.set(seg.id, stroke);
         strokesRef.current.push(stroke);
       }
-      let prev = stroke.points[stroke.points.length - 1];
+      const { w, h } = size();
       for (const p of seg.pts) {
-        if (prev) strokeSegment(seg, prev, p);
-        else drawDot(seg, p);
         stroke.points.push(p);
-        prev = p;
+        drawIndex(stroke, stroke.points.length - 1, w, h);
       }
+      if (seg.end) drawEnd(stroke, w, h);
     },
-    [strokeSegment, drawDot],
+    [size, drawIndex, drawEnd],
   );
 
   const redraw = useCallback(() => {
@@ -119,10 +147,10 @@ export default function InkBoard({
     const { w, h } = size();
     context.clearRect(0, 0, w, h);
     for (const s of strokesRef.current) {
-      for (let i = 1; i < s.points.length; i += 1) strokeSegment(s, s.points[i - 1], s.points[i]);
-      if (s.points.length === 1) drawDot(s, s.points[0]);
+      for (let i = 0; i < s.points.length; i += 1) drawIndex(s, i, w, h);
+      drawEnd(s, w, h);
     }
-  }, [ctx, size, strokeSegment, drawDot]);
+  }, [ctx, size, drawIndex, drawEnd]);
 
   const resize = useCallback(() => {
     const c = canvasRef.current;
@@ -286,11 +314,14 @@ export default function InkBoard({
   // ── Pointer drawing (pen surface only) ──────────────────────────────────────
   const toNorm = useCallback((e: React.PointerEvent<HTMLCanvasElement>): InkPoint => {
     const r = e.currentTarget.getBoundingClientRect();
-    return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
+    return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height, p: e.pressure };
   }, []);
 
+  const penSeenRef = useRef(false);
   const onDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!interactive) return;
+    if (e.pointerType === "pen") penSeenRef.current = true;
+    else if (e.pointerType === "touch" && penSeenRef.current) return; // palm/finger rejected once the Pencil is in use
     e.currentTarget.setPointerCapture(e.pointerId);
     drawingRef.current = true;
     const id = crypto.randomUUID();
@@ -317,6 +348,7 @@ export default function InkBoard({
     const pts: InkPoint[] = sources.map((ev) => ({
       x: (ev.clientX - r.left) / r.width,
       y: (ev.clientY - r.top) / r.height,
+      p: ev.pressure,
     }));
     const seg: Extract<InkMessage, { t: "seg" }> = {
       t: "seg", id, color: stroke.color, erase: stroke.erase, widthFrac: stroke.widthFrac, pts,
@@ -327,9 +359,21 @@ export default function InkBoard({
 
   const onUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+    const wasDrawing = drawingRef.current;
+    const id = activeIdRef.current;
     drawingRef.current = false;
     activeIdRef.current = null;
-  }, []);
+    if (interactive && wasDrawing && id) {
+      const stroke = byIdRef.current.get(id);
+      if (stroke) {
+        const endSeg: Extract<InkMessage, { t: "seg" }> = {
+          t: "seg", id, color: stroke.color, erase: stroke.erase, widthFrac: stroke.widthFrac, pts: [], end: true,
+        };
+        applySeg(endSeg);
+        channelRef.current?.send(endSeg);
+      }
+    }
+  }, [interactive, applySeg]);
 
   return (
     <div style={{ position: "absolute", inset: 0, background: "#ffffff", overflow: "hidden" }}>

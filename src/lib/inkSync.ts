@@ -14,6 +14,7 @@ import { getSupabase } from "./supabase";
 export interface InkPoint {
   x: number; // 0..1 across the writing surface
   y: number; // 0..1 down the writing surface
+  p?: number; // Apple Pencil pressure 0..1 (absent for mouse)
 }
 
 export interface InkStroke {
@@ -25,7 +26,7 @@ export interface InkStroke {
 }
 
 export type InkMessage =
-  | { t: "seg"; id: string; color: string; erase: boolean; widthFrac: number; pts: InkPoint[]; start?: boolean }
+  | { t: "seg"; id: string; color: string; erase: boolean; widthFrac: number; pts: InkPoint[]; start?: boolean; end?: boolean }
   | { t: "clear" }
   | { t: "bg"; url: string | null }
   | { t: "problem"; text: string | null } // problem(s) to show with space to solve
