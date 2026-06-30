@@ -5,9 +5,11 @@
 
 import { useEffect, useState } from "react";
 import InkBoard from "@/components/InkBoard";
+import { joinInkRoom } from "@/lib/inkSync";
 
 export default function BoardPage() {
   const [room, setRoom] = useState("main");
+  const [scratchOpen, setScratchOpen] = useState(false);
   useEffect(() => {
     try {
       const r = new URLSearchParams(window.location.search).get("room");
@@ -15,9 +17,20 @@ export default function BoardPage() {
     } catch { /* ignore */ }
   }, []);
 
+  // Mirror the iPad's scratch overlay open/close.
+  useEffect(() => {
+    const ctrl = joinInkRoom(`${room}__ctrl`, (m) => { if (m.t === "scratch") setScratchOpen(m.open); });
+    return () => ctrl.close();
+  }, [room]);
+
   return (
     <main style={{ position: "fixed", inset: 0, background: "#ffffff" }}>
       <InkBoard room={room} interactive={false} />
+      {scratchOpen && (
+        <div style={{ position: "absolute", inset: 0, zIndex: 3, background: "#ffffff" }}>
+          <InkBoard room={`${room}__scratch`} interactive={false} />
+        </div>
+      )}
       <div
         style={{
           position: "absolute", top: 10, right: 12, zIndex: 2,

@@ -7,6 +7,8 @@
 import { useEffect, useRef, useState } from "react";
 import InkBoard from "@/components/InkBoard";
 import { getSupabase } from "@/lib/supabase";
+import { joinInkRoom, type InkChannel } from "@/lib/inkSync";
+import { BOARD_TEMPLATES } from "@/lib/boardTemplates";
 
 function classroomDate(): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -34,7 +36,11 @@ export default function IpadPage() {
   const [clearSignal, setClearSignal] = useState(0);
   const [exportSignal, setExportSignal] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [scratchOpen, setScratchOpen] = useState(false);
+  const [scratchClear, setScratchClear] = useState(0);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const ctrlRef = useRef<InkChannel | null>(null);
 
   function flashToast(message: string) {
     setToast(message);
@@ -70,6 +76,21 @@ export default function IpadPage() {
     } catch { /* ignore */ }
   }, []);
 
+  // Control channel: open/close the scratch overlay on the board.
+  useEffect(() => {
+    const ctrl = joinInkRoom(`${room}__ctrl`, (m) => { if (m.t === "scratch") setScratchOpen(m.open); });
+    ctrlRef.current = ctrl;
+    return () => ctrl.close();
+  }, [room]);
+
+  function toggleScratch() {
+    setScratchOpen((v) => {
+      const next = !v;
+      ctrlRef.current?.send({ t: "scratch", open: next });
+      return next;
+    });
+  }
+
   function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -102,7 +123,12 @@ export default function IpadPage() {
         .ip-divider { width:1px; align-self:stretch; background:var(--bdb-line); margin:2px 4px; }
         .ip-problem { display:flex; gap:10px; align-items:center; padding:8px 14px; background:var(--bdb-card); border-bottom:1px solid var(--bdb-line); }
         .ip-problem-in { flex:1; resize:vertical; min-height:42px; border:1px solid var(--bdb-line); border-radius:10px; padding:10px 12px; font-family:var(--bdb-font); font-size:0.95rem; color:var(--bdb-ink); }
+        .ip-templates { display:flex; gap:8px; flex-wrap:wrap; padding:8px 14px; background:var(--bdb-card); border-bottom:1px solid var(--bdb-line); }
         .ip-stage { position:relative; flex:1; }
+        .ip-scratch { position:absolute; inset:0; z-index:5; display:flex; flex-direction:column; background:#fff; }
+        .ip-scratch-bar { display:flex; align-items:center; gap:8px; padding:8px 14px; background:var(--bdb-card); border-bottom:1px solid var(--bdb-line); }
+        .ip-scratch-title { font-weight:800; color:var(--bdb-ink); }
+        .ip-scratch-stage { position:relative; flex:1; }
         .ip-spacer { flex:1; }
       `}</style>
 
@@ -135,8 +161,10 @@ export default function IpadPage() {
         <span className="ip-divider" />
 
         <button className={`ip-btn${showProblem ? " on" : ""}`} onClick={() => setShowProblem((v) => !v)}>Problem</button>
+        <button className={`ip-btn${showTemplates ? " on" : ""}`} onClick={() => setShowTemplates((v) => !v)}>Templates</button>
         <button className="ip-btn" onClick={() => fileRef.current?.click()}>Background</button>
         {background && <button className="ip-btn warn" onClick={() => setBackground(null)}>Remove bg</button>}
+        <button className={`ip-btn${scratchOpen ? " on" : ""}`} onClick={toggleScratch}>Scratch</button>
         <button className="ip-btn warn" onClick={() => setClearSignal((n) => n + 1)}>Clear</button>
 
         <span className="ip-spacer" />
@@ -158,6 +186,14 @@ export default function IpadPage() {
         </div>
       )}
 
+      {showTemplates && (
+        <div className="ip-templates">
+          {BOARD_TEMPLATES.map((t) => (
+            <button key={t.id} className="ip-btn" onClick={() => { setBackground(t.build()); setShowTemplates(false); }}>{t.label}</button>
+          ))}
+        </div>
+      )}
+
       <div className="ip-stage">
         <InkBoard
           room={room}
@@ -171,6 +207,26 @@ export default function IpadPage() {
           exportSignal={exportSignal}
           onExport={handleExport}
         />
+        {scratchOpen && (
+          <div className="ip-scratch">
+            <div className="ip-scratch-bar">
+              <span className="ip-scratch-title">Scratch</span>
+              <span className="ip-spacer" />
+              <button className="ip-btn warn" onClick={() => setScratchClear((n) => n + 1)}>Clear</button>
+              <button className="ip-btn" onClick={toggleScratch}>Done</button>
+            </div>
+            <div className="ip-scratch-stage">
+              <InkBoard
+                room={`${room}__scratch`}
+                interactive
+                color={color}
+                erase={erase}
+                penWidth={penWidth}
+                clearSignal={scratchClear}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {toast && (

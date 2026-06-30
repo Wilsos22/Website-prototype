@@ -30,6 +30,7 @@ export type InkMessage =
   | { t: "clear" }
   | { t: "bg"; url: string | null }
   | { t: "problem"; text: string | null } // problem(s) to show with space to solve
+  | { t: "scratch"; open: boolean } // open/close the scratch overlay on the board
   | { t: "hello" } // a display just opened — please resend current state
   | { t: "state"; strokes: InkStroke[]; bg: string | null; problem: string | null };
 
