@@ -8,9 +8,11 @@ export const dynamic = "force-dynamic";
 // spoken-aloud classroom use. Swap to "eleven_turbo_v2_5" for a bit more polish.
 const VOICE_MODEL = "eleven_flash_v2_5";
 
-// Default voice ("Elli", a preset). Override per-teacher with ELEVENLABS_VOICE_ID
-// once you pick a voice you like from the ElevenLabs Voice Library.
-const DEFAULT_VOICE_ID = "MF3mGyEYCl7XYWbV9V6O";
+// Default voice = "Jessica", one of ElevenLabs' built-in DEFAULT voices (usable on
+// the free API tier). NOTE: community "Voice Library" voices require a PAID plan via
+// the API (free tier returns 402 paid_plan_required). Override with ELEVENLABS_VOICE_ID
+// — but only with a Default voice's ID unless you're on a paid ElevenLabs plan.
+const DEFAULT_VOICE_ID = "cgSgspJ2msm6clMCkdW9";
 
 export async function POST(req: Request) {
   const key = process.env.ELEVENLABS_API_KEY;
