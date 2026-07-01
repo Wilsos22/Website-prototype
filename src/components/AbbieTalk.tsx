@@ -13,6 +13,10 @@ interface SRResult { readonly isFinal: boolean; readonly length: number; readonl
 interface SREvent { readonly resultIndex: number; readonly results: ArrayLike<SRResult> }
 interface SR { lang: string; interimResults: boolean; continuous: boolean; start: () => void; stop: () => void; onresult: ((e: SREvent) => void) | null; onend: (() => void) | null; onerror: (() => void) | null }
 
+// Physical push-to-talk key — map a Stream Deck button's Hotkey to this key.
+// Change it here if F8 conflicts with anything on your setup.
+const TRIGGER_KEY = "F8";
+
 export default function AbbieTalk() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [text, setText] = useState("");
@@ -25,10 +29,16 @@ export default function AbbieTalk() {
 
   const recRef = useRef<SR | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const heardRef = useRef("");
   const sendRef = useRef<(raw: string) => void>(() => {});
   const messagesRef = useRef<Msg[]>([]);
+  const listeningRef = useRef(false);
+  const thinkingRef = useRef(false);
+  const startedPressRef = useRef(false);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
+  useEffect(() => { listeningRef.current = listening; }, [listening]);
+  useEffect(() => { thinkingRef.current = thinking; }, [thinking]);
 
   useEffect(() => {
     const w = window as unknown as { SpeechRecognition?: new () => SR; webkitSpeechRecognition?: new () => SR };
@@ -63,6 +73,30 @@ export default function AbbieTalk() {
     } catch { /* ignore */ }
   }, []);
 
+  // Abbie's real voice: ElevenLabs (server-side, key stays on Vercel). Falls back
+  // to the browser's robotic speechSynthesis if the voice route isn't configured.
+  const speakVoice = useCallback(async (line: string) => {
+    try {
+      const res = await fetch("/api/abbie/voice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: line }),
+      });
+      if (!res.ok) { speak(line); return; }
+      const buf = await res.arrayBuffer();
+      const url = URL.createObjectURL(new Blob([buf], { type: "audio/mpeg" }));
+      try { window.speechSynthesis?.cancel(); } catch { /* ignore */ }
+      let audio = audioRef.current;
+      if (!audio) { audio = new Audio(); audioRef.current = audio; }
+      audio.pause();
+      audio.src = url;
+      audio.onended = () => URL.revokeObjectURL(url);
+      await audio.play();
+    } catch {
+      speak(line); // autoplay blocked or network error → robotic fallback
+    }
+  }, [speak]);
+
   const send = useCallback(async (raw: string) => {
     const content = raw.trim();
     if (!content || thinking) return;
@@ -81,14 +115,14 @@ export default function AbbieTalk() {
       if (data.error) { setStatus(data.error); }
       else if (data.reply) {
         setMessages((m) => [...m, { role: "assistant", content: data.reply }]);
-        speak(data.reply);
+        void speakVoice(data.reply);
       }
     } catch {
       setStatus("Network error reaching Abbie.");
     } finally {
       setThinking(false);
     }
-  }, [thinking, lesson, speak]);
+  }, [thinking, lesson, speakVoice]);
 
   // Keep the persistent recognizer's onend handler pointed at the latest send().
   useEffect(() => { sendRef.current = send; }, [send]);
@@ -136,6 +170,35 @@ export default function AbbieTalk() {
     try { recRef.current?.stop(); } catch { /* ignore */ }
   }, []);
 
+  // Physical push-to-talk (e.g. a Stream Deck key mapped to TRIGGER_KEY). Hold the
+  // key to talk and release to send, OR tap once to start and tap again to send —
+  // whichever your Stream Deck sends. Only fires while this browser tab is focused.
+  useEffect(() => {
+    if (!sttSupported) return;
+    let downAt = 0;
+    const isTyping = () => {
+      const el = document.activeElement as HTMLElement | null;
+      return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA");
+    };
+    const onDown = (e: KeyboardEvent) => {
+      if (e.key !== TRIGGER_KEY || e.repeat || isTyping()) return;
+      e.preventDefault();
+      downAt = Date.now();
+      if (!listeningRef.current && !thinkingRef.current) { startedPressRef.current = true; startListening(); }
+      else { startedPressRef.current = false; }
+    };
+    const onUp = (e: KeyboardEvent) => {
+      if (e.key !== TRIGGER_KEY) return;
+      e.preventDefault();
+      const held = Date.now() - downAt;
+      if (held >= 350) { if (listeningRef.current) stopListening(); }            // hold-to-talk → release sends
+      else if (!startedPressRef.current && listeningRef.current) stopListening(); // tap-again → send
+    };
+    window.addEventListener("keydown", onDown);
+    window.addEventListener("keyup", onUp);
+    return () => { window.removeEventListener("keydown", onDown); window.removeEventListener("keyup", onUp); };
+  }, [sttSupported, startListening, stopListening]);
+
   return (
     <div className="ab-wrap">
       <style>{`
@@ -163,7 +226,7 @@ export default function AbbieTalk() {
 
       <div className="ab-log">
         {messages.length === 0 ? (
-          <div className="ab-empty">{sttSupported ? "Hold the button and talk to her — or type below. She talks back." : "Type to her below — she talks back. (Voice input needs Chrome or Safari.)"}</div>
+          <div className="ab-empty">{sttSupported ? "Hold the button — or your Stream Deck key — and talk. Or type below. She talks back out loud." : "Type to her below — she talks back. (Voice input needs Chrome or Safari.)"}</div>
         ) : messages.map((m, i) => (
           <div className={`ab-row ${m.role === "user" ? "user" : "abbie"}`} key={i}>
             <div className={`ab-av ${m.role === "user" ? "me" : "abbie"}`}>
