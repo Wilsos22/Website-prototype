@@ -5,8 +5,9 @@ import "./globals.css";
 import ClassSync from "@/components/ClassSync";
 
 export const metadata: Metadata = {
-  title: "Big Dog Board",
-  description: "A small classroom board prototype for teachers.",
+  title: "Big Dog Math Classroom System",
+  description:
+    "A classroom math system with student lesson flow, teacher controls, Notion curriculum data, Google Forms warm-up automation, and interactive math tools.",
 };
 
 export const viewport: Viewport = {

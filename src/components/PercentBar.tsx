@@ -103,39 +103,40 @@ export default function PercentBar() {
   return (
     <div className="pc-root">
       <style>{`
-        .pc-root { min-height:100vh; background:#0b0d14; color:#fff; font-family:Inter,ui-sans-serif,system-ui,sans-serif; display:grid; grid-template-rows:auto 1fr auto; }
-        .pc-top { display:flex; align-items:center; justify-content:space-between; padding:14px 24px; border-bottom:1px solid #1f2332; flex-wrap:wrap; gap:8px; }
-        .pc-mark { font-size:0.76rem; font-weight:900; letter-spacing:0.14em; text-transform:uppercase; color:#f472b6; margin:0; }
-        .pc-btn { font-size:0.8rem; font-weight:800; color:#8a93ad; background:transparent; border:1px solid #1f2332; border-radius:7px; padding:8px 13px; cursor:pointer; text-decoration:none; }
-        .pc-btn:hover { border-color:#f472b6; color:#fff; }
+        .pc-root { min-height:100vh; background:var(--bdb-ground); color:var(--bdb-ink); font-family:var(--bdb-font); display:grid; grid-template-rows:auto 1fr auto; }
+        .pc-top { display:flex; align-items:center; justify-content:space-between; padding:14px 24px; border-bottom:1px solid var(--bdb-line); flex-wrap:wrap; gap:8px; }
+        .pc-mark { font-size:0.76rem; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; color:var(--bdb-coral); margin:0; }
+        .pc-btn { font-size:0.8rem; font-weight:700; color:var(--bdb-ink-soft); background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:999px; padding:8px 13px; cursor:pointer; text-decoration:none; }
+        .pc-btn:hover { border-color:var(--bdb-coral); color:var(--bdb-ink); }
         .pc-main { padding:24px 18px; display:grid; gap:22px; justify-items:center; max-width:860px; margin:0 auto; width:100%; }
 
-        .pc-prompt { font-size:clamp(1.2rem,3vw,1.7rem); font-weight:900; text-align:center; }
-        .pc-prompt .u { color:#f472b6; }
+        .pc-prompt { font-size:clamp(1.2rem,3vw,1.7rem); font-weight:800; text-align:center; }
+        .pc-prompt .u { color:var(--bdb-coral); }
 
         .pc-bar-wrap { width:100%; max-width:720px; display:grid; gap:4px; }
-        .pc-scale { display:flex; justify-content:space-between; font-size:0.72rem; font-weight:800; color:#7681a8; }
+        .pc-scale { display:flex; justify-content:space-between; font-size:0.72rem; font-weight:700; color:var(--bdb-ink-faint); }
         .pc-pcts, .pc-vals { display:grid; grid-template-columns:repeat(10,1fr); }
-        .pc-pcts span, .pc-vals span { font-size:0.66rem; font-weight:800; color:#7681a8; text-align:right; padding-right:2px; }
-        .pc-bar { display:grid; grid-template-columns:repeat(10,1fr); height:70px; border:2px solid #2a3045; border-radius:12px; overflow:hidden; }
-        .pc-seg { border-right:1px solid #0b0d14; transition:background 200ms ease; }
-        .pc-seg.fill { background:#f472b6; }
-        .pc-seg.bench { background:#fbbf24; }
-        .pc-vals span { color:#9aa3bd; }
-        .pc-pcts span { color:#7681a8; }
+        .pc-pcts span, .pc-vals span { font-size:0.66rem; font-weight:700; color:var(--bdb-ink-faint); text-align:right; padding-right:2px; }
+        .pc-bar { display:grid; grid-template-columns:repeat(10,1fr); height:70px; border:2px solid var(--bdb-ink); border-radius:12px; overflow:hidden; background:var(--bdb-card); }
+        .pc-seg { border-right:1px solid var(--bdb-line); transition:background 200ms ease; }
+        .pc-seg.fill { background:var(--bdb-teal); }
+        .pc-seg.bench { background:var(--bdb-amber); }
+        .pc-vals span { color:var(--bdb-ink-soft); }
+        .pc-pcts span { color:var(--bdb-ink-faint); }
 
-        .pc-expr { font-size:clamp(1rem,2.6vw,1.4rem); font-weight:900; color:#f9a8d4; text-align:center; min-height:1.3em; }
-        .pc-q { font-size:clamp(1.05rem,2.6vw,1.4rem); font-weight:800; text-align:center; color:#e8ecf5; }
+        .pc-expr { font-size:clamp(1rem,2.6vw,1.4rem); font-weight:800; color:var(--bdb-brown); text-align:center; min-height:1.3em; }
+        .pc-q { font-size:clamp(1.05rem,2.6vw,1.4rem); font-weight:700; text-align:center; color:var(--bdb-ink); }
         .pc-row { display:flex; gap:10px; justify-content:center; align-items:center; flex-wrap:wrap; }
-        .pc-input { font-size:1.5rem; font-weight:900; text-align:center; background:#0b0d14; border:2px solid #2a3045; border-radius:12px; color:#fff; padding:10px; width:130px; }
-        .pc-go { font-size:1.05rem; font-weight:900; color:#fff; background:#f472b6; border:none; border-radius:12px; padding:12px 24px; cursor:pointer; }
-        .pc-hint { background:rgba(244,114,182,0.12); border:1px solid rgba(244,114,182,0.45); color:#f9a8d4; border-radius:10px; padding:11px 16px; font-weight:700; font-size:0.92rem; max-width:520px; text-align:center; }
-        .pc-hintbtn { font-size:0.82rem; font-weight:800; color:#f9a8d4; background:transparent; border:1px solid rgba(244,114,182,0.45); border-radius:8px; padding:8px 14px; cursor:pointer; }
-        .pc-solved { font-size:clamp(1.3rem,3.4vw,2rem); font-weight:900; color:#22c55e; text-align:center; }
+        .pc-input { font-size:1.5rem; font-weight:800; text-align:center; background:var(--bdb-card); border:2px solid var(--bdb-line); border-radius:12px; color:var(--bdb-ink); padding:10px; width:130px; }
+        .pc-input:focus { outline:none; border-color:var(--bdb-teal); }
+        .pc-go { font-size:1.05rem; font-weight:800; color:#fff; background:var(--bdb-coral); border:none; border-radius:12px; padding:12px 24px; cursor:pointer; }
+        .pc-hint { background:color-mix(in srgb, var(--bdb-amber) 16%, var(--bdb-card)); border:1px solid color-mix(in srgb, var(--bdb-amber) 45%, transparent); color:var(--bdb-brown); border-radius:10px; padding:11px 16px; font-weight:600; font-size:0.92rem; max-width:520px; text-align:center; }
+        .pc-hintbtn { font-size:0.82rem; font-weight:700; color:var(--bdb-coral); background:transparent; border:1px solid var(--bdb-line); border-radius:999px; padding:8px 14px; cursor:pointer; }
+        .pc-solved { font-size:clamp(1.3rem,3.4vw,2rem); font-weight:800; color:var(--bdb-green); text-align:center; }
         .pc-unknowns { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
-        .pc-preset { font-size:0.85rem; font-weight:800; color:#c8cedd; background:#121520; border:1px solid #1f2332; border-radius:999px; padding:7px 13px; cursor:pointer; }
-        .pc-preset:hover { border-color:#f472b6; }
-        .pc-foot { padding:12px 24px; border-top:1px solid #1f2332; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+        .pc-preset { font-size:0.85rem; font-weight:700; color:var(--bdb-ink-soft); background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:999px; padding:7px 13px; cursor:pointer; }
+        .pc-preset:hover { border-color:var(--bdb-coral); color:var(--bdb-ink); }
+        .pc-foot { padding:12px 24px; border-top:1px solid var(--bdb-line); display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
       `}</style>
 
       <header className="pc-top">
@@ -184,7 +185,7 @@ export default function PercentBar() {
               {unknown === "whole" && `${part} is ${P}% of ${W} 🎉`}
               {unknown === "percent" && `${part} is ${finalPercent}% of ${W} 🎉`}
             </div>
-            <p className="pc-q" style={{ color: "#9aa3bd", fontSize: "0.95rem" }}>Solved with benchmark 10%{wrong === 0 ? " · no mistakes!" : "!"}</p>
+            <p className="pc-q" style={{ color: "var(--bdb-ink-soft)", fontSize: "0.95rem" }}>Solved with benchmark 10%{wrong === 0 ? " · no mistakes!" : "!"}</p>
             <button className="pc-go" onClick={() => load(makeProblem())}>Next problem →</button>
           </>
         ) : (
@@ -195,7 +196,7 @@ export default function PercentBar() {
               <button className="pc-go" onClick={check}>Check →</button>
             </div>
             {hint ? <div className="pc-hint">💡 {hint}</div> : <button className="pc-hintbtn" onClick={() => setHint(stepIdx === 0 ? "Benchmarks make percents easy — 10% is just the whole split into 10 equal parts." : "Use your 10% benchmark and scale up.")}>Need a hint?</button>}
-            {feedback && !hint && <p className="pc-q" style={{ color: "#9aa3bd", fontSize: "0.92rem" }}>{feedback}</p>}
+            {feedback && !hint && <p className="pc-q" style={{ color: "var(--bdb-ink-soft)", fontSize: "0.92rem" }}>{feedback}</p>}
           </>
         )}
 

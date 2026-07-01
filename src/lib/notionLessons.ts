@@ -31,6 +31,11 @@ export interface LessonData {
   toolsConfigured: boolean;
   warmUpLink: string;    // url to today's warm-up
   exitTicketLink: string; // url to the exit ticket
+  // Lesson-flow fields for the auto-built sequence. Empty if the Notion column is absent.
+  learningIntention: string;
+  successCriteria: string;
+  discussionPrompt: string;
+  practiceProblems: string;
 }
 
 interface RichTextItem {
@@ -254,6 +259,10 @@ async function mapPage(page: NotionPage, token: string, cache: Map<string, Promi
     toolsConfigured: Boolean(toolText.trim()) || hasToolCheckboxes,
     warmUpLink: await resolveLink(p["Warm Up Link"], token, cache),
     exitTicketLink: await resolveLink(p["Exit Ticket Link"], token, cache),
+    learningIntention: extractText(p["Learning Intention"]),
+    successCriteria: extractText(p["Success Criteria"]),
+    discussionPrompt: extractText(p["Discussion Prompt"]),
+    practiceProblems: extractText(p["Practice Problems"]),
   };
 }
 

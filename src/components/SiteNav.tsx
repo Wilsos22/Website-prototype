@@ -7,8 +7,13 @@ import { usePathname } from "next/navigation";
 
 const TEACHER = [
   { href: "/teacher",   label: "🏠 Home" },
+  { href: "/builder",   label: "🧱 Builder" },
   { href: "/control",   label: "🎛 Control" },
   { href: "/session",   label: "📡 Session" },
+  { href: "/teacher/challenges", label: "🎮 Games" },
+  { href: "/teacher/assignments", label: "📝 Practice" },
+  { href: "/teacher/exit-tickets", label: "🎟 Exit" },
+  { href: "/teacher/checkpoints", label: "✅ Checks" },
   { href: "/roster",    label: "👥 Rosters" },
   { href: "/",          label: "Student view" },
 ];
@@ -31,9 +36,7 @@ export default function SiteNav({ variant = "teacher" }: { variant?: "teacher" |
         }
         .nav-brand { display:inline-flex; align-items:center; gap:9px; text-decoration:none; }
         .nav-logo {
-          width:30px; height:30px; border-radius:9px;
-          background:var(--bdb-ink); color:var(--bdb-amber);
-          display:grid; place-items:center; font-weight:800; font-size:0.95rem;
+          width:32px; height:32px; display:block; object-fit:contain; flex:none;
         }
         .nav-name { font-weight:700; color:var(--bdb-ink); font-size:0.98rem; letter-spacing:-0.01em; }
         .nav-links { display:flex; gap:4px; flex-wrap:wrap; }
@@ -46,7 +49,7 @@ export default function SiteNav({ variant = "teacher" }: { variant?: "teacher" |
         .nav-link.on { background:var(--bdb-ink); color:#fff; }
       `}</style>
       <a className="nav-brand" href={variant === "teacher" ? "/teacher" : "/"}>
-        <span className="nav-logo">b</span>
+        <img className="nav-logo" src="/big-dog-mark.png" alt="" />
         <span className="nav-name">bigdogmath</span>
       </a>
       <div className="nav-links">

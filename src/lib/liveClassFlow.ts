@@ -15,12 +15,36 @@ export type LiveToolRoute =
   | "/equation-builder"
   | "/order-of-operations"
   | "/fraction-bars"
-  | "/algebra-tiles";
+  | "/algebra-tiles"
+  | "/area-model"
+  | "/multiplication-fluency"
+  | "/combine-like-terms"
+  | "/ladder-method"
+  | "/group-bars"
+  | "/proportions"
+  | "/coordinate-grid"
+  | "/term-identifier"
+  | "/challenge"
+  | "/exit-ticket"
+  | "/checkpoint";
 
 export type LiveToolConfig =
   | {
       id: string;
-      route: "/whiteboard" | "/fraction-bars";
+      route:
+        | "/whiteboard"
+        | "/fraction-bars"
+        | "/area-model"
+        | "/multiplication-fluency"
+        | "/combine-like-terms"
+        | "/ladder-method"
+        | "/group-bars"
+        | "/proportions"
+        | "/coordinate-grid"
+        | "/term-identifier"
+        | "/challenge"
+        | "/exit-ticket"
+        | "/checkpoint";
       label: string;
       prompt: string;
       config: Record<string, never>;
@@ -67,6 +91,8 @@ export interface DiscussionPhaseSnapshot {
     url: string;
     type: "image" | "video" | "embed";
   } | null;
+  sentenceStems?: string[];
+  keyVocabulary?: string[];
 }
 
 export interface LiveClassFlowSnapshot {
@@ -161,12 +187,50 @@ export function leaveClassMode(): void {
   markClassModeExited();
 }
 
+// Per-TAB marker (sessionStorage is not shared across tabs/windows). Set when a
+// device joins as a student, so a single browser can run a teacher tab AND a
+// student tab at once for testing: the joined tab follows class mode even though
+// the browser also has a teacher session stored.
+export const STUDENT_TAB_KEY = "bdm-student-tab";
+
+export function markStudentTab(): void {
+  try {
+    sessionStorage.setItem(STUDENT_TAB_KEY, "1");
+  } catch {
+    /* ignore */
+  }
+}
+
+export function isStudentTab(): boolean {
+  try {
+    return sessionStorage.getItem(STUDENT_TAB_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function getStoredTeacherSessionId(): string | null {
   try {
     const stored = localStorage.getItem(TEACHER_SESSION_KEY);
     if (!stored) return null;
     const session = JSON.parse(stored) as { sessionId?: unknown };
     return typeof session.sessionId === "string" && session.sessionId ? session.sessionId : null;
+  } catch {
+    return null;
+  }
+}
+
+export function getStoredTeacherSession(): { sessionId: string; code: string; periodName: string } | null {
+  try {
+    const stored = localStorage.getItem(TEACHER_SESSION_KEY);
+    if (!stored) return null;
+    const s = JSON.parse(stored) as { sessionId?: unknown; code?: unknown; periodName?: unknown };
+    if (typeof s.sessionId !== "string" || !s.sessionId) return null;
+    return {
+      sessionId: s.sessionId,
+      code: typeof s.code === "string" ? s.code : "",
+      periodName: typeof s.periodName === "string" ? s.periodName : "",
+    };
   } catch {
     return null;
   }

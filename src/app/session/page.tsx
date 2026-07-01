@@ -9,12 +9,27 @@ import SiteNav from "@/components/SiteNav";
 import {
   LIVE_FLOW_MODE,
   clearStoredTeacherSession,
+  getStoredTeacherSession,
   saveTeacherSession,
 } from "@/lib/liveClassFlow";
+import { SKILLS } from "@/lib/challengeSkills";
+import {
+  launchChallenge,
+  endChallenge,
+  fetchLeaderboard,
+  type ChallengeRow,
+  type LeaderRow,
+} from "@/lib/challenges";
 
 interface Period { id: string; name: string; }
 interface Join { id: string; display_name: string | null; joined_at: string; }
 interface Answer { id: string; display_name: string | null; answer: string | null; }
+
+const DURATIONS = [
+  { label: "2 min", value: 120 },
+  { label: "3 min", value: 180 },
+  { label: "5 min", value: 300 },
+];
 
 function makeCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -41,12 +56,55 @@ export default function SessionPage() {
   const ansRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [broadcast, setBroadcast] = useState<string | null>(null);
 
+  // Live challenge (game) state
+  const [chSkill, setChSkill] = useState(SKILLS[0].key);
+  const [chLevel, setChLevel] = useState(1);
+  const [chDuration, setChDuration] = useState(180);
+  const [challenge, setChallenge] = useState<ChallengeRow | null>(null);
+  const [board, setBoard] = useState<LeaderRow[]>([]);
+  const [chSetup, setChSetup] = useState(false);
+  const boardRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const activeSkill = SKILLS.find((s) => s.key === chSkill) || SKILLS[0];
+
   useEffect(() => {
     if (!supabase) return;
     supabase.from("periods").select("id,name").order("sort_order").then(({ data }) => {
       const ps = (data as Period[]) || [];
       setPeriods(ps); if (ps[0]) setPeriodId(ps[0].id);
     });
+  }, [supabase]);
+
+  // Restore an already-open session if the teacher navigated away (e.g. to the
+  // Control panel) and came back — otherwise the page looks empty and a second
+  // "Start session" click spawns a duplicate with a new code, which is what made
+  // it keep asking to start/join a new session.
+  useEffect(() => {
+    if (!supabase) return;
+    const stored = getStoredTeacherSession();
+    if (!stored) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("sessions")
+        .select("id,status,period_id,broadcast")
+        .eq("id", stored.sessionId)
+        .maybeSingle();
+      if (cancelled) return;
+      const s = data as { id: string; status: string; period_id: string; broadcast: string | null } | null;
+      if (error || !s || s.status !== "open") {
+        clearStoredTeacherSession(stored.sessionId);
+        return;
+      }
+      const { count } = await supabase
+        .from("students")
+        .select("id", { count: "exact", head: true })
+        .eq("period_id", s.period_id);
+      if (cancelled) return;
+      setRosterCount(count || 0);
+      setBroadcast(s.broadcast ?? null);
+      setSession({ id: s.id, code: stored.code, periodName: stored.periodName });
+    })();
+    return () => { cancelled = true; };
   }, [supabase]);
 
   const pollJoins = useCallback(async (sessionId: string) => {
@@ -66,7 +124,9 @@ export default function SessionPage() {
     if (!supabase || !periodId) return;
     setError(null);
     const code = makeCode();
-    const { data, error } = await supabase.from("sessions").insert({ period_id: periodId, join_code: code, status: "open" }).select("id").single();
+    // Start held on the lesson page so joined students are locked in from the
+    // moment they join (not free to wander) until you pick a tool or release them.
+    const { data, error } = await supabase.from("sessions").insert({ period_id: periodId, join_code: code, status: "open", broadcast: "/lesson" }).select("id").single();
     if (error) { setError(error.message); return; }
     const periodName = periods.find((p) => p.id === periodId)?.name || "";
     const { count } = await supabase.from("students").select("id", { count: "exact", head: true }).eq("period_id", periodId);
@@ -74,19 +134,50 @@ export default function SessionPage() {
     const sessionId = (data as { id: string }).id;
     saveTeacherSession(sessionId, code, periodName);
     setSession({ id: sessionId, code, periodName });
-    setJoins([]); setBroadcast(null);
+    setJoins([]); setBroadcast("/lesson");
   }
   async function end() {
     if (!supabase || !session) return;
     await supabase.from("sessions").update({ status: "closed", ended_at: new Date().toISOString(), broadcast: null }).eq("id", session.id);
     clearStoredTeacherSession(session.id);
     setSession(null); setJoins([]); setPoll(null); setAnswers([]); setBroadcast(null);
+    setChallenge(null); setBoard([]);
   }
   async function setBroadcastTo(value: string | null) {
     if (!supabase || !session) return;
     await supabase.from("sessions").update({ broadcast: value }).eq("id", session.id);
     setBroadcast(value);
   }
+
+  async function startChallenge() {
+    if (!supabase || !session) return;
+    setError(null); setChSetup(false);
+    const skill = SKILLS.find((s) => s.key === chSkill) || SKILLS[0];
+    const title = `${skill.label} · ${skill.levels[chLevel - 1] || `Level ${chLevel}`}`;
+    const { challenge: created, error: chErr } = await launchChallenge(supabase, {
+      sessionId: session.id, skill: chSkill, title, level: chLevel, durationSeconds: chDuration,
+    });
+    if (chErr === "SETUP") { setChSetup(true); return; }
+    if (chErr) { setError(chErr); return; }
+    setChallenge(created);
+    setBoard([]);
+    await setBroadcastTo("/challenge");
+  }
+  async function stopChallenge() {
+    if (!supabase || !challenge) return;
+    await endChallenge(supabase, challenge.id);
+    setChallenge(null);
+    await setBroadcastTo("/lesson");
+  }
+
+  // Poll the live leaderboard while a challenge is running.
+  useEffect(() => {
+    if (!supabase || !challenge) { setBoard([]); return; }
+    const load = async () => setBoard(await fetchLeaderboard(supabase, challenge.id));
+    load();
+    boardRef.current = setInterval(load, 3000);
+    return () => { if (boardRef.current) clearInterval(boardRef.current); };
+  }, [supabase, challenge]);
   const SENDS: { label: string; value: string }[] = [
     { label: "Free (browse)", value: "free" },
     { label: "Lesson page", value: "/lesson" },
@@ -180,6 +271,25 @@ export default function SessionPage() {
         .se-send { background:#f6f1e6; border:1px solid #e7dec9; color:#5a5346; border-radius:999px; padding:9px 15px; font-weight:800; cursor:pointer; font-size:0.9rem; }
         .se-send:hover { border-color:#14b8a6; }
         .se-send.on { background:#14b8a6; border-color:#14b8a6; color:#04231f; }
+        .se-fld { font-size:0.74rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; color:#a89f8c; margin:14px 0 7px; }
+        .se-fld:first-of-type { margin-top:0; }
+        .se-skills { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
+        .se-skill { display:flex; align-items:center; gap:8px; text-align:left; background:#f6f1e6; border:1px solid #e7dec9; color:#5a5346;
+          border-radius:12px; padding:11px 13px; font-weight:800; font-size:0.88rem; cursor:pointer; }
+        .se-skill:hover { border-color:#14b8a6; }
+        .se-skill.on { background:#14b8a6; border-color:#14b8a6; color:#04231f; }
+        .se-skill-emoji { font-size:1.15rem; }
+        .se-pills { display:flex; flex-wrap:wrap; gap:8px; }
+        .se-pill { background:#f6f1e6; border:1px solid #e7dec9; color:#5a5346; border-radius:999px; padding:9px 15px; font-weight:800; font-size:0.88rem; cursor:pointer; }
+        .se-pill:hover { border-color:#14b8a6; }
+        .se-pill.on { background:#1c1d22; border-color:#1c1d22; color:#fff; }
+        .se-chtitle { font-size:1.1rem; font-weight:900; color:#1c1d22; }
+        .se-lb { display:flex; flex-direction:column; gap:6px; margin-top:10px; }
+        .se-lb-row { display:flex; align-items:center; gap:12px; padding:11px 14px; border-radius:12px; background:#fbf7ef; border:1px solid #efe7d6; }
+        .se-lb-rank { width:30px; font-size:1.1rem; font-weight:900; color:#5a5346; }
+        .se-lb-name { flex:1; font-weight:800; color:#2a2a2e; }
+        .se-lb-acc { font-weight:700; color:#a89f8c; font-size:0.85rem; }
+        .se-lb-pts { font-weight:900; color:#14b8a6; font-size:1.05rem; min-width:48px; text-align:right; }
       `}</style>
 
       <SiteNav variant="teacher" />
@@ -219,7 +329,7 @@ export default function SessionPage() {
               <h3 className="se-qh">Class mode — send screens to</h3>
               <div className="se-sends">
                 {SENDS.map((s) => (
-                  <button key={s.value} className={`se-send${(broadcast || "free") === s.value ? " on" : ""}`} onClick={() => setBroadcastTo(s.value === "free" ? null : s.value)}>{s.label}</button>
+                  <button key={s.value} className={`se-send${(broadcast || "free") === s.value ? " on" : ""}`} onClick={() => setBroadcastTo(s.value)}>{s.label}</button>
                 ))}
               </div>
               <p className="se-empty" style={{ marginTop: 10 }}>
@@ -227,6 +337,73 @@ export default function SessionPage() {
                   ? `Joined students are following ${SENDS.find((mode) => mode.value === broadcast)?.label || broadcast}.`
                   : "Students are browsing freely."}
               </p>
+            </div>
+
+            <div className="se-card" id="challenge" style={{ scrollMarginTop: 80 }}>
+              <h3 className="se-qh">🎮 Challenge — live game</h3>
+              {chSetup && (
+                <div className="se-warn" style={{ marginBottom: 12 }}>
+                  One-time setup: open Supabase → SQL Editor and run <b>supabase/challenges.sql</b>, then try again.
+                </div>
+              )}
+              {!challenge ? (
+                <>
+                  <div className="se-fld">Skill</div>
+                  <div className="se-skills">
+                    {SKILLS.map((s) => (
+                      <button key={s.key} className={`se-skill${chSkill === s.key ? " on" : ""}`}
+                        onClick={() => { setChSkill(s.key); setChLevel(1); }}>
+                        <span className="se-skill-emoji">{s.emoji}</span>{s.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="se-fld">Difficulty</div>
+                  <div className="se-pills">
+                    {activeSkill.levels.map((lvl, i) => (
+                      <button key={i} className={`se-pill${chLevel === i + 1 ? " on" : ""}`} onClick={() => setChLevel(i + 1)}>
+                        {i + 1}. {lvl}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="se-fld">Length</div>
+                  <div className="se-pills">
+                    {DURATIONS.map((d) => (
+                      <button key={d.value} className={`se-pill${chDuration === d.value ? " on" : ""}`} onClick={() => setChDuration(d.value)}>
+                        {d.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <button className="se-start" style={{ marginTop: 16 }} onClick={startChallenge} disabled={!joins.length}>
+                    Launch challenge →
+                  </button>
+                  {!joins.length && <p className="se-empty" style={{ marginTop: 8 }}>Students need to join first.</p>}
+                </>
+              ) : (
+                <>
+                  <div className="se-row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                    <div className="se-chtitle">{activeSkill.emoji} {challenge.title}</div>
+                    <button className="se-end" onClick={stopChallenge}>End challenge</button>
+                  </div>
+                  <div className="se-count" style={{ marginTop: 12 }}>Live leaderboard · {board.length} playing</div>
+                  {board.length === 0 ? (
+                    <span className="se-empty">Waiting for the first answers…</span>
+                  ) : (
+                    <div className="se-lb">
+                      {board.slice(0, 10).map((r, i) => (
+                        <div className="se-lb-row" key={r.key}>
+                          <span className="se-lb-rank">{["🥇", "🥈", "🥉"][i] || `${i + 1}`}</span>
+                          <span className="se-lb-name">{r.name}</span>
+                          <span className="se-lb-acc">{r.total ? Math.round((r.correct / r.total) * 100) : 0}%</span>
+                          <span className="se-lb-pts">{r.points}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
 
             {!poll ? (

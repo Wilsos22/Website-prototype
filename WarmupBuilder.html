@@ -83,6 +83,47 @@
     }
     .btn-build:hover:not(:disabled) { background: #1557b0; }
     .btn-build:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-preview {
+      width: 100%;
+      background: #fff;
+      color: #1a73e8;
+      border: 1px solid #1a73e8;
+      border-radius: 8px;
+      padding: 11px;
+      font-size: 13px;
+      font-weight: 800;
+      font-family: inherit;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: background 120ms;
+    }
+    .btn-preview:hover:not(:disabled) { background: #e8f0fe; }
+    .btn-preview:disabled { opacity: 0.45; cursor: not-allowed; }
+    .preview-q {
+      border-top: 1px solid #f1f3f4;
+      padding-top: 8px;
+      margin-top: 8px;
+    }
+    .preview-q:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+    .preview-prompt { font-size: 12px; font-weight: 700; color: #202124; margin-bottom: 4px; }
+    .preview-choice {
+      font-size: 12px;
+      color: #5f6368;
+      padding: 2px 0 2px 14px;
+      position: relative;
+    }
+    .preview-choice.correct { color: #137333; font-weight: 700; }
+    .preview-choice.correct::before { content: "✓"; position: absolute; left: 0; }
+    .preview-fb {
+      font-size: 11px;
+      line-height: 1.35;
+      margin-top: 4px;
+      padding: 6px 8px;
+      border-radius: 6px;
+    }
+    .preview-fb.good { background: #e6f4ea; color: #137333; }
+    .preview-fb.miss { background: #fef7e0; color: #7c5800; }
+    .preview-bonus { font-size: 12px; font-weight: 700; color: #202124; }
     #days-area { margin-top: 14px; display: none; }
     .day-card {
       background: #fff;
@@ -247,6 +288,7 @@
     </div>
   </div>
 
+  <button class="btn-preview" id="btn-preview" onclick="previewWeek()">Preview Questions</button>
   <button class="btn-build" id="btn-build" onclick="startBuild()">Build All 5 Forms</button>
 
   <div id="days-area">
@@ -276,12 +318,17 @@
     return document.getElementById(`topic-${index}`).value.trim();
   }
 
+  function getTopicsForWeek() {
+    return DAYS.map((_, index) => getTopicForDay(index));
+  }
+
   function setTopicForDay(index, value) {
     document.getElementById(`topic-${index}`).value = value || "";
   }
 
   function setBuilding(building) {
     document.getElementById("btn-build").disabled = building;
+    document.getElementById("btn-preview").disabled = building;
     document.querySelectorAll(".btn-rebuild").forEach(button => button.disabled = building);
   }
 
@@ -320,29 +367,26 @@
       container.appendChild(buildDayCard(i, day, getDateForDay(startDate, i)));
     });
 
-    setBuilding(true);
-    buildDay(0);
+    buildWeek();
   }
 
-  function buildDay(index) {
-    if (index >= 5) {
-      setBuilding(false);
-      return;
-    }
-
-    setDayStatus(index, "running");
+  function buildWeek() {
+    setBuilding(true);
+    for (let i = 0; i < 5; i++) setDayStatus(i, "running");
 
     google.script.run
-      .withSuccessHandler(result => {
-        dayResults[index] = result;
-        setDayStatus(index, "done", result);
-        buildDay(index + 1);
-      })
-      .withFailureHandler(err => {
-        setDayStatus(index, "error", null, err.message);
+      .withSuccessHandler(results => {
+        (results || []).forEach((result, index) => {
+          dayResults[index] = result;
+          setDayStatus(index, "done", result);
+        });
         setBuilding(false);
       })
-      .generateSingleDayAuto(getWeekConfig(), index, getTopicForDay(index), null);
+      .withFailureHandler(err => {
+        for (let i = 0; i < 5; i++) setDayStatus(i, "error", null, err.message);
+        setBuilding(false);
+      })
+      .generateWeekAuto(getWeekConfig(), getTopicsForWeek());
   }
 
   function rebuildDay(index) {
@@ -410,7 +454,7 @@
       const editUrl = escapeAttr(result.editUrl);
       const reviews = result.reviewTopics ? escapeHtml(result.reviewTopics.join(" / ")) : "";
       const responseTab = result.responseTabName ? escapeHtml(result.responseTabName) : "";
-      const source = result.source ? escapeHtml(result.source) : "grade-5.pdf";
+      const source = result.source ? escapeHtml(result.source) : "AI";
       const linkStatus = result.notionStatus || {};
       const triggerStatus = result.triggerStatus || {};
       const linkLine = linkStatus.ok
@@ -424,7 +468,7 @@
         <div class="result-topic">${dailyTopic}</div>
         ${reviews ? `<div class="result-review">Review slots: ${reviews}</div>` : ""}
         ${responseTab ? `<div class="result-review">Response tab: ${responseTab}</div>` : ""}
-        <div class="result-review">Problem source: ${source}</div>
+        <div class="result-review">Question source: ${source}</div>
         ${linkLine}
         ${triggerLine}
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
@@ -463,6 +507,100 @@
     if (row.style.display === "block") {
       document.getElementById(`override-${index}`).focus();
     }
+  }
+
+  // ---- Preview (no forms created) ----
+  function previewWeek() {
+    const startDate = document.getElementById("start-date").value.trim();
+    if (!/^\d{2}-\d{2}-\d{2}$/.test(startDate)) {
+      alert("Date format should be MM-DD-YY, for example 08-10-26.");
+      return;
+    }
+    for (let i = 0; i < 5; i++) {
+      if (!getTopicForDay(i)) {
+        alert(`Enter a topic for ${DAYS[i]}.`);
+        return;
+      }
+    }
+
+    const container = document.getElementById("day-cards");
+    container.innerHTML = "";
+    document.getElementById("days-area").style.display = "block";
+
+    DAYS.forEach((day, i) => {
+      container.appendChild(buildDayCard(i, day, getDateForDay(startDate, i)));
+      setPreviewStatus(i, "running");
+      requestPreview(i, getTopicForDay(i));
+    });
+  }
+
+  function requestPreview(index, topic) {
+    setBuilding(true);
+    google.script.run
+      .withSuccessHandler(questionSet => {
+        setPreviewStatus(index, "done", questionSet);
+        setBuilding(false);
+      })
+      .withFailureHandler(err => {
+        setPreviewStatus(index, "error", null, err.message);
+        setBuilding(false);
+      })
+      .previewDayAuto(topic, DAYS[index], index, topic);
+  }
+
+  function setPreviewStatus(index, state, questionSet, errorMsg) {
+    const card = document.getElementById(`card-${index}`);
+    const pill = document.getElementById(`pill-${index}`);
+    const resultDiv = document.getElementById(`result-${index}`);
+    card.className = "day-card";
+
+    if (state === "running") {
+      card.classList.add("card-running");
+      pill.className = "status-pill pill-running";
+      pill.innerHTML = `<span class="spinner"></span> Previewing`;
+      resultDiv.style.display = "none";
+      return;
+    }
+
+    if (state === "done") {
+      card.classList.add("card-done");
+      pill.className = "status-pill pill-done";
+      pill.textContent = "Preview";
+      resultDiv.innerHTML = renderPreviewQuestions(questionSet);
+      resultDiv.style.display = "block";
+      return;
+    }
+
+    if (state === "error") {
+      card.classList.add("card-error");
+      pill.className = "status-pill pill-error";
+      pill.textContent = "Error";
+      resultDiv.innerHTML = `<div style="color:#c5221f;font-size:12px">${escapeHtml(errorMsg || "Something went wrong.")}</div>`;
+      resultDiv.style.display = "block";
+    }
+  }
+
+  function renderPreviewQuestions(questionSet) {
+    const questions = (questionSet && questionSet.questions) || [];
+    return questions.map((q, i) => {
+      if (q.type === "multiple_choice") {
+        const choices = (q.choices || []).map(choice => {
+          const isCorrect = String(choice) === String(q.correct);
+          return `<div class="preview-choice ${isCorrect ? "correct" : ""}">${escapeHtml(choice)}</div>`;
+        }).join("");
+        const good = q.correctFeedback
+          ? `<div class="preview-fb good">If right: ${escapeHtml(q.correctFeedback)}</div>` : "";
+        const miss = q.feedback
+          ? `<div class="preview-fb miss">If wrong: ${escapeHtml(q.feedback)}</div>` : "";
+        return `<div class="preview-q">
+          <div class="preview-prompt">${i + 1}. ${escapeHtml(q.q)}</div>
+          ${choices}${good}${miss}
+        </div>`;
+      }
+      return `<div class="preview-q">
+        <div class="preview-bonus">★ LEVEL UP (bonus): ${escapeHtml(q.q)}</div>
+      </div>`;
+    }).join("");
   }
 </script>
 </body>

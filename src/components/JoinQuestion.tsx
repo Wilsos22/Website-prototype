@@ -9,6 +9,7 @@ import {
   LIVE_FLOW_MODE,
   LIVE_FLOW_ROUTE,
   STUDENT_SESSION_KEY,
+  clearClassModeExitMarker,
 } from "@/lib/liveClassFlow";
 
 type SessionType = "question" | "fist-to-five";
@@ -97,6 +98,7 @@ export function JoinQuestion() {
         }
 
         try {
+          clearClassModeExitMarker();
           localStorage.setItem("bdm-student-name", cleanName);
           localStorage.setItem(STUDENT_SESSION_KEY, JSON.stringify({
             sessionId: row.id,

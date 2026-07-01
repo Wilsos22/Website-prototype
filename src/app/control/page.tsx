@@ -23,14 +23,20 @@ import {
   type LiveToolConfig,
   type LiveToolRoute,
 } from "@/lib/liveClassFlow";
+import {
+  listLessonPresets,
+  getLessonPreset,
+  saveLessonPreset,
+  deleteLessonPreset,
+  type LessonPreset,
+} from "@/lib/lessonPresets";
+import { SKILLS } from "@/lib/challengeSkills";
+import { launchChallenge, endChallenge, type ChallengeRow } from "@/lib/challenges";
+import { launchExitTicket, type ExitKind } from "@/lib/exitTickets";
+import { SBAC_CHECKPOINTS, getCheckpoint } from "@/lib/sbacCheckpoints";
+import { launchCheckpoint } from "@/lib/checkpoints";
 
-interface ClassState {
-  id: string;
-  label: string;
-  minutes: number;
-  color: string;
-  desc: string;
-}
+import { DEFAULT_STATES, BANK_GROUPS, type ClassState } from "@/lib/classStates";
 
 interface LineupItem {
   uid: string;
@@ -53,6 +59,17 @@ const TOOL_STATE_INFO = {
   "tool-gems": { route: "/order-of-operations", label: "GEMS" },
   "tool-fraction-bars": { route: "/fraction-bars", label: "Fraction Bars" },
   "tool-algebra-tiles": { route: "/algebra-tiles", label: "Algebra Tiles" },
+  "tool-area-model": { route: "/area-model", label: "Area Model" },
+  "tool-combine": { route: "/combine-like-terms", label: "Combine Like Terms" },
+  "tool-ladder": { route: "/ladder-method", label: "Ladder Method" },
+  "tool-proportions": { route: "/proportions", label: "Proportions" },
+  "tool-group-bars": { route: "/group-bars", label: "Group Bars" },
+  "tool-coordinate-grid": { route: "/coordinate-grid", label: "Coordinate Grid" },
+  "tool-term-identifier": { route: "/term-identifier", label: "Identify Terms" },
+  "tool-multiplication": { route: "/multiplication-fluency", label: "Multiplication Facts" },
+  "tool-game": { route: "/challenge", label: "Live Game" },
+  "tool-exit-ticket": { route: "/exit-ticket", label: "Exit Ticket" },
+  "tool-checkpoint": { route: "/checkpoint", label: "SBAC Checkpoint" },
 } as const satisfies Record<string, { route: LiveToolRoute; label: string }>;
 
 type ToolStateId = keyof typeof TOOL_STATE_INFO;
@@ -70,6 +87,14 @@ interface ToolSetupValues {
   equationSolution: string;
   gemsExpression: string;
   algebraExpression: string;
+  gameSkill: string;
+  gameLevel: string;
+  gameDuration: string;
+  exitPrompt: string;
+  exitKind: ExitKind;
+  exitChoices: string;
+  checkpointId: string;
+  checkpointItem: string;
 }
 
 interface PublishedTool {
@@ -92,55 +117,8 @@ interface ControlPollAnswer {
   answer: string | null;
 }
 
-const DEFAULT_STATES: ClassState[] = [
-  { id: "warmup", label: "Warm-Up", minutes: 10, color: "#4e6ef2", desc: "Silently begin your warm-up. Work on your own." },
-  { id: "review", label: "Go Over / Review", minutes: 5, color: "#8b5cf6", desc: "Eyes up — we're going over the answers together." },
-  { id: "i-do", label: "Direct Instruction (I do)", minutes: 15, color: "#0ea5e9", desc: "Watch and take notes. I'll model each step." },
-  { id: "we-do", label: "Guided Practice (We do)", minutes: 10, color: "#14b8a6", desc: "We'll solve these together — try each step with me." },
-  { id: "discussion", label: "Discussion (Think–Pair–Share)", minutes: 3, color: "#06b6d4", desc: "Think on your own, then talk it through with your group." },
-  { id: "question", label: "Question", minutes: 2, color: "#8b5cf6", desc: "Respond to the question before the timer ends." },
-  { id: "poll", label: "Live Poll", minutes: 1, color: "#ec4899", desc: "Share a quick check-in before results appear." },
-  { id: "tool-whiteboard", label: "Whiteboard", minutes: 5, color: "#0ea5e9", desc: "Use the whiteboard to show and explain your thinking." },
-  { id: "tool-number-line", label: "Number Line", minutes: 5, color: "#38bdf8", desc: "Model the problem on the number line." },
-  { id: "tool-percent-bar", label: "Percent Bar", minutes: 5, color: "#f472b6", desc: "Use the percent bar to make sense of the relationship." },
-  { id: "tool-equation-builder", label: "Equation Builder", minutes: 6, color: "#2f9e6f", desc: "Build and solve the equation one step at a time." },
-  { id: "tool-gems", label: "GEMS", minutes: 5, color: "#a78bfa", desc: "Use GEMS to decide which operation comes first." },
-  { id: "tool-fraction-bars", label: "Fraction Bars", minutes: 5, color: "#f59e0b", desc: "Model the fraction relationship with bars." },
-  { id: "tool-algebra-tiles", label: "Algebra Tiles", minutes: 6, color: "#fb7185", desc: "Build the expression with algebra tiles." },
-  { id: "you-do", label: "Independent Practice (You do)", minutes: 15, color: "#2f9e6f", desc: "Work independently. Show all of your steps." },
-  { id: "manip", label: "Manipulatives / Hands-On", minutes: 10, color: "#f59e0b", desc: "Use the manipulative to model the problem." },
-  { id: "partner", label: "Partner / Group Work", minutes: 10, color: "#ec4899", desc: "Work with your partner — both of you explain your thinking." },
-  { id: "exit", label: "Exit Ticket", minutes: 5, color: "#f95335", desc: "Complete your exit ticket on your own and turn it in before the timer ends." },
-  { id: "cleanup", label: "Clean Up / Pack Up", minutes: 3, color: "#64748b", desc: "Clean your space and pack up quietly." },
-  { id: "break", label: "Brain Break", minutes: 3, color: "#a3a3a3", desc: "Quick brain break — reset and get ready to focus." },
-];
-
-const BANK_GROUPS = [
-  {
-    id: "class",
-    label: "Class States",
-    hint: "Room routines and teacher-led lesson flow",
-    stateIds: ["warmup", "review", "i-do", "we-do", "discussion", "you-do", "partner", "exit", "cleanup", "break"],
-  },
-  {
-    id: "feedback",
-    label: "Feedback",
-    hint: "Questions, checks for understanding, and polls",
-    stateIds: ["question", "poll"],
-  },
-  {
-    id: "process",
-    label: "Guided Processes",
-    hint: "Step-by-step math thinking routines",
-    stateIds: ["tool-gems", "tool-equation-builder"],
-  },
-  {
-    id: "manipulatives",
-    label: "Manipulatives",
-    hint: "Student screens switch to digital math tools",
-    stateIds: ["tool-whiteboard", "tool-number-line", "tool-percent-bar", "tool-fraction-bars", "tool-algebra-tiles", "manip"],
-  },
-] as const;
+// DEFAULT_STATES + BANK_GROUPS now live in @/lib/classStates (shared with the
+// standalone Sequence Builder so the catalog never drifts).
 
 const LS_BANK = "bdm-control-bank-v2";
 const LS_LINEUP = "bdm-control-lineup-v1";
@@ -159,6 +137,14 @@ const DEFAULT_TOOL_SETUP: ToolSetupValues = {
   equationSolution: "4",
   gemsExpression: "3 + 4 × 2",
   algebraExpression: "2x + 3 = 11",
+  gameSkill: SKILLS[0].key,
+  gameLevel: "1",
+  gameDuration: "180",
+  exitPrompt: "",
+  exitKind: "short-answer",
+  exitChoices: "",
+  checkpointId: SBAC_CHECKPOINTS[0].id,
+  checkpointItem: String(Math.max(0, SBAC_CHECKPOINTS[0].items.findIndex((it) => it.digital))),
 };
 
 type CueKey = "music" | "warn30" | "tick" | "end";
@@ -242,6 +228,28 @@ function buildLiveToolConfig(stateId: ToolStateId, values: ToolSetupValues): Liv
       return { ...base, route: "/order-of-operations", config: { expression: values.gemsExpression.trim() } };
     case "tool-algebra-tiles":
       return { ...base, route: "/algebra-tiles", config: { expression: values.algebraExpression.trim() } };
+    case "tool-area-model":
+      return { ...base, route: "/area-model", config: {} };
+    case "tool-combine":
+      return { ...base, route: "/combine-like-terms", config: {} };
+    case "tool-ladder":
+      return { ...base, route: "/ladder-method", config: {} };
+    case "tool-proportions":
+      return { ...base, route: "/proportions", config: {} };
+    case "tool-group-bars":
+      return { ...base, route: "/group-bars", config: {} };
+    case "tool-coordinate-grid":
+      return { ...base, route: "/coordinate-grid", config: {} };
+    case "tool-term-identifier":
+      return { ...base, route: "/term-identifier", config: {} };
+    case "tool-multiplication":
+      return { ...base, route: "/multiplication-fluency", config: {} };
+    case "tool-game":
+      return { ...base, route: "/challenge", config: {} };
+    case "tool-exit-ticket":
+      return { ...base, route: "/exit-ticket", config: {} };
+    case "tool-checkpoint":
+      return { ...base, route: "/checkpoint", config: {} };
   }
 }
 
@@ -290,6 +298,69 @@ async function idbDel(key: string): Promise<void> {
   });
 }
 
+// ── Today's Notion lesson → Control lineup ──────────────────────────────────
+// The published lesson lists its tools as free text (e.g. "Number Line"). Map
+// those names to bank state ids so the teacher can load and run the day's
+// lesson as one sequence instead of rebuilding it by hand.
+type TodayLesson = { title?: string; tools?: string | null };
+
+const LESSON_TOOL_ALIASES: Record<string, string> = {
+  whiteboard: "tool-whiteboard",
+  numberline: "tool-number-line",
+  doublenumberline: "tool-number-line",
+  numberlineplus: "tool-number-line",
+  percentbar: "tool-percent-bar",
+  percent: "tool-percent-bar",
+  equationbuilder: "tool-equation-builder",
+  equation: "tool-equation-builder",
+  equations: "tool-equation-builder",
+  gems: "tool-gems",
+  orderofoperations: "tool-gems",
+  fractionbars: "tool-fraction-bars",
+  fractions: "tool-fraction-bars",
+  algebratiles: "tool-algebra-tiles",
+  areamodel: "tool-area-model",
+  combineliketerms: "tool-combine",
+  combiningliketerms: "tool-combine",
+  liketerms: "tool-combine",
+  laddermethod: "tool-ladder",
+  ladder: "tool-ladder",
+  proportions: "tool-proportions",
+  proportion: "tool-proportions",
+  ratios: "tool-proportions",
+  groupbars: "tool-group-bars",
+  coordinategrid: "tool-coordinate-grid",
+  coordinateplane: "tool-coordinate-grid",
+  graphing: "tool-coordinate-grid",
+  identifyterms: "tool-term-identifier",
+  termidentifier: "tool-term-identifier",
+  multiplicationfacts: "tool-multiplication",
+  multiplicationfluency: "tool-multiplication",
+  multiplication: "tool-multiplication",
+};
+
+function normalizeToolName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function parseLessonList(raw: string | undefined | null): string[] {
+  if (!raw) return [];
+  return raw.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean);
+}
+
+function matchLessonToolStateId(name: string): string | null {
+  const norm = normalizeToolName(name);
+  if (!norm) return null;
+  if (LESSON_TOOL_ALIASES[norm]) return LESSON_TOOL_ALIASES[norm];
+  const exact = DEFAULT_STATES.find((s) => normalizeToolName(s.label) === norm);
+  if (exact) return exact.id;
+  const loose = DEFAULT_STATES.find(
+    (s) => s.id.startsWith("tool-")
+      && (normalizeToolName(s.label).includes(norm) || norm.includes(normalizeToolName(s.label))),
+  );
+  return loose ? loose.id : null;
+}
+
 export default function ControlPage() {
   const supabase = getSupabase();
   const [bank, setBank] = useState<ClassState[]>(DEFAULT_STATES);
@@ -304,6 +375,13 @@ export default function ControlPage() {
   const [editing, setEditing] = useState(false);
   const [showSounds, setShowSounds] = useState(false);
   const [showSpinner, setShowSpinner] = useState(false);
+  const [showLessons, setShowLessons] = useState(false);
+  const [presets, setPresets] = useState<LessonPreset[]>([]);
+  const [presetSearch, setPresetSearch] = useState("");
+  const [saveCode, setSaveCode] = useState("");
+  const [saveTitle, setSaveTitle] = useState("");
+  const [lessonMsg, setLessonMsg] = useState<string | null>(null);
+  const [todayMsg, setTodayMsg] = useState<string | null>(null);
   const [showDiscussion, setShowDiscussion] = useState(false);
   const [autoAdvance, setAutoAdvance] = useState(true);
   const [soundUrls, setSoundUrls] = useState<Record<string, string>>({});
@@ -319,6 +397,7 @@ export default function ControlPage() {
   const [toolSetup, setToolSetup] = useState<ToolSetupValues>(DEFAULT_TOOL_SETUP);
   const [publishedTool, setPublishedTool] = useState<PublishedTool | null>(null);
   const [toolError, setToolError] = useState<string | null>(null);
+  const [liveChallenge, setLiveChallenge] = useState<ChallengeRow | null>(null);
 
   const secRef = useRef(0);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -515,6 +594,10 @@ export default function ControlPage() {
   }, [finished, autoAdvance, bank, controlPoll, currentIndex, lineup, startMusicFor, stopMusic]);
 
   const activeItem = currentIndex >= 0 ? lineup[currentIndex] : undefined;
+  const filteredPresets = presets.filter((p) => {
+    const t = presetSearch.trim().toLowerCase();
+    return !t || p.code.toLowerCase().includes(t) || p.title.toLowerCase().includes(t);
+  });
   const activeState = activeItem ? bank.find((s) => s.id === activeItem.stateId) : undefined;
   const totalMin = lineup.reduce((sum, it) => {
     const st = bank.find((s) => s.id === it.stateId);
@@ -557,6 +640,16 @@ export default function ControlPage() {
       setToolError(null);
     }
   }, [activeToolState, publishedTool?.stateId]);
+
+  // When the lineup moves off the Live Game state, close out the running
+  // challenge round so it doesn't linger open for the session.
+  useEffect(() => {
+    if (activeToolState === "tool-game") return;
+    if (liveChallenge && supabase) {
+      void endChallenge(supabase, liveChallenge.id);
+      setLiveChallenge(null);
+    }
+  }, [activeToolState, liveChallenge, supabase]);
 
   useEffect(() => {
     if (!controlPoll || !supabase) return;
@@ -658,9 +751,79 @@ export default function ControlPage() {
     setToolSetup((current) => ({ ...current, [key]: value } as ToolSetupValues));
   }
 
-  function publishToolSetup() {
+  async function publishToolSetup() {
     if (!teacherSession || teacherSession.broadcast !== LIVE_FLOW_MODE || !activeToolState) {
       setToolError("Start a session, select Live Class Flow, then send this tool setup.");
+      return;
+    }
+
+    // The Live Game state launches an actual auto-scored challenge round for the
+    // session (its own Supabase row + leaderboard) and points students at the
+    // /challenge surface, which plays whatever round is open for the session.
+    if (activeToolState === "tool-game") {
+      if (!supabase) { setToolError("Supabase isn't connected."); return; }
+      const skill = SKILLS.find((s) => s.key === toolSetup.gameSkill) || SKILLS[0];
+      const level = clamp(Math.round(numericValue(toolSetup.gameLevel, 1)), 1, skill.levels.length);
+      const durationSeconds = Math.round(numericValue(toolSetup.gameDuration, 180));
+      const title = `${skill.label} · ${skill.levels[level - 1] || `Level ${level}`}`;
+      const { challenge, error } = await launchChallenge(supabase, {
+        sessionId: teacherSession.id, skill: skill.key, title, level, durationSeconds,
+      });
+      if (error === "SETUP") {
+        setToolError("One-time setup: run supabase/challenges.sql in Supabase, then try again.");
+        return;
+      }
+      if (error || !challenge) {
+        setToolError(error || "The game could not be launched.");
+        return;
+      }
+      setLiveChallenge(challenge);
+      setToolError(null);
+      setPublishedTool({ stateId: "tool-game", tool: buildLiveToolConfig("tool-game", toolSetup) });
+      return;
+    }
+
+    // The Exit Ticket state opens a saved exit-ticket question for the session and
+    // sends students to /exit-ticket to answer; responses land in Supabase.
+    if (activeToolState === "tool-exit-ticket") {
+      if (!supabase) { setToolError("Supabase isn't connected."); return; }
+      const prompt = toolSetup.exitPrompt.trim();
+      if (!prompt) { setToolError("Type the exit-ticket question first."); return; }
+      const kind = toolSetup.exitKind;
+      const choices = kind === "multiple-choice"
+        ? toolSetup.exitChoices.split(/[\n,]/).map((c) => c.trim()).filter(Boolean)
+        : null;
+      if (kind === "multiple-choice" && (!choices || choices.length < 2)) {
+        setToolError("Add at least two answer choices (one per line)."); return;
+      }
+      const { ticket, error } = await launchExitTicket(supabase, {
+        sessionId: teacherSession.id, periodId: null, lessonCode: null, prompt, kind, choices,
+      });
+      if (error === "SETUP") { setToolError("One-time setup: run supabase/formative.sql in Supabase, then try again."); return; }
+      if (error || !ticket) { setToolError(error || "The exit ticket could not be sent."); return; }
+      setToolError(null);
+      setPublishedTool({ stateId: "tool-exit-ticket", tool: buildLiveToolConfig("tool-exit-ticket", toolSetup) });
+      return;
+    }
+
+    // The SBAC Checkpoint state launches one bank item for the session; students
+    // answer on /checkpoint and it's auto-graded against the answer key.
+    if (activeToolState === "tool-checkpoint") {
+      if (!supabase) { setToolError("Supabase isn't connected."); return; }
+      const cp = getCheckpoint(toolSetup.checkpointId);
+      if (!cp) { setToolError("Pick a checkpoint."); return; }
+      const idx = clamp(Math.round(numericValue(toolSetup.checkpointItem, 0)), 0, cp.items.length - 1);
+      const item = cp.items[idx];
+      if (!item) { setToolError("Pick a checkpoint question."); return; }
+      const { run, error } = await launchCheckpoint(supabase, {
+        sessionId: teacherSession.id, periodId: null, lessonKey: cp.lessonKey,
+        checkpointId: cp.id, itemIndex: idx, ccss: item.ccss,
+        prompt: item.q, correctAnswer: item.a, misses: item.misses,
+      });
+      if (error === "SETUP") { setToolError("One-time setup: run supabase/checkpoints.sql in Supabase, then try again."); return; }
+      if (error || !run) { setToolError(error || "The checkpoint could not be sent."); return; }
+      setToolError(null);
+      setPublishedTool({ stateId: "tool-checkpoint", tool: buildLiveToolConfig("tool-checkpoint", toolSetup) });
       return;
     }
 
@@ -791,6 +954,120 @@ export default function ControlPage() {
     stopMusic();
   }
 
+  // ── Lesson presets (saved sequences) ────────────────────────────────────
+  const refreshPresets = useCallback(async () => {
+    setPresets(await listLessonPresets());
+  }, []);
+
+  function loadPreset(p: LessonPreset) {
+    const newBank = DEFAULT_STATES.map((d) => ({
+      ...d,
+      minutes: typeof p.minutes[d.id] === "number" ? p.minutes[d.id] : d.minutes,
+    }));
+    const newLineup = p.lineup.map((s) => ({ uid: uid(), stateId: s.stateId }));
+    persistBank(newBank);
+    persistLineup(newLineup);
+    const first = newLineup[0] ? newBank.find((s) => s.id === newLineup[0].stateId) : undefined;
+    setCurrentIndex(newLineup.length ? 0 : -1);
+    if (first) { secRef.current = first.minutes * 60; setSecondsLeft(first.minutes * 60); }
+    setRunning(false);
+    setFinished(false);
+    stopMusic();
+    setShowLessons(false);
+    setLessonMsg(null);
+  }
+
+  async function saveCurrentLesson() {
+    const code = saveCode.trim();
+    if (!code) { setLessonMsg("Add a code first (e.g. M1.T1.L1)."); return; }
+    if (lineup.length === 0) { setLessonMsg("Build a lineup before saving."); return; }
+    const minutes: Record<string, number> = {};
+    bank.forEach((b) => { minutes[b.id] = b.minutes; });
+    const res = await saveLessonPreset({
+      code,
+      title: saveTitle.trim(),
+      lineup: lineup.map((l) => ({ stateId: l.stateId })),
+      minutes,
+    });
+    if (!res.ok) { setLessonMsg(res.error || "Couldn't save."); return; }
+    setLessonMsg("Saved ✓");
+    setSaveCode("");
+    setSaveTitle("");
+    refreshPresets();
+  }
+
+  async function removePreset(id: string) {
+    await deleteLessonPreset(id);
+    refreshPresets();
+  }
+
+  // Pull today's published Notion lesson and build a runnable lineup from it:
+  // Warm-Up → the lesson's tools (in order) → Exit Ticket. The teacher can then
+  // reorder, add, or run the sequence as usual.
+  async function loadTodayLesson() {
+    setTodayMsg("Loading today's lesson from Notion…");
+    let lesson: TodayLesson | null = null;
+    try {
+      const res = await fetch("/api/today", { cache: "no-store" });
+      const data = (await res.json()) as { lesson?: TodayLesson | null };
+      lesson = data?.lesson ?? null;
+    } catch {
+      setTodayMsg("Couldn't reach Notion — check the connection and try again.");
+      window.setTimeout(() => setTodayMsg(null), 6000);
+      return;
+    }
+    if (!lesson) {
+      setTodayMsg("No lesson is published in Notion for today.");
+      window.setTimeout(() => setTodayMsg(null), 6000);
+      return;
+    }
+    const mapped: string[] = [];
+    const unmatched: string[] = [];
+    for (const name of parseLessonList(lesson.tools)) {
+      const id = matchLessonToolStateId(name);
+      if (id) { if (!mapped.includes(id)) mapped.push(id); }
+      else unmatched.push(name);
+    }
+    if (lineup.length > 0 && !window.confirm(`Replace today's lineup with “${lesson.title || "today's lesson"}”?`)) {
+      setTodayMsg(null);
+      return;
+    }
+    const newLineup = ["warmup", ...mapped, "exit"].map((stateId) => ({ uid: uid(), stateId }));
+    persistLineup(newLineup);
+    const first = bank.find((s) => s.id === newLineup[0].stateId);
+    setCurrentIndex(0);
+    if (first) { secRef.current = first.minutes * 60; setSecondsLeft(first.minutes * 60); }
+    setRunning(false);
+    setFinished(false);
+    stopMusic();
+    setShowLessons(false);
+    const parts = [`Loaded “${lesson.title || "today's lesson"}”`, `${mapped.length} tool${mapped.length === 1 ? "" : "s"} added`];
+    if (unmatched.length) parts.push(`couldn't match: ${unmatched.join(", ")}`);
+    setTodayMsg(parts.join(" · "));
+    window.setTimeout(() => setTodayMsg(null), 8000);
+  }
+
+  // When launched from the Sequence Builder with ?run=1, auto-start the lineup
+  // once it has loaded so the lesson runs straight through.
+  const [pendingRun, setPendingRun] = useState(false);
+  useEffect(() => {
+    refreshPresets();
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const lessonId = params.get("lesson");
+      if (lessonId) getLessonPreset(lessonId).then((p) => { if (p) { loadPreset(p); if (params.get("run") === "1") setPendingRun(true); } });
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (pendingRun && lineup.length > 0) {
+      setPendingRun(false);
+      runSequence();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingRun, lineup]);
+
   // ── Timer controls ──────────────────────────────────────────────────────
   function toggleRun() {
     if (!activeState) return;
@@ -821,6 +1098,15 @@ export default function ControlPage() {
     setSecondsLeft(secRef.current);
     setRunning(false);
     setFinished(false);
+    stopMusic();
+  }
+  // Stop the whole running sequence and return the room to idle/free.
+  function stopSequence() {
+    setRunning(false);
+    setFinished(false);
+    setCurrentIndex(-1);
+    secRef.current = 0;
+    setSecondsLeft(0);
     stopMusic();
   }
   function adjust(deltaSeconds: number) {
@@ -944,7 +1230,8 @@ export default function ControlPage() {
         .cx-upnext { font-size:0.82rem; font-weight:800; color:#7c7363; text-transform:uppercase; letter-spacing:0.07em; }
         .cx-upnext strong { color:#b3aa98; }
 
-        .cx-actions { display:flex; flex-wrap:wrap; gap:9px; justify-content:center; }
+        .cx-actions { display:flex; flex-wrap:wrap; gap:9px; justify-content:center; align-items:center; }
+        .cx-actions-sep { width:1px; align-self:stretch; min-height:20px; background:#34301f; margin:0 4px; }
         .cx-btn { font-size:1rem; font-weight:900; border-radius:11px; padding:13px 24px; cursor:pointer; border:1px solid #34301f; background:#1d1810; color:#fff; transition:transform 120ms ease, border-color 140ms ease, filter 140ms; }
         .cx-btn:hover { transform:translateY(-1px); border-color:${accent}; }
         .cx-btn.pri { background:${accent}; border-color:${accent}; } .cx-btn.pri:hover { filter:brightness(1.08); }
@@ -1014,6 +1301,23 @@ export default function ControlPage() {
         .cx-sset { font-size:0.78rem; font-weight:800; color:#86efac; }
         .cx-sclear { font-size:0.74rem; font-weight:800; color:#fca5a5; background:transparent; border:1px solid rgba(239,68,68,0.3); border-radius:6px; padding:5px 9px; cursor:pointer; }
         .cx-hint { color:#7c7363; font-size:0.82rem; font-weight:600; }
+
+        .cx-lessons-head { display:flex; align-items:center; justify-content:space-between; padding:16px 24px; border-bottom:1px solid #2a241a; position:sticky; top:0; background:#14110c; z-index:2; }
+        .cx-lessons-title { margin:0; font-size:1rem; font-weight:900; color:#fff; }
+        .cx-lessons-body { max-width:760px; margin:0 auto; padding:20px; display:grid; gap:16px; }
+        .cx-lessons-save { border:1px solid #2a241a; border-radius:12px; background:#18140d; padding:14px; display:grid; gap:10px; }
+        .cx-lessons-sub { margin:0; font-size:0.74rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; color:#a39a88; }
+        .cx-lessons-saverow { display:flex; gap:8px; flex-wrap:wrap; }
+        .cx-lessons-in { flex:1; min-width:150px; background:#14110c; border:1px solid #34301f; color:#fff; border-radius:8px; padding:10px 12px; font:inherit; font-weight:700; }
+        .cx-lessons-msg { margin:0; font-size:0.84rem; font-weight:800; color:#86efac; }
+        .cx-lessons-search { width:100%; box-sizing:border-box; background:#14110c; border:1px solid #34301f; color:#fff; border-radius:10px; padding:11px 14px; font:inherit; font-weight:700; }
+        .cx-lessons-list { display:grid; gap:10px; }
+        .cx-lesson-card { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; border:1px solid #2a241a; border-radius:12px; background:#1a160f; padding:12px 14px; }
+        .cx-lesson-meta { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
+        .cx-lesson-code { font-weight:900; color:#fff; font-size:1rem; }
+        .cx-lesson-name { color:#d8d2c5; font-weight:700; font-size:0.9rem; }
+        .cx-lesson-stats { color:#7c7363; font-weight:800; font-size:0.78rem; }
+        .cx-lesson-actions { display:flex; gap:8px; align-items:center; }
       `}</style>
 
       <div className="cx-root">
@@ -1023,8 +1327,11 @@ export default function ControlPage() {
           <div className="cx-tbtns">
             <a className="cx-sbtn cx-home" href="/teacher">🏠 Home</a>
             <a className="cx-sbtn" href="/session">📡 Session</a>
+            <a className="cx-sbtn" href="/session#challenge">🎮 Games</a>
             <a className="cx-sbtn" href="/roster">👥 Rosters</a>
             <span className="cx-divider" />
+            <button className="cx-sbtn" style={{ borderColor: "#14b8a6", color: "#5eead4" }} onClick={loadTodayLesson}>📅 Today&apos;s lesson</button>
+            <button className="cx-sbtn" onClick={() => { setShowLessons(true); setLessonMsg(null); }}>📚 Lessons</button>
             <button className="cx-sbtn" onClick={() => setShowSpinner(true)}>🎰 Spinner</button>
             <button className="cx-sbtn" style={autoAdvance ? { borderColor: accent, color: "#fff" } : undefined} onClick={() => setAutoAdvance((v) => !v)}>Auto {autoAdvance ? "✓" : "off"}</button>
             <button className="cx-sbtn" onClick={() => setShowSounds((v) => !v)}>🎵 Sounds</button>
@@ -1032,6 +1339,21 @@ export default function ControlPage() {
             <button className="cx-sbtn" onClick={toggleFullscreen}>⛶ Full</button>
           </div>
         </header>
+
+        {todayMsg && (
+          <div
+            role="status"
+            style={{
+              position: "fixed", left: "50%", bottom: "18px", transform: "translateX(-50%)",
+              zIndex: 60, maxWidth: "min(720px, 92vw)", background: "#151a27", color: "#e6f6f4",
+              border: "1px solid #2a3550", borderLeft: "4px solid #14b8a6", borderRadius: "10px",
+              padding: "12px 16px", fontSize: "0.9rem", fontWeight: 700,
+              boxShadow: "0 14px 34px rgba(0,0,0,0.45)",
+            }}
+          >
+            {todayMsg}
+          </div>
+        )}
 
         <main className="cx-main">
           {activeState ? (
@@ -1224,22 +1546,114 @@ export default function ControlPage() {
                         <input id="algebra-expression" className="cx-tool-input" value={toolSetup.algebraExpression} onChange={(event) => updateToolSetup("algebraExpression", event.target.value)} placeholder="2x + 3 = 11" />
                       </label>
                     )}
+
+                    {activeToolState === "tool-game" && (
+                      <>
+                        <label className="cx-tool-field" htmlFor="game-skill">Game
+                          <select id="game-skill" className="cx-tool-select" value={toolSetup.gameSkill} onChange={(event) => { updateToolSetup("gameSkill", event.target.value); updateToolSetup("gameLevel", "1"); }}>
+                            {SKILLS.map((s) => <option key={s.key} value={s.key}>{s.emoji} {s.label}</option>)}
+                          </select>
+                        </label>
+                        <label className="cx-tool-field" htmlFor="game-level">Level
+                          <select id="game-level" className="cx-tool-select" value={toolSetup.gameLevel} onChange={(event) => updateToolSetup("gameLevel", event.target.value)}>
+                            {(SKILLS.find((s) => s.key === toolSetup.gameSkill) || SKILLS[0]).levels.map((lvl, i) => (
+                              <option key={i} value={String(i + 1)}>{i + 1}. {lvl}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="cx-tool-field" htmlFor="game-duration">Length
+                          <select id="game-duration" className="cx-tool-select" value={toolSetup.gameDuration} onChange={(event) => updateToolSetup("gameDuration", event.target.value)}>
+                            <option value="120">2 min</option>
+                            <option value="180">3 min</option>
+                            <option value="300">5 min</option>
+                          </select>
+                        </label>
+                      </>
+                    )}
+
+                    {activeToolState === "tool-exit-ticket" && (
+                      <>
+                        <label className="cx-tool-field wide" htmlFor="exit-prompt">Exit-ticket question
+                          <input id="exit-prompt" className="cx-tool-input" value={toolSetup.exitPrompt} onChange={(event) => updateToolSetup("exitPrompt", event.target.value)} placeholder="Solve 3x + 4 = 19, then explain your first step." />
+                        </label>
+                        <label className="cx-tool-field" htmlFor="exit-kind">Answer type
+                          <select id="exit-kind" className="cx-tool-select" value={toolSetup.exitKind} onChange={(event) => updateToolSetup("exitKind", event.target.value)}>
+                            <option value="short-answer">Short answer</option>
+                            <option value="multiple-choice">Multiple choice</option>
+                            <option value="fist-to-five">Fist to five (0–5)</option>
+                          </select>
+                        </label>
+                        {toolSetup.exitKind === "multiple-choice" && (
+                          <label className="cx-tool-field wide" htmlFor="exit-choices">Choices (comma-separated)
+                            <input id="exit-choices" className="cx-tool-input" value={toolSetup.exitChoices} onChange={(event) => updateToolSetup("exitChoices", event.target.value)} placeholder="Yes, No, Not sure" />
+                          </label>
+                        )}
+                      </>
+                    )}
+
+                    {activeToolState === "tool-checkpoint" && (() => {
+                      const cp = getCheckpoint(toolSetup.checkpointId) || SBAC_CHECKPOINTS[0];
+                      const items = cp.items.map((it, i) => ({ it, i }));
+                      const digital = items.filter((x) => x.it.digital);
+                      const choices = digital.length ? digital : items;
+                      const idx = Math.max(0, Math.min(cp.items.length - 1, Math.round(Number(toolSetup.checkpointItem) || 0)));
+                      const sel = cp.items[idx];
+                      return (
+                        <>
+                          <label className="cx-tool-field wide" htmlFor="cp-pick">Checkpoint (standard set)
+                            <select id="cp-pick" className="cx-tool-select" value={toolSetup.checkpointId} onChange={(event) => {
+                              updateToolSetup("checkpointId", event.target.value);
+                              const ncp = getCheckpoint(event.target.value);
+                              const first = ncp ? ncp.items.findIndex((it) => it.digital) : 0;
+                              updateToolSetup("checkpointItem", String(first < 0 ? 0 : first));
+                            }}>
+                              {SBAC_CHECKPOINTS.map((c) => <option key={c.id} value={c.id}>{c.id} · {c.covers}</option>)}
+                            </select>
+                          </label>
+                          <label className="cx-tool-field wide" htmlFor="cp-item">Question (auto-graded)
+                            <select id="cp-item" className="cx-tool-select" value={toolSetup.checkpointItem} onChange={(event) => updateToolSetup("checkpointItem", event.target.value)}>
+                              {choices.map(({ it, i }) => <option key={i} value={String(i)}>{it.ccss} — {it.q.length > 64 ? it.q.slice(0, 64) + "…" : it.q}</option>)}
+                            </select>
+                          </label>
+                          {sel && <div style={{ gridColumn: "1 / -1", fontSize: "0.82rem", fontWeight: 700, color: "#8b8170" }}>Answer key: {sel.a}{sel.digital ? "" : "  ·  (paper item — grade by eye)"}</div>}
+                        </>
+                      );
+                    })()}
                   </div>
                   {toolError && <div className="cx-poll-error">{toolError}</div>}
-                  {publishedTool?.stateId === activeToolState && <div className="cx-tool-status">Student screens are on this configured tool.</div>}
+                  {publishedTool?.stateId === activeToolState && (
+                    <div className="cx-tool-status">
+                      {activeToolState === "tool-game"
+                        ? "The live game is running — watch the leaderboard on the Session page."
+                        : activeToolState === "tool-exit-ticket"
+                          ? "Exit ticket sent — responses are saving. Review them under 📝 Practice → Exit tickets."
+                          : activeToolState === "tool-checkpoint"
+                            ? "Checkpoint sent — auto-graded answers are saving. Review under ✅ Checkpoints."
+                            : "Student screens are on this configured tool."}
+                    </div>
+                  )}
                   <div className="cx-actions" style={{ justifyContent: "flex-start" }}>
-                    <button className="cx-btn pri" onClick={publishToolSetup}>{publishedTool?.stateId === activeToolState ? "Update student screens" : "Send tool setup to students"}</button>
+                    <button className="cx-btn pri" onClick={publishToolSetup}>
+                      {activeToolState === "tool-game"
+                        ? (publishedTool?.stateId === activeToolState ? "Relaunch game" : "🎮 Launch game")
+                        : activeToolState === "tool-exit-ticket"
+                          ? (publishedTool?.stateId === activeToolState ? "Re-send exit ticket" : "📝 Send exit ticket")
+                          : activeToolState === "tool-checkpoint"
+                            ? (publishedTool?.stateId === activeToolState ? "Re-send checkpoint" : "✅ Send checkpoint")
+                            : (publishedTool?.stateId === activeToolState ? "Update student screens" : "Send tool setup to students")}
+                    </button>
                   </div>
                 </section>
               )}
               <div className="cx-actions">
-                <button className="cx-btn" onClick={runSequence}>▶ Run sequence</button>
-                <button className="cx-btn pri" onClick={toggleRun}>{running ? "⏸ Pause" : secondsLeft <= 0 ? "↻ Restart" : "▶ Start"}</button>
-                <button className="cx-btn" onClick={reset}>Reset</button>
+                <button className="cx-btn pri" onClick={running ? toggleRun : runSequence}>{running ? "⏸ Pause" : "▶ Start"}</button>
+                <button className="cx-btn next" onClick={next} disabled={controlPoll?.stage !== "responding" && currentIndex + 1 >= lineup.length}>{controlPoll?.stage === "responding" ? "Show results" : "Advance ▶"}</button>
+                <button className="cx-btn" onClick={stopSequence}>■ Stop</button>
+                <span className="cx-actions-sep" />
+                <button className="cx-btn" onClick={reset}>↻ Reset state</button>
                 <button className="cx-btn" onClick={() => adjust(60)}>+1 min</button>
                 <button className="cx-btn" onClick={() => adjust(-60)} disabled={secondsLeft < 60}>−1 min</button>
                 <button className="cx-btn" onClick={() => adjust(30)}>+30s</button>
-                <button className="cx-btn next" onClick={next} disabled={controlPoll?.stage !== "responding" && currentIndex + 1 >= lineup.length}>{controlPoll?.stage === "responding" ? "Show results" : "Next ▶"}</button>
                 {finished && activeState.id === "warmup" && (
                   <button className="cx-btn" style={{ background: "#f59e0b", borderColor: "#f59e0b" }} onClick={() => setShowSpinner(true)}>🎰 Pick readers</button>
                 )}
@@ -1257,7 +1671,7 @@ export default function ControlPage() {
                 Build today&apos;s lineup: tap states in the bank below to add them, then run the sequence.
                 Hit “Sounds” to upload your warm-up music and cue sounds.
               </p>
-              {lineup.length > 0 && <button className="cx-btn pri" onClick={runSequence}>▶ Run sequence</button>}
+              {lineup.length > 0 && <button className="cx-btn pri" onClick={runSequence}>▶ Start sequence</button>}
             </div>
           )}
         </main>
@@ -1357,6 +1771,51 @@ export default function ControlPage() {
             )}
           </div>
         </section>
+
+        {showLessons && (
+          <div className="cx-overlay cx-lessons">
+            <div className="cx-lessons-head">
+              <h2 className="cx-lessons-title">📚 Lesson Library</h2>
+              <button className="cx-sbtn" onClick={() => setShowLessons(false)}>✕ Close</button>
+            </div>
+            <div className="cx-lessons-body">
+              <div className="cx-lessons-save">
+                <p className="cx-lessons-sub">Save the current sequence as a lesson</p>
+                <div className="cx-lessons-saverow">
+                  <input className="cx-lessons-in" placeholder="Code (e.g. M1.T1.L1)" value={saveCode} onChange={(e) => setSaveCode(e.target.value)} />
+                  <input className="cx-lessons-in" placeholder="Title (optional)" value={saveTitle} onChange={(e) => setSaveTitle(e.target.value)} />
+                  <button className="cx-btn pri" onClick={saveCurrentLesson}>Save</button>
+                </div>
+                {lessonMsg && <p className="cx-lessons-msg">{lessonMsg}</p>}
+              </div>
+
+              <input className="cx-lessons-search" placeholder="Search by code or title…" value={presetSearch} onChange={(e) => setPresetSearch(e.target.value)} />
+
+              <div className="cx-lessons-list">
+                {filteredPresets.length === 0 ? (
+                  <p className="cx-hint">No saved lessons yet. Build a sequence in the bank below, then save it above.</p>
+                ) : (
+                  filteredPresets.map((p) => {
+                    const total = p.lineup.reduce((sum, s) => sum + (typeof p.minutes[s.stateId] === "number" ? p.minutes[s.stateId] : 0), 0);
+                    return (
+                      <div className="cx-lesson-card" key={p.id}>
+                        <div className="cx-lesson-meta">
+                          <span className="cx-lesson-code">{p.code || "Untitled"}</span>
+                          {p.title && <span className="cx-lesson-name">{p.title}</span>}
+                          <span className="cx-lesson-stats">{p.lineup.length} steps · {total} min</span>
+                        </div>
+                        <div className="cx-lesson-actions">
+                          <button className="cx-btn next" onClick={() => loadPreset(p)}>Load →</button>
+                          <button className="cx-sclear" onClick={() => removePreset(p.id)}>Delete</button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {showSpinner && (
           <div className="cx-overlay"><StudentSpinner onClose={() => setShowSpinner(false)} /></div>

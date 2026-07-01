@@ -1,0 +1,16 @@
+{
+  "name": "abbies-classroom",
+  "version": "0.1.0",
+  "description": "Context capsule + lesson-database builder for the Big Dog Math classroom OS. Auto-loads project context so Claude understands the site, Notion schema, and control panel without re-explaining.",
+  "author": {
+    "name": "Steele Wilson"
+  },
+  "keywords": [
+    "classroom",
+    "math",
+    "6th grade",
+    "lesson planning",
+    "notion",
+    "abbie"
+  ]
+}

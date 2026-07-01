@@ -1,19 +1,18 @@
 "use client";
 
-// Big Dog Math — STUDENT home (free / normal).
-// Students can open Today's Lesson anytime — no code required. "Join with a code"
-// is optional, only when the teacher runs a live session (for questions / class mode).
+// Big Dog Math — STUDENT landing. Join is the main event: enter the class code to
+// link to the teacher's live session. A quiet secondary option ("Absent or just
+// exploring") drops into the full site (/explore) for own-time browsing.
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
-import { clearClassModeExitMarker } from "@/lib/liveClassFlow";
+import { clearClassModeExitMarker, markStudentTab } from "@/lib/liveClassFlow";
 
-export default function StudentHome() {
+export default function StudentLanding() {
   const router = useRouter();
   const supabase = getSupabase();
   const [name, setName] = useState("");
-  const [showJoin, setShowJoin] = useState(false);
   const [code, setCode] = useState("");
   const [joinSess, setJoinSess] = useState<{ id: string; periodId: string } | null>(null);
   const [roster, setRoster] = useState<{ id: string; full_name: string }[]>([]);
@@ -35,6 +34,7 @@ export default function StudentHome() {
     setJoinSess({ id: s.id, periodId: s.period_id });
     setRoster((studs as { id: string; full_name: string }[]) || []);
   }
+
   async function pickName(s: { id: string; full_name: string }) {
     if (supabase && joinSess) {
       await supabase.from("session_joins").insert({ session_id: joinSess.id, student_id: s.id, display_name: s.full_name });
@@ -42,7 +42,10 @@ export default function StudentHome() {
     try {
       clearClassModeExitMarker();
       localStorage.setItem("bdm-student-name", s.full_name);
-      if (joinSess) localStorage.setItem("bdm-student-session", JSON.stringify({ sessionId: joinSess.id, studentId: s.id, name: s.full_name }));
+      if (joinSess) {
+        localStorage.setItem("bdm-student-session", JSON.stringify({ sessionId: joinSess.id, studentId: s.id, name: s.full_name }));
+        markStudentTab();
+      }
     } catch { /* ignore */ }
     router.push("/lesson");
   }
@@ -50,86 +53,89 @@ export default function StudentHome() {
   return (
     <main className="st-page">
       <style>{`
-        .st-page { min-height:100vh; background:var(--bdb-ground); font-family:var(--bdb-font); color:var(--bdb-ink); padding:clamp(18px,4vw,44px) 16px; box-sizing:border-box; display:flex; flex-direction:column; align-items:center; }
-        .st-banner { width:100%; max-width:560px; }
-        .st-banner img { width:100%; height:auto; border-radius:var(--bdb-r-lg); display:block; box-shadow:var(--bdb-shadow); }
-        .st-hello { margin:18px 0 4px; font-family:var(--bdb-font); font-size:clamp(1.5rem,4vw,2.2rem); font-weight:700; letter-spacing:-0.02em; color:var(--bdb-ink); text-align:center; }
-        .st-hello-sub { margin:0 0 clamp(20px,4vw,32px); color:var(--bdb-ink-soft); font-weight:500; font-size:clamp(0.95rem,2.4vw,1.1rem); text-align:center; }
+        .st-page { min-height:100vh; background:var(--bdb-ground); font-family:var(--bdb-font); color:var(--bdb-ink);
+          padding:clamp(18px,4vw,44px) 16px; box-sizing:border-box; display:flex; flex-direction:column; align-items:center; }
+        .st-banner { width:100%; max-width:min(440px, 86vw); margin-top:clamp(2px,1.5vw,12px); }
+        .st-banner img { width:100%; height:auto; display:block; }
+        .st-hello { margin:6px 0 2px; font-size:clamp(1.5rem,4vw,2.2rem); font-weight:700; letter-spacing:-0.02em; color:var(--bdb-ink); text-align:center; }
+        .st-hello-sub { margin:0 0 clamp(16px,3vw,24px); color:var(--bdb-ink-soft); font-weight:500; font-size:clamp(0.98rem,2.4vw,1.12rem); text-align:center; }
 
-        .st-cards { width:100%; max-width:460px; display:grid; gap:14px; }
-        .st-card { text-align:left; border:1px solid var(--bdb-line); background:var(--bdb-card); border-radius:var(--bdb-r); padding:18px 20px; cursor:pointer; transition:transform 130ms ease, box-shadow 130ms ease, border-color 130ms; display:flex; align-items:center; gap:16px; box-shadow:var(--bdb-shadow-sm); }
-        .st-card:hover { transform:translateY(-2px); box-shadow:var(--bdb-shadow); }
-        .st-ico { width:52px; height:52px; border-radius:13px; display:grid; place-items:center; flex:none; color:#fff; }
-        .st-ico svg { width:28px; height:28px; }
-        .st-card.primary { border-color:transparent; box-shadow:0 14px 28px -16px rgba(249,83,53,0.55); }
-        .st-title { font-size:1.18rem; font-weight:700; letter-spacing:-0.01em; color:var(--bdb-ink); }
-        .st-sub { font-size:0.88rem; font-weight:500; color:var(--bdb-ink-soft); margin-top:2px; }
+        .st-cards { width:100%; max-width:440px; display:grid; gap:16px; }
+        .st-join { border:none; border-radius:var(--bdb-r-lg); background:var(--bdb-card); padding:22px 22px 24px;
+          box-shadow:0 18px 36px -22px rgba(80,163,164,0.55); border:2px solid color-mix(in srgb, var(--bdb-teal) 30%, transparent); }
+        .st-join-h { margin:0 0 4px; font-size:1.25rem; font-weight:800; letter-spacing:-0.01em; color:var(--bdb-ink); }
+        .st-join-sub { margin:0 0 14px; font-size:0.92rem; font-weight:500; color:var(--bdb-ink-soft); }
+        .st-codebox { display:flex; gap:8px; }
+        .st-code-in { flex:1; min-width:0; border:2px solid var(--bdb-teal); border-radius:12px; padding:14px 16px;
+          font-size:1.3rem; font-weight:800; letter-spacing:0.18em; text-transform:uppercase; color:#0f5e5f; background:#fff; }
+        .st-code-in:focus { outline:none; box-shadow:0 0 0 4px color-mix(in srgb, var(--bdb-teal) 22%, transparent); }
+        .st-code-btn { background:var(--bdb-teal); color:#fff; border:none; border-radius:12px; padding:0 22px; font-weight:800; font-size:1.05rem; cursor:pointer; }
+        .st-code-btn:hover { filter:brightness(1.04); }
+        .st-joinerr { color:var(--bdb-coral); font-weight:600; font-size:0.9rem; margin-top:10px; }
 
-        .st-codebox { display:flex; gap:8px; margin-top:12px; }
-        .st-code-in { flex:1; border:2px solid var(--bdb-teal); border-radius:12px; padding:11px 14px; font-size:1.1rem; font-weight:700; letter-spacing:0.16em; text-transform:uppercase; color:#0f5e5f; background:#fff; }
-        .st-code-btn { background:var(--bdb-teal); color:#fff; border:none; border-radius:12px; padding:0 20px; font-weight:700; cursor:pointer; }
-        .st-joinerr { color:var(--bdb-coral); font-weight:600; font-size:0.9rem; margin-top:8px; }
-        .st-namepick-label { font-size:0.78rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--bdb-ink-faint); margin:12px 0 8px; }
+        .st-namepick-label { font-size:0.78rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--bdb-ink-faint); margin:0 0 10px; }
         .st-names { display:flex; flex-wrap:wrap; gap:8px; }
-        .st-name { background:color-mix(in srgb, var(--bdb-teal) 14%, white); border:1px solid color-mix(in srgb, var(--bdb-teal) 35%, white); color:#0f5e5f; border-radius:999px; padding:10px 16px; font-weight:600; cursor:pointer; font-size:0.95rem; }
+        .st-name { background:color-mix(in srgb, var(--bdb-teal) 14%, white); border:1px solid color-mix(in srgb, var(--bdb-teal) 35%, white);
+          color:#0f5e5f; border-radius:999px; padding:10px 16px; font-weight:600; cursor:pointer; font-size:0.95rem; }
         .st-name:hover { border-color:var(--bdb-teal); }
+
+        .st-explore { display:flex; align-items:center; justify-content:center; gap:8px; text-decoration:none;
+          border:1px solid var(--bdb-line); border-radius:var(--bdb-r); background:var(--bdb-card); color:var(--bdb-ink-soft);
+          padding:14px 16px; font-weight:600; font-size:0.95rem; transition:border-color 120ms, color 120ms; }
+        .st-explore:hover { border-color:var(--bdb-coral); color:var(--bdb-ink); }
+        .st-explore b { color:var(--bdb-ink); font-weight:700; }
+
         .st-foot { margin-top:auto; padding-top:26px; }
         .st-teacher { color:var(--bdb-ink-faint); font-size:0.78rem; font-weight:600; text-decoration:none; }
       `}</style>
 
       <div className="st-banner">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/big-dog-logo.png" alt="Big Dog Math — Abbie" />
+        <img src="/big-dog-logo.svg" alt="Big Dog Math" />
       </div>
       <h1 className="st-hello">{name ? `Hey ${name}!` : "Welcome!"}</h1>
-      <p className="st-hello-sub">Tap “Today’s Lesson” to get started.</p>
+      <p className="st-hello-sub">Enter your class code to join today&apos;s lesson.</p>
 
       <div className="st-cards">
-        <div className="st-card primary" style={{ background: "#f95335" }} onClick={() => router.push("/lesson")}>
-          <span className="st-ico" style={{ background: "rgba(255,255,255,0.25)" }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3 h9 l4 4 v14 H6 Z" /><path d="M15 3 v4 h4" /><line x1="9" y1="13" x2="16" y2="13" /><line x1="9" y1="17" x2="16" y2="17" /></svg>
-          </span>
-          <div>
-            <div className="st-title" style={{ color: "#fff" }}>Today&apos;s Lesson</div>
-            <div className="st-sub" style={{ color: "rgba(255,255,255,0.9)" }}>Warm-up, agenda, and today&apos;s work</div>
-          </div>
+        <div className="st-join">
+          {!joinSess ? (
+            <>
+              <h2 className="st-join-h">Join your class</h2>
+              <p className="st-join-sub">Your teacher will give you a code.</p>
+              <div className="st-codebox">
+                <input
+                  className="st-code-in"
+                  value={code}
+                  placeholder="CODE"
+                  maxLength={8}
+                  autoFocus
+                  onChange={(e) => setCode(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") submitCode(); }}
+                />
+                <button className="st-code-btn" onClick={submitCode}>Join</button>
+              </div>
+              {joinErr && <div className="st-joinerr">{joinErr}</div>}
+            </>
+          ) : (
+            <>
+              <p className="st-namepick-label">Tap your name</p>
+              <div className="st-names">
+                {roster.length === 0
+                  ? <span className="st-joinerr">No students in this class yet.</span>
+                  : roster.map((s) => <button key={s.id} className="st-name" onClick={() => pickName(s)}>{s.full_name}</button>)}
+              </div>
+            </>
+          )}
         </div>
 
-        <div className="st-card" onClick={() => setShowJoin((v) => !v)}>
-          <span className="st-ico" style={{ background: "#50a3a4" }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="5" width="16" height="14" rx="2" /><path d="M8 10 h8 M8 14 h5" /></svg>
-          </span>
-          <div style={{ flex: 1 }}>
-            <div className="st-title">Join with a code</div>
-            <div className="st-sub">Only when your teacher gives a code</div>
-          </div>
-        </div>
-
-        {showJoin && (
-          <div className="st-card" style={{ display: "block", cursor: "default" }}>
-            {!joinSess ? (
-              <>
-                <div className="st-codebox">
-                  <input className="st-code-in" value={code} placeholder="CODE" maxLength={8} autoFocus
-                    onChange={(e) => setCode(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submitCode(); }} />
-                  <button className="st-code-btn" onClick={submitCode}>Join</button>
-                </div>
-                {joinErr && <div className="st-joinerr">{joinErr}</div>}
-              </>
-            ) : (
-              <>
-                <div className="st-namepick-label">Tap your name</div>
-                <div className="st-names">
-                  {roster.length === 0
-                    ? <span className="st-joinerr">No students in this class yet.</span>
-                    : roster.map((s) => <button key={s.id} className="st-name" onClick={() => pickName(s)}>{s.full_name}</button>)}
-                </div>
-              </>
-            )}
-          </div>
-        )}
+        <a className="st-explore" href="/explore">
+          <span>Just looking around? <b>Explore the math tools →</b></span>
+        </a>
       </div>
 
+      <div className="st-foot">
+        <a className="st-teacher" href="/teacher">Teacher →</a>
+      </div>
     </main>
   );
 }

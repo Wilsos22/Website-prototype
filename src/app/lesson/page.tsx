@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
 import SiteNav from "@/components/SiteNav";
+import TodaysBoards from "@/components/TodaysBoards";
 
 interface LessonData {
   title: string;
@@ -255,6 +256,8 @@ export default function LessonPage() {
                 {lesson.dueDate && <div className="ls-due">Due {fmtDate(lesson.dueDate)}</div>}
               </section>
             )}
+
+            <TodaysBoards date={date} />
 
             <section className="ls-card ls-exit">
               <h2 className="ls-h2">Exit ticket</h2>

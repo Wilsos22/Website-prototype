@@ -60,37 +60,37 @@ export default function GroupBars() {
   return (
     <div className="gb-root">
       <style>{`
-        .gb-root { min-height:100vh; background:#0b0d14; color:#fff; font-family:Inter,ui-sans-serif,system-ui,sans-serif; display:grid; grid-template-rows:auto 1fr auto; }
-        .gb-top { display:flex; align-items:center; justify-content:space-between; padding:14px 24px; border-bottom:1px solid #1f2332; flex-wrap:wrap; gap:8px; }
-        .gb-mark { font-size:0.76rem; font-weight:900; letter-spacing:0.14em; text-transform:uppercase; color:#14b8a6; margin:0; }
-        .gb-btn { font-size:0.8rem; font-weight:800; color:#8a93ad; background:transparent; border:1px solid #1f2332; border-radius:7px; padding:8px 13px; cursor:pointer; text-decoration:none; }
-        .gb-btn:hover { border-color:#14b8a6; color:#fff; }
+        .gb-root { min-height:100vh; background:var(--bdb-ground); color:var(--bdb-ink); font-family:var(--bdb-font); display:grid; grid-template-rows:auto 1fr auto; }
+        .gb-top { display:flex; align-items:center; justify-content:space-between; padding:14px 24px; border-bottom:1px solid var(--bdb-line); flex-wrap:wrap; gap:8px; }
+        .gb-mark { font-size:0.76rem; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; color:var(--bdb-teal); margin:0; }
+        .gb-btn { font-size:0.8rem; font-weight:700; color:var(--bdb-ink-soft); background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:999px; padding:8px 13px; cursor:pointer; text-decoration:none; }
+        .gb-btn:hover { border-color:var(--bdb-teal); color:var(--bdb-ink); }
 
         .gb-main { padding:24px; display:grid; gap:22px; align-content:start; justify-items:center; max-width:920px; margin:0 auto; width:100%; }
         .gb-controls { display:flex; gap:18px; flex-wrap:wrap; justify-content:center; align-items:center; }
         .gb-group { display:grid; gap:6px; justify-items:center; }
-        .gb-glabel { font-size:0.68rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; color:#5a6280; }
-        .gb-seg { display:inline-flex; border:1px solid #2a3045; border-radius:9px; overflow:hidden; flex-wrap:wrap; }
-        .gb-seg button { background:#121520; border:none; color:#8a93ad; font-weight:800; font-size:0.86rem; padding:8px 12px; cursor:pointer; }
-        .gb-seg button.on { background:#14b8a6; color:#04231f; }
+        .gb-glabel { font-size:0.68rem; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:var(--bdb-ink-faint); }
+        .gb-seg { display:inline-flex; border:1px solid var(--bdb-line); border-radius:9px; overflow:hidden; flex-wrap:wrap; }
+        .gb-seg button { background:var(--bdb-card); border:none; color:var(--bdb-ink-soft); font-weight:700; font-size:0.86rem; padding:8px 12px; cursor:pointer; }
+        .gb-seg button.on { background:var(--bdb-teal); color:#fff; }
 
-        .gb-prompt { font-size:clamp(1.1rem,2.8vw,1.5rem); font-weight:800; text-align:center; color:#e8ecf5; }
-        .gb-expr { font-size:clamp(1rem,2.6vw,1.5rem); font-weight:900; color:#5eead4; text-align:center; word-break:break-word; min-height:1.4em; }
+        .gb-prompt { font-size:clamp(1.1rem,2.8vw,1.5rem); font-weight:700; text-align:center; color:var(--bdb-ink); }
+        .gb-expr { font-size:clamp(1rem,2.6vw,1.5rem); font-weight:800; color:var(--bdb-teal); text-align:center; word-break:break-word; min-height:1.4em; }
 
-        .gb-bar { width:100%; height:84px; border:2px solid #2a3045; border-radius:14px; display:flex; overflow:hidden; background:#0d1018; }
-        .gb-slot { flex:1 1 0; border-right:2px solid #0d1018; display:grid; place-items:center; font-weight:900; font-size:0.95rem; transition:background 200ms ease, color 200ms ease; color:#3a4460; }
+        .gb-bar { width:100%; height:84px; border:2px solid var(--bdb-ink); border-radius:14px; display:flex; overflow:hidden; background:var(--bdb-card); }
+        .gb-slot { flex:1 1 0; border-right:2px solid var(--bdb-line); display:grid; place-items:center; font-weight:800; font-size:0.95rem; transition:background 200ms ease, color 200ms ease; color:var(--bdb-ink-faint); }
         .gb-slot:last-child { border-right:none; }
-        .gb-slot.fill { color:#04231f; animation:gbPop 0.3s ease; }
+        .gb-slot.fill { color:var(--bdb-ink); animation:gbPop 0.3s ease; }
         @keyframes gbPop { from{transform:scale(0.9); opacity:0.4;} to{transform:none; opacity:1;} }
-        .gb-meter { font-size:0.95rem; font-weight:800; color:#9aa3bd; text-align:center; }
+        .gb-meter { font-size:0.95rem; font-weight:700; color:var(--bdb-ink-soft); text-align:center; }
 
         .gb-actions { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
-        .gb-a { font-size:1.1rem; font-weight:900; border-radius:12px; padding:13px 26px; cursor:pointer; border:1px solid #2a3045; background:#161a28; color:#fff; }
-        .gb-a:hover { border-color:#14b8a6; }
-        .gb-a.add { background:#14b8a6; border-color:#14b8a6; color:#04231f; }
+        .gb-a { font-size:1.1rem; font-weight:800; border-radius:12px; padding:13px 26px; cursor:pointer; border:1px solid var(--bdb-line); background:var(--bdb-card); color:var(--bdb-ink); }
+        .gb-a:hover { border-color:var(--bdb-teal); }
+        .gb-a.add { background:var(--bdb-teal); border-color:var(--bdb-teal); color:#fff; }
         .gb-a:disabled { opacity:0.35; cursor:not-allowed; }
-        .gb-solved { font-size:clamp(1.1rem,2.8vw,1.5rem); font-weight:900; color:#22c55e; text-align:center; min-height:1.4em; }
-        .gb-foot { padding:12px 24px; border-top:1px solid #1f2332; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+        .gb-solved { font-size:clamp(1.1rem,2.8vw,1.5rem); font-weight:800; color:var(--bdb-green); text-align:center; min-height:1.4em; }
+        .gb-foot { padding:12px 24px; border-top:1px solid var(--bdb-line); display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
       `}</style>
 
       <header className="gb-top">
@@ -125,7 +125,7 @@ export default function GroupBars() {
         <div className="gb-bar">
           {Array.from({ length: den }).map((_, i) => (
             <div key={i} className={`gb-slot${i < count ? " fill" : ""}`}
-              style={i < count ? { background: i % 2 === 0 ? "#14b8a6" : "#2dd4bf" } : undefined}>
+              style={i < count ? { background: i % 2 === 0 ? "var(--bdb-teal)" : "var(--bdb-amber)" } : undefined}>
               {i < count ? piece : ""}
             </div>
           ))}

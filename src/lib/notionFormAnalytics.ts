@@ -170,7 +170,6 @@ async function parseFormResponse(
   relatedTitleCache: Map<string, Promise<string>>,
 ): Promise<FormResponseData> {
   const p = page.properties;
-
   const warmUpTitle = await extractRelationTitle(p["Warm Up"], token, relatedTitleCache);
   const studentTitle = await extractRelationTitle(p["Student"], token, relatedTitleCache);
 
