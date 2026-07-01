@@ -4,9 +4,17 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// Read an optional numeric env var, clamped to a safe range. Lets you tune Abbie's
+// cadence live from Vercel (no code push) — set the vars below, then redeploy.
+function envNum(name: string, def: number, min: number, max: number): number {
+  const n = Number(process.env[name]);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : def;
+}
+
 // Flash v2.5 is ElevenLabs' lowest-latency model — the right pick for live,
-// spoken-aloud classroom use. Swap to "eleven_turbo_v2_5" for a bit more polish.
-const VOICE_MODEL = "eleven_flash_v2_5";
+// spoken-aloud classroom use. Set ELEVENLABS_MODEL=eleven_turbo_v2_5 for a richer,
+// slightly slower read.
+const VOICE_MODEL = process.env.ELEVENLABS_MODEL || "eleven_flash_v2_5";
 
 // Default voice = "Jessica", one of ElevenLabs' built-in DEFAULT voices (usable on
 // the free API tier). NOTE: community "Voice Library" voices require a PAID plan via
@@ -38,9 +46,17 @@ export async function POST(req: Request) {
         body: JSON.stringify({
           text,
           model_id: VOICE_MODEL,
-          // Lower stability = more expressive/varied delivery, which suits her
-          // dry, sarcastic register. Tune to taste.
-          voice_settings: { stability: 0.4, similarity_boost: 0.8, style: 0.35, use_speaker_boost: true },
+          // All tunable live from Vercel env vars (then redeploy):
+          //   ELEVENLABS_SPEED     0.7–1.2  (higher = talks faster)
+          //   ELEVENLABS_STABILITY 0–1      (lower = more expressive/conversational)
+          //   ELEVENLABS_STYLE     0–1      (higher = more attitude/emphasis)
+          voice_settings: {
+            stability: envNum("ELEVENLABS_STABILITY", 0.4, 0, 1),
+            similarity_boost: envNum("ELEVENLABS_SIMILARITY", 0.8, 0, 1),
+            style: envNum("ELEVENLABS_STYLE", 0.35, 0, 1),
+            use_speaker_boost: true,
+            speed: envNum("ELEVENLABS_SPEED", 1.0, 0.7, 1.2),
+          },
         }),
       },
     );
