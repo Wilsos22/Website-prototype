@@ -9,7 +9,9 @@ interface Msg { role: "user" | "assistant"; content: string }
 interface Lesson { title?: string; learningIntention?: string; successCriteria?: string }
 
 // Minimal shape for the (un-typed) Web Speech API.
-interface SR { lang: string; interimResults: boolean; continuous: boolean; start: () => void; stop: () => void; onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null; onend: (() => void) | null; onerror: (() => void) | null }
+interface SRResult { readonly isFinal: boolean; readonly length: number; readonly [i: number]: { readonly transcript: string } }
+interface SREvent { readonly resultIndex: number; readonly results: ArrayLike<SRResult> }
+interface SR { lang: string; interimResults: boolean; continuous: boolean; start: () => void; stop: () => void; onresult: ((e: SREvent) => void) | null; onend: (() => void) | null; onerror: (() => void) | null }
 
 export default function AbbieTalk() {
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -19,9 +21,12 @@ export default function AbbieTalk() {
   const [status, setStatus] = useState<string | null>(null);
   const [lesson, setLesson] = useState<Lesson | null>(null);
   const [sttSupported, setSttSupported] = useState(false);
+  const [interim, setInterim] = useState("");
 
   const recRef = useRef<SR | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
   const heardRef = useRef("");
+  const sendRef = useRef<(raw: string) => void>(() => {});
   const messagesRef = useRef<Msg[]>([]);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
 
@@ -30,6 +35,21 @@ export default function AbbieTalk() {
     setSttSupported(Boolean(w.SpeechRecognition || w.webkitSpeechRecognition));
     fetch("/api/today", { cache: "no-store" }).then((r) => r.json()).then((d) => { if (d?.lesson) setLesson(d.lesson); }).catch(() => {});
   }, []);
+
+  // Pre-warm the microphone once so push-to-talk engages instantly instead of
+  // cold-starting the audio device on every press. Released on unmount.
+  useEffect(() => {
+    if (!sttSupported) return;
+    let cancelled = false;
+    navigator.mediaDevices?.getUserMedia?.({ audio: true })
+      .then((s) => { if (cancelled) s.getTracks().forEach((t) => t.stop()); else micStreamRef.current = s; })
+      .catch(() => { /* fall back to per-press mic acquisition */ });
+    return () => {
+      cancelled = true;
+      micStreamRef.current?.getTracks().forEach((t) => t.stop());
+      micStreamRef.current = null;
+    };
+  }, [sttSupported]);
 
   const speak = useCallback((line: string) => {
     try {
@@ -70,31 +90,47 @@ export default function AbbieTalk() {
     }
   }, [thinking, lesson, speak]);
 
-  const startListening = useCallback(() => {
+  // Keep the persistent recognizer's onend handler pointed at the latest send().
+  useEffect(() => { sendRef.current = send; }, [send]);
+
+  // Build the recognizer once and reuse it — recreating it on every press adds
+  // noticeable start-up lag. interimResults gives live "it's hearing me" feedback.
+  const ensureRecognizer = useCallback((): SR | null => {
+    if (recRef.current) return recRef.current;
     const w = window as unknown as { SpeechRecognition?: new () => SR; webkitSpeechRecognition?: new () => SR };
     const Ctor = w.SpeechRecognition || w.webkitSpeechRecognition;
-    if (!Ctor || listening || thinking) return;
+    if (!Ctor) return null;
     const rec = new Ctor();
     rec.lang = "en-US";
-    rec.interimResults = false;
-    rec.continuous = false;
-    heardRef.current = "";
+    rec.interimResults = true;
+    rec.continuous = true;
     rec.onresult = (e) => {
       let t = "";
-      for (let i = 0; i < e.results.length; i += 1) t += e.results[i][0].transcript;
-      heardRef.current = t;
+      for (let i = 0; i < e.results.length; i += 1) t += e.results[i][0]?.transcript || "";
+      heardRef.current = t.trim();
+      setInterim(t.trim());
     };
     rec.onerror = () => { setStatus("Didn't catch that — try again."); };
     rec.onend = () => {
       setListening(false);
-      recRef.current = null;
-      if (heardRef.current.trim()) void send(heardRef.current);
+      const said = heardRef.current.trim();
+      setInterim("");
+      if (said) sendRef.current(said);
     };
     recRef.current = rec;
+    return rec;
+  }, []);
+
+  const startListening = useCallback(() => {
+    if (listening || thinking) return;
+    const rec = ensureRecognizer();
+    if (!rec) return;
+    heardRef.current = "";
+    setInterim("");
     setListening(true);
     setStatus(null);
-    try { rec.start(); } catch { setListening(false); }
-  }, [listening, thinking, send]);
+    try { rec.start(); } catch { /* already listening — ignore */ }
+  }, [listening, thinking, ensureRecognizer]);
 
   const stopListening = useCallback(() => {
     try { recRef.current?.stop(); } catch { /* ignore */ }
@@ -144,7 +180,7 @@ export default function AbbieTalk() {
         )}
       </div>
 
-      <div className="ab-status">{listening ? "Listening — release to send." : status}</div>
+      <div className="ab-status">{listening ? (interim ? `“${interim}”` : "Listening — release to send.") : status}</div>
 
       <div className="ab-controls">
         {sttSupported && (
