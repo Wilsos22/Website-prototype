@@ -81,7 +81,12 @@ export default function LessonPage() {
       const { data } = await supabase.from("polls").select("id,question,choices")
         .eq("session_id", sess.sessionId).eq("status", "open").order("created_at", { ascending: false }).limit(1).maybeSingle();
       if (stop) return;
-      const p = data as { id: string; question: string; choices: string[] | null } | null;
+      const raw = data as { id: string; question: string; choices: string[] | null } | null;
+      // Ignore blank/malformed polls, and treat an empty choices array as open-
+      // ended, so a bad row can't drop an unanswerable full-screen block on the class.
+      const p = raw && raw.question && raw.question.trim()
+        ? { id: raw.id, question: raw.question, choices: Array.isArray(raw.choices) && raw.choices.length ? raw.choices : null }
+        : null;
       if (p && !answered.includes(p.id)) { setActivePoll(p); setSent(false); } else setActivePoll(null);
     };
     tick();

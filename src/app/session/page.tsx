@@ -120,6 +120,24 @@ export default function SessionPage() {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [session, pollJoins]);
 
+  // Load any poll already open for this session so the "Close question" control is
+  // available even after a page reload — otherwise an orphaned open poll has no
+  // off-switch and blocks every student who joins.
+  useEffect(() => {
+    if (!supabase || !session) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase.from("polls")
+        .select("id,question,choices")
+        .eq("session_id", session.id).eq("status", "open")
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (cancelled) return;
+      const p = data as { id: string; question: string; choices: string[] | null } | null;
+      if (p) setPoll({ id: p.id, question: p.question, choices: p.choices && p.choices.length ? p.choices : null });
+    })();
+    return () => { cancelled = true; };
+  }, [supabase, session]);
+
   async function start() {
     if (!supabase || !periodId) return;
     setError(null);
@@ -138,6 +156,9 @@ export default function SessionPage() {
   }
   async function end() {
     if (!supabase || !session) return;
+    // Close any polls still open for this session so they can't linger and block
+    // students who later join (an orphaned open poll otherwise has no off-switch).
+    await supabase.from("polls").update({ status: "closed" }).eq("session_id", session.id).eq("status", "open");
     await supabase.from("sessions").update({ status: "closed", ended_at: new Date().toISOString(), broadcast: null }).eq("id", session.id);
     clearStoredTeacherSession(session.id);
     setSession(null); setJoins([]); setPoll(null); setAnswers([]); setBroadcast(null);
