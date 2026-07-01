@@ -13,8 +13,9 @@ interface SRResult { readonly isFinal: boolean; readonly length: number; readonl
 interface SREvent { readonly resultIndex: number; readonly results: ArrayLike<SRResult> }
 interface SR { lang: string; interimResults: boolean; continuous: boolean; start: () => void; stop: () => void; onresult: ((e: SREvent) => void) | null; onend: (() => void) | null; onerror: (() => void) | null }
 
-// Physical push-to-talk key — map a Stream Deck button's Hotkey to this key.
-// Change it here if F8 conflicts with anything on your setup.
+// Default physical push-to-talk key (map a Stream Deck button's Hotkey to it).
+// Override live with ?ptt=<key> in the URL — e.g. ?ptt=F13 — no redeploy needed.
+// Add ?debug=1 to see exactly what key the page receives when you press it.
 const TRIGGER_KEY = "F8";
 
 export default function AbbieTalk() {
@@ -26,6 +27,9 @@ export default function AbbieTalk() {
   const [lesson, setLesson] = useState<Lesson | null>(null);
   const [sttSupported, setSttSupported] = useState(false);
   const [interim, setInterim] = useState("");
+  const [triggerKey, setTriggerKey] = useState(TRIGGER_KEY);
+  const [debug, setDebug] = useState(false);
+  const [lastKey, setLastKey] = useState("");
 
   const recRef = useRef<SR | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
@@ -36,14 +40,35 @@ export default function AbbieTalk() {
   const listeningRef = useRef(false);
   const thinkingRef = useRef(false);
   const startedPressRef = useRef(false);
+  const triggerKeyRef = useRef(TRIGGER_KEY);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
   useEffect(() => { listeningRef.current = listening; }, [listening]);
   useEffect(() => { thinkingRef.current = thinking; }, [thinking]);
+  useEffect(() => { triggerKeyRef.current = triggerKey; }, [triggerKey]);
 
   useEffect(() => {
     const w = window as unknown as { SpeechRecognition?: new () => SR; webkitSpeechRecognition?: new () => SR };
     setSttSupported(Boolean(w.SpeechRecognition || w.webkitSpeechRecognition));
     fetch("/api/today", { cache: "no-store" }).then((r) => r.json()).then((d) => { if (d?.lesson) setLesson(d.lesson); }).catch(() => {});
+  }, []);
+
+  // Push-to-talk config from the URL: ?ptt=F13 changes + remembers the trigger key;
+  // ?debug=1 shows a live readout of every key the page receives — so you can see
+  // exactly what your Stream Deck button is sending.
+  useEffect(() => {
+    try {
+      const q = new URLSearchParams(window.location.search);
+      const ptt = q.get("ptt");
+      if (ptt) {
+        setTriggerKey(ptt);
+        try { localStorage.setItem("bdm-ptt-key", ptt); } catch { /* ignore */ }
+      } else {
+        let saved: string | null = null;
+        try { saved = localStorage.getItem("bdm-ptt-key"); } catch { /* ignore */ }
+        if (saved) setTriggerKey(saved);
+      }
+      setDebug(q.get("debug") === "1");
+    } catch { /* ignore */ }
   }, []);
 
   // Pre-warm the microphone once so push-to-talk engages instantly instead of
@@ -181,14 +206,15 @@ export default function AbbieTalk() {
       return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA");
     };
     const onDown = (e: KeyboardEvent) => {
-      if (e.key !== TRIGGER_KEY || e.repeat || isTyping()) return;
+      if (debug) setLastKey(`${e.key}  ·  code=${e.code}${e.ctrlKey ? " +ctrl" : ""}${e.altKey ? " +alt" : ""}${e.shiftKey ? " +shift" : ""}${e.metaKey ? " +cmd" : ""}`);
+      if (e.key !== triggerKeyRef.current || e.repeat || isTyping()) return;
       e.preventDefault();
       downAt = Date.now();
       if (!listeningRef.current && !thinkingRef.current) { startedPressRef.current = true; startListening(); }
       else { startedPressRef.current = false; }
     };
     const onUp = (e: KeyboardEvent) => {
-      if (e.key !== TRIGGER_KEY) return;
+      if (e.key !== triggerKeyRef.current) return;
       e.preventDefault();
       const held = Date.now() - downAt;
       if (held >= 350) { if (listeningRef.current) stopListening(); }            // hold-to-talk → release sends
@@ -197,7 +223,7 @@ export default function AbbieTalk() {
     window.addEventListener("keydown", onDown);
     window.addEventListener("keyup", onUp);
     return () => { window.removeEventListener("keydown", onDown); window.removeEventListener("keyup", onUp); };
-  }, [sttSupported, startListening, stopListening]);
+  }, [sttSupported, startListening, stopListening, debug]);
 
   return (
     <div className="ab-wrap">
@@ -243,6 +269,12 @@ export default function AbbieTalk() {
         )}
       </div>
 
+      {debug && (
+        <div style={{ fontSize: "0.8rem", color: "#9fb0c8", background: "#141a27", border: "1px solid #2a3550", borderRadius: 10, padding: "8px 12px", textAlign: "center", lineHeight: 1.6 }}>
+          PTT debug · trigger key = <b style={{ color: "#5eead4" }}>{triggerKey}</b><br />
+          last key received = <b style={{ color: "#f5b915" }}>{lastKey || "— press your Stream Deck button —"}</b>
+        </div>
+      )}
       <div className="ab-status">{listening ? (interim ? `“${interim}”` : "Listening — release to send.") : status}</div>
 
       <div className="ab-controls">
