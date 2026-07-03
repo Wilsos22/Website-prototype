@@ -27,15 +27,72 @@ const DOMAIN_SHORT: Record<Domain, string> = {
   "Geometry": "Geometry",
 };
 
-function Spark({ points, color }: { points: HistoryPoint[]; color: string }) {
-  if (points.length < 2) return <div style={{ color: "#9aa0a6", fontSize: 12 }}>not enough data yet</div>;
-  const w = 640, h = 44;
-  const step = w / (points.length - 1);
-  const pts = points.map((p, i) => `${(i * step).toFixed(1)},${(h - (p.percent / 100) * h).toFixed(1)}`).join(" ");
+// Weekly-averaged growth chart. Raw history is one point per warm-up (jittery
+// by design — EWMA wiggles); averaging by week shows the trend a teacher can read.
+function bucketWeekly(points: HistoryPoint[]): { at: Date; percent: number }[] {
+  const byWeek = new Map<string, { sum: number; n: number; at: Date }>();
+  for (const p of points) {
+    const d = new Date(p.at);
+    if (Number.isNaN(d.getTime())) continue;
+    const monday = new Date(d);
+    monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    const key = monday.toISOString().slice(0, 10);
+    const b = byWeek.get(key) || { sum: 0, n: 0, at: monday };
+    b.sum += p.percent; b.n += 1;
+    byWeek.set(key, b);
+  }
+  return [...byWeek.values()].sort((a, b) => a.at.getTime() - b.at.getTime())
+    .map((b) => ({ at: b.at, percent: b.sum / b.n }));
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function GrowthChart({ points, color }: { points: HistoryPoint[]; color: string }) {
+  const weeks = bucketWeekly(points);
+  if (weeks.length < 2) return <div style={{ color: "#9aa0a6", fontSize: 12, padding: "6px 0" }}>Not enough history yet — it charts once a couple of weeks of work is in.</div>;
+
+  const W = 640, H = 120, L = 30, B = 16; // plot area: x in [L,W], y in [0,H-B]
+  const plotH = H - B;
+  const x = (i: number) => L + (i / (weeks.length - 1)) * (W - L - 4);
+  const y = (pct: number) => plotH - (pct / 100) * plotH;
+  const line = weeks.map((p, i) => `${x(i).toFixed(1)},${y(p.percent).toFixed(1)}`).join(" ");
+  const area = `${L},${plotH} ${line} ${x(weeks.length - 1).toFixed(1)},${plotH}`;
+
+  // month tick whenever the month changes
+  const ticks: { i: number; label: string }[] = [];
+  let lastMonth = -1;
+  weeks.forEach((p, i) => {
+    const m = p.at.getMonth();
+    if (m !== lastMonth) { ticks.push({ i, label: MONTHS[m] }); lastMonth = m; }
+  });
+
+  const first = weeks[0].percent, last = weeks[weeks.length - 1].percent;
+  const delta = Math.round(last - first);
+
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ width: "100%", height: 44 }}>
-      <polyline fill="none" stroke={color} strokeWidth={2} points={pts} />
-    </svg>
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }}>
+        {[25, 50, 75].map((g) => (
+          <line key={g} x1={L} x2={W - 4} y1={y(g)} y2={y(g)} stroke="#eee7d6" strokeWidth={1} />
+        ))}
+        <text x={L - 6} y={y(0) - 2} textAnchor="end" fontSize={10} fill="#a99f8c">0</text>
+        <text x={L - 6} y={y(50) + 3} textAnchor="end" fontSize={10} fill="#a99f8c">50</text>
+        <text x={L - 6} y={y(100) + 8} textAnchor="end" fontSize={10} fill="#a99f8c">100</text>
+        <polygon points={area} fill={color} opacity={0.12} />
+        <polyline fill="none" stroke={color} strokeWidth={2.5} points={line} strokeLinejoin="round" strokeLinecap="round" />
+        <circle cx={x(0)} cy={y(first)} r={3.5} fill={color} />
+        <circle cx={x(weeks.length - 1)} cy={y(last)} r={4.5} fill={color} stroke="#fff" strokeWidth={1.5} />
+        {ticks.map((t) => (
+          <text key={t.label + t.i} x={x(t.i)} y={H - 4} fontSize={10} fill="#a99f8c">{t.label}</text>
+        ))}
+      </svg>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: "#4a443a", marginTop: 2 }}>
+        {Math.round(first)} → {Math.round(last)}
+        <span style={{ color: delta >= 0 ? "#1e8449" : "#c0392b", marginLeft: 6 }}>
+          {delta >= 0 ? "▲" : "▼"} {delta >= 0 ? "+" : ""}{delta} since {MONTHS[weeks[0].at.getMonth()]}
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -182,19 +239,22 @@ export default function MasteryBoard() {
             <button className="mb-close" onClick={() => setDetail(null)}>✕ close</button>
             <h2 style={{ fontFamily: "Georgia, serif", margin: "0 0 14px", color: "#2b2620" }}>{detail.name}</h2>
             {DOMAINS.map((d) => {
-              const v = pct(detail, d);
+              const hist = series[d] || [];
+              // Prefer the mastery row; fall back to the newest history point so
+              // the bar always reflects the data that exists.
+              const v = pct(detail, d) ?? (hist.length ? hist[hist.length - 1].percent : null);
               return (
-                <div key={d} style={{ margin: "14px 0" }}>
+                <div key={d} style={{ margin: "18px 0" }}>
                   <div className="mb-row">
                     <span className="mb-dlbl" style={{ width: 120 }}>{DOMAIN_SHORT[d]}</span>
                     <span className="mb-bar" style={{ height: 16 }}><span className="mb-fill" style={{ width: `${v ?? 0}%`, background: DOMAIN_COLOR[d] }} /></span>
                     <span className="mb-val" style={{ width: 40 }}>{v === null ? "—" : Math.round(v)}</span>
                   </div>
-                  <Spark points={series[d] || []} color={DOMAIN_COLOR[d]} />
+                  <GrowthChart points={hist} color={DOMAIN_COLOR[d]} />
                 </div>
               );
             })}
-            <div style={{ fontSize: 12, color: "#8a8172" }}>Growth over the year — every point is one piece of evidence (warm-up, practice day, or checkpoint).</div>
+            <div style={{ fontSize: 12, color: "#8a8172" }}>Growth over the year, averaged by week — checkpoints move the line most, warm-ups keep it honest.</div>
           </div>
         </div>
       )}

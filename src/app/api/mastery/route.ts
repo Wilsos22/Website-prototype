@@ -24,12 +24,14 @@ export async function GET(req: Request) {
   const { data: rows, error: mErr } = await db
     .from("mastery")
     .select("student_id,domain,standard_id,percent,stage,updated_at")
-    .in("student_id", ids)
-    .eq("standard_id", standardId);
+    .in("student_id", ids);
   if (mErr) return Response.json({ error: mErr.message }, { status: 500 });
 
+  // Scope filtering in code — '' (domain bars) vs a CCSS id (stage rows). An
+  // eq-on-empty-string PostgREST filter is unreliable, so don't depend on it.
   const byStudent = new Map<string, { domain: string; percent: number; stage: string }[]>();
   for (const r of rows || []) {
+    if ((r.standard_id ?? "") !== standardId) continue;
     const list = byStudent.get(r.student_id) || [];
     list.push({ domain: r.domain, percent: Number(r.percent), stage: r.stage });
     byStudent.set(r.student_id, list);

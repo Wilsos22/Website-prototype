@@ -22,13 +22,17 @@ export async function GET(req: Request) {
     .select("percent,stage,source,at,domain,standard_id")
     .eq("student_id", studentId)
     .order("at", { ascending: true })
-    .limit(2000);
-  q = standardId ? q.eq("standard_id", standardId) : q.eq("domain", domain as string).eq("standard_id", "");
+    .limit(5000);
+  if (standardId) q = q.eq("standard_id", standardId);
+  else q = q.eq("domain", domain as string);
 
   const { data, error } = await q;
   if (error) return Response.json({ error: error.message }, { status: 500 });
+  // Domain series = rows without a standard scope; filter in code rather than
+  // relying on a PostgREST eq-on-empty-string.
+  const rows = (data || []).filter((r) => (standardId ? true : !(r.standard_id ?? "").length));
   return Response.json({
     studentId,
-    series: (data || []).map((r) => ({ at: r.at, percent: Number(r.percent), stage: r.stage, source: r.source })),
+    series: rows.map((r) => ({ at: r.at, percent: Number(r.percent), stage: r.stage, source: r.source })),
   });
 }
