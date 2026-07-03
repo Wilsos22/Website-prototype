@@ -109,11 +109,26 @@ export default function MasteryBoard() {
 
   useEffect(() => {
     if (!supabase) return;
-    supabase.from("periods").select("id,name").order("sort_order").then(({ data }) => {
-      const ps = (data as Period[]) || [];
+    (async () => {
+      const [{ data: pData }, { data: sData }] = await Promise.all([
+        supabase.from("periods").select("id,name").order("sort_order"),
+        supabase.from("students").select("period_id"),
+      ]);
+      // Count students per period so duplicate names (e.g. a real "Period 2" and
+      // the mock one) are tellable apart in the dropdown.
+      const counts = new Map<string, number>();
+      for (const s of (sData as { period_id: string }[]) || []) {
+        counts.set(s.period_id, (counts.get(s.period_id) || 0) + 1);
+      }
+      const ps = ((pData as Period[]) || []).map((p) => ({
+        ...p,
+        name: `${p.name} · ${counts.get(p.id) || 0} students`,
+      }));
       setPeriods(ps);
-      if (ps[0]) setPeriodId(ps[0].id);
-    });
+      // Default to the fullest period, not just the first one.
+      const fullest = [...ps].sort((a, b) => (counts.get(b.id) || 0) - (counts.get(a.id) || 0))[0];
+      if (fullest) setPeriodId(fullest.id);
+    })();
   }, [supabase]);
 
   const load = useCallback(async (pid: string) => {
