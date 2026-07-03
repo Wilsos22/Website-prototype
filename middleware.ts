@@ -7,6 +7,8 @@ const PROTECTED_PREFIXES = [
   "/roster",
   "/start-question",
   "/api/form-responses",
+  "/api/mastery",
+  "/api/live",
 ];
 
 function isProtectedPath(pathname: string) {
@@ -64,5 +66,8 @@ export const config = {
     "/roster/:path*",
     "/start-question/:path*",
     "/api/form-responses/:path*",
+    "/api/mastery/:path*",
+    "/api/mastery",
+    "/api/live/:path*",
   ],
 };

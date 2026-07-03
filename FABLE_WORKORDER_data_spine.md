@@ -1,213 +1,151 @@
-# Fable work-order — DATA SPINE (build this first)
+# Work-order — DATA SPINE v2 (aligned to the Independent Proficiency System prototype)
 
-> The buildable backbone of the formative pipeline. Full vision + rationale live in
-> `FABLE_BRIEF_formative_pipeline.md`; **this** doc is the precise, testable spec for the first
-> end-to-end slice: **warm-up + tool work → one evidence log → mastery bar → a live
-> group-by-misconception view.** Verify every claim against the actual code before trusting it.
-> A Google AI Studio agent also commits here — `git fetch` + merge before pushing, add explicit paths.
+> **v2 supersedes v1.** The system is already designed and validated with mock data in
+> `/Users/steelewilson/Documents/Big Dog Math - Mock Data/` (Notion mirrors: "Independent
+> Proficiency System — Semester 1 Overview & How-To" and "Daily Warm-Up Integration — Q4/Q5 as the
+> data pull + multi-point confidence"). **Build that system into the Next.js/Supabase app — do not
+> redesign it.** Read these before writing code: `README_import_guide.md`, `AI_Next_Moves_POC.md`,
+> `Semester 1 Proficiency System/` (esp. `build_dashboard.py`, `SEMESTER1_summary.md`,
+> `_semester1_checkpoints.json`, the Q4Q5 + ShortAnswer pools), `Independent Proficiency Checks -
+> Module 1/README_checkpoint_system.md`, `_clusters.json`, and the repo's `supabase/*.sql`.
+> A Google AI Studio agent also commits to this repo: fetch+merge before pushing; add explicit paths.
 
----
+## 0. The system in one paragraph (teacher's design — locked)
+Students demonstrate proficiency through a **two-tier independent-demonstration system** layered on
+existing calendar days: **Tier-2 Checkpoints** (6–8 items, paper-primary so reasoning is preserved,
+solver-resistant, one SBAC-modeled item each, on MATHia "Learn Individually" days; cuts: **≥80% Got
+It / 50–79% Almost / <50% Intervention**) and **Tier-1 practice-day checks** (4–6 items; second
+practice day may run as **Grudgeball game mode** with individual capture). **Daily warm-ups** feed the
+same spine: **Q4/Q5 are the data pull** — drawn from curated pools with **keyed distractors** from a
+**finite misconception vocabulary (~13 tags, exact-match, no NLP)**; the short-answer pool supplies an
+explain-your-reasoning item. **Multi-point confidence:** no single wrong answer triggers action — a
+flag needs recurrence (2+ same-tag) and corroboration (i-Ready domain placement, checkpoint results).
+Mastery is visualized as **per-domain EWMA bars** (Number & Operations, Algebra & Algebraic Thinking,
+Measurement & Data, Geometry), initialized from i-Ready Fall. Clusters of students sharing a
+misconception get **templated next moves keyed to (misconception × archetype)**. Endpoint (out of
+scope, design-compatible): teacher confirms outcome → push to **Infinite Campus**.
 
-## Scope
-**IN:** standards taxonomy + prerequisite graph · misconception catalog · one unified `evidence` log ·
-warm-up Google Form (2 fluency / 3 topic / 1 stretch) generation + **sync fix** · tool evidence emitter
-wired into **Equation Builder, GEMS, Combine Like Terms** · mastery derivation (percent + stage +
-growth history) · **RLS + teacher auth** · a **minimal but real** live "Right now" group-by-misconception
-view with typed next-steps · the read APIs the dashboards will consume.
+## 1. Architecture decision
+**Supabase is the computational store** (EWMA, clustering, live grouping, history) — the prototype's
+`checkpoint_results.notion_synced` already implies this. **Notion stays the human-facing mirror +
+authoring layer** (Student Data Hub, gradebook, lesson DB). CSV import paths from the mock README stay
+valid for iReady/SBAC/curriculum tests. The QR-scan→OCR checkpoint pipeline is **out of scope** here —
+ingest checkpoint results via CSV upload first; design the table so the scan path slots in later.
 
-**OUT (later — but design so they need no schema change):** polished growth dashboards, full tool
-coverage, richly-authored next-step content, per-period tool curation.
+## 2. Schema — REUSE what exists, ADD only what's missing
+**Existing (verify in `supabase/schema.sql`, `formative.sql`, `checkpoints.sql` — do not rebuild):**
+`students`, `periods`, `problems`, `responses(student_id, problem_id, is_correct, misconception,
+score, submitted_at)`, `checkpoint_runs(session_id, checkpoint_id, ccss, prompt, correct_answer,
+misses jsonb)`, `checkpoint_results(run_id, student_id, answer, is_correct, misconception, ccss,
+notion_synced)`, plus practice/exit-ticket tables.
 
-Non-negotiable: **none of this ships on the current `prototype_all` RLS** (§8). Secrets stay server-side.
+**Add (new migrations in `supabase/`):**
+- `standards(id text pk, title, strand, domain, grade, sort)` — CCSS for the Sem-1 scope (see §7) with
+  each standard's **i-Ready domain**; extend to Sem 2 later.
+- `standard_prereqs(standard_id, requires_id)` — powers the "connected/missing skill" move.
+- `misconceptions(id, label unique, standard_id null, description)` — seed the finite vocabulary from
+  `_clusters.json` / `_semester1_checkpoints.json` (≈13 tags incl. "distributes to first term only").
+- `mastery(student_id, standard_id null, domain, percent numeric, stage, updated_at, pk(student_id,
+  domain, coalesce(standard_id,'—')))` — EWMA state per **domain** (the bars) and per **standard**
+  (the stage gates), + `mastery_history(student_id, domain, standard_id null, percent, stage, at)` for
+  the growth-over-the-year view.
+- `evidence_weights` config table (or a constants module): α values + cuts, tunable, not magic numbers.
+- `recommendations(id, session_id, misconception_id, archetype, student_ids uuid[], type, content
+  jsonb, created_at)` — cached next moves.
 
----
+## 3. Mastery engine — port `build_dashboard.py` exactly, then add the stage gates
+- **EWMA:** `m_new = (1−α)·m_old + α·(score_pct)` with **α = 0.40 Tier-2 checkpoint, 0.20 Tier-1,
+  0.30 daily warm-up**. Per-item **domain tags** decide which bar each item moves.
+- **Init:** from i-Ready Fall scale score: `clamp((scale−480)/(660−480)×100, 5, 98)` per domain.
+- **Stage per standard** (the teacher's mastery-bar semantics — accuracy alone can't reach the top):
+  - `not_started` → no evidence. `developing` → warm-up evidence accruing (~bar rising through ≈30%).
+  - `approaching` → **cap for MC/accuracy-only evidence** (warm-ups + digital quick-checks), however high the average.
+  - `mastered` → a **Tier-2 checkpoint ≥80%** on that standard — checkpoints are paper, work-shown,
+    solver-resistant: that *is* the produced-reasoning gate.
+  - `complete` → sustained: **≥2 Tier-2 checkpoints ≥80% spanning ≥3 weeks AND the SBAC-modeled item
+    correct** (transfer). Locked unless later evidence contradicts.
+  - **Regression:** a later checkpoint <50% drops `mastered → approaching`; EWMA dips naturally
+    (one bad day ≠ crater — that's the point of EWMA).
+- Recompute on every write of `responses`/`checkpoint_results`; append to `mastery_history`.
 
-## 1. Schema (Supabase) — exact, put migrations in `supabase/`
+## 4. Ingestion
+1. **Warm-ups (extend the existing Apps Script — `warmup-ai-generator.gs`, `warmup-notion-sync.gs`,
+   `WarmupBuilder.html` — do NOT rebuild):** keep the 5 MC + 1 short-answer shape. **Q1–Q3 =
+   fluency/review; Q4 = on-grade topic; Q5 = challenge.** Q4/Q5 draw from (or match the format of)
+   `SEMESTER1_WarmUp_Q4Q5_pool.csv` — every distractor carries a misconception tag from the vocabulary;
+   the short-answer item draws from `SEMESTER1_WarmUp_ShortAnswer_pool.csv`. On submit: existing Notion
+   mirror **plus** rows into `responses` (`is_correct`, `misconception` resolved from the chosen
+   distractor). **Fix the sync bug:** trigger calls `syncSubmissionToNotion` (missing); real handler is
+   `syncSubmissionToNotionSafely_` — add a wrapper/repoint, remove duplicate triggers, confirm the
+   Notion DBs are shared with the integration. **Identity:** respondent school email →
+   `students.email`; unmatched → park + surface, never drop.
+2. **Checkpoints (Tier-1 + Tier-2):** teacher-facing **CSV upload** matching
+   `checkpoint_results_sample.csv` → `checkpoint_runs`/`checkpoint_results` (per-item `ccss`, domain,
+   `misconception`). Mark tier on the run (drives α). QR/scan/OCR comes later; same tables.
+3. **Manipulative tools:** wire Equation Builder, GEMS, Combine Like Terms to write `responses` rows
+   (wrong-step patterns → vocabulary tags) during live sessions. Warm-up-weight α.
+4. **Benchmarks:** CSV import for `iready_scores.csv` shape (init + corroboration) and
+   `sbac_scores.csv` (reference).
 
-```sql
--- Standards taxonomy (seed CCSS Grade 6: 6.RP, 6.NS, 6.EE, 6.G, 6.SP)
-create table standards (
-  id text primary key,               -- e.g. '6.NS.B.4'
-  title text not null,
-  strand text not null,              -- 'RP' | 'NS' | 'EE' | 'G' | 'SP'
-  grade int not null default 6,
-  sort int
-);
+## 5. Clustering + next moves (port the POC logic)
+- **Cluster rule:** exact-match on misconception tag with **≥2 occurrences** per student across
+  warm-ups + checkpoints (recency-windowed); corroborate with the student's i-Ready domain placement
+  (multi-point confidence) before surfacing.
+- **Archetypes** (compute from the data, thresholds in config): high-steady (warm-up avg ≥4.6) ·
+  strong-recurring-slip (≥4.0 + repeated tag) · leaper (low baseline, climbing) · plateau (flat ~2.9–3.4
+  + recurring tag) · chronically-low (<2.2) · **non-submitter** (<30% submission rate — a logistics
+  group, not a math group).
+- **Next move = template keyed to (misconception × archetype)** — seed the template bank from
+  `AI_Next_Moves_POC.md` (challenge-not-remedial / catch-now / break-the-plateau / concrete-first +
+  prereq check via `standard_prereqs` / extension / parent-contact draft). Claude enrichment (scoring
+  short-answer reasoning quality, refining a template with detected prereq gaps) is a later layer —
+  server-side, matching the repo's existing `fetch` pattern.
+- **APIs:** `GET /api/mastery?periodId&domain|standardId` → bars+stages · `GET
+  /api/mastery/:studentId/history` → growth series · `GET /api/live/groups?sessionId|periodId` →
+  clusters with archetype-typed moves.
 
--- Prerequisite graph → powers the "connected/missing skill" next-step
-create table standard_prereqs (
-  standard_id text references standards(id),
-  requires_id text references standards(id),
-  primary key (standard_id, requires_id)
-);
+## 6. Teacher surfaces (cream design system; control panel stays dark)
+- **"Right now" view:** cluster cards (misconception, students, archetype-differentiated move,
+  corroboration badge e.g. "iReady Geometry low ✓"), + the non-submitter card. One glance → one move.
+  Reuse class mode to push a tool/problem to a group.
+- **Mastery board:** port `mastery_feed_demo_semester1.html` to React — per-student 4 domain bars +
+  per-standard stage chips (Not started → Complete), drill-down to the evidence, growth chart over the
+  year from `mastery_history`.
 
--- Named misconceptions per standard (authored by the teacher; see §2)
-create table misconceptions (
-  id uuid primary key default gen_random_uuid(),
-  standard_id text references standards(id),
-  label text not null,               -- 'adds instead of multiplies'
-  description text
-);
+## 7. Standards scope (seed now; Sem 2 later)
+M1T1: 6.EE.A.3, 6.EE.A.1, 6.NS.B.4, 5.NF.B.4, 6.NS.A.1 · M1T2: 6.G.A.1, 6.G.A.2, 6.G.A.3, 6.G.A.4 ·
+M1T3: 5.NBT.A.3b, 6.NS.B.3 · M2T1: 6.RP.A.1, 6.RP.A.3, 6.RP.A.3a, 6.RP.A.3b · M2T2: 6.RP.A.3c ·
+M2T3: 6.RP.A.3d, 6.RP.A.2. Domain mapping per the i-Ready four; keep `SEMESTER1_SBAC_crosswalk.csv`
+importable for per-item SBAC citations.
 
--- THE unified evidence log — every source writes here, nothing else
-create table evidence (
-  id uuid primary key default gen_random_uuid(),
-  student_id uuid references students(id),
-  standard_id text references standards(id),
-  source text not null,              -- 'warmup' | 'tool' | 'exit_ticket' | 'explanation'
-  kind text not null,                -- 'answer' | 'process' | 'explanation' | 'stretch'
-  correct boolean,                   -- null when not applicable (e.g. a process step)
-  quality int,                       -- 0..3 reasoning quality (Claude-scored), null if n/a
-  misconception_id uuid references misconceptions(id),
-  item_ref text,                     -- form question id / tool problem id
-  session_id uuid references sessions(id),
-  payload jsonb default '{}',
-  dedupe_key text unique,            -- idempotency: '<source>:<item_ref>:<student_id>'
-  created_at timestamptz default now()
-);
-create index on evidence (student_id, standard_id, created_at);
-create index on evidence (session_id);
+## 8. Security (before any real student rows)
+Replace `prototype_all` RLS: students insert only their own `responses`; `mastery`,
+`checkpoint_results`, `recommendations` teacher-only. Teacher auth exists per `NOTION-SETUP.md`
+(TEACHER_USERNAME/PASSWORD + middleware) — **verify it actually gates /teacher, /control, /session,
+and the new APIs**; service-role key server-side only.
 
--- Derived mastery, recomputed on every evidence write (see §5)
-create table mastery (
-  student_id uuid references students(id),
-  standard_id text references standards(id),
-  percent int not null default 0,    -- 0..100
-  stage text not null default 'not_started', -- see §5 enum
-  counts jsonb not null default '{}', -- {correct, incorrect, process, stretch, days}
-  first_at timestamptz,
-  last_at timestamptz,
-  updated_at timestamptz default now(),
-  primary key (student_id, standard_id)
-);
+## 9. Acceptance criteria — use the mock data as fixtures
+Seed with `supabase_seed.sql` (25 students, 1,441 responses) + `checkpoint_results_sample.csv`. Then:
+1. **Clustering recovers the designed-in groups:** "treats ratio as additive" → Beckett, Pemberton, Hollis,
+   Fontaine, Xanders; "adds denominators…" → Escobar, Tanaka, Kingsley, Sterling; "area vs perimeter" → Juarez,
+   Winslow, Navarro; non-submitters → Rosales, Ibarra, Yarrow (with Ibarra's 3.4-when-he-submits surfaced).
+2. Archetypes assign correctly (Beckett strong-recurring → challenge; Fontaine chronically-low →
+   concrete-first; Hollis leaper → catch-now) and each cluster shows a templated move.
+3. EWMA matches `build_dashboard.py` output on the same inputs (golden-file test); a Tier-2 ≥80 moves
+   a bar visibly, a Tier-1 nudges it, one bad day doesn't crater it.
+4. Stage gates: a student with high warm-up accuracy but no checkpoint ≥80 shows **Approaching**, never
+   Mastered; a ≥80 Tier-2 flips **Mastered**; two ≥80s across ≥3 weeks + correct SBAC-modeled item →
+   **Complete**; a later <50 regresses it. History endpoint returns the arc.
+5. A warm-up Form submission lands in Notion AND `responses` with the right misconception — with the
+   `syncSubmissionToNotion` bug fixed and duplicate triggers removed.
+6. RLS: student token can't read `mastery` or others' rows; teacher APIs require auth. Build passes;
+   existing flows unbroken.
 
--- Cached next-step recommendations (rule-based now, Claude-enriched later)
-create table recommendations (
-  id uuid primary key default gen_random_uuid(),
-  session_id uuid references sessions(id),
-  standard_id text references standards(id),
-  misconception_id uuid references misconceptions(id),
-  student_ids uuid[] not null,
-  type text not null,                -- 'new_problem' | 'new_explanation' | 'connected_skill'
-  content jsonb default '{}',
-  created_at timestamptz default now()
-);
-```
-
-## 2. Taxonomy + misconception authoring
-- Seed `standards` + `standard_prereqs` (CCSS G6). Keep the seed in a migration/script so it's reproducible.
-- Add a **Standards** multi-select (or relation) to the Notion Lessons DB, and let the teacher author,
-  per warm-up **topic question**, a **distractor → misconception** map. Sync those into `misconceptions`
-  (+ keep the map with the question so responses can resolve it). This authored map is what makes the
-  fast MC grouping possible — the classifier only covers open/stretch responses.
-
-## 3. Evidence contract — the single write path
-One server route, everything calls it:
-```
-POST /api/evidence
-body: { studentId, standardId, source, kind, correct?, quality?, misconceptionId?, itemRef?, sessionId?, payload? }
-→ upsert on dedupe_key, then recompute mastery for (studentId, standardId). Returns the new mastery row.
-```
-- **Client emitter** `logEvidence(e)` in `src/lib/evidence.ts` for the tools.
-- **Instrument the 3 guided tools** (they already have step engines) to emit:
-  - **Equation Builder:** `answer` (final x correct?), `process` (chose the correct inverse op / correct
-    isolation step), map wrong inverse-op picks → a misconception.
-  - **GEMS / order-of-operations:** `answer` (final), `process` (picked the correct next operation),
-    wrong-order picks → misconception.
-  - **Combine Like Terms:** `answer` (final simplified), `process` (grouped like terms / cancelled a zero
-    pair correctly), mis-grouping → misconception.
-  - Emit only inside a live session; tag `session_id` + the lesson's standard.
-
-## 4. Warm-up Google Forms (2/3/1) + sync — EXTEND the existing scripts, DO NOT rebuild
-This already exists as Apps Script — read it first: `warmup-ai-generator.gs` (AI-generates a day's Google
-Form; today it emits **5 MC questions with 4 "common-mistake distractor" choices each + 1 open-response
-"explain your reasoning" bonus**), `warmup-generator.gs`, `warmup-sidebar-functions.gs`,
-`WarmupBuilder.html` (sidebar UI), `warmup-notion-sync.gs` (Notion sync). `src/lib/notionWarmupSummaries.ts`
-reads the summaries. Form generation + AI distractors + Notion sync are **done** — extend, don't replace:
-- **Reshape the generated set to the exact template** — 2 fluency + 3 topic + 1 stretch — by adjusting the
-  AI prompt/schema in `warmup-ai-generator.gs` (it's close already: fluency + review + on-grade + challenge
-  + open bonus).
-- **Add the misconception tag (the ONE missing piece).** The generator already picks plausible
-  common-mistake distractors and writes a `feedback` string; extend its output schema so **each wrong
-  choice carries a named misconception label** and each question a **standard id**. Upsert those labels
-  into `misconceptions`, and keep the per-choice map with the question so a submitted answer resolves to a
-  `misconception_id`. This is a small prompt/schema extension — the AI is *already* choosing the
-  distractors on purpose; we just need it to name them. Use the **finite misconception vocabulary** from
-  the mock-data prototype (`Big Dog Math - Mock Data/README_import_guide.md`) as the seed vocabulary —
-  exact-match clusterable, no NLP.
-- **Fix the sync:** the submit trigger calls `syncSubmissionToNotion`, which does not exist — real handler
-  is `syncSubmissionToNotionSafely_`. Add a public wrapper / repoint the trigger; remove duplicate triggers;
-  confirm the "Warm-Up Weekly Summaries" + "Warm up Links" Notion DBs are shared with the integration.
-- **New: per-response → evidence.** On submit, in addition to the Notion mirror, `POST /api/evidence` per
-  question — `source:'warmup'`, `kind:'answer'|'stretch'`, `correct`, resolved `standardId` +
-  `misconceptionId` (from the chosen distractor). The open "explain your reasoning" bonus →
-  `kind:'explanation'`, quality Claude-scored (§5) — this is a primary *reasoning* signal for Mastered.
-- **Identity:** map the Form respondent's **school email** → `students.email` (collect email in the Form).
-  Unmatched → park + surface to the teacher, don't drop.
-
-## 5. Mastery derivation — exact rubric
-Pure function `computeMastery(evidence[]) → { percent, stage, counts }`, per student × standard.
-Stages: `not_started → developing → approaching → mastered → complete`. **Config object (tunable):**
-```
-CORRECT answers build accuracy but CAP the stage at 'approaching'.
-'mastered' REQUIRES ≥1 process/explanation with quality ≥ 2 (reasoning shown).
-'complete' REQUIRES 'mastered' conditions sustained across ≥ 3 distinct days
-           AND ≥1 correct 'stretch' item with quality ≥ 2 (transfer).
-Defaults (make them constants, easy to change):
-  developing:  ≥1 correct                                   → percent ~30
-  approaching: ≥3 correct across ≥2 sources (warmup+tool)   → percent ~60  (accuracy-only ceiling)
-  mastered:    approaching + reasoning evidence             → percent ~85
-  complete:    mastered + sustained(≥3 days) + stretch      → percent 100 (locked)
-Regression: allow a drop (e.g. mastered→approaching) if recent contradicting evidence accrues.
-```
-Recompute on every evidence write; keep all `evidence` rows so growth-over-time is queryable. Never let
-raw right-answer count alone reach `mastered` — the whole point is that produced reasoning gates the top.
-
-## 6. Read surface (what the UIs call) — exact shapes
-```
-GET /api/mastery?periodId=…&standardId=…
-  → [{ studentId, name, percent, stage, counts }]
-GET /api/mastery/student/:studentId/:standardId/history
-  → [{ at, percent, stage }]        // growth-over-the-year series
-GET /api/live/groups?sessionId=…
-  → [{ misconception, standardId, students:[…], suggestedType, content? }]
-     // grouping: cluster this session's students by their active misconception per the lesson standard.
-     // suggestedType (rule-based first, Claude later):
-     //   prereq gap detected  → 'connected_skill' (walk standard_prereqs for a weak upstream standard)
-     //   same misconception repeated / consistent → 'new_explanation'
-     //   inconsistent / close  → 'new_problem'
-```
-
-## 7. Minimal live "Right now" view
-A teacher page reading `/api/live/groups`: one card per misconception group — the misconception, the
-named students, the typed next-step, and a **"push to this group"** button reusing class mode
-(`sessions.broadcast` / `useLiveToolConfig`). Cream design system. Usable-in-class, not final polish.
-
-## 8. Security — exact intent
-Replace `prototype_all` with real RLS:
-- A student may **insert only their own** `evidence` (and read none of `mastery`/others).
-- `mastery`, `recommendations`, and the read APIs are **teacher-only**, behind auth (upgrade the PIN gate
-  to a real teacher login, or Supabase Auth). Service-role key used **only** server-side.
-- Example intent (refine): `evidence` insert policy `student_id = auth.uid()`-equivalent; `mastery`
-  select policy teacher-role only. Do not leave any table world-writable.
-
-## 9. Acceptance criteria (testable)
-1. Submitting a lesson's warm-up Form writes **per-question evidence** (correct + standard +
-   misconception for topic distractors) to Supabase and mirrors to Notion — **without** the missing
-   `syncSubmissionToNotion` name; duplicate triggers gone.
-2. Doing Equation Builder / GEMS / Combine Like Terms in a live session writes **answer + process**
-   evidence tagged to the right standard, and wrong steps write a `misconception_id`.
-3. A student with 4 correct answers and **no** reasoning shows **Approaching (~60%)** — not Mastered.
-   Add one quality process/explanation → **Mastered**. Add sustained correct+reasoning over 3 days + a
-   correct stretch → **Complete**. `.../history` returns the rising series.
-4. `/api/live/groups` returns this session's students **grouped by shared misconception**, each with a
-   typed next-step; a detected prereq gap yields `connected_skill`.
-5. RLS: a student token cannot read `mastery` or another student's `evidence`; teacher APIs require auth.
-6. `npm run build` passes; existing session/lesson/control/tool flows still work.
-
-## 10. Build order (small, verifiable steps)
-1. Migrations for §1 + standards/prereq seed + RLS (§8). 2. `/api/evidence` + `logEvidence` + dedupe.
-3. `computeMastery` + recompute-on-write + `/api/mastery*`. 4. Warm-up sync fix + Form generation →
-evidence. 5. Instrument the 3 tools. 6. `/api/live/groups` (rule-based) + the "Right now" view.
-7. (Then hand off to the feedback/Claude layer per the brief.) Stop after each step and verify.
-```
+## 10. Build order (each step shippable, verify then stop)
+1. Migrations (§2) + standards/misconception seeds + RLS + verify teacher auth.
+2. Mastery engine (port EWMA + stage gates) + golden-file test against `build_dashboard.py`.
+3. Fixture load + `/api/mastery*` + mastery board (read-only, mock-data-powered).
+4. Clustering + archetypes + template bank + `/api/live/groups` + "Right now" view — validate §9.1–2.
+5. Warm-up Apps Script extension + sync fix → live `responses` ingestion.
+6. Checkpoint CSV upload → `checkpoint_results` → bars move end-to-end.
+7. Tool emitters (Equation Builder, GEMS, CLT). 8. (Later layers: Claude enrichment, scan/OCR, Infinite Campus.)

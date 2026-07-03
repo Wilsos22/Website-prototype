@@ -1,5 +1,12 @@
 # Fable work-order — Grade-from-manipulatives + instant-feedback pipeline
 
+> **⚠️ READ `FABLE_WORKORDER_data_spine.md` (v2) FIRST — it supersedes this doc wherever they
+> conflict.** After this brief was written we found the teacher's own validated prototype (the
+> **Independent Proficiency System**, `/Users/steelewilson/Documents/Big Dog Math - Mock Data/`):
+> two-tier checkpoints, EWMA per-domain mastery bars, a finite misconception vocabulary with keyed
+> distractors (no NLP), archetype-templated next moves, and Q4/Q5-as-data-pull warm-ups. Build THAT
+> system. This brief remains useful for the broader vision (pillars, Claude enrichment, phasing).
+
 > Build order-of-magnitude: this is the big cross-cutting build. Ship it in phases (§9),
 > each independently useful. Read the repo before trusting anything asserted here — where
 > this doc says "verify," confirm against the actual code. Another agent (Google AI Studio)

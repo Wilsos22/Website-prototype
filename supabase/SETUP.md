@@ -43,3 +43,10 @@ app can read them:
 
 That's it. After this, everything else (rosters, capturing answers, the review
 screen, period summaries, assignments) is on me.
+
+## 5. Proficiency data spine (run when we wire the mastery system)
+Same drill as step 2: SQL Editor → New query → paste **`supabase/proficiency.sql`**
+→ Run. It adds the standards taxonomy + prerequisite graph, the misconception
+vocabulary, EWMA mastery state/history, tunable weights, and next-move caching —
+and locks the mastery tables to server-only access (the app reads them through
+API routes using the service_role key, never from the browser).

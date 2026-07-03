@@ -12,3 +12,6 @@ yarn-error.log*
 
 # AI Studio scratch environments (large binaries, never commit)
 aistudio_*
+
+# mastery golden-test build artifact
+.tmp-mastery/
