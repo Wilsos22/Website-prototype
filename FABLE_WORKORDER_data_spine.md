@@ -118,18 +118,32 @@ body: { studentId, standardId, source, kind, correct?, quality?, misconceptionId
     pair correctly), mis-grouping → misconception.
   - Emit only inside a live session; tag `session_id` + the lesson's standard.
 
-## 4. Warm-up Google Forms (2/3/1) + sync — exact
-- **Generate the Form** for a lesson from its Notion warm-up spec via Apps Script (`FormApp`): 2 fluency
-  + 3 topic (with distractor→misconception maps) + 1 stretch; every question tagged with its standard.
-  *Fallback for slice 1:* a Form template + a per-lesson config the script reads; still auto-sync.
-- **onFormSubmit** → (a) the existing Notion mirror **and** (b) `POST /api/evidence` per question:
-  `source:'warmup'`, `kind:'answer'|'stretch'`, `correct`, resolved `standardId` + `misconceptionId`
-  (from the chosen distractor).
-- **FIX THE SYNC:** the trigger calls `syncSubmissionToNotion`, which does not exist — real handler is
-  `syncSubmissionToNotionSafely_`. Add a public wrapper (or repoint the trigger) and remove the duplicate
-  triggers. Share the "Warm-Up Weekly Summaries" + "Warm up Links" Notion DBs with the integration.
-- **Identity:** map the Form respondent's **school email** → `students.email` (Forms should collect email).
-  If unmatched, park the response and surface it to the teacher rather than dropping it.
+## 4. Warm-up Google Forms (2/3/1) + sync — EXTEND the existing scripts, DO NOT rebuild
+This already exists as Apps Script — read it first: `warmup-ai-generator.gs` (AI-generates a day's Google
+Form; today it emits **5 MC questions with 4 "common-mistake distractor" choices each + 1 open-response
+"explain your reasoning" bonus**), `warmup-generator.gs`, `warmup-sidebar-functions.gs`,
+`WarmupBuilder.html` (sidebar UI), `warmup-notion-sync.gs` (Notion sync). `src/lib/notionWarmupSummaries.ts`
+reads the summaries. Form generation + AI distractors + Notion sync are **done** — extend, don't replace:
+- **Reshape the generated set to the exact template** — 2 fluency + 3 topic + 1 stretch — by adjusting the
+  AI prompt/schema in `warmup-ai-generator.gs` (it's close already: fluency + review + on-grade + challenge
+  + open bonus).
+- **Add the misconception tag (the ONE missing piece).** The generator already picks plausible
+  common-mistake distractors and writes a `feedback` string; extend its output schema so **each wrong
+  choice carries a named misconception label** and each question a **standard id**. Upsert those labels
+  into `misconceptions`, and keep the per-choice map with the question so a submitted answer resolves to a
+  `misconception_id`. This is a small prompt/schema extension — the AI is *already* choosing the
+  distractors on purpose; we just need it to name them. Use the **finite misconception vocabulary** from
+  the mock-data prototype (`Big Dog Math - Mock Data/README_import_guide.md`) as the seed vocabulary —
+  exact-match clusterable, no NLP.
+- **Fix the sync:** the submit trigger calls `syncSubmissionToNotion`, which does not exist — real handler
+  is `syncSubmissionToNotionSafely_`. Add a public wrapper / repoint the trigger; remove duplicate triggers;
+  confirm the "Warm-Up Weekly Summaries" + "Warm up Links" Notion DBs are shared with the integration.
+- **New: per-response → evidence.** On submit, in addition to the Notion mirror, `POST /api/evidence` per
+  question — `source:'warmup'`, `kind:'answer'|'stretch'`, `correct`, resolved `standardId` +
+  `misconceptionId` (from the chosen distractor). The open "explain your reasoning" bonus →
+  `kind:'explanation'`, quality Claude-scored (§5) — this is a primary *reasoning* signal for Mastered.
+- **Identity:** map the Form respondent's **school email** → `students.email` (collect email in the Form).
+  Unmatched → park + surface to the teacher, don't drop.
 
 ## 5. Mastery derivation — exact rubric
 Pure function `computeMastery(evidence[]) → { percent, stage, counts }`, per student × standard.
