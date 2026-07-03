@@ -18,6 +18,8 @@ export default function RosterPage() {
   const [error, setError] = useState<string | null>(null);
   const [newPeriod, setNewPeriod] = useState("");
   const [nameInputs, setNameInputs] = useState<Record<string, string>>({});
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!supabase) { setLoading(false); return; }
@@ -49,6 +51,21 @@ export default function RosterPage() {
   async function removeStudent(id: string) {
     if (!supabase) return;
     await supabase.from("students").delete().eq("id", id); load();
+  }
+  async function syncFromNotion() {
+    if (syncing) return;
+    setSyncing(true); setSyncMsg("Reading the Notion roster…");
+    try {
+      const res = await fetch("/api/roster/sync", { method: "POST" });
+      const d = await res.json();
+      if (d.error) setSyncMsg(`⚠ ${d.error}`);
+      else {
+        const extra = d.onSiteNotInNotion?.length ? ` · on site but not in Notion: ${d.onSiteNotInNotion.join(", ")}` : "";
+        setSyncMsg(`✓ Synced ${d.notionRows} Notion rows — ${d.created} added, ${d.updated} updated, ${d.unchanged} unchanged${d.periodsCreated ? `, ${d.periodsCreated} new period(s)` : ""}${extra}`);
+        load();
+      }
+    } catch { setSyncMsg("⚠ Sync failed — network error."); }
+    finally { setSyncing(false); }
   }
 
   return (
@@ -90,6 +107,20 @@ export default function RosterPage() {
 
         {supabase && !loading && (
           <>
+            <div className="rs-card">
+              <h2>Sync from Notion</h2>
+              <p style={{ margin: "0 0 12px", color: "#7a7468", fontWeight: 600, fontSize: "0.9rem" }}>
+                Pulls your Notion contact-info roster onto the site — new rows become students, periods are
+                created automatically, and nothing on the site is ever deleted. Runs by itself daily too.
+              </p>
+              <div className="rs-row">
+                <button className="rs-btn" style={{ minHeight: 42 }} onClick={syncFromNotion} disabled={syncing}>
+                  {syncing ? "Syncing…" : "⟳ Sync from Notion"}
+                </button>
+              </div>
+              {syncMsg && <p style={{ margin: "12px 0 0", fontWeight: 700, color: "#4a4636", fontSize: "0.9rem" }}>{syncMsg}</p>}
+            </div>
+
             <div className="rs-card">
               <h2>Add a class period</h2>
               <div className="rs-row">

@@ -9,6 +9,7 @@ const PROTECTED_PREFIXES = [
   "/api/form-responses",
   "/api/mastery",
   "/api/live",
+  "/api/roster",
 ];
 
 function isProtectedPath(pathname: string) {
@@ -48,6 +49,12 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Vercel cron invocations authenticate with CRON_SECRET instead of basic auth.
+  const cronSecret = process.env.CRON_SECRET;
+  if (cronSecret && request.headers.get("authorization") === `Bearer ${cronSecret}`) {
+    return NextResponse.next();
+  }
+
   const username = process.env.TEACHER_USERNAME || "teacher";
   const auth = readBasicAuth(request.headers.get("authorization"));
 
@@ -69,5 +76,6 @@ export const config = {
     "/api/mastery/:path*",
     "/api/mastery",
     "/api/live/:path*",
+    "/api/roster/:path*",
   ],
 };
