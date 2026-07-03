@@ -11,7 +11,7 @@ import { getSupabase } from "@/lib/supabase";
 import { DOMAINS, type Domain } from "@/lib/mastery";
 
 interface Period { id: string; name: string }
-interface StudentRow { studentId: string; name: string; mastery: { domain: string; percent: number; stage: string }[] }
+interface StudentRow { studentId: string; name: string; evidence?: number; mastery: { domain: string; percent: number; stage: string }[] }
 interface HistoryPoint { at: string; percent: number; source: string | null }
 
 const DOMAIN_COLOR: Record<Domain, string> = {
@@ -105,6 +105,7 @@ export default function MasteryBoard() {
   const [status, setStatus] = useState<string | null>(null);
   const [detail, setDetail] = useState<StudentRow | null>(null);
   const [series, setSeries] = useState<Record<string, HistoryPoint[]>>({});
+  const [showLegend, setShowLegend] = useState(false);
 
   useEffect(() => {
     if (!supabase) return;
@@ -176,7 +177,14 @@ export default function MasteryBoard() {
         .mb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
         .mb-card { background: #fff; border: 1px solid #efe8d8; border-radius: 16px; padding: 16px; cursor: pointer; transition: 0.12s; }
         .mb-card:hover { transform: translateY(-1px); border-color: #dcd2ba; }
-        .mb-name { font-weight: 800; color: #2b2620; margin-bottom: 8px; }
+        .mb-name { font-weight: 800; color: #2b2620; }
+        .mb-cardhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+        .mb-chip { font-size: 11px; font-weight: 700; color: #7a7264; background: #f5f0e3; border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
+        .mb-info { border: 1px solid #e5ddcd; background: #fff; border-radius: 999px; width: 34px; height: 34px; font-weight: 800; cursor: pointer; color: #7a7264; }
+        .mb-legendcard { background: #fff; border: 1px solid #efe8d8; border-radius: 16px; padding: 16px 18px; margin-bottom: 14px; font-size: 0.92rem; color: #4a443a; line-height: 1.55; }
+        .mb-legendcard b { color: #2b2620; }
+        .mb-bands { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 4px; }
+        .mb-band { border-radius: 10px; padding: 6px 10px; font-size: 0.8rem; font-weight: 700; }
         .mb-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
         .mb-dlbl { font-size: 11px; color: #8a8172; width: 92px; flex: none; }
         .mb-bar { flex: 1; height: 12px; background: #f1ecdf; border-radius: 8px; overflow: hidden; }
@@ -198,8 +206,29 @@ export default function MasteryBoard() {
           </select>
           <button className="mb-btn pri" onClick={() => void recompute()} disabled={loading || !periodId}>↻ Recompute</button>
           <button className="mb-btn" onClick={() => void load(periodId)} disabled={loading || !periodId}>Refresh</button>
+          <button className="mb-info" title="What does the number mean?" onClick={() => setShowLegend((v) => !v)}>ⓘ</button>
         </div>
         <div className="mb-status">{loading ? "Working…" : status}</div>
+
+        {showLegend && (
+          <div className="mb-legendcard">
+            <b>What the number means.</b> It's a 0–100, recency-weighted estimate of how the student is
+            performing in that domain <i>right now</i> — roughly, the percent they'd score on domain-level
+            work today. It starts at their i-Ready Fall placement, then every piece of work pulls it toward
+            that work's score: <b>checkpoints pull hardest (0.40)</b>, practice-day checks nudge (0.20),
+            daily warm-ups keep it honest (0.30). Old work fades — the number mostly reflects the last
+            five-to-seven things they've done, so one bad day dips it without cratering it.
+            <div className="mb-bands">
+              <span className="mb-band" style={{ background: "#e9f7ef", color: "#1e8449" }}>80+ · consistently "Got It"-level work</span>
+              <span className="mb-band" style={{ background: "#fef6e0", color: "#9a6a00" }}>50–79 · the "Almost" zone — partial, not solid</span>
+              <span className="mb-band" style={{ background: "#fdeeee", color: "#c0392b" }}>below 50 · intervention territory</span>
+            </div>
+            Two things it is <b>not</b>: it's not volume — the <b>“n items”</b> chip shows how much work the
+            number is based on (a 55 on 4 items is a guess; a 55 on 40 items is a pattern) — and it's not the
+            mastery claim. The bar is the <b>pulse</b>; the per-standard <b>stage</b> (Approaching → Mastered →
+            Complete) is the verdict, and only produced checkpoint work can reach the top.
+          </div>
+        )}
 
         <div className="mb-legend">
           {DOMAINS.map((d) => (
@@ -216,7 +245,10 @@ export default function MasteryBoard() {
           <div className="mb-grid">
             {rows.map((stu) => (
               <div className="mb-card" key={stu.studentId} onClick={() => void openDetail(stu)}>
-                <div className="mb-name">{stu.name}</div>
+                <div className="mb-cardhead">
+                  <span className="mb-name">{stu.name}</span>
+                  <span className="mb-chip" title="Pieces of evidence behind these bars (warm-ups, practice checks, checkpoint items)">{stu.evidence ?? 0} items</span>
+                </div>
                 {DOMAINS.map((d) => {
                   const v = pct(stu, d);
                   return (
@@ -237,7 +269,8 @@ export default function MasteryBoard() {
         <div className="mb-modal" onClick={() => setDetail(null)}>
           <div className="mb-sheet" onClick={(e) => e.stopPropagation()}>
             <button className="mb-close" onClick={() => setDetail(null)}>✕ close</button>
-            <h2 style={{ fontFamily: "Georgia, serif", margin: "0 0 14px", color: "#2b2620" }}>{detail.name}</h2>
+            <h2 style={{ fontFamily: "Georgia, serif", margin: "0 0 4px", color: "#2b2620" }}>{detail.name}</h2>
+            <div style={{ fontSize: 12.5, color: "#7a7264", marginBottom: 12 }}>{detail.evidence ?? 0} pieces of evidence behind these numbers</div>
             {DOMAINS.map((d) => {
               const hist = series[d] || [];
               // Prefer the mastery row; fall back to the newest history point so

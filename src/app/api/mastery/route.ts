@@ -36,11 +36,23 @@ export async function GET(req: Request) {
     list.push({ domain: r.domain, percent: Number(r.percent), stage: r.stage });
     byStudent.set(r.student_id, list);
   }
+  // Evidence volume per student (warm-ups/tools + checkpoint items) — the bar is
+  // "how well (lately)", this count is "how much"; the UI shows both.
+  const counts = new Map<string, number>();
+  const [respCount, cpCount] = await Promise.all([
+    db.from("responses").select("student_id").in("student_id", ids).limit(50000),
+    db.from("checkpoint_results").select("student_id").in("student_id", ids).limit(50000),
+  ]);
+  for (const r of [...(respCount.data || []), ...(cpCount.data || [])]) {
+    counts.set(r.student_id, (counts.get(r.student_id) || 0) + 1);
+  }
+
   return Response.json({
     standardId: standardId || null,
     students: (students || []).map((s) => ({
       studentId: s.id,
       name: s.full_name,
+      evidence: counts.get(s.id) || 0,
       mastery: byStudent.get(s.id) || [],
     })),
   });
