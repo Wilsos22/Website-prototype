@@ -202,8 +202,8 @@ export default function MasteryBoard() {
         .mb-band { border-radius: 10px; padding: 6px 10px; font-size: 0.8rem; font-weight: 700; }
         .mb-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
         .mb-dlbl { font-size: 11px; color: #8a8172; width: 92px; flex: none; }
-        .mb-bar { flex: 1; height: 12px; background: #f1ecdf; border-radius: 8px; overflow: hidden; }
-        .mb-fill { height: 100%; border-radius: 8px; transition: width 0.25s; }
+        .mb-bar { display: block; flex: 1; height: 12px; background: #f1ecdf; border-radius: 8px; overflow: hidden; }
+        .mb-fill { display: block; height: 100%; border-radius: 8px; transition: width 0.25s; }
         .mb-val { font-size: 12px; font-weight: 700; width: 34px; text-align: right; color: #4a443a; font-variant-numeric: tabular-nums; }
         .mb-empty { background: #fff; border: 1px dashed #dcd2ba; border-radius: 16px; padding: 28px; text-align: center; color: #7a7264; }
         .mb-modal { position: fixed; inset: 0; background: rgba(32,30,26,0.5); display: grid; place-items: center; padding: 20px; z-index: 50; }
