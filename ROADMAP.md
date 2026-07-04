@@ -17,10 +17,11 @@ Checkpoint delivery · iPad ink → board · Abbiliathan 3000 (voice + Stream De
 **Proficiency spine**: schema/seeds, EWMA engine (golden-tested 25/25),
 mastery board + growth charts, /api/evidence, clustering + archetypes
 (golden-tested 25/25), Right-now view w/ Notion Misconception Plans merge ·
-Figma lesson-flow template
+**Checkpoint CSV upload** (/teacher/checkpoint-upload — tier + SBAC flags,
+idempotent, auto-recompute) · Figma lesson-flow template
 
 ## In progress 🔨
-- **Checkpoint CSV upload** (Tier-2 results → Mastered/Complete stages move) — next build
+- (nothing — next up: warm-up Apps Script wiring)
 
 ## Planned 🧭
 - Warm-up Apps Script extension + `syncSubmissionToNotion` bug fix (Q4/Q5 keyed
