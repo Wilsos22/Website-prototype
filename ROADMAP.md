@@ -21,11 +21,10 @@ mastery board + growth charts, /api/evidence, clustering + archetypes
 idempotent, auto-recompute) · Figma lesson-flow template
 
 ## In progress 🔨
-- (nothing — next up: warm-up Apps Script wiring)
+- **Warm-up → spine bridge** — code shipped (warmup-evidence.gs + generator tagging);
+  waiting on Steele's Apps Script paste-in + EVIDENCE_INGEST_KEY/BDM_EVIDENCE_KEY setup
 
 ## Planned 🧭
-- Warm-up Apps Script extension + `syncSubmissionToNotion` bug fix (Q4/Q5 keyed
-  distractors → live evidence)
 - Tool evidence emitters (Equation Builder, GEMS, CLT → responses)
 - Claude enrichment (score short-answer reasoning; sharpen next moves)
 - RLS tightening on legacy tables (required before real student data)
