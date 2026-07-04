@@ -1,0 +1,61 @@
+Date,Student,Email,Source,Checkpoint,Form,Item #,Lesson,Domain,CCSS,Mode,Correct,Misconception (if wrong)
+2026-08-27,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP1,A,1,L1 Distributive,Algebra & Algebraic Thinking,6.EE.A.3,Digital OK,N,distributes to first term only
+2026-08-27,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP1,A,2,L2 Factors/Multiples,Number & Operations,6.NS.B.4,Digital OK,Y,
+2026-08-27,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP1,A,3,L2 Factors/Multiples,Number & Operations,6.EE.A.1,Digital OK,Y,
+2026-08-27,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP1,A,4,L3 GCF & LCM,Number & Operations,6.NS.B.4,Digital OK,Y,
+2026-08-27,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP1,A,5,L3 GCF & LCM,Number & Operations,6.NS.B.4,Paper,Y,
+2026-08-27,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP1,A,6,L3 GCF & LCM,Number & Operations,6.NS.B.4,Paper,Y,
+2026-08-27,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP1,A,7,L4 Multiplying Fractions,Number & Operations,5.NF.B.4,Digital OK,Y,
+2026-08-27,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP1,A,8,L4 Multiplying Fractions,Number & Operations,5.NF.B.4,Paper,Y,
+2026-08-27,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP1,A,9,L5 Dividing Fractions,Number & Operations,6.NS.A.1,Paper,Y,
+2026-08-27,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP1,A,10,L5 Dividing Fractions,Number & Operations,6.NS.A.1,Paper,Y,
+2026-09-17,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP2,A,1,L1 Area,Geometry,6.G.A.1,Digital OK,Y,
+2026-09-17,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP2,A,2,L1 Area,Geometry,6.G.A.1,Paper,Y,
+2026-09-17,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP2,A,3,L1 Area,Geometry,6.G.A.1,Paper,Y,
+2026-09-17,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP2,A,4,L2 Composite,Geometry,6.G.A.1,Paper,Y,
+2026-09-17,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP2,A,5,L2 Composite,Geometry,6.G.A.1,Paper,Y,
+2026-09-17,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP2,A,6,L3 Volume,Geometry,6.G.A.2,Digital OK,Y,
+2026-09-17,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP2,A,7,L3 Volume,Geometry,6.G.A.2,Paper,Y,
+2026-09-17,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP2,A,8,L3 Volume,Geometry,6.G.A.2,Paper,Y,
+2026-09-17,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP2,A,9,L4 Surface Area,Geometry,6.G.A.4,Digital OK,Y,
+2026-09-17,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP2,A,10,L4 Surface Area,Geometry,6.G.A.4,Paper,Y,
+2026-10-08,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP3,A,1,L1 Compare/Order,Number & Operations,5.NBT.A.3b,Paper,Y,
+2026-10-08,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP3,A,2,L1 Compare/Order,Number & Operations,5.NBT.A.3b,Paper,Y,
+2026-10-08,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP3,A,3,L2 Add/Subtract,Number & Operations,6.NS.B.3,Digital OK,Y,
+2026-10-08,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP3,A,4,L2 Add/Subtract,Number & Operations,6.NS.B.3,Paper,Y,
+2026-10-08,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP3,A,5,L3 Multiply,Number & Operations,6.NS.B.3,Digital OK,Y,
+2026-10-08,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP3,A,6,L3 Multiply,Number & Operations,6.NS.B.3,Paper,N,miscounts decimal places when multiplying decimals
+2026-10-08,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP3,A,7,L3 Multiply,Number & Operations,6.NS.B.3,Paper,Y,
+2026-10-08,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP3,A,8,L4 Divide,Number & Operations,6.NS.B.3,Paper,Y,
+2026-10-08,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP3,A,9,L4 Divide,Number & Operations,6.NS.B.3,Paper,Y,
+2026-10-08,"Beckett, Rio",rio.9010000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP3,A,10,L4 Divide,Number & Operations,6.NS.B.3,Paper,Y,
+2026-08-27,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP1,A,1,L1 Distributive,Algebra & Algebraic Thinking,6.EE.A.3,Digital OK,Y,
+2026-08-27,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP1,A,2,L2 Factors/Multiples,Number & Operations,6.NS.B.4,Digital OK,N,confuses GCF and LCM
+2026-08-27,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP1,A,3,L2 Factors/Multiples,Number & Operations,6.EE.A.1,Digital OK,Y,
+2026-08-27,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP1,A,4,L3 GCF & LCM,Number & Operations,6.NS.B.4,Digital OK,N,confuses GCF and LCM
+2026-08-27,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP1,A,5,L3 GCF & LCM,Number & Operations,6.NS.B.4,Paper,Y,
+2026-08-27,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP1,A,6,L3 GCF & LCM,Number & Operations,6.NS.B.4,Paper,N,confuses GCF and LCM
+2026-08-27,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP1,A,7,L4 Multiplying Fractions,Number & Operations,5.NF.B.4,Digital OK,Y,
+2026-08-27,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP1,A,8,L4 Multiplying Fractions,Number & Operations,5.NF.B.4,Paper,N,multiplies fractions by cross-multiplying
+2026-08-27,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP1,A,9,L5 Dividing Fractions,Number & Operations,6.NS.A.1,Paper,N,does not invert divisor when dividing fractions
+2026-08-27,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP1,A,10,L5 Dividing Fractions,Number & Operations,6.NS.A.1,Paper,Y,
+2026-09-17,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP2,A,1,L1 Area,Geometry,6.G.A.1,Digital OK,N,forgets to halve base × height for triangle area
+2026-09-17,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP2,A,2,L1 Area,Geometry,6.G.A.1,Paper,N,forgets to halve base × height for triangle area
+2026-09-17,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP2,A,3,L1 Area,Geometry,6.G.A.1,Paper,N,confuses area vs perimeter
+2026-09-17,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP2,A,4,L2 Composite,Geometry,6.G.A.1,Paper,Y,
+2026-09-17,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP2,A,5,L2 Composite,Geometry,6.G.A.1,Paper,N,adds dimensions instead of areas
+2026-09-17,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP2,A,6,L3 Volume,Geometry,6.G.A.2,Digital OK,Y,
+2026-09-17,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP2,A,7,L3 Volume,Geometry,6.G.A.2,Paper,N,treats fractional edge as a whole number
+2026-09-17,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP2,A,8,L3 Volume,Geometry,6.G.A.2,Paper,Y,
+2026-09-17,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP2,A,9,L4 Surface Area,Geometry,6.G.A.4,Digital OK,N,confuses surface area and volume
+2026-09-17,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP2,A,10,L4 Surface Area,Geometry,6.G.A.4,Paper,Y,
+2026-10-08,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP3,A,1,L1 Compare/Order,Number & Operations,5.NBT.A.3b,Paper,N,compares decimals by length not place value
+2026-10-08,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP3,A,2,L1 Compare/Order,Number & Operations,5.NBT.A.3b,Paper,Y,
+2026-10-08,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP3,A,3,L2 Add/Subtract,Number & Operations,6.NS.B.3,Digital OK,Y,
+2026-10-08,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP3,A,4,L2 Add/Subtract,Number & Operations,6.NS.B.3,Paper,N,misaligns place value adding/subtracting decimals
+2026-10-08,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP3,A,5,L3 Multiply,Number & Operations,6.NS.B.3,Digital OK,Y,
+2026-10-08,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP3,A,6,L3 Multiply,Number & Operations,6.NS.B.3,Paper,N,miscounts decimal places when multiplying decimals
+2026-10-08,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP3,A,7,L3 Multiply,Number & Operations,6.NS.B.3,Paper,Y,
+2026-10-08,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP3,A,8,L4 Divide,Number & Operations,6.NS.B.3,Paper,Y,
+2026-10-08,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP3,A,9,L4 Divide,Number & Operations,6.NS.B.3,Paper,N,misplaces decimal in division
+2026-10-08,"Navarro, Cove",cove.9130000@mock.bigdogmath.example,Independent Demonstration,IDC-M1-CP3,A,10,L4 Divide,Number & Operations,6.NS.B.3,Paper,Y,
