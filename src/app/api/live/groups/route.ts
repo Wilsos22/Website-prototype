@@ -28,7 +28,7 @@ export async function GET(req: Request) {
 
   const { data: resp, error: rErr } = await db
     .from("responses")
-    .select("student_id,score,is_correct,misconception,submitted_at")
+    .select("student_id,score,is_correct,misconception,submitted_at,standard_id")
     .in("student_id", ids)
     .order("submitted_at", { ascending: true })
     .limit(50000);
@@ -38,6 +38,10 @@ export async function GET(req: Request) {
   const days = new Set<string>();
   for (const s of students || []) byStudent.set(s.id, { studentId: s.id, name: s.full_name, events: [] });
   for (const r of resp || []) {
+    // Standard-scoped rows (per-question Q4/Q5 evidence) feed the stage gates,
+    // not archetype stats — their binary 0/5 would skew daily averages. The
+    // daily aggregate row already carries the day's score + primary tag.
+    if (r.standard_id) continue;
     const day = String(r.submitted_at).slice(0, 10);
     days.add(day);
     const score = r.score != null ? Number(r.score) : r.is_correct === true ? 5 : r.is_correct === false ? 0 : null;

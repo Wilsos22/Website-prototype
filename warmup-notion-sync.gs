@@ -181,6 +181,10 @@ function syncFormResponseToExportSheet(e) {
     const submissionData = buildSubmissionDataFromFormResponse_(form, response);
     const notionResult = syncWarmupSubmissionToNotionSafely_(submissionData);
     writeSubmissionExportRow_(Object.assign({}, submissionData, { notionResult }));
+    // Proficiency spine bridge (warmup-evidence.gs) — never blocks the Notion sync.
+    if (typeof postWarmupEvidenceSafely_ === "function") {
+      postWarmupEvidenceSafely_(submissionData, form, response);
+    }
   } catch (err) {
     Logger.log(`Response export/sync error: ${err.message}`);
   }
@@ -202,12 +206,18 @@ function syncSubmissionToExportSheet(e) {
     ).trim().toLowerCase();
 
     let submissionData = null;
+    let recoveredForm = null;
+    let recoveredResponse = null;
     try {
       const formUrl = sheet && sheet.getFormUrl ? sheet.getFormUrl() : "";
       if (formUrl) {
         const form = FormApp.openByUrl(formUrl);
         const response = findFormResponseForSubmission_(form, email);
-        if (response) submissionData = buildSubmissionDataFromFormResponse_(form, response);
+        if (response) {
+          submissionData = buildSubmissionDataFromFormResponse_(form, response);
+          recoveredForm = form;
+          recoveredResponse = response;
+        }
       }
     } catch (lookupErr) {
       Logger.log(`Could not recover graded form response: ${lookupErr.message}`);
@@ -237,6 +247,10 @@ function syncSubmissionToExportSheet(e) {
 
     const notionResult = syncWarmupSubmissionToNotionSafely_(submissionData);
     writeSubmissionExportRow_(Object.assign({}, submissionData, { notionResult }));
+    // Proficiency spine bridge (warmup-evidence.gs) — never blocks the Notion sync.
+    if (typeof postWarmupEvidenceSafely_ === "function") {
+      postWarmupEvidenceSafely_(submissionData, recoveredForm, recoveredResponse);
+    }
   } catch (err) {
     Logger.log(`Spreadsheet response export/sync error: ${err.message}`);
   }

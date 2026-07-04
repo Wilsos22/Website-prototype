@@ -10,6 +10,25 @@
 const OPENAI_WARMUP_MODEL = "gpt-4o-mini";
 const OPENAI_WARMUP_SOURCE = "AI (gpt-4o-mini)";
 
+// Finite misconception vocabulary — must match the site's `misconceptions`
+// table exactly (exact-match clustering, no NLP). Q4/Q5 wrong choices are
+// tagged from THIS list so the Right-now grouping can cluster on them.
+const BDM_MISCONCEPTION_VOCAB = [
+  "treats ratio as additive",
+  "reverses part and whole in percent",
+  "adds denominators when adding fractions",
+  "misplaces decimal in division",
+  "ignores order of operations",
+  "confuses coefficient with exponent",
+  "sign errors with negatives",
+  "reverses inequality symbol",
+  "confuses area vs perimeter",
+  "forgets to halve base × height for triangle area",
+  "confuses mean and median",
+  "miscounts frequencies in a data display",
+  "distributes to first term only"
+];
+
 // Build all five day forms for a week from typed topics (sidebar week build).
 function generateWeekFormsFromTopics(weekConfig, topics) {
   const safeTopics = Array.isArray(topics) ? topics : [];
@@ -49,6 +68,20 @@ function createWarmupFormFromAI_(weekConfig, dayIndex, requestedTopic) {
     "installWarmupFormSubmitTriggerSafely_",
     [formResult.form],
     { ok: false, error: "Response export helper is not installed." }
+  );
+
+  // Save CCSS + distractor→misconception metadata for the evidence bridge
+  // (warmup-evidence.gs) so submissions can post per-standard, tagged evidence.
+  callIfAvailable_(
+    "saveWarmupFormMetaSafely_",
+    [formResult.form.getId(), {
+      topic: dailyTopic,
+      isoDate: dayInfo.isoDate,
+      questions: questionSet.questions
+        .map(function (q, i) { return { index: i, ccss: q.ccss || "", misconceptions: q.misconceptions || {} }; })
+        .filter(function (q, i) { return i < 5; })
+    }],
+    { ok: false, error: "Evidence bridge not installed." }
   );
 
   const linkStatus = callIfAvailable_(
@@ -136,13 +169,20 @@ function generateAIQuestionSet_(dailyTopic, weekConfig, dayIndex) {
     "(dots, groups, a number line) to make it click. " +
     "Example for 2x4 when a student answers 9: \"Remember 2x4 means 2 groups with 4 in each. " +
     "One group of 4 plus another group of 4: 0000 + 0000 = 00000000, which is 8.\"\n" +
-    "- Question 6 has no choices and no correct answer; just the prompt.\n\n" +
+    "- Question 6 has no choices and no correct answer; just the prompt.\n" +
+    "- Every multiple-choice question includes \"ccss\": the single best grade-6 CCSS code " +
+    "for that question (like \"6.NS.B.4\" or \"6.RP.A.3\"; use a grade-5 code like \"5.NF.B.4\" only for below-grade review).\n" +
+    "- Questions 4 and 5 are the DATA PULL: each wrong choice must be engineered to reveal ONE " +
+    "specific misconception, and you must include \"misconceptions\": an object mapping each wrong " +
+    "choice string (exactly as written) to a tag chosen ONLY from this fixed vocabulary:\n" +
+    BDM_MISCONCEPTION_VOCAB.map(function (t) { return "  \"" + t + "\""; }).join("\n") + "\n" +
+    "If no vocabulary tag fits a wrong choice, use \"other\".\n\n" +
     "Return JSON with this exact shape:\n" +
     "{\n" +
     "  \"reviewTopics\": [\"skill for Q2\", \"skill for Q3\"],\n" +
     "  \"questions\": [\n" +
-    "    {\"q\": \"...\", \"choices\": [\"a\",\"b\",\"c\",\"d\"], \"correct\": \"a\", \"correctFeedback\": \"...\", \"feedback\": \"...\"},\n" +
-    "    ... (5 multiple-choice objects total) ...,\n" +
+    "    {\"q\": \"...\", \"choices\": [\"a\",\"b\",\"c\",\"d\"], \"correct\": \"a\", \"ccss\": \"6.NS.B.4\", \"correctFeedback\": \"...\", \"feedback\": \"...\"},\n" +
+    "    ... (5 multiple-choice objects total; Q4 and Q5 also have \"misconceptions\") ...,\n" +
     "    {\"q\": \"... explain your thinking ...\"}\n" +
     "  ]\n" +
     "}";
@@ -174,11 +214,24 @@ function generateAIQuestionSet_(dailyTopic, weekConfig, dayIndex) {
       }
       let correct = String(q.correct || "").trim();
       if (choices.indexOf(correct) === -1) correct = choices[0];
+      // Sanitize the distractor→misconception map: keep only real wrong choices,
+      // tags must come from the fixed vocabulary (anything else → "other").
+      const misconceptions = {};
+      if (q.misconceptions && typeof q.misconceptions === "object") {
+        Object.keys(q.misconceptions).forEach(function (choiceText) {
+          const clean = String(choiceText).trim();
+          if (choices.indexOf(clean) === -1 || clean === correct) return;
+          const tag = String(q.misconceptions[choiceText] || "").trim();
+          misconceptions[clean] = BDM_MISCONCEPTION_VOCAB.indexOf(tag) !== -1 ? tag : "other";
+        });
+      }
       return {
         q: String(q.q || "").trim(),
         type: "multiple_choice",
         choices: choices,
         correct: correct,
+        ccss: String(q.ccss || "").trim(),
+        misconceptions: misconceptions,
         feedback: String(q.feedback || "").trim(),
         correctFeedback: String(q.correctFeedback || "").trim(),
         points: 1
