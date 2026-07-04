@@ -15,6 +15,19 @@ interface Move { archetype: Archetype; students: string[]; move: string }
 interface ClusterOut { misconception: string; domain: string | null; corroborated: number; size: number; students: Member[]; moves: Move[] }
 interface NonSub { name: string; submitted: number; possible: number; avgWhenSubmitting: number }
 
+// Parse the lesson's "Misconception Plans" lines: "tag :: prepared move".
+function parsePlans(raw: string): Map<string, string> {
+  const plans = new Map<string, string>();
+  for (const line of (raw || "").split("\n")) {
+    const i = line.indexOf("::");
+    if (i === -1) continue;
+    const tag = line.slice(0, i).trim().toLowerCase();
+    const move = line.slice(i + 2).trim();
+    if (tag && move) plans.set(tag, move);
+  }
+  return plans;
+}
+
 const ARCH_COLOR: Record<Archetype, string> = {
   high: "#22c55e", strong_misc: "#14b8a6", growth: "#4d8df6",
   leaper: "#8b5cf6", plateau: "#f5b915", low: "#ef4444", nonsub: "#9a6a00",
@@ -28,6 +41,18 @@ export default function RightNowPage() {
   const [nonSub, setNonSub] = useState<NonSub[]>([]);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [plans, setPlans] = useState<Map<string, string>>(new Map());
+  const [lessonTitle, setLessonTitle] = useState("");
+
+  // Today's lesson plans from Notion ("Misconception Plans" property).
+  useEffect(() => {
+    fetch("/api/today", { cache: "no-store" }).then((r) => r.json()).then((d) => {
+      if (d?.lesson?.misconceptionPlans) {
+        setPlans(parsePlans(d.lesson.misconceptionPlans));
+        setLessonTitle(d.lesson.title || "");
+      }
+    }).catch(() => { /* plans are optional */ });
+  }, []);
 
   useEffect(() => {
     if (!supabase) return;
@@ -88,6 +113,10 @@ export default function RightNowPage() {
         .rn-move b { color: #2b2620; }
         .rn-move p { margin: 4px 0 0; color: #4a443a; line-height: 1.5; font-size: 0.95rem; }
         .rn-ns { border: 1px dashed #e0b64f; background: #fffaf0; }
+        .rn-plan { border-left: 4px solid #14b8a6; background: #eefaf7; padding: 12px 14px; margin: 12px 0; border-radius: 0 12px 12px 0; }
+        .rn-plan b { color: #0f5e5f; }
+        .rn-plan p { margin: 4px 0 0; color: #14484a; line-height: 1.5; font-size: 0.98rem; font-weight: 600; }
+        .rn-waiting { border: 1px dashed #cfe8e2; background: #f7fcfa; }
       `}</style>
 
       <div className="rn-wrap">
@@ -119,6 +148,12 @@ export default function RightNowPage() {
                   </span>
                 ))}
               </div>
+              {plans.has(c.misconception.toLowerCase()) && (
+                <div className="rn-plan">
+                  <b>📋 Your plan{lessonTitle ? ` — ${lessonTitle}` : ""}</b>
+                  <p>{plans.get(c.misconception.toLowerCase())}</p>
+                </div>
+              )}
               {c.moves.map((m) => (
                 <div className="rn-move" key={m.archetype} style={{ borderLeftColor: ARCH_COLOR[m.archetype] }}>
                   <b>{ARCHETYPE_LABEL[m.archetype]}</b> — {m.students.join(", ")}
@@ -127,6 +162,16 @@ export default function RightNowPage() {
               ))}
             </div>
           ))}
+
+          {[...plans.entries()]
+            .filter(([tag]) => !clusters.some((c) => c.misconception.toLowerCase() === tag))
+            .map(([tag, move]) => (
+              <div className="rn-card rn-waiting" key={tag}>
+                <h2 className="rn-mis">“{tag}”</h2>
+                <div className="rn-badges"><span className="rn-badge d">planned{lessonTitle ? ` · ${lessonTitle}` : ""}</span><span className="rn-badge d">no students flagged yet</span></div>
+                <div className="rn-plan"><b>📋 Your plan, ready to go</b><p>{move}</p></div>
+              </div>
+            ))}
 
           {nonSub.length > 0 && (
             <div className="rn-card rn-ns">

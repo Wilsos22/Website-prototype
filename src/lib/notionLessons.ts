@@ -36,6 +36,9 @@ export interface LessonData {
   successCriteria: string;
   discussionPrompt: string;
   practiceProblems: string;
+  // Pre-planned reteach groups: one line per group, "misconception tag :: prepared move".
+  // The Right-now view matches live clusters to these and shows YOUR plan first.
+  misconceptionPlans: string;
 }
 
 interface RichTextItem {
@@ -263,6 +266,7 @@ async function mapPage(page: NotionPage, token: string, cache: Map<string, Promi
     successCriteria: extractText(p["Success Criteria"]),
     discussionPrompt: extractText(p["Discussion Prompt"]),
     practiceProblems: extractText(p["Practice Problems"]),
+    misconceptionPlans: extractText(p["Misconception Plans"]),
   };
 }
 
