@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { teacherToken, TEACHER_COOKIE, TEACHER_COOKIE_MAX_AGE } from "@/lib/teacherToken";
 
 const PROTECTED_PREFIXES = [
   "/teacher",
@@ -14,15 +15,6 @@ const PROTECTED_PREFIXES = [
 
 function isProtectedPath(pathname: string) {
   return PROTECTED_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
-}
-
-function unauthorized() {
-  return new NextResponse("Teacher access required.", {
-    status: 401,
-    headers: {
-      "WWW-Authenticate": 'Basic realm="Big Dog Math Teacher"',
-    },
-  });
 }
 
 function readBasicAuth(header: string | null) {
@@ -42,27 +34,43 @@ function readBasicAuth(header: string | null) {
   }
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const password = process.env.TEACHER_PASSWORD;
+  const { pathname, search } = request.nextUrl;
 
-  if (!password || !isProtectedPath(request.nextUrl.pathname)) {
+  if (!password || !isProtectedPath(pathname)) {
     return NextResponse.next();
   }
 
-  // Vercel cron invocations authenticate with CRON_SECRET instead of basic auth.
+  // 1. Device cookie (set once by /teacher-login, lasts ~6 months).
+  const expected = await teacherToken(password);
+  if (request.cookies.get(TEACHER_COOKIE)?.value === expected) {
+    return NextResponse.next();
+  }
+
+  // 2. Vercel cron authenticates with CRON_SECRET.
   const cronSecret = process.env.CRON_SECRET;
   if (cronSecret && request.headers.get("authorization") === `Bearer ${cronSecret}`) {
     return NextResponse.next();
   }
 
-  const username = process.env.TEACHER_USERNAME || "teacher";
+  // 3. Proactive basic auth (curl/scripts) still works — and upgrades to the cookie.
   const auth = readBasicAuth(request.headers.get("authorization"));
-
-  if (auth?.username === username && auth.password === password) {
-    return NextResponse.next();
+  if (auth && auth.password === password && auth.username === (process.env.TEACHER_USERNAME || "teacher")) {
+    const res = NextResponse.next();
+    res.cookies.set(TEACHER_COOKIE, expected, {
+      path: "/", maxAge: TEACHER_COOKIE_MAX_AGE, httpOnly: true, secure: true, sameSite: "lax",
+    });
+    return res;
   }
 
-  return unauthorized();
+  // 4. Unauthenticated: APIs get a JSON 401 (no browser popup); pages go to the login screen.
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.json({ error: "Teacher login required." }, { status: 401 });
+  }
+  const login = new URL("/teacher-login", request.url);
+  login.searchParams.set("next", `${pathname}${search}`);
+  return NextResponse.redirect(login);
 }
 
 export const config = {
