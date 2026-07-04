@@ -1,0 +1,7360 @@
+{
+ "possibleDays": 69,
+ "students": [
+  {
+   "name": "Acosta, Zora",
+   "events": [
+    {
+     "at": "2026-08-10",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-11",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-12",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-13",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-17",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-18",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-19",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-20",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-24",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-25",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-26",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-27",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-31",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-01",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-02",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-03",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-08",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-09",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-10",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-14",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-15",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-16",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-17",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-21",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-22",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-23",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-24",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-28",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-29",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-30",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-01",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-05",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-06",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-07",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-08",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-12",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-14",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-15",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-19",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-20",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-21",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-22",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-26",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-27",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-28",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-29",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-02",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-03",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-04",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-05",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-09",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-10",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-11",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-12",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-16",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-17",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-18",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-19",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-23",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-24",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-30",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-01",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-02",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-03",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-07",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-08",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-09",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-10",
+     "score": 5,
+     "misconception": null
+    }
+   ],
+   "expectedArch": "high"
+  },
+  {
+   "name": "Beckett, Rio",
+   "events": [
+    {
+     "at": "2026-08-11",
+     "score": 3,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-12",
+     "score": 0,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-13",
+     "score": 3,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-17",
+     "score": 3,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-18",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-19",
+     "score": 3,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-20",
+     "score": 2,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-24",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-25",
+     "score": 3,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-26",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-27",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-01",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-02",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-03",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-08",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-09",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-10",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-14",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-15",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-16",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-17",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-21",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-22",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-23",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-24",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-28",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-29",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-30",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-01",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-05",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-06",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-07",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-08",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-12",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-13",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-14",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-15",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-19",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-20",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-21",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-22",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-26",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-27",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-28",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-02",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-03",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-04",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-05",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-09",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-10",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-11",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-12",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-16",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-17",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-18",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-19",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-23",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-24",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-30",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-01",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-02",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-03",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-07",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-08",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-09",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-10",
+     "score": 5,
+     "misconception": null
+    }
+   ],
+   "expectedArch": "strong_misc"
+  },
+  {
+   "name": "Calloway, Juno",
+   "events": [
+    {
+     "at": "2026-08-10",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-11",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-13",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-17",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-18",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-19",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-20",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-24",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-25",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-27",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-31",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-01",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-02",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-03",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-08",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-09",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-10",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-14",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-15",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-16",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-17",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-21",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-22",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-23",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-24",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-28",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-29",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-30",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-01",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-05",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-06",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-07",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-08",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-12",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-13",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-14",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-15",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-19",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-20",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-21",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-22",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-26",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-27",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-28",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-29",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-02",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-03",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-04",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-05",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-09",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-10",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-11",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-12",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-16",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-17",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-18",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-19",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-23",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-24",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-30",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-01",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-02",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-03",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-08",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-09",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-10",
+     "score": 4,
+     "misconception": null
+    }
+   ],
+   "expectedArch": "high"
+  },
+  {
+   "name": "Delgado, Mars",
+   "events": [
+    {
+     "at": "2026-08-10",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-11",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-12",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-13",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-17",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-18",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-19",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-20",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-24",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-25",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-26",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-27",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-31",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-01",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-02",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-03",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-08",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-09",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-10",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-15",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-16",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-17",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-21",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-22",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-23",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-24",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-28",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-29",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-30",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-01",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-05",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-06",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-07",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-08",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-12",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-13",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-14",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-15",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-19",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-20",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-21",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-22",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-26",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-27",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-28",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-02",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-04",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-05",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-09",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-10",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-11",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-12",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-16",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-17",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-19",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-23",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-24",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-30",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-01",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-02",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-03",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-07",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-08",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-09",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-10",
+     "score": 5,
+     "misconception": null
+    }
+   ],
+   "expectedArch": "growth"
+  },
+  {
+   "name": "Escobar, Vega",
+   "events": [
+    {
+     "at": "2026-08-10",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-11",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-12",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-13",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-18",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-19",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-20",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-24",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-25",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-26",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-27",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-31",
+     "score": 3,
+     "misconception": "adds denominators when adding fractions"
+    },
+    {
+     "at": "2026-09-01",
+     "score": 2,
+     "misconception": "adds denominators when adding fractions"
+    },
+    {
+     "at": "2026-09-02",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-03",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-08",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-09",
+     "score": 3,
+     "misconception": "adds denominators when adding fractions"
+    },
+    {
+     "at": "2026-09-10",
+     "score": 3,
+     "misconception": "adds denominators when adding fractions"
+    },
+    {
+     "at": "2026-09-14",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-15",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-16",
+     "score": 1,
+     "misconception": "adds denominators when adding fractions"
+    },
+    {
+     "at": "2026-09-17",
+     "score": 3,
+     "misconception": "adds denominators when adding fractions"
+    },
+    {
+     "at": "2026-09-21",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-22",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-23",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-24",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-28",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-29",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-30",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-01",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-05",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-07",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-08",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-12",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-13",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-14",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-15",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-19",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-20",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-21",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-22",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-26",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-27",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-28",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-29",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-02",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-03",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-04",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-05",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-09",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-10",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-11",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-12",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-17",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-18",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-19",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-23",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-24",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-30",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-01",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-02",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-03",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-07",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-08",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-09",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-10",
+     "score": 4,
+     "misconception": null
+    }
+   ],
+   "expectedArch": "strong_misc"
+  },
+  {
+   "name": "Fontaine, Onyx",
+   "events": [
+    {
+     "at": "2026-08-10",
+     "score": 1,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-11",
+     "score": 1,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-13",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-17",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-18",
+     "score": 1,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-19",
+     "score": 0,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-20",
+     "score": 0,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-24",
+     "score": 0,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-25",
+     "score": 1,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-26",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-27",
+     "score": 1,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-09-02",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-08",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-09",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-10",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-15",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-16",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-17",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-21",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-22",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-23",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-24",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-28",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-05",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-06",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-08",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-12",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-13",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-14",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-19",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-20",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-21",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-22",
+     "score": 0,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-27",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-28",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-29",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-02",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-03",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-05",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-09",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-10",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-12",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-16",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-17",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-19",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-24",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-30",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-01",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-02",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-07",
+     "score": 0,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-09",
+     "score": 0,
+     "misconception": null
+    }
+   ],
+   "expectedArch": "low"
+  },
+  {
+   "name": "Galloway, Wren",
+   "events": [
+    {
+     "at": "2026-08-10",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-11",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-12",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-13",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-17",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-18",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-19",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-20",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-24",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-25",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-26",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-27",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-31",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-01",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-02",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-03",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-08",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-09",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-10",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-14",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-15",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-16",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-17",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-21",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-22",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-23",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-24",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-28",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-29",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-30",
+     "score": 0,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-01",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-05",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-06",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-07",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-08",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-12",
+     "score": 0,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-13",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-14",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-15",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-19",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-20",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-21",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-22",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-26",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-27",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-28",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-29",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-02",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-03",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-04",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-05",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-09",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-10",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-11",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-12",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-16",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-17",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-18",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-19",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-23",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-24",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-30",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-01",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-02",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-03",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-07",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-08",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-09",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-10",
+     "score": 4,
+     "misconception": null
+    }
+   ],
+   "expectedArch": "growth"
+  },
+  {
+   "name": "Hollis, Zephyr",
+   "events": [
+    {
+     "at": "2026-08-11",
+     "score": 0,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-12",
+     "score": 1,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-13",
+     "score": 1,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-18",
+     "score": 0,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-19",
+     "score": 1,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-20",
+     "score": 1,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-24",
+     "score": 0,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-25",
+     "score": 1,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-26",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-27",
+     "score": 1,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-31",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-01",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-02",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-03",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-08",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-09",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-14",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-15",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-16",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-17",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-21",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-23",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-24",
+     "score": 0,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-28",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-29",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-30",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-01",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-05",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-06",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-07",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-08",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-12",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-13",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-19",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-20",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-21",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-22",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-26",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-27",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-28",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-29",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-03",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-04",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-05",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-09",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-10",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-12",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-16",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-17",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-19",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-23",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-24",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-30",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-01",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-02",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-03",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-07",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-09",
+     "score": 4,
+     "misconception": null
+    }
+   ],
+   "expectedArch": "leaper"
+  },
+  {
+   "name": "Ibarra, Sol",
+   "events": [
+    {
+     "at": "2026-08-11",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-12",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-17",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-27",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-02",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-15",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-17",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-23",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-01",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-05",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-06",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-12",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-13",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-19",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-20",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-29",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-02",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-03",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-12",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-16",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-19",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-23",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-03",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-07",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-08",
+     "score": 4,
+     "misconception": null
+    }
+   ],
+   "expectedArch": "nonsub"
+  },
+  {
+   "name": "Juarez, Lyric",
+   "events": [
+    {
+     "at": "2026-08-10",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-11",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-12",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-13",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-17",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-18",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-19",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-20",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-24",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-25",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-26",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-27",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-31",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-01",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-02",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-03",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-08",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-09",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-10",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-14",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-15",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-16",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-17",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-21",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-22",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-23",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-24",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-28",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-29",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-30",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-01",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-05",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-06",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-07",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-08",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-12",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-13",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-14",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-15",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-19",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-20",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-21",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-22",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-26",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-27",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-28",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-29",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-02",
+     "score": 3,
+     "misconception": "confuses area vs perimeter"
+    },
+    {
+     "at": "2026-11-03",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-04",
+     "score": 0,
+     "misconception": "confuses area vs perimeter"
+    },
+    {
+     "at": "2026-11-05",
+     "score": 3,
+     "misconception": "confuses area vs perimeter"
+    },
+    {
+     "at": "2026-11-09",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-10",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-11",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-12",
+     "score": 2,
+     "misconception": "confuses area vs perimeter"
+    },
+    {
+     "at": "2026-11-16",
+     "score": 2,
+     "misconception": "confuses area vs perimeter"
+    },
+    {
+     "at": "2026-11-17",
+     "score": 2,
+     "misconception": "confuses area vs perimeter"
+    },
+    {
+     "at": "2026-11-18",
+     "score": 2,
+     "misconception": "confuses area vs perimeter"
+    },
+    {
+     "at": "2026-11-19",
+     "score": 3,
+     "misconception": "confuses area vs perimeter"
+    },
+    {
+     "at": "2026-11-23",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-24",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-30",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-03",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-07",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-08",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-09",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-10",
+     "score": 5,
+     "misconception": null
+    }
+   ],
+   "expectedArch": "strong_misc"
+  },
+  {
+   "name": "Kingsley, Ash",
+   "events": [
+    {
+     "at": "2026-08-10",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-11",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-12",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-13",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-18",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-19",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-20",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-25",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-26",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-27",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-31",
+     "score": 2,
+     "misconception": "adds denominators when adding fractions"
+    },
+    {
+     "at": "2026-09-01",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-02",
+     "score": 2,
+     "misconception": "adds denominators when adding fractions"
+    },
+    {
+     "at": "2026-09-03",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-08",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-09",
+     "score": 1,
+     "misconception": "adds denominators when adding fractions"
+    },
+    {
+     "at": "2026-09-10",
+     "score": 1,
+     "misconception": "adds denominators when adding fractions"
+    },
+    {
+     "at": "2026-09-14",
+     "score": 2,
+     "misconception": "adds denominators when adding fractions"
+    },
+    {
+     "at": "2026-09-15",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-16",
+     "score": 2,
+     "misconception": "adds denominators when adding fractions"
+    },
+    {
+     "at": "2026-09-17",
+     "score": 3,
+     "misconception": "adds denominators when adding fractions"
+    },
+    {
+     "at": "2026-09-22",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-23",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-24",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-28",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-29",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-30",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-01",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-05",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-06",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-07",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-12",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-14",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-15",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-19",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-20",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-21",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-22",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-26",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-27",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-28",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-29",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-02",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-03",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-04",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-05",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-09",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-10",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-11",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-12",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-16",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-17",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-18",
+     "score": 0,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-19",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-23",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-24",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-30",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-02",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-07",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-08",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-09",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-10",
+     "score": 3,
+     "misconception": null
+    }
+   ],
+   "expectedArch": "plateau"
+  },
+  {
+   "name": "Lachlan, Indigo",
+   "events": [
+    {
+     "at": "2026-08-10",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-11",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-12",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-13",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-17",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-18",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-19",
+     "score": 0,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-20",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-24",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-25",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-26",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-27",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-01",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-02",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-03",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-08",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-09",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-14",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-15",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-16",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-17",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-21",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-22",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-28",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-29",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-30",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-01",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-05",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-06",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-08",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-13",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-15",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-19",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-20",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-22",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-26",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-27",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-02",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-03",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-04",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-05",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-09",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-10",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-12",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-16",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-17",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-18",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-19",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-24",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-30",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-01",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-02",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-03",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-07",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-08",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-09",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-10",
+     "score": 3,
+     "misconception": null
+    }
+   ],
+   "expectedArch": "growth"
+  },
+  {
+   "name": "Moreau, Sage",
+   "events": [
+    {
+     "at": "2026-08-10",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-11",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-12",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-13",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-17",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-18",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-19",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-20",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-24",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-25",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-26",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-27",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-31",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-01",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-02",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-03",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-08",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-09",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-10",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-14",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-15",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-16",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-17",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-21",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-22",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-23",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-24",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-28",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-29",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-30",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-01",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-05",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-06",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-07",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-08",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-12",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-13",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-14",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-15",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-19",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-20",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-21",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-22",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-26",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-27",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-28",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-29",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-02",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-03",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-04",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-05",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-09",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-10",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-11",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-12",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-16",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-17",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-18",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-19",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-23",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-24",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-30",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-01",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-02",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-03",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-07",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-08",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-09",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-10",
+     "score": 4,
+     "misconception": null
+    }
+   ],
+   "expectedArch": "high"
+  },
+  {
+   "name": "Navarro, Cove",
+   "events": [
+    {
+     "at": "2026-08-10",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-11",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-13",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-17",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-18",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-19",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-20",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-24",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-25",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-27",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-01",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-02",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-03",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-14",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-16",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-17",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-21",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-22",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-23",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-28",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-29",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-30",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-01",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-05",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-06",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-08",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-12",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-13",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-14",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-15",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-20",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-22",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-26",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-27",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-28",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-29",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-03",
+     "score": 0,
+     "misconception": "confuses area vs perimeter"
+    },
+    {
+     "at": "2026-11-04",
+     "score": 0,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-05",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-09",
+     "score": 0,
+     "misconception": "confuses area vs perimeter"
+    },
+    {
+     "at": "2026-11-11",
+     "score": 1,
+     "misconception": "confuses area vs perimeter"
+    },
+    {
+     "at": "2026-11-12",
+     "score": 1,
+     "misconception": "confuses area vs perimeter"
+    },
+    {
+     "at": "2026-11-16",
+     "score": 0,
+     "misconception": "confuses area vs perimeter"
+    },
+    {
+     "at": "2026-11-17",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-18",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-23",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-01",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-02",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-03",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-07",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-08",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-09",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-10",
+     "score": 2,
+     "misconception": null
+    }
+   ],
+   "expectedArch": "low"
+  },
+  {
+   "name": "Okafor, Blaze",
+   "events": [
+    {
+     "at": "2026-08-10",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-11",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-13",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-17",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-18",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-19",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-20",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-24",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-25",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-26",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-27",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-31",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-01",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-02",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-03",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-08",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-09",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-10",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-14",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-15",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-16",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-17",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-21",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-22",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-23",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-28",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-29",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-30",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-01",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-06",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-07",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-08",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-12",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-13",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-14",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-15",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-19",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-20",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-21",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-22",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-26",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-27",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-28",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-29",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-02",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-04",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-05",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-09",
+     "score": 0,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-10",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-11",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-16",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-17",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-18",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-23",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-24",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-30",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-01",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-02",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-03",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-07",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-08",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-10",
+     "score": 5,
+     "misconception": null
+    }
+   ],
+   "expectedArch": "growth"
+  },
+  {
+   "name": "Pemberton, Echo",
+   "events": [
+    {
+     "at": "2026-08-10",
+     "score": 3,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-11",
+     "score": 3,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-12",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-13",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-17",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-18",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-19",
+     "score": 2,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-20",
+     "score": 1,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-24",
+     "score": 2,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-25",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-26",
+     "score": 3,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-27",
+     "score": 0,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-31",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-01",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-02",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-03",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-08",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-09",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-10",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-14",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-15",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-16",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-17",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-21",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-22",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-24",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-28",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-29",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-30",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-01",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-05",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-06",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-08",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-12",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-13",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-14",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-15",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-19",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-20",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-21",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-22",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-26",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-27",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-28",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-02",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-03",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-04",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-05",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-09",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-10",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-11",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-12",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-16",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-17",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-18",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-19",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-23",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-24",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-30",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-01",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-02",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-03",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-07",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-08",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-09",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-10",
+     "score": 5,
+     "misconception": null
+    }
+   ],
+   "expectedArch": "strong_misc"
+  },
+  {
+   "name": "Quimby, Storm",
+   "events": [
+    {
+     "at": "2026-08-10",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-12",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-13",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-17",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-18",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-19",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-20",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-24",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-25",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-26",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-27",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-31",
+     "score": 0,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-01",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-02",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-03",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-08",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-09",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-10",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-14",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-15",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-16",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-17",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-21",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-22",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-23",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-24",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-28",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-29",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-30",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-01",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-05",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-06",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-07",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-08",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-12",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-13",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-14",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-15",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-19",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-21",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-22",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-26",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-27",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-28",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-29",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-02",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-03",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-04",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-05",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-09",
+     "score": 0,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-10",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-11",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-16",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-17",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-19",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-23",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-24",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-30",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-01",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-02",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-03",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-07",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-08",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-09",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-10",
+     "score": 5,
+     "misconception": null
+    }
+   ],
+   "expectedArch": "growth"
+  },
+  {
+   "name": "Rosales, Nova",
+   "events": [
+    {
+     "at": "2026-08-10",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-13",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-17",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-20",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-01",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-16",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-22",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-24",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-06",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-07",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-15",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-19",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-02",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-04",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-05",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-10",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-23",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-24",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-30",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-01",
+     "score": 4,
+     "misconception": null
+    }
+   ],
+   "expectedArch": "nonsub"
+  },
+  {
+   "name": "Sterling, Quill",
+   "events": [
+    {
+     "at": "2026-08-11",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-12",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-13",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-17",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-18",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-19",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-20",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-24",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-25",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-27",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-31",
+     "score": 0,
+     "misconception": "adds denominators when adding fractions"
+    },
+    {
+     "at": "2026-09-01",
+     "score": 0,
+     "misconception": "adds denominators when adding fractions"
+    },
+    {
+     "at": "2026-09-02",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-03",
+     "score": 0,
+     "misconception": "adds denominators when adding fractions"
+    },
+    {
+     "at": "2026-09-08",
+     "score": 0,
+     "misconception": "adds denominators when adding fractions"
+    },
+    {
+     "at": "2026-09-09",
+     "score": 0,
+     "misconception": "adds denominators when adding fractions"
+    },
+    {
+     "at": "2026-09-10",
+     "score": 1,
+     "misconception": "adds denominators when adding fractions"
+    },
+    {
+     "at": "2026-09-14",
+     "score": 0,
+     "misconception": "adds denominators when adding fractions"
+    },
+    {
+     "at": "2026-09-15",
+     "score": 0,
+     "misconception": "adds denominators when adding fractions"
+    },
+    {
+     "at": "2026-09-16",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-17",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-21",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-23",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-24",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-28",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-29",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-30",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-01",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-07",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-08",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-13",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-14",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-19",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-20",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-22",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-26",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-27",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-28",
+     "score": 0,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-29",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-03",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-05",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-09",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-10",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-11",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-12",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-16",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-17",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-19",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-23",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-24",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-01",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-02",
+     "score": 0,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-07",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-09",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-10",
+     "score": 1,
+     "misconception": null
+    }
+   ],
+   "expectedArch": "low"
+  },
+  {
+   "name": "Tanaka, Ember",
+   "events": [
+    {
+     "at": "2026-08-10",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-11",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-12",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-13",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-17",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-18",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-19",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-20",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-24",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-25",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-26",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-27",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-31",
+     "score": 2,
+     "misconception": "adds denominators when adding fractions"
+    },
+    {
+     "at": "2026-09-01",
+     "score": 1,
+     "misconception": "adds denominators when adding fractions"
+    },
+    {
+     "at": "2026-09-02",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-03",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-08",
+     "score": 2,
+     "misconception": "adds denominators when adding fractions"
+    },
+    {
+     "at": "2026-09-09",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-10",
+     "score": 2,
+     "misconception": "adds denominators when adding fractions"
+    },
+    {
+     "at": "2026-09-15",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-16",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-21",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-22",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-23",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-24",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-28",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-29",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-30",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-01",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-05",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-06",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-07",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-08",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-12",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-13",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-14",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-15",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-19",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-20",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-21",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-26",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-27",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-28",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-29",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-02",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-03",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-04",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-05",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-09",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-10",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-11",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-12",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-16",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-17",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-18",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-19",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-23",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-24",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-30",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-01",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-02",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-03",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-07",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-08",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-09",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-10",
+     "score": 3,
+     "misconception": null
+    }
+   ],
+   "expectedArch": "strong_misc"
+  },
+  {
+   "name": "Umber, Reef",
+   "events": [
+    {
+     "at": "2026-08-10",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-11",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-12",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-13",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-17",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-18",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-20",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-26",
+     "score": 0,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-27",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-31",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-01",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-02",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-03",
+     "score": 0,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-08",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-09",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-10",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-15",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-16",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-21",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-22",
+     "score": 0,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-23",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-24",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-28",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-29",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-30",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-01",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-05",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-06",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-07",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-12",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-13",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-14",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-15",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-19",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-20",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-21",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-22",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-26",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-27",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-28",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-29",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-02",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-03",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-04",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-05",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-09",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-10",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-11",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-12",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-16",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-18",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-19",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-23",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-24",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-30",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-01",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-02",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-03",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-07",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-08",
+     "score": 4,
+     "misconception": null
+    }
+   ],
+   "expectedArch": "leaper"
+  },
+  {
+   "name": "Valdez, Orion",
+   "events": [
+    {
+     "at": "2026-08-10",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-11",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-12",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-13",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-17",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-18",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-19",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-20",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-24",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-25",
+     "score": 0,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-26",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-27",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-31",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-01",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-02",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-03",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-09",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-10",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-14",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-15",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-16",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-17",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-21",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-22",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-23",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-24",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-28",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-29",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-30",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-01",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-06",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-07",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-08",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-12",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-15",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-19",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-20",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-21",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-22",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-26",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-27",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-28",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-29",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-02",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-03",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-04",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-05",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-09",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-10",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-12",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-17",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-18",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-19",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-23",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-24",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-30",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-01",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-02",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-03",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-07",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-08",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-09",
+     "score": 4,
+     "misconception": null
+    }
+   ],
+   "expectedArch": "growth"
+  },
+  {
+   "name": "Winslow, Pax",
+   "events": [
+    {
+     "at": "2026-08-10",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-11",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-12",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-13",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-17",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-20",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-24",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-25",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-26",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-27",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-31",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-01",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-03",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-09",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-10",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-14",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-15",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-16",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-17",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-21",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-22",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-23",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-24",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-28",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-29",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-30",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-01",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-05",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-06",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-07",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-12",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-13",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-14",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-15",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-19",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-20",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-21",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-22",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-26",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-27",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-28",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-29",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-02",
+     "score": 3,
+     "misconception": "confuses area vs perimeter"
+    },
+    {
+     "at": "2026-11-03",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-04",
+     "score": 0,
+     "misconception": "confuses area vs perimeter"
+    },
+    {
+     "at": "2026-11-05",
+     "score": 1,
+     "misconception": "confuses area vs perimeter"
+    },
+    {
+     "at": "2026-11-09",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-10",
+     "score": 2,
+     "misconception": "confuses area vs perimeter"
+    },
+    {
+     "at": "2026-11-11",
+     "score": 0,
+     "misconception": "confuses area vs perimeter"
+    },
+    {
+     "at": "2026-11-12",
+     "score": 2,
+     "misconception": "confuses area vs perimeter"
+    },
+    {
+     "at": "2026-11-16",
+     "score": 1,
+     "misconception": "confuses area vs perimeter"
+    },
+    {
+     "at": "2026-11-17",
+     "score": 2,
+     "misconception": "confuses area vs perimeter"
+    },
+    {
+     "at": "2026-11-18",
+     "score": 1,
+     "misconception": "confuses area vs perimeter"
+    },
+    {
+     "at": "2026-11-19",
+     "score": 2,
+     "misconception": "confuses area vs perimeter"
+    },
+    {
+     "at": "2026-11-23",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-30",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-01",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-02",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-03",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-07",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-08",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-09",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-10",
+     "score": 4,
+     "misconception": null
+    }
+   ],
+   "expectedArch": "plateau"
+  },
+  {
+   "name": "Xanders, Lark",
+   "events": [
+    {
+     "at": "2026-08-11",
+     "score": 3,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-12",
+     "score": 1,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-13",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-17",
+     "score": 0,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-18",
+     "score": 0,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-19",
+     "score": 1,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-20",
+     "score": 1,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-24",
+     "score": 1,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-25",
+     "score": 0,
+     "misconception": "treats ratio as additive"
+    },
+    {
+     "at": "2026-08-26",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-31",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-01",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-03",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-09",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-10",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-14",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-15",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-16",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-17",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-21",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-23",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-24",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-28",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-29",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-30",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-01",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-05",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-06",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-07",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-12",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-14",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-15",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-20",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-21",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-26",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-27",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-28",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-29",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-03",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-04",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-05",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-09",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-10",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-11",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-12",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-17",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-18",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-19",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-23",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-30",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-01",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-02",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-07",
+     "score": 1,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-08",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-09",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-10",
+     "score": 3,
+     "misconception": null
+    }
+   ],
+   "expectedArch": "low"
+  },
+  {
+   "name": "Yarrow, Bram",
+   "events": [
+    {
+     "at": "2026-08-12",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-08-17",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-01",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-16",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-21",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-22",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-24",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-28",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-09-29",
+     "score": 5,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-01",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-07",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-15",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-19",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-20",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-21",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-27",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-10-28",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-02",
+     "score": 0,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-11",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-12",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-18",
+     "score": 3,
+     "misconception": null
+    },
+    {
+     "at": "2026-11-30",
+     "score": 4,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-02",
+     "score": 2,
+     "misconception": null
+    },
+    {
+     "at": "2026-12-09",
+     "score": 4,
+     "misconception": null
+    }
+   ],
+   "expectedArch": "nonsub"
+  }
+ ]
+}
