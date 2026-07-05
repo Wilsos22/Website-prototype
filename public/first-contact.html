@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>First Contact — Talking to Aliens with Math (Big Dog Math)</title>
+<style>
+  :root{
+    --cream:#fbf7ef; --ink:#2b2622; --muted:#7a7168;
+    --orange:#ff6b3d; --teal:#14b8a6; --green:#22c55e; --amber:#f5b915; --blue:#4d8df6;
+    --line:#e7ded0;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--cream);color:var(--ink);
+    font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.55;}
+  .wrap{max-width:880px;margin:0 auto;padding:40px 28px 80px;}
+  h1,h2,h3{font-family:Georgia,'Times New Roman',serif;line-height:1.15;}
+  h1{font-size:40px;margin:0 0 6px;}
+  h2{font-size:26px;margin:38px 0 12px;padding-bottom:6px;border-bottom:2px solid var(--line);}
+  h3{font-size:19px;margin:22px 0 6px;}
+  p{margin:8px 0;}
+  .kicker{display:inline-block;background:var(--orange);color:#fff;font-weight:700;
+    font-size:12px;letter-spacing:.12em;text-transform:uppercase;padding:5px 12px;border-radius:999px;}
+  .lede{font-size:18px;color:var(--muted);margin:10px 0 4px;}
+  .chips{margin:14px 0 4px;}
+  .chip{display:inline-block;border:1.5px solid var(--line);background:#fff;border-radius:999px;
+    padding:4px 12px;margin:0 6px 6px 0;font-size:13px;font-weight:600;}
+  .card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px 20px;margin:14px 0;}
+  .accent-orange{border-left:6px solid var(--orange)}
+  .accent-teal{border-left:6px solid var(--teal)}
+  .accent-blue{border-left:6px solid var(--blue)}
+  .accent-amber{border-left:6px solid var(--amber)}
+  .accent-green{border-left:6px solid var(--green)}
+  ul,ol{margin:8px 0 8px 4px;padding-left:22px}
+  li{margin:5px 0}
+  .two{display:flex;gap:16px;flex-wrap:wrap}
+  .two>*{flex:1 1 320px}
+  .phase{display:flex;align-items:baseline;gap:10px}
+  .time{font-family:Georgia,serif;font-weight:700;color:var(--orange);font-size:15px;white-space:nowrap}
+  .say{background:#fff7f3;border:1px dashed var(--orange);border-radius:10px;padding:8px 12px;margin:8px 0;font-style:italic}
+  .say b{font-style:normal}
+  .move{background:#f2fbf6;border:1px solid #cdeede;border-radius:10px;padding:8px 12px;margin:8px 0}
+  .rule{font-weight:700}
+  table{border-collapse:collapse;width:100%;margin:10px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:7px 9px;text-align:left;vertical-align:top}
+  th{background:#f3ecdf;font-family:Georgia,serif}
+  code{background:#f3ecdf;padding:1px 6px;border-radius:5px;font-size:.92em}
+  .grid-wrap{display:flex;flex-wrap:wrap;gap:26px;margin:12px 0}
+  .grid-card{text-align:center}
+  .grid-card .label{font-family:Georgia,serif;font-weight:700;margin-top:6px}
+  .note{color:var(--muted);font-size:13px}
+  .foot{margin-top:40px;border-top:2px solid var(--line);padding-top:12px;color:var(--muted);font-size:13px}
+  .pagebreak{page-break-before:always}
+  .print-title{display:none}
+  @media print{
+    body{background:#fff}
+    .wrap{max-width:100%;padding:0 12px}
+    .card,.grid-card svg{box-shadow:none}
+    h2{border-color:#ccc}
+    .noprint{display:none}
+    .print-title{display:block}
+    a{color:inherit;text-decoration:none}
+  }
+  @page{margin:14mm}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <span class="kicker">Big Dog Math · Project Lesson</span>
+  <h1>First Contact</h1>
+  <p class="lede">Talking to aliens using nothing but math.</p>
+  <div class="chips">
+    <span class="chip">Module: Number Sense &amp; the Coordinate Plane</span>
+    <span class="chip">Topic: Ordered pairs · Factors</span>
+    <span class="chip">1 class period (55 min)</span>
+    <span class="chip">Groups of 3–4</span>
+  </div>
+
+  <div class="card accent-orange">
+    <h3 style="margin-top:0">The big idea</h3>
+    <p>Two groups of "civilizations" have to send a real message to each other — but they share no language. No words, no letters, no labeled pictures. The <b>only</b> thing they can agree on is math, because two dots means two dots whether you live in Ohio or Andromeda. Groups <b>bootstrap</b> a shared code from counting, then use the coordinate plane to transmit a hidden picture. This is exactly how scientists built the real 1974 <b>Arecibo message</b> beamed into space.</p>
+    <p style="margin-bottom:0"><b>Why it lands in this room:</b> the receiving group <i>starts</i> confused — that's step one, how they know they're engaged. Then <i>what do you know</i>. Then <i>try something</i>. The confusion is the curriculum.</p>
+  </div>
+
+  <h2>Standards &amp; objectives</h2>
+  <div class="two">
+    <div class="card">
+      <h3 style="margin-top:0">Learning intention</h3>
+      <p>I can encode and decode information using only numbers and the coordinate plane — no words allowed.</p>
+      <h3>Standards touched</h3>
+      <ul>
+        <li><b>6.NS.C.6c</b> — plot ordered pairs; order matters.</li>
+        <li><b>6.NS.B.4</b> — factors &amp; multiples (deciding the grid size).</li>
+        <li><b>SMP 1, 3, 6</b> — persevere, argue from evidence, attend to precision.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Success criteria</h3>
+      <ul>
+        <li>I can build a number system from tally marks so another group learns my digits.</li>
+        <li>I can define <code>+</code> and <code>=</code> using only examples.</li>
+        <li>I can transmit a picture as ordered pairs <code>(row, column)</code>.</li>
+        <li>I can decode another group's message and name <i>where</i> meaning broke down.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>Materials</h2>
+  <ul>
+    <li>Printed <b>Symbol Reference strip</b> (1 per student) — page 4</li>
+    <li>Printed <b>blank 7×7 grids</b> — 2 per group (one to encode, one to decode) — page 5</li>
+    <li>Printed <b>Transmission strips</b> (blank paper strips for the coded message) — page 5</li>
+    <li><b>Secret Image cards</b> — cut apart, one per sending group — page 6</li>
+    <li>Pencils. That's it. No words on any paper the students pass.</li>
+  </ul>
+
+  <h2>Teacher background: the bootstrapping ladder</h2>
+  <p>You can't use a symbol until you've <i>taught</i> it, and the only thing you're allowed to assume is that a mark repeated means "count." Everything else is built on top, one rung at a time:</p>
+  <table>
+    <tr><th>Rung</th><th>What you send</th><th>What the receiver figures out</th></tr>
+    <tr><td>1 · Digits</td><td><code>•</code> , <code>••</code> , <code>•••</code> , <code>••••</code></td><td>"These marks are counting numbers."</td></tr>
+    <tr><td>2 · Equals</td><td><code>••• ▢ •••</code></td><td>The middle symbol <code>▢</code> means "is the same as" ( = ).</td></tr>
+    <tr><td>3 · Plus</td><td><code>•• △ ••• ▢ •••••</code></td><td><code>△</code> means "combine" ( + ).</td></tr>
+    <tr><td>4 · The grid</td><td>the single number <b>49</b></td><td>49 = 7×7 → build a 7-by-7 board (see note).</td></tr>
+    <tr><td>5 · The picture</td><td>ordered pairs like <code>(••, •••)</code></td><td>Fill row 2, column 3. Repeat until the image appears.</td></tr>
+  </table>
+  <div class="card accent-amber">
+    <p style="margin:0"><b>The 49 trick (real Arecibo move):</b> the Arecibo message used a number with exactly two prime factors so aliens would know to arrange the bits in a rectangle. We use <b>49</b>: its only sensible factor pair is <b>7 × 7</b>, which forces a square grid with no ambiguity. Let students <i>discover</i> that — don't hand it to them.</p>
+  </div>
+
+  <h2>The one rule</h2>
+  <div class="card accent-orange">
+    <p class="rule" style="margin-top:0">No words. No letters. No labeled drawings. Every symbol you use must be taught with math examples before you use it to mean anything.</p>
+    <p style="margin-bottom:0">A transmission strip that would get "rejected by the aliens": anything with a written word, an arrow with a caption, or a drawn picture of the answer. If it isn't numbers and symbols-you-defined, it doesn't fly.</p>
+  </div>
+
+  <h2 class="pagebreak">Run of show (55 minutes)</h2>
+
+  <div class="card accent-teal">
+    <div class="phase"><span class="time">0–10 min</span><h3 style="margin:0">1 · Warm-up (the 2 + 3)</h3></div>
+    <p class="note">Full warm-up is on page 3, formatted for your control panel / Notion. Q5 surfaces the exact misconception that will break their transmissions: <b>order matters — (4,1) is not (1,4).</b> Don't resolve it yet. Let it hang.</p>
+  </div>
+
+  <div class="card accent-blue">
+    <div class="phase"><span class="time">10–15 min</span><h3 style="margin:0">2 · Hook — the real message</h3></div>
+    <p><b>Say:</b> "In 1974 humans pointed the biggest radio dish on Earth at a star cluster 25,000 light-years away and sent a message. No English — because why would aliens know English? They sent <i>math</i>. Today you're doing the same thing, across the room."</p>
+    <div class="say"><b>Prompt:</b> "If you had to tell someone something and you couldn't use any word or language they'd know… what's the one thing you're sure they'd also understand?" (Steer toward: counting / numbers.)</div>
+  </div>
+
+  <div class="card accent-teal">
+    <div class="phase"><span class="time">15–25 min</span><h3 style="margin:0">3 · Mini-lesson — climb the ladder together</h3></div>
+    <p>Build rungs 1–3 on the board <b>with</b> the class so everyone owns the shared code before groups split off. Do it as a puzzle, not a lecture:</p>
+    <ul>
+      <li>Put <code>• , •• , •••</code> up. "What am I doing?" → counting.</li>
+      <li>Write <code>••• ▢ •••</code>. "What could the box mean?" → equals.</li>
+      <li>Write <code>•• △ ••• ▢ •••••</code>. "Now the triangle?" → plus.</li>
+    </ul>
+    <div class="move"><b>Teacher move:</b> the instant a kid says "ohhh the box means equals," name it: "You were confused 40 seconds ago. That confusion is what made you look for the pattern. That's the whole job today."</div>
+  </div>
+
+  <div class="card accent-amber">
+    <div class="phase"><span class="time">25–43 min</span><h3 style="margin:0">4 · Work time — encode your message</h3></div>
+    <p>Each group gets a <b>Secret Image card</b> (page 6) and blank grids + transmission strips. Their task:</p>
+    <ol>
+      <li>Agree, as a group, on their symbols for the digits, <code>=</code>, and <code>+</code> (they may reuse the class ones or invent their own — but then they must <i>teach</i> them on the strip).</li>
+      <li>Send the grid size as a <b>number to factor</b> (49), so the receivers build the right board.</li>
+      <li>List every filled square of their secret image as an ordered pair <code>(row, column)</code> in their number symbols.</li>
+    </ol>
+    <div class="move"><b>Circulate for the misconception:</b> the groups that don't nail down "row first or column first?" will transmit a sideways/flipped picture. Let it happen. It's the best teaching moment of the day and it's <i>their</i> discovery in Phase 5.</div>
+  </div>
+
+  <div class="card accent-blue">
+    <div class="phase"><span class="time">43–50 min</span><h3 style="margin:0">5 · Exchange &amp; decode</h3></div>
+    <p>Groups swap <b>only</b> their transmission strips (never the Secret Image card). Receivers decode onto a fresh 7×7 grid and shade the squares. No talking between groups.</p>
+    <div class="say"><b>Prompt on the board:</b> "You are the aliens now. Step one: you're confused. Good. Step two: what do you know? Step three: try something."</div>
+  </div>
+
+  <div class="card accent-green">
+    <div class="phase"><span class="time">50–55 min</span><h3 style="margin:0">6 · The reveal (exit ticket)</h3></div>
+    <p>Sending group holds up the original Secret Image next to the decoded grid. Then each student answers the exit ticket (page 3):</p>
+    <ul style="margin-bottom:0">
+      <li>Did the picture come through? If it was flipped or scrambled, <b>what assumption</b> caused it?</li>
+      <li>What's one thing both groups had to agree on that they never said out loud?</li>
+    </ul>
+  </div>
+
+  <h2 class="pagebreak">Differentiation &amp; extensions</h2>
+  <div class="two">
+    <div class="card">
+      <h3 style="margin-top:0">Support</h3>
+      <ul>
+        <li>Give struggling groups the <b>Heart</b> or <b>Smiley</b> (symmetric — a flip still looks right, lowering the stakes).</li>
+        <li>Pre-fill rungs 1–3 on their transmission strip so they only build the picture.</li>
+        <li>Shrink to a 5×5 grid (send the number <b>25</b> = 5×5).</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Stretch</h3>
+      <ul>
+        <li>Give the <b>Abbie</b> or <b>Rocket</b> (not symmetric — order errors show instantly).</li>
+        <li>Ban the class symbols: the group must invent and teach a brand-new code from scratch.</li>
+        <li>Encode the picture as one long binary string (row by row, filled=•, empty=nothing) instead of coordinate pairs — closer to the real Arecibo bitmap.</li>
+        <li>Add a second "message": send a number fact about themselves (group size, today's date as a sum).</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>Quick assessment look-fors</h2>
+  <table>
+    <tr><th>Rung reached</th><th>What you're seeing</th></tr>
+    <tr><td>Getting started</td><td>Builds a working number code; sends <i>some</i> coordinates but order is inconsistent.</td></tr>
+    <tr><td>Proficient</td><td>Defines digits, =, + clearly; transmits the full picture with consistent (row, col) order; decodes another group's image.</td></tr>
+    <tr><td>Extending</td><td>Invents an original symbol set, explains the 7×7 reasoning, and can articulate the hidden assumption that order must be agreed on.</td></tr>
+  </table>
+
+  <div class="foot noprint">
+    <b>Facilitator guide + printables · Big Dog Math.</b> Pages 3–6 are print-ready (page breaks set). Print the symbol strip 1-per-student, grids 2-per-group, and cut the Secret Image cards apart before class.
+  </div>
+
+  <!-- ===================== PRINTABLE: WARM-UP + EXIT TICKET ===================== -->
+  <div class="pagebreak"></div>
+  <span class="kicker">Printable · Page 3</span>
+  <h2 style="margin-top:14px">Warm-up &amp; Exit Ticket</h2>
+
+  <div class="card accent-orange">
+    <h3 style="margin-top:0">Warm-up — First Contact (2 review + 3 current)</h3>
+    <p class="note">Music during warm-up; alert at 0:30, countdown from 10.</p>
+    <p><b>Review (fluency):</b></p>
+    <ol>
+      <li>4 × 6 = ______</li>
+      <li>35 ÷ 5 = ______</li>
+    </ol>
+    <p><b>Today's thinking:</b></p>
+    <ol start="3">
+      <li>On a grid, plot the point <b>(3, 2)</b>. Which do you count first — across or up?</li>
+      <li>List <b>all</b> the factor pairs of <b>49</b>. Which pair would make a square?</li>
+      <li><b>(Discuss)</b> Is the point <b>(4, 1)</b> the same as <b>(1, 4)</b>? Convince your neighbor.</li>
+    </ol>
+    <p class="note" style="margin-bottom:0"><b>Target misconception (Q5):</b> that (4,1) and (1,4) are "basically the same." They are <i>not</i> — order is the invisible agreement that makes the whole message work. Surface it; don't correct it yet. It pays off in the reveal.</p>
+  </div>
+
+  <div class="card accent-green">
+    <h3 style="margin-top:0">Exit Ticket — First Contact</h3>
+    <ol>
+      <li>Did your group's picture come through? Circle: &nbsp; <b>Yes</b> &nbsp; / &nbsp; <b>Flipped</b> &nbsp; / &nbsp; <b>Scrambled</b></li>
+      <li>If it wasn't perfect, what <b>assumption</b> caused the problem? _______________________________</li>
+      <li>Name one thing <b>both groups had to agree on that nobody ever said out loud.</b> _______________________________</li>
+      <li>Confusion is step one. What did you <b>try</b> when you got stuck? _______________________________</li>
+    </ol>
+  </div>
+
+  <!-- ===================== PRINTABLE: SYMBOL REFERENCE ===================== -->
+  <div class="pagebreak"></div>
+  <span class="kicker">Printable · Page 4 · 1 per student</span>
+  <h2 style="margin-top:14px">Symbol Reference — how to teach a code from nothing</h2>
+  <p>You may use these symbols, or invent your own — but if you invent them, you have to <b>teach</b> them on your transmission strip exactly like this, using only examples.</p>
+
+  <table>
+    <tr><th>Idea</th><th>How you PROVE it (send this)</th><th>Meaning the receiver builds</th></tr>
+    <tr><td>The numbers 1–5</td><td><code>•</code>&nbsp;&nbsp;<code>••</code>&nbsp;&nbsp;<code>•••</code>&nbsp;&nbsp;<code>••••</code>&nbsp;&nbsp;<code>•••••</code></td><td>Counting marks = numbers</td></tr>
+    <tr><td>Equals ( = )</td><td><code>••• ▢ •••</code></td><td>▢ means "is the same as"</td></tr>
+    <tr><td>Plus ( + )</td><td><code>•• △ ••• ▢ •••••</code></td><td>△ means "combine"</td></tr>
+    <tr><td>Grid size</td><td>the number for <b>49</b>, then let them factor it</td><td>7 × 7 board</td></tr>
+    <tr><td>A filled square</td><td>a pair: <code>( row , column )</code> e.g. <code>( •• , ••• )</code></td><td>"shade row 2, column 3"</td></tr>
+  </table>
+  <div class="card accent-blue">
+    <p style="margin:0"><b>Order is a secret handshake.</b> Your group must decide: do we always write <b>row first, then column</b>? Write your choice on your strip in numbers — or the aliens will build your picture sideways.</p>
+  </div>
+
+  <!-- ===================== PRINTABLE: BLANK GRIDS + STRIPS ===================== -->
+  <div class="pagebreak"></div>
+  <span class="kicker">Printable · Page 5 · 2 per group</span>
+  <h2 style="margin-top:14px">Blank 7×7 grids &amp; transmission strips</h2>
+  <p class="note">Rows are numbered top→bottom, columns left→right. One grid to ENCODE your secret image, one to DECODE the message you receive.</p>
+  <div class="grid-wrap">
+    <div class="grid-card"><div data-grid="blank"></div><div class="label">ENCODE (your secret)</div></div>
+    <div class="grid-card"><div data-grid="blank"></div><div class="label">DECODE (message received)</div></div>
+  </div>
+  <h3>Transmission strips</h3>
+  <p class="note">Write your coded message here. Numbers and defined symbols only — no words.</p>
+  <div class="card" style="height:70px"></div>
+  <div class="card" style="height:70px"></div>
+  <div class="card" style="height:70px"></div>
+
+  <!-- ===================== PRINTABLE: SECRET IMAGE CARDS ===================== -->
+  <div class="pagebreak"></div>
+  <span class="kicker">Printable · Page 6 · Teacher — cut apart</span>
+  <h2 style="margin-top:14px">Secret Image cards</h2>
+  <p class="note">Each sending group gets ONE. Shaded squares are the picture. Keep these hidden from the receiving group until the reveal.</p>
+  <div class="grid-wrap">
+    <div class="grid-card"><div data-grid="abbie"></div><div class="label">Abbie 🐾 (hard — not symmetric)</div></div>
+    <div class="grid-card"><div data-grid="rocket"></div><div class="label">Rocket (hard)</div></div>
+    <div class="grid-card"><div data-grid="smiley"></div><div class="label">Smiley (easier — symmetric)</div></div>
+    <div class="grid-card"><div data-grid="heart"></div><div class="label">Heart (easier — symmetric)</div></div>
+  </div>
+
+  <!-- ===================== PRINTABLE: ANSWER KEY ===================== -->
+  <div class="pagebreak"></div>
+  <span class="kicker">Printable · Page 7 · Teacher answer key</span>
+  <h2 style="margin-top:14px">Answer key — Abbie as ordered pairs</h2>
+  <p>If a group encodes <b>Abbie</b> with <b>(row, column)</b> order, their transmission (after teaching the code + sending 49) should list these filled squares:</p>
+  <div id="abbie-coords" class="card" style="font-family:Georgia,serif"></div>
+  <p class="note">Any consistent order is "correct" as long as the group defined it. A decoded image that's flipped or rotated almost always means the two groups disagreed on row-vs-column order — the target misconception from warm-up Q5.</p>
+
+  <div class="foot">Big Dog Math · First Contact · how to think, not what to think.</div>
+
+</div>
+
+<script>
+(function(){
+  // 7x7 pixel images. '#' = filled, '.' = empty. Row 1 = top.
+  var IMAGES = {
+    blank: [
+      ".......",
+      ".......",
+      ".......",
+      ".......",
+      ".......",
+      ".......",
+      "......."
+    ],
+    abbie: [           // dog face with floppy ears + snout
+      "##...##",
+      "#######",
+      "#.#.#.#",
+      "#######",
+      "#.###.#",
+      "#.###.#",
+      ".#####."
+    ],
+    rocket: [
+      "...#...",
+      "..###..",
+      "..#.#..",
+      "..###..",
+      "..###..",
+      ".#.#.#.",
+      "#..#..#"
+    ],
+    smiley: [
+      ".#####.",
+      "#.....#",
+      "#.#.#.#",
+      "#.....#",
+      "#.....#",
+      "#.###.#",
+      ".#####."
+    ],
+    heart: [
+      ".##.##.",
+      "#######",
+      "#######",
+      "#######",
+      ".#####.",
+      "..###..",
+      "...#..."
+    ]
+  };
+
+  function makeGrid(rows, filledColor){
+    var n = rows.length, cell = 34, pad = 20;
+    var size = n*cell;
+    var W = size + pad, H = size + pad;
+    var svg = '<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg">';
+    svg += '<rect x="0" y="0" width="'+W+'" height="'+H+'" fill="#ffffff"/>';
+    // axis numbers
+    for(var i=0;i<n;i++){
+      // column numbers (top)
+      svg += '<text x="'+(pad + i*cell + cell/2)+'" y="'+(pad-6)+'" font-size="11" fill="#7a7168" text-anchor="middle" font-family="Georgia,serif">'+(i+1)+'</text>';
+      // row numbers (left)
+      svg += '<text x="'+(pad-7)+'" y="'+(pad + i*cell + cell/2 + 4)+'" font-size="11" fill="#7a7168" text-anchor="middle" font-family="Georgia,serif">'+(i+1)+'</text>';
+    }
+    for(var r=0;r<n;r++){
+      for(var c=0;c<n;c++){
+        var x = pad + c*cell, y = pad + r*cell;
+        var filled = rows[r].charAt(c) === '#';
+        svg += '<rect x="'+x+'" y="'+y+'" width="'+cell+'" height="'+cell+'" fill="'+(filled?filledColor:'#ffffff')+'" stroke="#c9bfae" stroke-width="1"/>';
+      }
+    }
+    svg += '</svg>';
+    return svg;
+  }
+
+  var colors = {abbie:'#ff6b3d', rocket:'#4d8df6', smiley:'#f5b915', heart:'#ff6b3d', blank:'#ffffff'};
+
+  document.querySelectorAll('[data-grid]').forEach(function(el){
+    var key = el.getAttribute('data-grid');
+    var rows = IMAGES[key] || IMAGES.blank;
+    el.innerHTML = makeGrid(rows, colors[key] || '#14b8a6');
+  });
+
+  // Abbie coordinate list (row, column), 1-indexed
+  var abbie = IMAGES.abbie, pairs = [];
+  for(var r=0;r<abbie.length;r++){
+    for(var c=0;c<abbie[r].length;c++){
+      if(abbie[r].charAt(c)==='#') pairs.push('('+(r+1)+', '+(c+1)+')');
+    }
+  }
+  var box = document.getElementById('abbie-coords');
+  if(box){
+    box.innerHTML = '<b>'+pairs.length+' filled squares:</b><br>' + pairs.join('&nbsp;&nbsp; ');
+  }
+})();
+</script>
+</body>
+</html>
