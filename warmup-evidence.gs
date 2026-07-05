@@ -179,32 +179,26 @@ function routeWarmupSubmitEvent_(e) {
   }
 }
 
-// Run ONCE from the Apps Script editor: removes duplicate/orphaned onFormSubmit
-// triggers, then reinstalls the correct ones.
+// Run ONCE from the Apps Script editor. Strategy: ONE spreadsheet-level trigger
+// covers every form linked to the response spreadsheet, so ALL per-form
+// triggers are deleted (they are redundant, double-fire submissions, and eat
+// Google's 20-trigger-per-script quota — the "too many triggers" error).
 function repairAllWarmupTriggers() {
-  const allowed = {
-    "syncFormResponseToExportSheet": true,
-    "syncSubmissionToExportSheet": true
-  };
-  const seen = {};
   let removed = 0;
+  let kept = false;
   ScriptApp.getProjectTriggers().forEach(function (trigger) {
     if (trigger.getEventType() !== ScriptApp.EventType.ON_FORM_SUBMIT) return;
     const handler = trigger.getHandlerFunction();
-    const source = trigger.getTriggerSourceId ? trigger.getTriggerSourceId() : "";
-    const dupKey = handler + "|" + source;
-    if (!allowed[handler] || seen[dupKey]) {
-      ScriptApp.deleteTrigger(trigger);
-      removed++;
-    } else {
-      seen[dupKey] = true;
+    // Keep exactly one spreadsheet-level trigger; delete everything else.
+    if (handler === "syncSubmissionToExportSheet" && !kept) {
+      kept = true;
+      return;
     }
+    ScriptApp.deleteTrigger(trigger);
+    removed++;
   });
-  installResponseExportTrigger();
-  let repaired = { installed: 0, failed: 0 };
-  try { repaired = installWarmupFormTriggersFromKnownForms(); } catch (err) {
-    Logger.log("Form trigger reinstall skipped: " + err.message);
-  }
-  Logger.log("Trigger repair: removed " + removed + " stale/duplicate, reinstalled spreadsheet trigger, form triggers: " +
-    repaired.installed + " installed / " + repaired.failed + " failed.");
+  if (!kept) installResponseExportTrigger();
+  Logger.log("Trigger repair: removed " + removed + " per-form/duplicate trigger(s); " +
+    (kept ? "kept" : "installed") + " the single spreadsheet trigger. " +
+    "Every linked form is covered by it — no per-form triggers needed.");
 }

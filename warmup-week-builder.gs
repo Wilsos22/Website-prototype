@@ -1,7 +1,7 @@
 // =====================================================================
 // BIG DOG MATH - WEEK BUILDER (Notion lessons + curated pools)
 // One click: reads the week's published lessons from the Math 6 Lessons
-// Notion DB and builds all five warm-up forms —
+// Notion DB and builds all five warm-up forms -
 //   Q1–Q3  AI-generated (fluency + two spiral review)
 //   Q4/Q5  from the CURATED pool (warmup-pools-data.gs): verified answers,
 //          keyed wrong-answer -> misconception tags, matched to the lesson,
@@ -47,7 +47,7 @@ function buildDayFromNotionLesson_(safeConfig, dayIndex, lessons) {
   const dayInfo = getWarmupDayInfo_(safeConfig.startDate, dayIndex);
   const lesson = lessons[dayInfo.isoDate];
   if (!lesson) {
-    throw new Error("No published lesson in Notion for " + dayInfo.isoDate + " — publish it (or use the typed-topic build for this day).");
+    throw new Error("No published lesson in Notion for " + dayInfo.isoDate + " - publish it (or use the typed-topic build for this day).");
   }
   const topic = lesson.topic || lesson.title || "math";
 
@@ -137,7 +137,7 @@ function buildDayFromNotionLesson_(safeConfig, dayIndex, lessons) {
   return {
     ok: true,
     title: title,
-    dailyTopic: topic + (lesson.title ? " — " + lesson.title : ""),
+    dailyTopic: topic + (lesson.title && lesson.title !== topic ? " - " + lesson.title : ""),
     reviewTopics: ai.reviewTopics || [],
     editUrl: formResult.form.getEditUrl(),
     publishedUrl: formResult.form.getPublishedUrl(),
@@ -234,11 +234,27 @@ function readNotionPlain_(prop) {
 // --- Pool matching + no-repeat rotation --------------------------------------
 
 function bdmStem_(w) {
-  if (w.length > 5 && w.slice(-3) === "ing") w = w.slice(0, -3);
+  if (w.length > 8 && w.slice(-7) === "ization") w = w.slice(0, -7); // factorization -> factor
+  else if (w.length > 5 && w.slice(-3) === "ing") w = w.slice(0, -3);
   else if (w.length > 4 && w.slice(-2) === "es") w = w.slice(0, -2);
   else if (w.length > 3 && w.slice(-1) === "s") w = w.slice(0, -1);
-  if (w.length > 4 && w.slice(-1) === "e") w = w.slice(0, -1); // divide/dividing → divid
+  if (w.length > 4 && w.slice(-1) === "e") w = w.slice(0, -1); // divide/dividing -> divid
   return w;
+}
+
+// Tokens match when equal, or when one is a prefix of the other (both >= 4
+// chars): multiplication/multiply, graphs/graphing, factor/factoring.
+function bdmTokenMatch_(a, b) {
+  if (a === b) return true;
+  if (a.length >= 4 && b.length >= 4) return a.indexOf(b) === 0 || b.indexOf(a) === 0;
+  return false;
+}
+
+function bdmTokenHit_(sourceTokens, t) {
+  for (let i = 0; i < sourceTokens.length; i++) {
+    if (bdmTokenMatch_(sourceTokens[i], t)) return true;
+  }
+  return false;
 }
 
 function bdmTokens_(s) {
@@ -259,8 +275,8 @@ function scorePoolGroups_(sourceTokens, pool) {
     const lessonNameTokens = bdmTokens_(item.lesson);
     const topicNameTokens = bdmTokens_(item.topic).filter(function (t) { return lessonNameTokens.indexOf(t) === -1; });
     let score = 0, hits = 0;
-    lessonNameTokens.forEach(function (t) { if (sourceTokens.indexOf(t) !== -1) { score += 3; hits += 1; } });
-    topicNameTokens.forEach(function (t) { if (sourceTokens.indexOf(t) !== -1) { score += 1; hits += 1; } });
+    lessonNameTokens.forEach(function (t) { if (bdmTokenHit_(sourceTokens, t)) { score += 3; hits += 1; } });
+    topicNameTokens.forEach(function (t) { if (bdmTokenHit_(sourceTokens, t)) { score += 1; hits += 1; } });
     groups[key] = { score: score, coverage: hits / Math.max(1, lessonNameTokens.length + topicNameTokens.length) };
   });
   let bestKey = null;
@@ -288,7 +304,7 @@ function pickPoolItemsForLesson_(lesson, count) {
   const group = matchPoolGroupForLesson_(lesson, BDM_Q4Q5_POOL);
   if (!group || !group.length) {
     throw new Error("No pool items match lesson \"" + (lesson.title || lesson.topic) +
-      "\" — check the lesson's Topic wording against the Semester 1 pool, or build this day with a typed topic.");
+      "\" - check the lesson's Topic wording against the Semester 1 pool, or build this day with a typed topic.");
   }
   return rotatePicks_("q45:" + group[0].lesson, group, count);
 }
@@ -331,13 +347,13 @@ function generateWeekBuilderAIFill_(topic, picks, saPick) {
 
   const userPrompt =
     "You are helping build a 6th grade math warm-up. Today's focus topic: \"" + topic + "\".\n\n" +
-    "TASK 1 — write 3 multiple-choice questions (4 choices each, exactly one correct):\n" +
+    "TASK 1 - write 3 multiple-choice questions (4 choices each, exactly one correct):\n" +
     "  Q1: an easy fluency question related to the topic.\n" +
     "  Q2: a spiral-review question from a DIFFERENT 6th grade skill.\n" +
     "  Q3: a spiral-review question from another DIFFERENT skill.\n" +
     "Each needs: q, choices[4], correct (identical to one choice), ccss (best grade-6 code),\n" +
     "correctFeedback (short, genuine, not corny), feedback (teach the idea when wrong).\n\n" +
-    "TASK 2 — for each existing question below, invent 2 MORE plausible wrong choices\n" +
+    "TASK 2 - for each existing question below, invent 2 MORE plausible wrong choices\n" +
     "(distinct from the correct answer and the existing wrong choice, same format/units),\n" +
     "a misconception tag for each new wrong choice chosen ONLY from this vocabulary\n" +
     "(or \"other\" if none fits): " + vocabList + ".\n" +

@@ -63,7 +63,17 @@ function installWarmupFormSubmitTriggerSafely_(form) {
 
 function installWarmupFormSubmitTrigger_(form) {
   const formId = form.getId();
+  // Per-form triggers are OFF by default: the single spreadsheet-level trigger
+  // (installResponseExportTrigger) already fires for every form linked to the
+  // response spreadsheet, and per-form triggers double-fire submissions while
+  // eating Google's 20-trigger quota ("This script has too many triggers").
+  // Set Script Property BDM_PER_FORM_TRIGGERS = "on" to restore old behavior.
   deleteTriggersForHandler_("syncFormResponseToExportSheet", formId);
+  const wantPerForm = PropertiesService.getScriptProperties().getProperty("BDM_PER_FORM_TRIGGERS") === "on";
+  if (!wantPerForm) {
+    Logger.log(`Covered by the spreadsheet-level trigger (no per-form trigger created) for ${form.getTitle()}`);
+    return;
+  }
 
   ScriptApp.newTrigger("syncFormResponseToExportSheet")
     .forForm(form)
