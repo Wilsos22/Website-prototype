@@ -63,15 +63,15 @@ function buildDayFromNotionLesson_(safeConfig, dayIndex, lessons) {
   const questions = [];
   ai.openers.forEach(function (q) { questions.push(q); }); // Q1–Q3 (multiple_choice)
   picks.forEach(function (item, i) {
-    const fill = ai.poolFills[i] || { distractors: [], feedback: "", correctFeedback: "" };
-    const choices = shuffleChoices_([item.correct, item.wrong].concat(fill.distractors).filter(Boolean).slice(0, 4));
+    const fill = ai.poolFills[i] || { distractors: [], distractorTags: [], feedback: "", correctFeedback: "" };
+    const assembled = assemblePoolChoices_(item, fill);
     questions.push({
       q: item.q,
       type: "multiple_choice",
-      choices: choices,
+      choices: shuffleChoices_(assembled.choices),
       correct: item.correct,
       ccss: item.ccss,
-      misconceptions: buildPoolMisconceptionMap_(item, fill),
+      misconceptions: assembled.misconceptions,
       feedback: fill.feedback || "",
       correctFeedback: fill.correctFeedback || "",
       points: 1
@@ -148,14 +148,33 @@ function buildDayFromNotionLesson_(safeConfig, dayIndex, lessons) {
   };
 }
 
-function buildPoolMisconceptionMap_(item, fill) {
-  const map = {};
-  if (item.wrong && item.tag) map[item.wrong] = item.tag;
+// Build EXACTLY 4 unique choices (Google Forms rejects duplicates; the form
+// normalizer requires 4): correct + the keyed wrong + AI distractors, deduped
+// case-insensitively, padded with safe fillers if the AI's inventions collide.
+function assemblePoolChoices_(item, fill) {
+  const choices = [];
+  const misconceptions = {};
+  const seen = {};
+  const keyOf = function (s) { return String(s).trim().toLowerCase().replace(/\s+/g, " "); };
+  const add = function (choice, tag) {
+    const clean = String(choice || "").trim();
+    if (!clean || choices.length >= 4) return false;
+    const k = keyOf(clean);
+    if (seen[k]) return false;
+    seen[k] = true;
+    choices.push(clean);
+    if (tag) misconceptions[clean] = tag;
+    return true;
+  };
+  add(item.correct, null);
+  add(item.wrong, item.tag || "other");
   (fill.distractors || []).forEach(function (d, i) {
-    const tag = (fill.distractorTags || [])[i];
-    if (d) map[d] = tag || "other";
+    add(d, (fill.distractorTags || [])[i] || "other");
   });
-  return map;
+  ["None of these", "Cannot be determined", "Not enough information"].forEach(function (filler) {
+    if (choices.length < 4) add(filler, "other");
+  });
+  return { choices: choices, misconceptions: misconceptions };
 }
 
 function shuffleChoices_(choices) {
@@ -353,16 +372,16 @@ function generateWeekBuilderAIFill_(topic, picks, saPick) {
     "  Q3: a spiral-review question from another DIFFERENT skill.\n" +
     "Each needs: q, choices[4], correct (identical to one choice), ccss (best grade-6 code),\n" +
     "correctFeedback (short, genuine, not corny), feedback (teach the idea when wrong).\n\n" +
-    "TASK 2 - for each existing question below, invent 2 MORE plausible wrong choices\n" +
-    "(distinct from the correct answer and the existing wrong choice, same format/units),\n" +
-    "a misconception tag for each new wrong choice chosen ONLY from this vocabulary\n" +
-    "(or \"other\" if none fits): " + vocabList + ".\n" +
+    "TASK 2 - for each existing question below, invent 3 MORE plausible wrong choices,\n" +
+    "ALL DIFFERENT from each other, from the correct answer, and from the existing wrong\n" +
+    "choice (same format/units). Give a misconception tag for each new wrong choice chosen\n" +
+    "ONLY from this vocabulary (or \"other\" if none fits): " + vocabList + ".\n" +
     "Also write correctFeedback and feedback for each.\n\n" + poolDesc + "\n\n" +
     "NEVER make an arithmetic mistake. Return ONLY JSON:\n" +
     "{\n" +
     "  \"reviewTopics\": [\"skill for Q2\", \"skill for Q3\"],\n" +
     "  \"openers\": [ {\"q\":\"...\",\"choices\":[\"a\",\"b\",\"c\",\"d\"],\"correct\":\"a\",\"ccss\":\"6.NS.B.4\",\"correctFeedback\":\"...\",\"feedback\":\"...\"} , x3 ],\n" +
-    "  \"poolFills\": [ {\"distractors\":[\"...\",\"...\"],\"distractorTags\":[\"tag or other\",\"tag or other\"],\"correctFeedback\":\"...\",\"feedback\":\"...\"} , one per existing question ]\n" +
+    "  \"poolFills\": [ {\"distractors\":[\"...\",\"...\",\"...\"],\"distractorTags\":[\"tag or other\",\"tag or other\",\"tag or other\"],\"correctFeedback\":\"...\",\"feedback\":\"...\"} , one per existing question ]\n" +
     "}";
 
   const content = callOpenAIChat_([
@@ -389,7 +408,7 @@ function generateWeekBuilderAIFill_(topic, picks, saPick) {
   if (openers.length !== 3) throw new Error("AI returned " + openers.length + " opener questions; expected 3. Try again.");
 
   const poolFills = (Array.isArray(parsed.poolFills) ? parsed.poolFills : []).map(function (f) {
-    const distractors = (Array.isArray(f.distractors) ? f.distractors : []).map(function (d) { return String(d).trim(); }).filter(Boolean).slice(0, 2);
+    const distractors = (Array.isArray(f.distractors) ? f.distractors : []).map(function (d) { return String(d).trim(); }).filter(Boolean).slice(0, 3);
     const tags = (Array.isArray(f.distractorTags) ? f.distractorTags : []).map(function (t) {
       const tag = String(t || "").trim();
       return BDM_MISCONCEPTION_VOCAB.indexOf(tag) !== -1 ? tag : "other";

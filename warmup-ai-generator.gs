@@ -212,6 +212,11 @@ function generateAIQuestionSet_(dailyTopic, weekConfig, dayIndex) {
       if (choices.length !== 4) {
         throw new Error("Question " + (i + 1) + " did not have 4 choices. Try Rebuild.");
       }
+      const uniq = {};
+      choices.forEach(function (c) { uniq[c.toLowerCase().replace(/\s+/g, " ")] = true; });
+      if (Object.keys(uniq).length !== 4) {
+        throw new Error("Question " + (i + 1) + " has duplicate answer choices. Try Rebuild.");
+      }
       let correct = String(q.correct || "").trim();
       if (choices.indexOf(correct) === -1) correct = choices[0];
       // Sanitize the distractor→misconception map: keep only real wrong choices,
