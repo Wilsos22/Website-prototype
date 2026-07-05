@@ -290,6 +290,12 @@
 
   <button class="btn-preview" id="btn-preview" onclick="previewWeek()">Preview Questions</button>
   <button class="btn-build" id="btn-build" onclick="startBuild()">Build All 5 Forms</button>
+  <button class="btn-build" id="btn-notion" onclick="startNotionBuild()" style="background:#0f5e5f">📅 Build Week from Notion Lessons</button>
+  <div style="font-size:11px;color:#777;margin:6px 0 0;line-height:1.5">
+    Notion build ignores the typed topics: each day's <b>published</b> lesson supplies the topic,
+    Q4/Q5 come from the curated Semester-1 pool (verified answers + misconception tags),
+    and AI writes only the fluency/review openers.
+  </div>
 
   <div id="days-area">
     <div id="day-cards"></div>
@@ -368,6 +374,43 @@
     });
 
     buildWeek();
+  }
+
+  // One-click build from Notion: published lessons supply topics, the curated
+  // pool supplies Q4/Q5, AI writes only the openers.
+  function startNotionBuild() {
+    const startDate = document.getElementById("start-date").value.trim();
+    if (!/^\d{2}-\d{2}-\d{2}$/.test(startDate)) {
+      alert("Enter the Monday start date as MM-DD-YY first.");
+      return;
+    }
+    const container = document.getElementById("day-cards");
+    container.innerHTML = "";
+    document.getElementById("days-area").style.display = "block";
+    DAYS.forEach((day, i) => {
+      container.appendChild(buildDayCard(i, day, getDateForDay(startDate, i)));
+    });
+
+    setBuilding(true);
+    for (let i = 0; i < 5; i++) setDayStatus(i, "running");
+
+    google.script.run
+      .withSuccessHandler(results => {
+        (results || []).forEach((result, index) => {
+          if (result && result.ok === false) {
+            setDayStatus(index, "error", null, result.error || "Build failed.");
+          } else {
+            dayResults[index] = result;
+            setDayStatus(index, "done", result);
+          }
+        });
+        setBuilding(false);
+      })
+      .withFailureHandler(err => {
+        for (let i = 0; i < 5; i++) setDayStatus(i, "error", null, err.message);
+        setBuilding(false);
+      })
+      .buildWeekFromNotionLessons(getWeekConfig());
   }
 
   function buildWeek() {
