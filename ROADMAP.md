@@ -21,8 +21,10 @@ mastery board + growth charts, /api/evidence, clustering + archetypes
 idempotent, auto-recompute) · Figma lesson-flow template
 
 ## In progress 🔨
-- **Warm-up → spine bridge** — code shipped (warmup-evidence.gs + generator tagging);
-  waiting on Steele's Apps Script paste-in + EVIDENCE_INGEST_KEY/BDM_EVIDENCE_KEY setup
+- **Week builder** — code shipped (warmup-pools-data.gs + warmup-week-builder.gs +
+  sidebar button); waiting on Steele's Apps Script paste-in. Builds the week from
+  published Notion lessons: pool-backed Q4/Q5 (verified tags), AI openers only.
+- Warm-up → spine bridge — live and verified (Evidence post 200, 7/4)
 
 ## Planned 🧭
 - Tool evidence emitters (Equation Builder, GEMS, CLT → responses)
