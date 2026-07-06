@@ -375,6 +375,8 @@ export default function EquationBuilder() {
       const shownOp = liveOp ?? l.opAfter ?? null;
 
       const flip = !!l.flip;
+      // in the fraction form, drop the = and the other side to the bar's level
+      const fshift = (l.div ?? 1) > 1 ? " eq-fshift" : "";
       const pushRow = (varCell: React.ReactNode, constCell: React.ReactNode, eqCell: React.ReactNode, rhsCell: React.ReactNode) => {
         if (flip) out.push(rhsCell, eqCell, varCell, constCell);
         else out.push(varCell, constCell, eqCell, rhsCell);
@@ -398,10 +400,10 @@ export default function EquationBuilder() {
             </span>
           )}
         </div>,
-        <div className="eq-cell c-eq" key={`e${i}`}><span className="eq-g eq-equals">=</span></div>,
+        <div className="eq-cell c-eq" key={`e${i}`}><span className={`eq-g eq-equals${fshift}`}>=</span></div>,
         <div className="eq-cell c-rhs" key={`r${i}`}>
           <span
-            className={`eq-g eq-rhs${isLast && phase === "tap-var" ? " eq-tap" : ""}${tapWrong.has("rhs") && isLast ? " eq-wrongglyph" : ""}`}
+            className={`eq-g eq-rhs${fshift}${isLast && phase === "tap-var" ? " eq-tap" : ""}${tapWrong.has("rhs") && isLast ? " eq-wrongglyph" : ""}`}
             onClick={isLast && phase === "tap-var" ? () => tapPart("rhs") : undefined}
           >{l.rhs}</span>
           {shownOp && (
@@ -467,12 +469,13 @@ export default function EquationBuilder() {
         .eqb-lvlfx.up { background:var(--bdb-coral); }
         @keyframes eqbFxPop { 0%{opacity:0; transform:translateX(-50%) translateY(-6px) scale(0.5);} 18%{opacity:1; transform:translateX(-50%) translateY(0) scale(1.08);} 30%{transform:translateX(-50%) scale(1);} 80%{opacity:1;} 100%{opacity:0; transform:translateX(-50%) translateY(8px);} }
 
-        /* inverse-operations key, pinned to the left side */
-        .eqb-key { position:fixed; left:clamp(8px,1.6vw,26px); top:50%; transform:translateY(-50%); z-index:10; background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:16px; padding:14px 16px; box-shadow:var(--bdb-shadow-sm); display:grid; gap:8px; justify-items:center; }
-        .eqb-key-title { font-size:0.68rem; font-weight:800; letter-spacing:0.09em; text-transform:uppercase; color:var(--bdb-ink-faint); }
-        .eqb-key-row { display:flex; align-items:center; gap:10px; font-family:"Chakra Petch", "Albert Sans", ui-sans-serif, sans-serif; font-weight:700; font-size:1.5rem; color:var(--bdb-ink); }
+        /* inverse-operations key — always a box pinned on the left, the
+           + ↔ − pair stacked on top of the × ↔ ÷ pair */
+        .eqb-key { position:fixed; left:clamp(8px,1.6vw,26px); top:50%; transform:translateY(-50%); z-index:10; background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:16px; padding:14px 16px; box-shadow:var(--bdb-shadow-sm); display:grid; gap:10px; justify-items:center; }
+        .eqb-key-title { font-size:0.68rem; font-weight:800; letter-spacing:0.09em; text-transform:uppercase; color:var(--bdb-ink-faint); max-width:110px; text-align:center; }
+        .eqb-key-row { display:flex; align-items:center; gap:10px; font-family:var(--bdb-font); font-weight:800; font-size:1.5rem; color:var(--bdb-ink); }
         .eqb-key-row .arr { color:var(--bdb-coral); font-size:1.2rem; }
-        @media (max-width:1050px) { .eqb-key { position:static; transform:none; grid-auto-flow:column; align-items:center; gap:14px; padding:8px 14px; margin:0 auto; } .eqb-key-title { max-width:90px; text-align:center; } }
+        @media (max-width:820px) { .eqb-key { padding:10px; gap:6px; } .eqb-key-row { font-size:1.1rem; gap:7px; } .eqb-key-title { font-size:0.58rem; max-width:80px; } }
         .eqb-streak { margin-left:auto; margin-right:auto; display:inline-flex; align-items:center; gap:8px; font-weight:800; font-size:1.02rem; background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:999px; padding:8px 18px; box-shadow:var(--bdb-shadow-sm); }
         .eqb-streak b { color:var(--bdb-coral); font-size:1.2rem; }
         .eqb-new { font-size:0.84rem; font-weight:600; color:var(--bdb-ink-soft); background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:999px; padding:8px 14px; cursor:pointer; }
@@ -484,7 +487,7 @@ export default function EquationBuilder() {
         /* column-gap stays 0 so an empty constant column takes no width —
            spacing comes from the = sign and from non-empty constant content */
         .eq-work { display:grid; grid-template-columns:minmax(0,auto) minmax(0,auto) auto minmax(0,auto); align-items:start; column-gap:0; row-gap:clamp(10px,2vw,18px); justify-content:center; margin-top:clamp(14px,3vh,34px); }
-        .eq-work.roomy { margin-top:clamp(60px,16vh,170px); }
+        .eq-work.roomy { margin-top:clamp(24px,7vh,64px); }
         .eq-cell.c-eq { margin:0 clamp(10px,2.2vw,20px); }
         .eq-cell.c-const > * { margin-left:clamp(10px,2.2vw,20px); }
         .eq-work.flip .c-var { align-items:flex-start; }
@@ -493,13 +496,14 @@ export default function EquationBuilder() {
         .eq-cell.c-var { align-items:flex-end; }
         .eq-cell.c-const, .eq-cell.c-rhs { align-items:flex-start; }
         @keyframes eqIn { from{opacity:0; transform:translateY(-8px);} to{opacity:1; transform:none;} }
-        .eq-g { font-family:"Chakra Petch", "Albert Sans", ui-sans-serif, sans-serif; font-weight:700; font-size:clamp(2.5rem,7.5vw,4.4rem); line-height:1.06; white-space:nowrap; }
+        .eq-g { font-family:var(--bdb-font); font-weight:800; font-size:clamp(3.4rem,10vw,6.6rem); line-height:1.06; white-space:nowrap; }
         .eq-coef, .eq-const, .eq-equals, .eq-rhs { color:var(--bdb-ink); }
         .eq-x { color:var(--bdb-ink); font-style:italic; padding-right:2px; border-radius:10px; }
         /* once the student identifies the variable it stays highlighted, like a highlighter */
         .eq-found .eq-x { background:color-mix(in srgb, var(--bdb-amber) 55%, white); box-shadow:0 0 0 2px color-mix(in srgb, var(--bdb-amber) 70%, white); padding:0 6px; }
         .eq-zero { color:var(--bdb-ink-faint); }
         .eq-faded { opacity:0.45; }
+        .eq-fshift { padding-top:0.57em; }
         .eq-term { display:inline-flex; align-items:baseline; }
 
         .eq-tap { cursor:pointer; border-radius:14px; padding:0 6px; transition:background 130ms, box-shadow 130ms; }
@@ -507,7 +511,7 @@ export default function EquationBuilder() {
         .eq-tap-x { box-shadow:0 0 0 0 transparent; }
         .eq-wrongglyph { background:color-mix(in srgb, #ef4444 16%, transparent); box-shadow:0 0 0 3px color-mix(in srgb, #ef4444 45%, transparent); border-radius:14px; }
 
-        .eq-under { font-family:"Chakra Petch", "Albert Sans", ui-sans-serif, sans-serif; font-weight:700; font-size:clamp(1.5rem,4.2vw,2.5rem); color:var(--bdb-coral); white-space:nowrap; }
+        .eq-under { font-family:var(--bdb-font); font-weight:700; font-size:clamp(2rem,5.6vw,3.4rem); color:var(--bdb-coral); white-space:nowrap; }
         .eq-drop { animation:eqDropIn 0.7s cubic-bezier(0.2,1.4,0.4,1); }
         @keyframes eqDropIn { from{opacity:0; transform:translateY(-46px) scale(0.7);} 60%{opacity:1;} to{opacity:1; transform:none;} }
         .eq-rule { grid-column:1 / -1; height:0; border-top:4px solid var(--bdb-ink); border-radius:2px; margin:2px 0; animation:eqRule 0.5s ease; }
@@ -515,7 +519,7 @@ export default function EquationBuilder() {
 
         /* x over a divisor, rendered as a stacked fraction */
         .eq-frac { display:inline-flex; flex-direction:column; align-items:center; gap:2px; }
-        .eq-fracbar { height:4px; min-width:44px; width:100%; background:var(--bdb-ink); border-radius:2px; }
+        .eq-fracbar { height:5px; min-width:60px; width:100%; background:var(--bdb-ink); border-radius:3px; }
 
         .eq-landed { animation:eqDropIn 0.5s cubic-bezier(0.2,1.4,0.4,1); }
 
@@ -523,10 +527,10 @@ export default function EquationBuilder() {
         .eq-zwrap { display:flex; flex-direction:column; align-items:center; gap:4px; }
         .eq-vanish { animation:eqVanish 0.6s ease forwards; }
         @keyframes eqVanish { to { opacity:0; transform:scale(0.7); } }
-        .eq-zeropop { font-family:"Chakra Petch", "Albert Sans", ui-sans-serif, sans-serif; font-weight:700; font-size:clamp(1.3rem,3.4vw,2rem); color:var(--bdb-green); background:color-mix(in srgb, var(--bdb-green) 14%, white); border:3px solid var(--bdb-green); border-radius:14px; padding:2px 14px; animation:eqZeroPop 0.55s cubic-bezier(0.2,1.5,0.4,1); }
+        .eq-zeropop { font-family:var(--bdb-font); font-weight:700; font-size:clamp(1.3rem,3.4vw,2rem); color:var(--bdb-green); background:color-mix(in srgb, var(--bdb-green) 14%, white); border:3px solid var(--bdb-green); border-radius:14px; padding:2px 14px; animation:eqZeroPop 0.55s cubic-bezier(0.2,1.5,0.4,1); }
         @keyframes eqZeroPop { from { opacity:0; transform:scale(0.2); } to { opacity:1; transform:scale(1); } }
 
-        .eq-input { font-family:"Chakra Petch", "Albert Sans", ui-sans-serif, sans-serif; font-weight:700; font-size:clamp(1.7rem,4.6vw,2.7rem); text-align:center; width:clamp(84px,14vw,130px); padding:6px 8px; border-radius:14px; border:3px solid var(--bdb-line); background:var(--bdb-card); color:var(--bdb-ink); outline:none; }
+        .eq-input { font-family:var(--bdb-font); font-weight:700; font-size:clamp(2.2rem,6vw,3.6rem); text-align:center; width:clamp(110px,18vw,180px); padding:6px 8px; border-radius:16px; border:3px solid var(--bdb-line); background:var(--bdb-card); color:var(--bdb-ink); outline:none; }
         .eq-input:focus { border-color:var(--bdb-teal); }
         .eq-input.ok { border-color:var(--bdb-green); background:color-mix(in srgb, var(--bdb-green) 10%, white); color:var(--bdb-green); }
         .eq-input.bad { border-color:#ef4444; background:color-mix(in srgb, #ef4444 8%, white); animation:eqShake 0.35s ease; }
@@ -562,7 +566,7 @@ export default function EquationBuilder() {
 
         /* ── celebration ── */
         .eqb-celebrate { display:grid; justify-items:center; gap:12px; text-align:center; }
-        .eqb-solved-eq { font-family:"Chakra Petch", "Albert Sans", ui-sans-serif, sans-serif; font-size:clamp(2.6rem,8vw,4.6rem); font-weight:700; color:var(--bdb-green); animation:eqDropIn 0.6s cubic-bezier(0.2,1.4,0.4,1); }
+        .eqb-solved-eq { font-family:var(--bdb-font); font-size:clamp(3.2rem,10vw,6rem); font-weight:800; color:var(--bdb-green); animation:eqDropIn 0.6s cubic-bezier(0.2,1.4,0.4,1); }
         .eqb-cheer { font-size:1.12rem; font-weight:700; color:var(--bdb-ink); }
         .eqb-confetti { position:fixed; inset:0; pointer-events:none; overflow:hidden; z-index:50; }
         .eqb-cf { position:absolute; top:-14px; width:10px; height:16px; border-radius:3px; animation:eqbFall 1.8s ease-in forwards; }
