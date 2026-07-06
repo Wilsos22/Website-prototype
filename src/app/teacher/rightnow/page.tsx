@@ -120,8 +120,8 @@ export default function RightNowPage() {
       `}</style>
 
       <div className="rn-wrap">
-        <h1 className="rn-h1">🎯 Right now</h1>
-        <div className="rn-sub">Who to pull and what to do — grouped by the misconception their work keeps showing. A tag needs 2+ hits to count, and the ✓ badge means i-Ready agrees.</div>
+        <h1 className="rn-h1">🌱 Growth</h1>
+        <div className="rn-sub">Your immediate next steps, right now — who to pull and what to do, grouped by the misconception their work keeps showing. A tag needs 2+ hits to count, and the ✓ badge means i-Ready agrees.</div>
 
         <div className="rn-controls">
           <select className="rn-select" value={periodId} onChange={(e) => setPeriodId(e.target.value)}>
