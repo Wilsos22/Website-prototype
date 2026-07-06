@@ -1,22 +1,25 @@
 "use client";
 
-// Guided Equation Builder & Solver — aligned worked-solution on a fixed grid.
-// Build ax + b = c, then solve. When you subtract (or add) to both sides, the
-// opposite value stacks under each side; on the variable side the +b and −b
-// form a zero pair that a red box animates over (the boxes STAY, they don't
-// vanish); the result then drops one row lower. Columns stay aligned on a grid.
+// Guided Equation Builder & Solver — student-facing solving reps.
+// Equations generate themselves (1-step or 2-step); the picking engine is not
+// student-facing. A teacher can still deploy a specific problem through Live
+// Flow and it loads here automatically. The student states the goal, taps the
+// actual variable (not the coefficient), picks the first move, watches the
+// inverse drop onto both sides above a horizontal line, drags the remaining
+// variable term down to the next line, writes the 0 and computes the other
+// side themselves — then celebrates and rolls straight into the next one,
+// with a running "in a row" count for the session.
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { LiveToolBanner, useLiveToolConfig } from "./useLiveToolConfig";
 
-type Op = "add" | "subtract" | "multiply" | "divide";
-type Phase = "build" | "goal" | "tap-var" | "ask-op" | "ask-term" | "compute" | "animating" | "solved";
-interface Eq { coef: number; divisor: number; constant: number; rhs: number }
-interface StepOp { kind: "cancel" | "divide" | "multiply"; val: number }
-interface Row { eq: Eq; op?: StepOp }
+type Phase = "idle" | "goal" | "tap-var" | "move" | "anim" | "pull" | "write" | "celebrate";
+type Level = "regular" | "levelup";
+type Steps = "one" | "two" | "mix";
+interface Line { coef: number; constant: number; rhs: number; showZero?: boolean; opAfter?: PendingOp }
+type PendingOp = { kind: "cancel" | "divide"; val: number };
+interface MoveChoice { label: string; correct: boolean }
 
-const OP_LABEL: Record<Op, string> = { add: "Add", subtract: "Subtract", multiply: "Multiply", divide: "Divide" };
-const PRESETS: [number, number, number][] = [[1, 5, 7], [2, 3, 4], [3, -4, 5], [4, 6, 3], [2, -7, 9]];
 const GOAL_CHOICES: { label: string; correct: boolean }[] = [
   { label: "Isolate the variable", correct: true },
   { label: "Make both sides as big as possible", correct: false },
@@ -24,37 +27,106 @@ const GOAL_CHOICES: { label: string; correct: boolean }[] = [
   { label: "Remove the variable", correct: false },
 ];
 
-function stepOf(eq: Eq): "constant" | "coefficient" | "divisor" | "done" {
-  if (eq.constant !== 0) return "constant";
-  if (eq.coef !== 1) return "coefficient";
-  if (eq.divisor !== 1) return "divisor";
+function ri(lo: number, hi: number): number { return lo + Math.floor(Math.random() * (hi - lo + 1)); }
+function shuffle<T>(a: T[]): T[] { return [...a].sort(() => Math.random() - 0.5); }
+function sign(v: number): string { return v > 0 ? "+" : "−"; }
+
+function genProblem(steps: Steps): Line {
+  const kind = steps === "one" ? (Math.random() < 0.5 ? "add" : "mul")
+    : steps === "two" ? "two"
+    : (["add", "mul", "two", "two"] as const)[ri(0, 3)];
+  if (kind === "add") {
+    const b = (Math.random() < 0.5 ? 1 : -1) * ri(2, 9);
+    const x = b < 0 ? ri(-b + 1, 14) : ri(1, 12);
+    return { coef: 1, constant: b, rhs: x + b };
+  }
+  if (kind === "mul") {
+    const a = ri(2, 9); const x = ri(2, 12);
+    return { coef: a, constant: 0, rhs: a * x };
+  }
+  const a = ri(2, 6);
+  const b = (Math.random() < 0.5 ? 1 : -1) * ri(2, 9);
+  const x = ri(2, 12);
+  return { coef: a, constant: b, rhs: a * x + b };
+}
+
+function stepOf(l: Line): "cancel" | "divide" | "done" {
+  if (l.constant !== 0) return "cancel";
+  if (l.coef !== 1) return "divide";
   return "done";
 }
-function shuffle<T>(a: T[]): T[] { return [...a].sort(() => Math.random() - 0.5); }
-function opSign(v: number): string { return `${v > 0 ? "−" : "+"} ${Math.abs(v)}`; }
+
+function moveChoicesFor(l: Line): MoveChoice[] {
+  const s = stepOf(l);
+  if (s === "cancel") {
+    const b = Math.abs(l.constant);
+    const correct = l.constant > 0 ? `Subtract ${b} from both sides` : `Add ${b} to both sides`;
+    const wrongs = [
+      l.constant > 0 ? `Add ${b} to both sides` : `Subtract ${b} from both sides`,
+      `Divide both sides by ${l.coef > 1 ? l.coef : b}`,
+      `Subtract ${Math.abs(l.rhs)} from both sides`,
+    ];
+    return shuffle([{ label: correct, correct: true }, ...wrongs.map((w) => ({ label: w, correct: false }))]);
+  }
+  const a = l.coef;
+  return shuffle([
+    { label: `Divide both sides by ${a}`, correct: true },
+    { label: `Multiply both sides by ${a}`, correct: false },
+    { label: `Subtract ${a} from both sides`, correct: false },
+    { label: `Divide both sides by ${Math.abs(l.rhs)}`, correct: false },
+  ]);
+}
+
+function goalTextOk(t: string): boolean {
+  const s = t.toLowerCase();
+  const hasVar = /variable|\bx\b|letter/.test(s);
+  const iso = /isolat|alone|by itself|on its own|separate/.test(s);
+  return hasVar && iso;
+}
 
 export default function EquationBuilder() {
   const liveTool = useLiveToolConfig("/equation-builder");
-  const [a, setA] = useState(2);
-  const [b, setB] = useState(3);
-  const [xAns, setXAns] = useState(4);
-  const [varOp, setVarOp] = useState<"×" | "÷">("×");
-  const isDiv = varOp === "÷";
-  const xUse = isDiv ? Math.max(a, Math.round(xAns / a) * a) : xAns;
-  const c = isDiv ? xUse / a + b : a * xUse + b;
+  const [level, setLevel] = useState<Level>("regular");
+  const [steps, setSteps] = useState<Steps>("mix");
+  const [streak, setStreak] = useState(0);
 
-  const [phase, setPhase] = useState<Phase>("build");
-  const [rows, setRows] = useState<Row[]>([]);
+  // Fixed starter so server + client render identically; randomized after mount.
+  const [lines, setLines] = useState<Line[]>([{ coef: 2, constant: 7, rhs: 13 }]);
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [pendingOp, setPendingOp] = useState<PendingOp | null>(null);
   const [feedback, setFeedback] = useState("");
   const [hint, setHint] = useState<string | null>(null);
-  const [wrong, setWrong] = useState(0);
-  const [mode, setMode] = useState<"beginner" | "advanced">("beginner");
-  const [pending, setPending] = useState<{ ne: Eq; op: StepOp; expr: string; answer: number } | null>(null);
-  const [computeInput, setComputeInput] = useState("");
+
+  // goal question
+  const [goalWrong, setGoalWrong] = useState<Set<number>>(new Set());
+  const [goalHit, setGoalHit] = useState<number | null>(null);
+  const [goalText, setGoalText] = useState("");
+  const [goalTries, setGoalTries] = useState(0);
+
+  // tap the variable
+  const [tapWrong, setTapWrong] = useState<Set<string>>(new Set());
+  const [tapHit, setTapHit] = useState(false);
+
+  // first-move question
+  const [moves, setMoves] = useState<MoveChoice[]>([]);
+  const [moveWrong, setMoveWrong] = useState<Set<number>>(new Set());
+  const [moveHit, setMoveHit] = useState<number | null>(null);
+
+  // pull-down drag + write-in
+  const [pulled, setPulled] = useState(false);
+  const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
+  const [pullMisses, setPullMisses] = useState(0);
+  const [zeroInput, setZeroInput] = useState("");
+  const [rhsInput, setRhsInput] = useState("");
+  const [zeroOk, setZeroOk] = useState<"idle" | "ok" | "bad">("idle");
+  const [rhsOk, setRhsOk] = useState<"idle" | "ok" | "bad">("idle");
+  const dropRef = useRef<HTMLDivElement | null>(null);
+
+  const [confetti, setConfetti] = useState<{ left: number; delay: number; hue: number; drift: number }[]>([]);
 
   const audioRef = useRef<AudioContext | null>(null);
-  const eq = rows.length ? rows[rows.length - 1].eq : null;
-  const step = eq ? stepOf(eq) : "done";
+  const cur = lines[lines.length - 1];
+  const step = stepOf(cur);
 
   const tone = useCallback((freqs: number[], gap = 0.12, dur = 0.16) => {
     try {
@@ -72,436 +144,528 @@ export default function EquationBuilder() {
   }, []);
   const sCorrect = useCallback(() => tone([523, 784]), [tone]);
   const sWrong = useCallback(() => tone([180, 140]), [tone]);
-  const sCancel = useCallback(() => tone([700, 500, 320], 0.08, 0.12), [tone]);
+  const sDrop = useCallback(() => tone([700, 500, 320], 0.08, 0.12), [tone]);
   const sSolved = useCallback(() => tone([523, 659, 784, 1047], 0.1, 0.2), [tone]);
 
-  function startSolve() {
-    const e: Eq = { coef: isDiv ? 1 : a, divisor: isDiv ? a : 1, constant: b, rhs: c };
-    setRows([{ eq: e }]);
-    setWrong(0); setHint(null);
-    if (stepOf(e) === "done") { setPhase("solved"); sSolved(); }
-    else if (mode === "beginner") { setPhase("goal"); setFeedback(""); }
-    else { setPhase("ask-op"); setFeedback(askOpText(e)); }
+  useEffect(() => {
+    let s: Steps = "mix";
+    try {
+      const l = localStorage.getItem("eqb-level"); if (l === "regular" || l === "levelup") setLevel(l);
+      const st = localStorage.getItem("eqb-steps"); if (st === "one" || st === "two" || st === "mix") s = st;
+    } catch { /* ignore */ }
+    setSteps(s);
+    setLines([genProblem(s)]);
+  }, []);
+  function saveLevel(l: Level) { setLevel(l); try { localStorage.setItem("eqb-level", l); } catch { /* ignore */ } }
+  function saveSteps(s: Steps) {
+    setSteps(s); try { localStorage.setItem("eqb-steps", s); } catch { /* ignore */ }
+    if (phase === "idle") setLines([genProblem(s)]);
   }
-  function loadPreset(p: [number, number, number]) { setVarOp("×"); setA(p[0]); setB(p[1]); setXAns(p[2]); }
 
+  // A teacher-deployed problem replaces the generated one.
   useEffect(() => {
     if (!liveTool || liveTool.route !== "/equation-builder") return;
-    setA(liveTool.config.coefficient);
-    setB(liveTool.config.constant);
-    setXAns(liveTool.config.solution);
-    setVarOp("×");
-    setPhase("build"); setRows([]); setFeedback(""); setHint(null); setWrong(0);
+    const { coefficient, constant, solution } = liveTool.config;
+    freshQuestion({ coef: coefficient, constant, rhs: coefficient * solution + constant });
   }, [liveTool?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function pickGoal(correct: boolean) {
-    if (correct) { sCorrect(); setFeedback(""); setPhase("tap-var"); }
-    else { sWrong(); setWrong((w) => w + 1); setFeedback("Not quite — solving an equation means getting the variable by itself."); }
+  function resetQuestionState() {
+    setPendingOp(null); setFeedback(""); setHint(null);
+    setGoalWrong(new Set()); setGoalHit(null); setGoalText(""); setGoalTries(0);
+    setTapWrong(new Set()); setTapHit(false);
+    setMoves([]); setMoveWrong(new Set()); setMoveHit(null);
+    setPulled(false); setDrag(null); setPullMisses(0);
+    setZeroInput(""); setRhsInput(""); setZeroOk("idle"); setRhsOk("idle");
+    setConfetti([]);
   }
-  function tapVar() {
-    if (phase !== "tap-var" || !eq) return;
-    sCorrect(); setPhase("ask-op"); setFeedback(askOpText(eq));
-  }
-
-  function askOpText(e: Eq): string {
-    return stepOf(e) === "constant" ? "What inverse operation gets the variable term by itself?" : "What operation isolates x now?";
-  }
-  function correctOp(e: Eq): Op {
-    const s = stepOf(e);
-    if (s === "constant") return e.constant > 0 ? "subtract" : "add";
-    if (s === "divisor") return "multiply";
-    return "divide";
-  }
-  function correctTerm(e: Eq): number {
-    const s = stepOf(e);
-    if (s === "constant") return Math.abs(e.constant);
-    if (s === "divisor") return e.divisor;
-    return e.coef;
-  }
-  function termChoices(e: Eq): number[] {
-    const correct = correctTerm(e);
-    const pool = [e.coef, e.divisor, Math.abs(e.constant), Math.abs(e.rhs), correct + 1, Math.max(2, correct - 1)].filter((n) => n > 0 && n !== correct);
-    const distractors = shuffle(Array.from(new Set(pool))).slice(0, 3);
-    return shuffle([correct, ...distractors]);
+  function freshQuestion(problem?: Line) {
+    resetQuestionState();
+    setLines([problem ?? genProblem(steps)]);
+    setPhase("idle");
   }
 
-  function giveHint() {
-    if (!eq) return;
-    if (phase === "ask-op") {
-      setHint(step === "constant"
-        ? `The constant is ${eq.constant > 0 ? "+" : "−"}${Math.abs(eq.constant)}. To undo it, do the OPPOSITE operation on both sides.`
-        : step === "divisor"
-        ? `The ${eq.divisor} is underneath x (it's dividing x). Underneath it, multiply it.`
-        : `The ${eq.coef} is beside x (it's multiplying x). Beside it, divide it.`);
-    } else if (phase === "ask-term") {
-      setHint(step === "constant"
-        ? `You're undoing ${eq.constant > 0 ? "+" : "−"}${Math.abs(eq.constant)} — which number cancels it to make a zero pair?`
-        : step === "divisor"
-        ? `x is divided by ${eq.divisor}, so multiply both sides by ${eq.divisor}.`
-        : `x is multiplied by ${eq.coef}, so divide both sides by ${eq.coef}.`);
-    }
+  function startSolving() {
+    resetQuestionState();
+    setLines((l) => [l[0]]);
+    setPhase("goal");
   }
 
-  function pickOp(op: Op) {
-    if (!eq) return;
-    if (op === correctOp(eq)) {
-      sCorrect(); setHint(null);
-      setFeedback(step === "constant" ? `Yes — ${OP_LABEL[op]} from both sides. ${OP_LABEL[op]} what?` : `Right — ${OP_LABEL[op]} both sides. By what?`);
-      setPhase("ask-term");
+  // ── goal ──
+  function pickGoal(i: number) {
+    if (goalHit !== null) return;
+    if (GOAL_CHOICES[i].correct) {
+      setGoalHit(i); sCorrect();
+      window.setTimeout(() => { setPhase("tap-var"); setFeedback("Tap the variable you're solving for."); }, 650);
     } else {
-      sWrong(); setWrong((w) => w + 1); giveHint();
-      setFeedback("Not quite — think about the opposite operation. Check the hint.");
+      sWrong();
+      setGoalWrong((w) => new Set(w).add(i));
+    }
+  }
+  function submitGoalText() {
+    if (goalTextOk(goalText)) {
+      setGoalHit(0); sCorrect();
+      window.setTimeout(() => { setPhase("tap-var"); setFeedback("Tap the variable you're solving for."); }, 650);
+    } else {
+      sWrong(); setGoalTries((t) => t + 1);
+      setFeedback(goalTries >= 2 ? "Hint: it starts with “isolate…” — what do you want to happen to the variable?" : "Not quite — what do you want the variable to end up like?");
     }
   }
 
-  function pickTerm(t: number) {
-    if (!eq) return;
-    if (t !== correctTerm(eq)) {
-      sWrong(); setWrong((w) => w + 1); giveHint();
-      setFeedback("Close — that number won't isolate x. Peek at the hint.");
+  // ── tap the variable itself ──
+  function tapPart(part: "coef" | "const" | "rhs" | "x") {
+    if (phase !== "tap-var" || tapHit) return;
+    if (part === "x") {
+      setTapHit(true); sCorrect();
+      window.setTimeout(() => {
+        setTapWrong(new Set());
+        beginMove("What is the first move I can make to isolate the variable?");
+      }, 500);
       return;
     }
-    sCorrect(); setHint(null);
-    // build the resulting equation AND the arithmetic the student still has to do
-    let ne: Eq, op: StepOp, expr: string, answer: number;
-    if (step === "constant") {
-      answer = eq.rhs - eq.constant;
-      ne = { coef: eq.coef, divisor: eq.divisor, constant: 0, rhs: answer };
-      op = { kind: "cancel", val: eq.constant };
-      expr = `${eq.rhs} ${eq.constant > 0 ? "−" : "+"} ${Math.abs(eq.constant)}`;
-    } else if (step === "divisor") {
-      answer = eq.rhs * eq.divisor;
-      ne = { coef: 1, divisor: 1, constant: 0, rhs: answer };
-      op = { kind: "multiply", val: eq.divisor };
-      expr = `${eq.rhs} × ${eq.divisor}`;
+    sWrong();
+    setTapWrong((w) => new Set(w).add(part));
+    setFeedback(part === "coef"
+      ? `That's the coefficient — the number multiplying the variable. Tap the letter itself.`
+      : part === "const"
+      ? "That's the constant. Tap the variable — the letter you're solving for."
+      : "That side is just a number. Tap the variable — the letter.");
+  }
+
+  function beginMove(q: string, line?: Line) {
+    setMoves(moveChoicesFor(line ?? lines[lines.length - 1]));
+    setMoveWrong(new Set()); setMoveHit(null); setHint(null);
+    setFeedback(q);
+    setPhase("move");
+  }
+
+  // ── first move ──
+  function pickMove(i: number) {
+    if (moveHit !== null) return;
+    const l = lines[lines.length - 1];
+    if (moves[i].correct) {
+      setMoveHit(i); sCorrect(); setHint(null);
+      const op: PendingOp = stepOf(l) === "cancel" ? { kind: "cancel", val: l.constant } : { kind: "divide", val: l.coef };
+      window.setTimeout(() => {
+        setPendingOp(op); setPhase("anim"); sDrop();
+        setFeedback(op.kind === "cancel" ? "The inverse drops onto BOTH sides…" : "Divide both sides…");
+        window.setTimeout(() => {
+          if (op.kind === "cancel") { setPhase("pull"); setFeedback("Now pull down the remaining terms — drag the variable term to the next line."); }
+          else { setPhase("write"); setFeedback("The coefficient cancels — now compute the other side."); }
+        }, 1100);
+      }, 550);
     } else {
-      answer = eq.rhs / eq.coef;
-      ne = { coef: 1, divisor: 1, constant: 0, rhs: answer };
-      op = { kind: "divide", val: eq.coef };
-      expr = `${eq.rhs} ÷ ${eq.coef}`;
+      sWrong();
+      setMoveWrong((w) => {
+        const nw = new Set(w).add(i);
+        if (nw.size >= 2) setHint(stepOf(l) === "cancel"
+          ? `The constant is ${sign(l.constant)}${Math.abs(l.constant)}. Undo it with the OPPOSITE operation — on both sides.`
+          : `x is multiplied by ${l.coef}. Undo multiplication with its inverse.`);
+        return nw;
+      });
     }
-    setPending({ ne, op, expr, answer });
-    setComputeInput(""); setFeedback(""); setPhase("compute");
   }
 
-  function submitCompute() {
-    if (!pending) return;
-    if (Number(computeInput) === pending.answer) {
-      sCorrect(); setPhase("animating"); sCancel();
-      const { ne, op } = pending;
-      setRows((r) => [...r, { eq: ne, op }]);
-      setPending(null);
-      window.setTimeout(() => advance(ne), 1300);
+  // ── drag the variable term down ──
+  function onTermPointerDown(e: React.PointerEvent) {
+    if (phase !== "pull" || pulled) return;
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    setDrag({ x: e.clientX, y: e.clientY });
+  }
+  function onTermPointerMove(e: React.PointerEvent) {
+    if (drag) setDrag({ x: e.clientX, y: e.clientY });
+  }
+  function onTermPointerUp(e: React.PointerEvent) {
+    if (!drag) return;
+    const r = dropRef.current?.getBoundingClientRect();
+    const pad = 34;
+    if (r && e.clientX > r.left - pad && e.clientX < r.right + pad && e.clientY > r.top - pad && e.clientY < r.bottom + pad) {
+      landPull();
     } else {
-      sWrong(); setWrong((w) => w + 1);
-      setFeedback(`Not yet — recompute ${pending.expr}.`);
+      setPullMisses((m) => m + 1);
+      if (pullMisses >= 1) setHint("Drag the variable term straight down into the dashed box on the next line.");
+    }
+    setDrag(null);
+  }
+  function landPull() {
+    setPulled(true); sDrop();
+    setPhase("write");
+    setFeedback("It copies down. Now write what each side becomes.");
+  }
+
+  // ── write the results ──
+  const zeroExpected = 0;
+  const rhsExpected = pendingOp?.kind === "cancel" ? cur.rhs - cur.constant : pendingOp ? cur.rhs / pendingOp.val : 0;
+
+  function checkZero() {
+    if (zeroInput.trim() === "") return;
+    if (Number(zeroInput) === zeroExpected) { setZeroOk("ok"); sCorrect(); }
+    else { setZeroOk("bad"); sWrong(); setFeedback(`${sign(cur.constant)}${Math.abs(cur.constant)} and ${sign(-cur.constant)}${Math.abs(cur.constant)} make a zero pair — what's left?`); }
+  }
+  function checkRhs() {
+    if (rhsInput.trim() === "") return;
+    if (Number(rhsInput) === rhsExpected) { setRhsOk("ok"); sCorrect(); }
+    else {
+      setRhsOk("bad"); sWrong();
+      setFeedback(pendingOp?.kind === "cancel"
+        ? `Recompute ${cur.rhs} ${sign(-cur.constant)} ${Math.abs(cur.constant)}.`
+        : `Recompute ${cur.rhs} ÷ ${pendingOp?.val}.`);
     }
   }
+  useEffect(() => {
+    if (phase !== "write" || !pendingOp) return;
+    const need = pendingOp.kind === "cancel" ? zeroOk === "ok" && rhsOk === "ok" : rhsOk === "ok";
+    if (!need) return;
+    const t = window.setTimeout(() => {
+      const next: Line = pendingOp.kind === "cancel"
+        ? { coef: cur.coef, constant: 0, rhs: rhsExpected, showZero: true }
+        : { coef: 1, constant: 0, rhs: rhsExpected };
+      // keep the inverse annotations + rule on the finished line, like paper
+      setLines((l) => [...l.slice(0, -1), { ...l[l.length - 1], opAfter: pendingOp }, next]);
+      setPendingOp(null); setPulled(false);
+      setZeroInput(""); setRhsInput(""); setZeroOk("idle"); setRhsOk("idle");
+      if (stepOf(next) === "done") {
+        setPhase("celebrate"); setFeedback(""); sSolved();
+        setStreak((s) => s + 1);
+        setConfetti(Array.from({ length: 26 }, () => ({ left: ri(2, 98), delay: Math.random() * 0.5, hue: ri(0, 360), drift: ri(-80, 80) })));
+      } else {
+        beginMove("The constant is gone. What's the next move to isolate the variable?", next);
+      }
+    }, 550);
+    return () => window.clearTimeout(t);
+  }, [phase, pendingOp, zeroOk, rhsOk]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function advance(ne: Eq) {
-    if (stepOf(ne) === "done") { setPhase("solved"); setFeedback(""); sSolved(); }
-    else { setPhase("ask-op"); setFeedback(askOpText(ne)); }
-  }
-  function reset() { setPhase("build"); setRows([]); setFeedback(""); setHint(null); setWrong(0); }
-
-  // ── chips ──
-  function varChip(coef: number, clickable = false) {
-    return <span className={`eqb-chip eqb-x${clickable ? " eqb-x-click" : ""}`} onClick={clickable ? tapVar : undefined}>{coef === 1 ? "x" : `${coef}x`}</span>;
-  }
-  function constChip(v: number) {
-    const pos = v > 0;
-    return <span className={`eqb-chip ${pos ? "eqb-pos" : "eqb-neg"}`}>{pos ? "+" : "−"}{Math.abs(v)}</span>;
-  }
-  function numChip(v: number) { return <span className="eqb-chip eqb-rhs">{v}</span>; }
-  function underChip(label: string) { return <span className="eqb-under-chip">{label}</span>; }
-
-  // Aligned worked-solution cells. 4 fixed columns: coef | const | = | rhs.
-  function fracCoef(coef: number) {
-    return (
-      <span className="eqb-frac">
-        <span className="num"><span className="eqb-canc">{coef}</span><span className="eqb-xkeep">x</span></span>
-        <span className="bar" />
-        <span className="den"><span className="eqb-canc">{coef}</span></span>
-      </span>
+  // ── glyph renderers (big serif, colored characters — no boxes) ──
+  function varTerm(l: Line, opts: { tapZone?: boolean; pullable?: boolean; faded?: boolean } = {}) {
+    const coefEl = l.coef !== 1 && (
+      <span
+        className={`eq-g eq-coef${opts.tapZone ? " eq-tap" : ""}${opts.tapZone && tapWrong.has("coef") ? " eq-wrongglyph" : ""}`}
+        onClick={opts.tapZone ? () => tapPart("coef") : undefined}
+      >{l.coef}</span>
     );
-  }
-  function fracRhs(rhs: number, a: number) {
-    return (
-      <span className="eqb-frac">
-        <span className="num">{rhs}</span>
-        <span className="bar" />
-        <span className="den">{a}</span>
-      </span>
+    const xEl = (
+      <span
+        className={`eq-g eq-x${opts.tapZone ? " eq-tap eq-tap-x" : ""}${opts.tapZone && tapHit ? " eq-hitglyph" : ""}`}
+        onClick={opts.tapZone ? () => tapPart("x") : undefined}
+      >x</span>
     );
+    const inner = <>{coefEl}{xEl}</>;
+    if (opts.pullable) {
+      return (
+        <span
+          className={`eq-term eq-pullable${drag ? " eq-dragging" : ""}`}
+          onPointerDown={onTermPointerDown} onPointerMove={onTermPointerMove} onPointerUp={onTermPointerUp}
+        >{inner}</span>
+      );
+    }
+    return <span className={`eq-term${opts.faded ? " eq-faded" : ""}`}>{inner}</span>;
   }
-  // x over a divisor; when cancel, the divisor is struck (it's being multiplied away)
-  function varFrac(divisor: number, cancel: boolean, clickable: boolean) {
-    const f = (
-      <span className="eqb-frac">
-        <span className="num"><span className="eqb-xkeep">x</span></span>
-        <span className="bar" />
-        <span className="den">{cancel ? <span className="eqb-canc">{divisor}</span> : divisor}</span>
-      </span>
-    );
-    return clickable ? <span className="eqb-x-click eqb-fracwrap" onClick={tapVar}>{f}</span> : f;
-  }
-  function workedCells(): React.ReactNode[] {
-    const cells: React.ReactNode[] = [];
-    rows.forEach((row, i) => {
-      const e = row.eq;
-      const nextOp = rows[i + 1]?.op;
-      const cancel = nextOp?.kind === "cancel";
-      const divide = nextOp?.kind === "divide";
-      const multiply = nextOp?.kind === "multiply";
-      const isLast = i === rows.length - 1;
 
-      // ── equation row ──
-      const coefContent = divide
-        ? fracCoef(e.coef)
-        : e.divisor > 1
-        ? varFrac(e.divisor, multiply, isLast && phase === "tap-var")
-        : varChip(e.coef, isLast && phase === "tap-var");
-      cells.push(<div className="gc coef" key={`e${i}c`}>{coefContent}</div>);
-      cells.push(
-        <div className="gc const" key={`e${i}k`}>
-          {e.constant !== 0 ? (
-            cancel ? (
-              <span className="eqb-zero">
-                {constChip(e.constant)}
-                <span className="eqb-zero-neg">{opSign(nextOp!.val)}</span>
-                <span className="eqb-redbox" />
-              </span>
-            ) : constChip(e.constant)
-          ) : null}
+  function renderWorked() {
+    const out: React.ReactNode[] = [];
+    lines.forEach((l, i) => {
+      const isLast = i === lines.length - 1;
+      const liveOp = isLast && pendingOp && (phase === "anim" || phase === "pull" || phase === "write") ? pendingOp : null;
+      const shownOp = liveOp ?? l.opAfter ?? null;
+
+      out.push(
+        <div className="eq-cell c-var" key={`v${i}`}>
+          {varTerm(l, {
+            tapZone: isLast && phase === "tap-var",
+            pullable: isLast && phase === "pull" && !pulled,
+            faded: false,
+          })}
+          {shownOp?.kind === "divide" && <span className="eq-under eq-drop">÷ {shownOp.val}</span>}
         </div>
       );
-      cells.push(<div className="gc eq" key={`e${i}q`}><span className="eqb-eqsign">=</span></div>);
-      cells.push(<div className="gc right" key={`e${i}r`}>{divide ? fracRhs(e.rhs, nextOp!.val) : numChip(e.rhs)}</div>);
+      out.push(
+        <div className="eq-cell c-const" key={`c${i}`}>
+          {l.constant !== 0 ? (
+            <span
+              className={`eq-g eq-const${isLast && phase === "tap-var" ? " eq-tap" : ""}${tapWrong.has("const") && isLast ? " eq-wrongglyph" : ""}`}
+              onClick={isLast && phase === "tap-var" ? () => tapPart("const") : undefined}
+            >{sign(l.constant)} {Math.abs(l.constant)}</span>
+          ) : l.showZero ? (
+            <span className="eq-g eq-zero">+ 0</span>
+          ) : null}
+          {shownOp?.kind === "cancel" && <span className="eq-under eq-drop">{sign(-shownOp.val)} {Math.abs(shownOp.val)}</span>}
+        </div>
+      );
+      out.push(<div className="eq-cell c-eq" key={`e${i}`}><span className="eq-g eq-equals">=</span></div>);
+      out.push(
+        <div className="eq-cell c-rhs" key={`r${i}`}>
+          <span
+            className={`eq-g eq-rhs${isLast && phase === "tap-var" ? " eq-tap" : ""}${tapWrong.has("rhs") && isLast ? " eq-wrongglyph" : ""}`}
+            onClick={isLast && phase === "tap-var" ? () => tapPart("rhs") : undefined}
+          >{l.rhs}</span>
+          {shownOp && <span className="eq-under eq-drop">{shownOp.kind === "cancel" ? `${sign(-shownOp.val)} ${Math.abs(shownOp.val)}` : `÷ ${shownOp.val}`}</span>}
+        </div>
+      );
 
-      // ── operation row (creates the NEXT line) ──
-      if (cancel) {
-        cells.push(<div className="gc coef arrow" key={`o${i}c`}>↓</div>);
-        cells.push(<div className="gc const" key={`o${i}k`} />);
-        cells.push(<div className="gc eq" key={`o${i}q`} />);
-        cells.push(<div className="gc right" key={`o${i}r`}>{underChip(opSign(nextOp!.val))}</div>);
-        cells.push(<div className="gc hr" key={`o${i}hr`} />);
-      } else if (divide) {
-        // the fraction bars above already show the ÷ on both sides — just rule the line
-        cells.push(<div className="gc hr" key={`o${i}hr`} />);
-      } else if (multiply) {
-        cells.push(<div className="gc coef" key={`o${i}c`}>{underChip(`× ${nextOp!.val}`)}</div>);
-        cells.push(<div className="gc const" key={`o${i}k`} />);
-        cells.push(<div className="gc eq" key={`o${i}q`} />);
-        cells.push(<div className="gc right" key={`o${i}r`}>{underChip(`× ${nextOp!.val}`)}</div>);
-        cells.push(<div className="gc hr" key={`o${i}hr`} />);
+      if (shownOp) out.push(<div className="eq-rule" key={`hr${i}`} />);
+      if (liveOp) {
+        // pending next line
+        if (liveOp.kind === "cancel") {
+          out.push(
+            <div className="eq-cell c-var" key={`pv${i}`}>
+              {pulled ? (
+                <span className="eq-term eq-landed">{cur.coef !== 1 && <span className="eq-g eq-coef">{cur.coef}</span>}<span className="eq-g eq-x">x</span></span>
+              ) : (
+                <div className={`eq-slot${drag ? " eq-slot-hot" : ""}`} ref={dropRef}>{phase === "pull" ? "drop here" : ""}</div>
+              )}
+            </div>
+          );
+          out.push(
+            <div className="eq-cell c-const" key={`pc${i}`}>
+              <input
+                className={`eq-input${zeroOk === "ok" ? " ok" : zeroOk === "bad" ? " bad" : ""}`}
+                type="number" inputMode="numeric" placeholder="?" disabled={!pulled || zeroOk === "ok"}
+                value={zeroInput}
+                onChange={(e) => { setZeroInput(e.target.value); setZeroOk("idle"); }}
+                onBlur={checkZero}
+                onKeyDown={(e) => { if (e.key === "Enter") checkZero(); }}
+                aria-label="What does the zero pair make?"
+              />
+            </div>
+          );
+          out.push(<div className="eq-cell c-eq" key={`pe${i}`}><span className="eq-g eq-equals eq-faded">=</span></div>);
+          out.push(
+            <div className="eq-cell c-rhs" key={`pr${i}`}>
+              <input
+                className={`eq-input${rhsOk === "ok" ? " ok" : rhsOk === "bad" ? " bad" : ""}`}
+                type="number" inputMode="numeric" placeholder="?" disabled={!pulled || rhsOk === "ok"}
+                value={rhsInput}
+                onChange={(e) => { setRhsInput(e.target.value); setRhsOk("idle"); }}
+                onBlur={checkRhs}
+                onKeyDown={(e) => { if (e.key === "Enter") checkRhs(); }}
+                aria-label="Compute the right side"
+              />
+            </div>
+          );
+        } else if (phase === "write") {
+          out.push(
+            <div className="eq-cell c-var" key={`pv${i}`}><span className="eq-term eq-landed"><span className="eq-g eq-x">x</span></span></div>
+          );
+          out.push(<div className="eq-cell c-const" key={`pc${i}`} />);
+          out.push(<div className="eq-cell c-eq" key={`pe${i}`}><span className="eq-g eq-equals eq-faded">=</span></div>);
+          out.push(
+            <div className="eq-cell c-rhs" key={`pr${i}`}>
+              <input
+                className={`eq-input${rhsOk === "ok" ? " ok" : rhsOk === "bad" ? " bad" : ""}`}
+                type="number" inputMode="numeric" placeholder="?" autoFocus
+                value={rhsInput}
+                onChange={(e) => { setRhsInput(e.target.value); setRhsOk("idle"); }}
+                onBlur={checkRhs}
+                onKeyDown={(e) => { if (e.key === "Enter") checkRhs(); }}
+                aria-label="Compute the right side"
+              />
+            </div>
+          );
+        }
       }
     });
-    return cells;
+    return out;
   }
 
-  const solved = phase === "solved" && eq;
-  const lastKind = rows[rows.length - 1]?.op?.kind;
-  const animMsg = lastKind === "divide" ? "Dividing both sides…" : lastKind === "multiply" ? "Multiplying both sides…" : "The zero pair is covered — it cancels to 0…";
+  const solvedX = phase === "celebrate" ? cur.rhs : null;
 
   return (
     <div className="eqb-root">
       <style>{`
-        .eqb-root { min-height:100vh; background:var(--bdb-ground); color:var(--bdb-ink); font-family:var(--bdb-font); display:flex; flex-direction:column; }
-        .eqb-top { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; padding:14px clamp(16px,3vw,30px); border-bottom:1px solid var(--bdb-line); }
-        .eqb-mark { font-size:0.74rem; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--bdb-ink-faint); margin:0; }
-        .eqb-btn { font-size:0.84rem; font-weight:600; color:var(--bdb-ink-soft); background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:var(--bdb-r-pill); padding:8px 14px; cursor:pointer; text-decoration:none; }
-        .eqb-btn:hover { border-color:var(--bdb-ink-faint); color:var(--bdb-ink); }
+        .eqb-root { min-height:calc(100vh - 50px); background:var(--bdb-ground); color:var(--bdb-ink); font-family:var(--bdb-font); display:flex; flex-direction:column; }
 
-        .eqb-main { flex:1; padding:clamp(18px,3vw,34px); display:flex; flex-direction:column; gap:clamp(16px,3vw,28px); align-items:center; max-width:920px; margin:0 auto; width:100%; box-sizing:border-box; }
+        .eqb-strip { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:12px clamp(16px,3vw,30px); border-bottom:1px solid var(--bdb-line); }
+        .eqb-seg { display:inline-flex; background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:999px; padding:3px; }
+        .eqb-seg button { border:none; background:transparent; border-radius:999px; padding:7px 14px; font:inherit; font-weight:600; font-size:0.82rem; color:var(--bdb-ink-soft); cursor:pointer; }
+        .eqb-seg button.on { background:var(--bdb-ink); color:#fff; }
+        .eqb-seg.lvl button.on { background:var(--bdb-coral); }
+        .eqb-streak { margin-left:auto; margin-right:auto; display:inline-flex; align-items:center; gap:8px; font-weight:800; font-size:1.02rem; background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:999px; padding:8px 18px; box-shadow:var(--bdb-shadow-sm); }
+        .eqb-streak b { color:var(--bdb-coral); font-size:1.2rem; }
+        .eqb-new { font-size:0.84rem; font-weight:600; color:var(--bdb-ink-soft); background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:999px; padding:8px 14px; cursor:pointer; }
+        .eqb-new:hover { border-color:var(--bdb-ink-faint); color:var(--bdb-ink); }
 
-        .eqb-build { display:grid; gap:18px; justify-items:center; }
-        .eqb-preview { display:flex; align-items:center; gap:12px; justify-content:center; }
-        .eqb-steppers { display:flex; gap:22px; flex-wrap:wrap; justify-content:center; }
-        .eqb-stp { display:grid; justify-items:center; gap:6px; }
-        .eqb-stp-label { font-size:0.7rem; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; color:var(--bdb-ink-faint); }
-        .eqb-stp-ctl { display:flex; align-items:center; gap:10px; }
-        .eqb-stp-btn { width:38px; height:38px; border-radius:10px; border:1px solid var(--bdb-line); background:var(--bdb-card); color:var(--bdb-ink); font-size:1.3rem; font-weight:700; cursor:pointer; }
-        .eqb-stp-val { min-width:42px; text-align:center; font-size:1.5rem; font-weight:800; }
-        .eqb-presets { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
-        .eqb-preset { font-size:0.85rem; font-weight:600; color:var(--bdb-ink-soft); background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:999px; padding:7px 14px; cursor:pointer; }
-        .eqb-preset:hover { border-color:var(--bdb-ink-faint); }
-        .eqb-start { font-size:1.15rem; font-weight:700; color:#fff; background:var(--bdb-teal); border:none; border-radius:14px; padding:14px 38px; cursor:pointer; }
+        .eqb-main { flex:1; padding:clamp(18px,3vw,34px); display:flex; flex-direction:column; gap:clamp(14px,2.4vw,22px); align-items:center; max-width:980px; margin:0 auto; width:100%; box-sizing:border-box; }
 
-        /* Worked solution — fixed columns so every row lines up */
-        .eqb-work { display:flex; justify-content:center; width:100%; }
-        .eqb-grid { display:grid; grid-template-columns:clamp(82px,15vw,128px) clamp(78px,14vw,120px) clamp(40px,7vw,54px) clamp(78px,14vw,120px); align-items:center; gap:14px 12px; }
-        .gc { display:flex; align-items:center; min-height:1px; animation:eqbDrop 0.4s ease; }
-        @keyframes eqbDrop { from{opacity:0; transform:translateY(-10px);} to{opacity:1; transform:none;} }
-        .gc.coef { justify-content:flex-end; }
-        .gc.const { justify-content:flex-start; }
-        .gc.eq { justify-content:center; }
-        .gc.right { justify-content:flex-start; }
-        .gc.arrow { justify-content:flex-end; color:var(--bdb-teal); font-weight:800; font-size:1.7rem; }
-        .gc.hr { grid-column:1 / -1; height:0; border-top:3px solid var(--bdb-ink-faint); margin:2px 0; animation:eqbLineIn 0.45s ease; }
-        @keyframes eqbLineIn { from{opacity:0; transform:scaleX(0.15);} to{opacity:1; transform:scaleX(1);} }
+        /* ── the equation: big, serif, colored characters ── */
+        .eq-work { display:grid; grid-template-columns:minmax(90px,auto) minmax(90px,auto) auto minmax(90px,auto); align-items:start; column-gap:clamp(10px,2.4vw,22px); row-gap:clamp(10px,2vw,18px); justify-content:center; margin-top:6px; }
+        .eq-cell { display:flex; flex-direction:column; align-items:center; gap:4px; min-height:1px; animation:eqIn 0.4s ease; }
+        .eq-cell.c-var { align-items:flex-end; }
+        .eq-cell.c-const, .eq-cell.c-rhs { align-items:flex-start; }
+        @keyframes eqIn { from{opacity:0; transform:translateY(-8px);} to{opacity:1; transform:none;} }
+        .eq-g { font-family:Georgia, "Times New Roman", serif; font-weight:700; font-size:clamp(2.5rem,7.5vw,4.4rem); line-height:1.06; white-space:nowrap; }
+        .eq-coef { color:#2456b8; }
+        .eq-x { color:#0c7268; font-style:italic; padding-right:2px; }
+        .eq-const { color:#c2410c; }
+        .eq-equals { color:var(--bdb-ink); }
+        .eq-rhs { color:#6d28d9; }
+        .eq-zero { color:var(--bdb-ink-faint); }
+        .eq-faded { opacity:0.45; }
+        .eq-term { display:inline-flex; align-items:baseline; }
 
-        .eqb-eqsign { font-size:clamp(1.8rem,5vw,2.6rem); font-weight:800; color:var(--bdb-ink-soft); }
-        .eqb-chip { display:inline-flex; align-items:center; justify-content:center; font-weight:800; border-radius:12px; padding:10px 14px; font-size:clamp(1.3rem,3.6vw,2rem); min-width:46px; border:2px solid transparent; }
-        .eqb-x { background:color-mix(in srgb,var(--bdb-teal) 20%,white); color:color-mix(in srgb,var(--bdb-teal) 80%,black); border-color:var(--bdb-teal); }
-        .eqb-x-click { cursor:pointer; box-shadow:0 0 0 3px color-mix(in srgb,var(--bdb-teal) 45%,white); animation:eqbPulse 1s ease-in-out infinite; }
-        .eqb-pos { background:color-mix(in srgb,var(--bdb-amber) 22%,white); color:#8a5a0b; border-color:var(--bdb-amber); }
-        .eqb-neg { background:color-mix(in srgb,var(--bdb-coral) 18%,white); color:#9a3412; border-color:var(--bdb-coral); }
-        .eqb-rhs { background:color-mix(in srgb,#4d8df6 18%,white); color:#0c447c; border-color:#4d8df6; }
-        .eqb-under-chip { font-weight:800; color:var(--bdb-coral); font-size:clamp(1.15rem,3.2vw,1.7rem); padding:4px 10px; }
+        .eq-tap { cursor:pointer; border-radius:14px; padding:0 6px; transition:background 130ms, box-shadow 130ms; }
+        .eq-tap:hover { background:color-mix(in srgb, var(--bdb-amber) 22%, transparent); }
+        .eq-tap-x { box-shadow:0 0 0 0 transparent; }
+        .eq-wrongglyph { background:color-mix(in srgb, #ef4444 16%, transparent); box-shadow:0 0 0 3px color-mix(in srgb, #ef4444 45%, transparent); border-radius:14px; }
+        .eq-hitglyph { background:color-mix(in srgb, var(--bdb-green) 18%, transparent); box-shadow:0 0 0 3px color-mix(in srgb, var(--bdb-green) 55%, transparent); border-radius:14px; }
 
-        /* division shown as a fraction with the coefficient cancelling */
-        .eqb-frac { display:inline-grid; justify-items:center; gap:3px; }
-        .eqb-frac .num, .eqb-frac .den { font-weight:800; font-size:clamp(1.3rem,3.6vw,2rem); display:inline-flex; }
-        .eqb-frac .bar { width:100%; min-width:46px; height:3px; background:var(--bdb-ink); border-radius:2px; }
-        .eqb-xkeep { color:color-mix(in srgb,var(--bdb-teal) 80%,black); }
-        .eqb-canc { position:relative; color:var(--bdb-ink-soft); }
-        .eqb-canc::after { content:""; position:absolute; left:-3px; right:-3px; top:45%; height:3px; background:var(--bdb-coral); border-radius:2px; transform:rotate(-18deg) scaleX(0); transform-origin:center; animation:eqbStrike 0.5s ease 0.25s forwards; }
-        @keyframes eqbStrike { to{ transform:rotate(-18deg) scaleX(1); } }
-        .eqb-rule { font-size:0.86rem; font-weight:600; color:#0f5e5f; background:color-mix(in srgb,var(--bdb-teal) 12%,white); border:1px solid color-mix(in srgb,var(--bdb-teal) 30%,white); border-radius:10px; padding:8px 14px; text-align:center; max-width:520px; }
-        .eqb-modepick { display:grid; gap:7px; justify-items:center; }
-        .eqb-modes { display:inline-flex; background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:var(--bdb-r-pill); padding:3px; }
-        .eqb-modes button { border:none; background:transparent; border-radius:var(--bdb-r-pill); padding:8px 20px; font:inherit; font-weight:600; font-size:0.9rem; color:var(--bdb-ink-soft); cursor:pointer; }
-        .eqb-modes button.on { background:var(--bdb-ink); color:#fff; }
+        .eq-under { font-family:Georgia, "Times New Roman", serif; font-weight:700; font-size:clamp(1.5rem,4.2vw,2.5rem); color:var(--bdb-coral); white-space:nowrap; }
+        .eq-drop { animation:eqDropIn 0.7s cubic-bezier(0.2,1.4,0.4,1); }
+        @keyframes eqDropIn { from{opacity:0; transform:translateY(-46px) scale(0.7);} 60%{opacity:1;} to{opacity:1; transform:none;} }
+        .eq-rule { grid-column:1 / -1; height:0; border-top:4px solid var(--bdb-ink); border-radius:2px; margin:2px 0; animation:eqRule 0.5s ease; }
+        @keyframes eqRule { from{opacity:0; transform:scaleX(0.1);} to{opacity:1; transform:scaleX(1);} }
 
-        /* zero pair: +b with −b stacked under it, red box covers BOTH (they stay) */
-        .eqb-zero { position:relative; display:inline-flex; }
-        .eqb-zero-neg { position:absolute; left:50%; top:calc(100% + 16px); transform:translateX(-50%); font-weight:800; color:var(--bdb-coral); font-size:clamp(1.15rem,3.2vw,1.7rem); white-space:nowrap; }
-        .eqb-redbox { position:absolute; left:-9px; right:-9px; top:-9px; height:calc(200% + 34px); border:3px solid var(--bdb-coral); background:color-mix(in srgb,var(--bdb-coral) 14%,transparent); border-radius:13px; transform-origin:top center; animation:eqbCover 0.5s ease forwards; pointer-events:none; }
-        @keyframes eqbCover { from{opacity:0; transform:scale(0.6);} to{opacity:1; transform:scale(1);} }
-        @keyframes eqbPulse { 50%{opacity:0.55;} }
+        .eq-pullable { cursor:grab; touch-action:none; border-radius:16px; padding:2px 8px; background:color-mix(in srgb, var(--bdb-teal) 14%, transparent); box-shadow:0 0 0 3px color-mix(in srgb, var(--bdb-teal) 45%, transparent); animation:eqPulse 1.1s ease-in-out infinite; user-select:none; }
+        .eq-pullable:active, .eq-dragging { cursor:grabbing; }
+        .eq-slot { min-width:clamp(90px,16vw,150px); min-height:clamp(52px,9vw,84px); border:3px dashed var(--bdb-ink-faint); border-radius:16px; display:grid; place-items:center; color:var(--bdb-ink-faint); font-weight:700; font-size:0.82rem; letter-spacing:0.04em; text-transform:uppercase; }
+        .eq-slot-hot { border-color:var(--bdb-teal); color:var(--bdb-teal); background:color-mix(in srgb, var(--bdb-teal) 8%, transparent); }
+        .eq-landed { animation:eqDropIn 0.5s cubic-bezier(0.2,1.4,0.4,1); }
+        .eq-ghost { position:fixed; z-index:60; pointer-events:none; transform:translate(-50%,-50%) scale(0.92); opacity:0.9; }
 
-        .eqb-modal { position:fixed; inset:0; background:rgba(32,30,26,0.55); display:grid; place-items:center; z-index:40; padding:20px; }
-        .eqb-modal-card { background:var(--bdb-card); border-radius:18px; padding:26px 28px; max-width:520px; width:100%; display:grid; gap:16px; box-shadow:var(--bdb-shadow-lg); }
-        .eqb-q { font-size:clamp(1.1rem,2.8vw,1.45rem); font-weight:700; text-align:center; color:var(--bdb-ink); min-height:1.3em; }
-        .eqb-choices { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
-        .eqb-choice { font-size:1.1rem; font-weight:700; color:var(--bdb-ink); background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:12px; padding:13px 24px; cursor:pointer; min-width:64px; transition:transform 120ms ease, border-color 140ms; }
+        .eq-input { font-family:Georgia, "Times New Roman", serif; font-weight:700; font-size:clamp(1.7rem,4.6vw,2.7rem); text-align:center; width:clamp(84px,14vw,130px); padding:6px 8px; border-radius:14px; border:3px solid var(--bdb-line); background:var(--bdb-card); color:var(--bdb-ink); outline:none; }
+        .eq-input:focus { border-color:var(--bdb-teal); }
+        .eq-input.ok { border-color:var(--bdb-green); background:color-mix(in srgb, var(--bdb-green) 10%, white); color:var(--bdb-green); }
+        .eq-input.bad { border-color:#ef4444; background:color-mix(in srgb, #ef4444 8%, white); animation:eqShake 0.35s ease; }
+        .eq-input:disabled { opacity:0.45; }
+        @keyframes eqShake { 25%{transform:translateX(-5px);} 75%{transform:translateX(5px);} }
+        .eq-input::-webkit-outer-spin-button, .eq-input::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+        .eq-input[type=number] { -moz-appearance:textfield; appearance:textfield; }
+
+        /* ── prompts, choices, feedback ── */
+        .eqb-q { font-size:clamp(1.06rem,2.6vw,1.4rem); font-weight:700; text-align:center; color:var(--bdb-ink); min-height:1.3em; margin:0; }
+        .eqb-choices { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; max-width:720px; }
+        .eqb-choice { font-size:1.02rem; font-weight:700; color:var(--bdb-ink); background:var(--bdb-card); border:2px solid var(--bdb-line); border-radius:14px; padding:13px 22px; cursor:pointer; transition:transform 120ms ease, border-color 140ms, background 140ms; }
         .eqb-choice:hover { transform:translateY(-1px); border-color:var(--bdb-teal); }
-        .eqb-feedback { font-size:0.95rem; font-weight:600; color:var(--bdb-ink-soft); text-align:center; min-height:1.2em; }
-        .eqb-hint { background:color-mix(in srgb,var(--bdb-amber) 16%,white); border:1px solid color-mix(in srgb,var(--bdb-amber) 40%,white); color:#8a5a0b; border-radius:12px; padding:11px 16px; font-weight:600; font-size:0.93rem; max-width:560px; text-align:center; }
-        .eqb-hintbtn { font-size:0.84rem; font-weight:600; color:#8a5a0b; background:transparent; border:1px solid color-mix(in srgb,var(--bdb-amber) 45%,white); border-radius:10px; padding:8px 14px; cursor:pointer; }
-        .eqb-cinput { font-size:1.7rem; font-weight:800; text-align:center; background:var(--bdb-ground); border:2px solid var(--bdb-line); border-radius:12px; color:var(--bdb-ink); padding:12px; width:160px; margin:0 auto; }
-        .eqb-fracwrap { cursor:pointer; display:inline-flex; padding:4px 8px; border-radius:10px; }
-        .eqb-solved { display:grid; justify-items:center; gap:14px; }
-        .eqb-solved-eq { font-size:clamp(2.4rem,8vw,4.6rem); font-weight:800; color:var(--bdb-green); }
+        .eqb-choice.wrong { background:color-mix(in srgb, #ef4444 14%, white); border-color:#ef4444; color:#b91c1c; transform:none; cursor:default; }
+        .eqb-choice.right { background:color-mix(in srgb, var(--bdb-green) 16%, white); border-color:var(--bdb-green); color:#166534; }
+        .eqb-feedback { font-size:0.96rem; font-weight:600; color:var(--bdb-ink-soft); text-align:center; min-height:1.2em; margin:0; }
+        .eqb-hint { background:color-mix(in srgb, var(--bdb-amber) 16%, white); border:1px solid color-mix(in srgb, var(--bdb-amber) 40%, white); color:#8a5a0b; border-radius:12px; padding:11px 16px; font-weight:600; font-size:0.93rem; max-width:560px; text-align:center; }
+
+        /* start button — pulses like it's floating above the page */
+        .eqb-start { font-size:1.3rem; font-weight:800; color:#fff; background:var(--bdb-coral); border:none; border-radius:16px; padding:17px 46px; cursor:pointer; box-shadow:0 14px 30px -10px color-mix(in srgb, var(--bdb-coral) 75%, transparent); animation:eqbFloat 1.5s ease-in-out infinite; }
+        @keyframes eqbFloat {
+          0%,100% { transform:translateY(0) scale(1); box-shadow:0 14px 30px -10px color-mix(in srgb, var(--bdb-coral) 75%, transparent); }
+          50% { transform:translateY(-5px) scale(1.035); box-shadow:0 24px 42px -12px color-mix(in srgb, var(--bdb-coral) 85%, transparent); }
+        }
+        @keyframes eqPulse { 50%{ box-shadow:0 0 0 8px color-mix(in srgb, var(--bdb-teal) 18%, transparent); } }
+
+        /* ── goal popup: zooms out of the middle toward you ── */
+        .eqb-modal { position:fixed; inset:0; background:rgba(32,30,26,0.5); display:grid; place-items:center; z-index:40; padding:20px; animation:eqbFade 0.25s ease; }
+        @keyframes eqbFade { from{opacity:0;} }
+        .eqb-modal-card { background:var(--bdb-card); border-radius:20px; padding:28px 30px; max-width:540px; width:100%; display:grid; gap:16px; box-shadow:var(--bdb-shadow-lg); animation:eqbZoom 0.45s cubic-bezier(0.2,1.3,0.4,1); }
+        @keyframes eqbZoom { from{opacity:0; transform:scale(0.25);} to{opacity:1; transform:scale(1);} }
+        .eqb-goal-input { font:inherit; font-weight:600; font-size:1.06rem; padding:13px 16px; border-radius:12px; border:2px solid var(--bdb-line); outline:none; width:100%; box-sizing:border-box; }
+        .eqb-goal-input:focus { border-color:var(--bdb-teal); }
+
+        /* ── celebration ── */
+        .eqb-celebrate { display:grid; justify-items:center; gap:12px; text-align:center; }
+        .eqb-solved-eq { font-family:Georgia, "Times New Roman", serif; font-size:clamp(2.6rem,8vw,4.6rem); font-weight:700; color:var(--bdb-green); animation:eqDropIn 0.6s cubic-bezier(0.2,1.4,0.4,1); }
+        .eqb-cheer { font-size:1.12rem; font-weight:700; color:var(--bdb-ink); }
+        .eqb-confetti { position:fixed; inset:0; pointer-events:none; overflow:hidden; z-index:50; }
+        .eqb-cf { position:absolute; top:-14px; width:10px; height:16px; border-radius:3px; animation:eqbFall 1.8s ease-in forwards; }
+        @keyframes eqbFall { to { transform:translateY(105vh) translateX(var(--drift)) rotate(560deg); opacity:0.8; } }
       `}</style>
 
-      <header className="eqb-top">
-        <p className="eqb-mark">Equation Builder</p>
-        <div style={{ display: "flex", gap: 8 }}>
-          {phase !== "build" && <button className="eqb-btn" onClick={reset}>↻ New equation</button>}
-          <a className="eqb-btn" href="/teacher">Tools</a>
+      <div className="eqb-strip">
+        <div className="eqb-seg" role="group" aria-label="Equation type">
+          <button className={steps === "one" ? "on" : ""} onClick={() => saveSteps("one")}>1-step</button>
+          <button className={steps === "two" ? "on" : ""} onClick={() => saveSteps("two")}>2-step</button>
+          <button className={steps === "mix" ? "on" : ""} onClick={() => saveSteps("mix")}>Mix</button>
         </div>
-      </header>
+        <div className="eqb-streak" title="Equations solved this session">⭐ <b>{streak}</b> in a row</div>
+        <div className="eqb-seg lvl" role="group" aria-label="Difficulty">
+          <button className={level === "regular" ? "on" : ""} onClick={() => saveLevel("regular")}>Regular</button>
+          <button className={level === "levelup" ? "on" : ""} onClick={() => saveLevel("levelup")}>Level Up!</button>
+        </div>
+        <button className="eqb-new" onClick={() => freshQuestion()}>↻ New equation</button>
+      </div>
 
       <main className="eqb-main">
         <LiveToolBanner tool={liveTool} />
-        {phase === "build" ? (
-          <div className="eqb-build">
-            <div className="eqb-preview">
-              {isDiv ? varFrac(a, false, false) : varChip(a)}{b !== 0 && constChip(b)}<span className="eqb-eqsign">=</span>{numChip(c)}
-            </div>
-            <div className="eqb-modepick">
-              <span className="eqb-stp-label">Mode for this lesson</span>
-              <div className="eqb-modes">
-                <button className={mode === "beginner" ? "on" : ""} onClick={() => setMode("beginner")}>Beginner</button>
-                <button className={mode === "advanced" ? "on" : ""} onClick={() => setMode("advanced")}>Advanced</button>
-              </div>
-            </div>
-            <div className="eqb-steppers">
-              <div className="eqb-stp">
-                <span className="eqb-stp-label">x term</span>
-                <div className="eqb-stp-ctl">
-                  <div className="eqb-modes" style={{ marginRight: 4 }}>
-                    <button className={!isDiv ? "on" : ""} onClick={() => setVarOp("×")}>× a</button>
-                    <button className={isDiv ? "on" : ""} onClick={() => { setVarOp("÷"); if (a < 2) setA(2); }}>÷ a</button>
-                  </div>
-                  <button className="eqb-stp-btn" onClick={() => setA(Math.max(isDiv ? 2 : 1, a - 1))}>−</button>
-                  <span className="eqb-stp-val">{a}</span>
-                  <button className="eqb-stp-btn" onClick={() => setA(Math.min(6, a + 1))}>+</button>
-                </div>
-              </div>
-              <div className="eqb-stp">
-                <span className="eqb-stp-label">constant (b)</span>
-                <div className="eqb-stp-ctl">
-                  <button className="eqb-stp-btn" onClick={() => setB(Math.max(-10, b - 1))}>−</button>
-                  <span className="eqb-stp-val">{b}</span>
-                  <button className="eqb-stp-btn" onClick={() => setB(Math.min(10, b + 1))}>+</button>
-                </div>
-              </div>
-              <div className="eqb-stp">
-                <span className="eqb-stp-label">answer x</span>
-                <div className="eqb-stp-ctl">
-                  <button className="eqb-stp-btn" onClick={() => setXAns(Math.max(1, xAns - 1))}>−</button>
-                  <span className="eqb-stp-val">{xUse}</span>
-                  <button className="eqb-stp-btn" onClick={() => setXAns(Math.min(24, xAns + 1))}>+</button>
-                </div>
-              </div>
-            </div>
-            <div className="eqb-presets">
-              {PRESETS.map((p, i) => (
-                <button className="eqb-preset" key={i} onClick={() => loadPreset(p)}>{p[0] === 1 ? "x" : `${p[0]}x`} {p[1] >= 0 ? `+ ${p[1]}` : `− ${-p[1]}`} = {p[0] * p[2] + p[1]}</button>
-              ))}
-            </div>
-            <button className="eqb-start" onClick={startSolve}>Start solving →</button>
-            <p className="eqb-feedback">Build any equation, then solve it together step by step.</p>
-          </div>
-        ) : (
-          <>
-            <div className="eqb-work"><div className="eqb-grid">{workedCells()}</div></div>
 
-            {solved ? (
-              <div className="eqb-solved">
-                <div className="eqb-solved-eq">x = {eq!.rhs}</div>
-                <p className="eqb-feedback">Solved{wrong === 0 ? " with no mistakes — nice!" : "!"} The variable is isolated.</p>
-                <button className="eqb-start" onClick={reset}>↻ New equation</button>
-              </div>
-            ) : phase === "goal" ? (
-              <div className="eqb-modal">
-                <div className="eqb-modal-card">
-                  <p className="eqb-q">First — what is your goal when solving an equation?</p>
-                  <div className="eqb-choices" style={{ flexDirection: "column" }}>
-                    {GOAL_CHOICES.map((g, i) => (
-                      <button className="eqb-choice" key={i} onClick={() => pickGoal(g.correct)}>{g.label}</button>
-                    ))}
-                  </div>
-                  {feedback && <p className="eqb-feedback">{feedback}</p>}
-                </div>
-              </div>
-            ) : phase === "tap-var" ? (
-              <p className="eqb-q">Now tap the variable you&apos;re solving for to begin.</p>
-            ) : phase === "compute" && pending ? (
-              <div className="eqb-modal">
-                <div className="eqb-modal-card">
-                  <p className="eqb-feedback" style={{ minHeight: 0 }}>Now do the math:</p>
-                  <p className="eqb-q" style={{ fontSize: "clamp(1.6rem,5vw,2.4rem)" }}>{pending.expr} = ?</p>
-                  <input className="eqb-cinput" type="number" autoFocus value={computeInput}
-                    onChange={(e) => setComputeInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") submitCompute(); }} />
-                  {feedback && <p className="eqb-feedback" style={{ color: "var(--bdb-coral)" }}>{feedback}</p>}
-                  <button className="eqb-start" onClick={submitCompute}>Check →</button>
-                </div>
-              </div>
-            ) : phase === "animating" ? (
-              <p className="eqb-q">{animMsg}</p>
-            ) : (
-              <>
-                <p className="eqb-q">{feedback}</p>
-                <div className="eqb-choices">
-                  {phase === "ask-op"
-                    ? (["add", "subtract", "multiply", "divide"] as Op[]).map((op) => (
-                        <button className="eqb-choice" key={op} onClick={() => pickOp(op)}>{OP_LABEL[op]}</button>
-                      ))
-                    : eq && termChoices(eq).map((t) => (
-                        <button className="eqb-choice" key={t} onClick={() => pickTerm(t)}>{t}</button>
-                      ))}
-                </div>
-                {(step === "coefficient" || step === "divisor") && <div className="eqb-rule">Beside it, divide it. Underneath it, multiply it.</div>}
-                {hint ? <div className="eqb-hint">{hint}</div> : <button className="eqb-hintbtn" onClick={giveHint}>Need a hint?</button>}
-              </>
-            )}
+        <div className="eq-work">{renderWorked()}</div>
+
+        {phase === "idle" && (
+          <>
+            <button className="eqb-start" onClick={startSolving}>Start solving →</button>
+            <p className="eqb-feedback">Isolate the variable, step by step. Every solve adds to your count.</p>
           </>
         )}
+
+        {phase === "goal" && (
+          <div className="eqb-modal">
+            <div className="eqb-modal-card">
+              <p className="eqb-q">First — what is your goal when solving an equation?</p>
+              {level === "regular" ? (
+                <div className="eqb-choices" style={{ flexDirection: "column", display: "flex" }}>
+                  {GOAL_CHOICES.map((g, i) => (
+                    <button
+                      key={i}
+                      className={`eqb-choice${goalWrong.has(i) ? " wrong" : ""}${goalHit === i ? " right" : ""}`}
+                      onClick={() => pickGoal(i)}
+                      disabled={goalWrong.has(i)}
+                    >{g.label}</button>
+                  ))}
+                </div>
+              ) : (
+                <>
+                  <input
+                    className="eqb-goal-input" autoFocus placeholder="Type your answer…"
+                    value={goalText} onChange={(e) => setGoalText(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") submitGoalText(); }}
+                  />
+                  <button className="eqb-choice" onClick={submitGoalText}>Check →</button>
+                </>
+              )}
+              {feedback && <p className="eqb-feedback">{feedback}</p>}
+            </div>
+          </div>
+        )}
+
+        {(phase === "tap-var" || phase === "move" || phase === "anim" || phase === "pull" || phase === "write") && (
+          <>
+            <p className="eqb-q">{feedback}</p>
+            {phase === "move" && (
+              <div className="eqb-choices">
+                {moves.map((m, i) => (
+                  <button
+                    key={i}
+                    className={`eqb-choice${moveWrong.has(i) ? " wrong" : ""}${moveHit === i ? " right" : ""}`}
+                    onClick={() => pickMove(i)}
+                    disabled={moveWrong.has(i)}
+                  >{m.label}</button>
+                ))}
+              </div>
+            )}
+            {hint && <div className="eqb-hint">{hint}</div>}
+          </>
+        )}
+
+        {phase === "celebrate" && solvedX !== null && (
+          <div className="eqb-celebrate">
+            <div className="eqb-solved-eq">x = {solvedX}</div>
+            <p className="eqb-cheer">The variable is isolated! Ready for another? Let&apos;s see how many you can do in a row.</p>
+            <button className="eqb-start" onClick={() => freshQuestion()}>Next equation →</button>
+          </div>
+        )}
       </main>
+
+      {drag && (
+        <span className="eq-ghost" style={{ left: drag.x, top: drag.y }}>
+          <span className="eq-term">{cur.coef !== 1 && <span className="eq-g eq-coef">{cur.coef}</span>}<span className="eq-g eq-x">x</span></span>
+        </span>
+      )}
+
+      {confetti.length > 0 && (
+        <div className="eqb-confetti" aria-hidden>
+          {confetti.map((c, i) => (
+            <span
+              key={i}
+              className="eqb-cf"
+              style={{ left: `${c.left}%`, animationDelay: `${c.delay}s`, background: `hsl(${c.hue} 85% 60%)`, ["--drift" as string]: `${c.drift}px` }}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

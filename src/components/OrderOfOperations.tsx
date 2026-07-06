@@ -353,8 +353,8 @@ export default function OrderOfOperations() {
       <header className="oo-top">
         <p className="oo-mark">GEMS — Order of Operations</p>
         <div className="oo-modes">
-          <button className={mode === "beginner" ? "on" : ""} onClick={() => switchMode("beginner")}>Beginner</button>
-          <button className={mode === "advanced" ? "on" : ""} onClick={() => switchMode("advanced")}>Advanced</button>
+          <button className={mode === "beginner" ? "on" : ""} onClick={() => switchMode("beginner")}>Regular</button>
+          <button className={mode === "advanced" ? "on" : ""} onClick={() => switchMode("advanced")}>Level Up!</button>
         </div>
         <div className="oo-actions">
           <button className="oo-btn" onClick={() => load(PRESETS[Math.floor(Math.random() * PRESETS.length)].tokens, mode)}>Random</button>

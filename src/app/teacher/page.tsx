@@ -48,6 +48,7 @@ const NAV: { label: string; href: string; active?: boolean }[] = [
   { label: "Number line", href: "/number-line-plus" },
   { label: "Timer", href: "/timer" },
   { label: "Analytics", href: "/teacher/analytics" },
+  { label: "Growth", href: "/teacher/rightnow" },
   { label: "Rosters", href: "/roster" },
 ];
 

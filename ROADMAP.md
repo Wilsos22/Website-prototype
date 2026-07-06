@@ -18,7 +18,14 @@ Checkpoint delivery · iPad ink → board · Abbiliathan 3000 (voice + Stream De
 mastery board + growth charts, /api/evidence, clustering + archetypes
 (golden-tested 25/25), Right-now view w/ Notion Misconception Plans merge ·
 **Checkpoint CSV upload** (/teacher/checkpoint-upload — tier + SBAC flags,
-idempotent, auto-recompute) · Figma lesson-flow template
+idempotent, auto-recompute) · Figma lesson-flow template ·
+**Equation Builder redesign** (7/6 — auto-generated 1/2-step equations, big
+colored serif equation, goal popup w/ sticky-red wrong picks + Level Up! short
+answer, tap the actual variable, first-move question, inverse-drop animation,
+drag-the-term-down, student writes the 0 + computes the side, celebration +
+in-a-row counter; Regular/Level Up! naming here + GEMS) ·
+**Growth view** (Right Now is now "🌱 Growth", linked from teacher nav + home;
+/teacher/growth redirects)
 
 ## In progress 🔨
 - **Week builder** — code shipped (warmup-pools-data.gs + warmup-week-builder.gs +
