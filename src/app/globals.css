@@ -1,5 +1,6 @@
-/* Big Dog Board design-system font (Albert Sans). Must stay at the top of the file. */
-@import url("https://fonts.googleapis.com/css2?family=Albert+Sans:wght@400;500;600;700;800&display=swap");
+/* Big Dog Board design-system font (Albert Sans) + squared-off math digits
+   (Chakra Petch, used by the Equation Builder). Must stay at the top of the file. */
+@import url("https://fonts.googleapis.com/css2?family=Albert+Sans:wght@400;500;600;700;800&family=Chakra+Petch:ital,wght@0,500;0,600;0,700;1,600;1,700&display=swap");
 
 * {
   box-sizing: border-box;

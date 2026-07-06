@@ -1,23 +1,23 @@
 "use client";
 
 // Guided Equation Builder & Solver — student-facing solving reps.
-// Equations generate themselves (1-step or 2-step); the picking engine is not
+// Equations generate themselves (one-step only — x ± b = c, ax = c, x/a = c;
+// on Level Up! the variable can sit on either side); the picking engine is not
 // student-facing. A teacher can still deploy a specific problem through Live
-// Flow and it loads here automatically. The student states the goal, taps the
-// actual variable (not the coefficient), picks the first move, watches the
-// inverse drop onto both sides above a horizontal line, drags the remaining
-// variable term down to the next line, writes the 0 and computes the other
-// side themselves — then celebrates and rolls straight into the next one,
-// with a running "in a row" count for the session.
+// Flow and it loads here automatically. The student states the goal,
+// identifies the actual variable (not the coefficient), picks the first move,
+// watches the inverse drop onto both sides above a horizontal line, sees the
+// zero pair make 0 and vanish while the variable term drops to the next line,
+// and computes the other side themselves — then celebrates and rolls straight
+// into the next one, with a running "in a row" session count.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LiveToolBanner, useLiveToolConfig } from "./useLiveToolConfig";
 
-type Phase = "idle" | "goal" | "tap-var" | "move" | "anim" | "pull" | "write" | "celebrate";
+type Phase = "idle" | "goal" | "tap-var" | "move" | "anim" | "zero" | "write" | "celebrate";
 type Level = "regular" | "levelup";
-type Steps = "one" | "two" | "mix";
-interface Line { coef: number; constant: number; rhs: number; showZero?: boolean; opAfter?: PendingOp }
-type PendingOp = { kind: "cancel" | "divide"; val: number };
+interface Line { coef: number; constant: number; rhs: number; div?: number; flip?: boolean; zeroed?: boolean; opAfter?: PendingOp }
+type PendingOp = { kind: "cancel" | "divide" | "times"; val: number };
 interface MoveChoice { label: string; correct: boolean }
 
 const GOAL_CHOICES: { label: string; correct: boolean }[] = [
@@ -31,27 +31,28 @@ function ri(lo: number, hi: number): number { return lo + Math.floor(Math.random
 function shuffle<T>(a: T[]): T[] { return [...a].sort(() => Math.random() - 0.5); }
 function sign(v: number): string { return v > 0 ? "+" : "−"; }
 
-function genProblem(steps: Steps): Line {
-  const kind = steps === "one" ? (Math.random() < 0.5 ? "add" : "mul")
-    : steps === "two" ? "two"
-    : (["add", "mul", "two", "two"] as const)[ri(0, 3)];
-  if (kind === "add") {
+// One-step equations only (x ± b = c, ax = c, or x/a = c) — two-step is 7th
+// grade. The solve engine still handles a teacher-deployed two-step problem.
+function genProblem(levelUp = false): Line {
+  // On Level Up! the variable can live on either side of the equals sign.
+  const flip = levelUp && Math.random() < 0.5;
+  const roll = Math.random();
+  if (roll < 0.4) {
     const b = (Math.random() < 0.5 ? 1 : -1) * ri(2, 9);
     const x = b < 0 ? ri(-b + 1, 14) : ri(1, 12);
-    return { coef: 1, constant: b, rhs: x + b };
+    return { coef: 1, constant: b, rhs: x + b, flip };
   }
-  if (kind === "mul") {
+  if (roll < 0.7) {
     const a = ri(2, 9); const x = ri(2, 12);
-    return { coef: a, constant: 0, rhs: a * x };
+    return { coef: a, constant: 0, rhs: a * x, flip };
   }
-  const a = ri(2, 6);
-  const b = (Math.random() < 0.5 ? 1 : -1) * ri(2, 9);
-  const x = ri(2, 12);
-  return { coef: a, constant: b, rhs: a * x + b };
+  const a = ri(2, 9); const q = ri(2, 12);
+  return { coef: 1, constant: 0, div: a, rhs: q, flip };
 }
 
-function stepOf(l: Line): "cancel" | "divide" | "done" {
+function stepOf(l: Line): "cancel" | "divide" | "times" | "done" {
   if (l.constant !== 0) return "cancel";
+  if ((l.div ?? 1) > 1) return "times";
   if (l.coef !== 1) return "divide";
   return "done";
 }
@@ -67,6 +68,15 @@ function moveChoicesFor(l: Line): MoveChoice[] {
       `Subtract ${Math.abs(l.rhs)} from both sides`,
     ];
     return shuffle([{ label: correct, correct: true }, ...wrongs.map((w) => ({ label: w, correct: false }))]);
+  }
+  if (s === "times") {
+    const a = l.div!;
+    return shuffle([
+      { label: `Multiply both sides by ${a}`, correct: true },
+      { label: `Divide both sides by ${a}`, correct: false },
+      { label: `Add ${a} to both sides`, correct: false },
+      { label: `Multiply both sides by ${Math.abs(l.rhs)}`, correct: false },
+    ]);
   }
   const a = l.coef;
   return shuffle([
@@ -87,7 +97,6 @@ function goalTextOk(t: string): boolean {
 export default function EquationBuilder() {
   const liveTool = useLiveToolConfig("/equation-builder");
   const [level, setLevel] = useState<Level>("regular");
-  const [steps, setSteps] = useState<Steps>("mix");
   const [streak, setStreak] = useState(0);
 
   // Fixed starter so server + client render identically; randomized after mount.
@@ -103,24 +112,23 @@ export default function EquationBuilder() {
   const [goalText, setGoalText] = useState("");
   const [goalTries, setGoalTries] = useState(0);
 
-  // tap the variable
+  // identify the variable
   const [tapWrong, setTapWrong] = useState<Set<string>>(new Set());
   const [tapHit, setTapHit] = useState(false);
+  const [varFound, setVarFound] = useState(false);
+
+  // level-switch acknowledgement
+  const [levelFx, setLevelFx] = useState<Level | null>(null);
+  const levelFxTimer = useRef<number | null>(null);
 
   // first-move question
   const [moves, setMoves] = useState<MoveChoice[]>([]);
   const [moveWrong, setMoveWrong] = useState<Set<number>>(new Set());
   const [moveHit, setMoveHit] = useState<number | null>(null);
 
-  // pull-down drag + write-in
-  const [pulled, setPulled] = useState(false);
-  const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
-  const [pullMisses, setPullMisses] = useState(0);
-  const [zeroInput, setZeroInput] = useState("");
+  // write-in for the side the student computes
   const [rhsInput, setRhsInput] = useState("");
-  const [zeroOk, setZeroOk] = useState<"idle" | "ok" | "bad">("idle");
   const [rhsOk, setRhsOk] = useState<"idle" | "ok" | "bad">("idle");
-  const dropRef = useRef<HTMLDivElement | null>(null);
 
   const [confetti, setConfetti] = useState<{ left: number; delay: number; hue: number; drift: number }[]>([]);
 
@@ -148,18 +156,24 @@ export default function EquationBuilder() {
   const sSolved = useCallback(() => tone([523, 659, 784, 1047], 0.1, 0.2), [tone]);
 
   useEffect(() => {
-    let s: Steps = "mix";
+    let lvl: Level = "regular";
     try {
-      const l = localStorage.getItem("eqb-level"); if (l === "regular" || l === "levelup") setLevel(l);
-      const st = localStorage.getItem("eqb-steps"); if (st === "one" || st === "two" || st === "mix") s = st;
+      const l = localStorage.getItem("eqb-level"); if (l === "regular" || l === "levelup") lvl = l;
     } catch { /* ignore */ }
-    setSteps(s);
-    setLines([genProblem(s)]);
+    setLevel(lvl);
+    setLines([genProblem(lvl === "levelup")]);
   }, []);
-  function saveLevel(l: Level) { setLevel(l); try { localStorage.setItem("eqb-level", l); } catch { /* ignore */ } }
-  function saveSteps(s: Steps) {
-    setSteps(s); try { localStorage.setItem("eqb-steps", s); } catch { /* ignore */ }
-    if (phase === "idle") setLines([genProblem(s)]);
+  function saveLevel(l: Level) {
+    if (l === level) return;
+    setLevel(l);
+    try { localStorage.setItem("eqb-level", l); } catch { /* ignore */ }
+    // acknowledge the switch: little fanfare + floating badge
+    tone(l === "levelup" ? [392, 523, 659, 784] : [659, 523], 0.09, 0.18);
+    setLevelFx(l);
+    if (levelFxTimer.current) window.clearTimeout(levelFxTimer.current);
+    levelFxTimer.current = window.setTimeout(() => setLevelFx(null), 1500);
+    // a fresh problem picks up the new level's rules (e.g. x on either side)
+    if (phase === "idle") { resetQuestionState(); setLines([genProblem(l === "levelup")]); }
   }
 
   // A teacher-deployed problem replaces the generated one.
@@ -172,15 +186,14 @@ export default function EquationBuilder() {
   function resetQuestionState() {
     setPendingOp(null); setFeedback(""); setHint(null);
     setGoalWrong(new Set()); setGoalHit(null); setGoalText(""); setGoalTries(0);
-    setTapWrong(new Set()); setTapHit(false);
+    setTapWrong(new Set()); setTapHit(false); setVarFound(false);
     setMoves([]); setMoveWrong(new Set()); setMoveHit(null);
-    setPulled(false); setDrag(null); setPullMisses(0);
-    setZeroInput(""); setRhsInput(""); setZeroOk("idle"); setRhsOk("idle");
+    setRhsInput(""); setRhsOk("idle");
     setConfetti([]);
   }
   function freshQuestion(problem?: Line) {
     resetQuestionState();
-    setLines([problem ?? genProblem(steps)]);
+    setLines([problem ?? genProblem(level === "levelup")]);
     setPhase("idle");
   }
 
@@ -195,7 +208,7 @@ export default function EquationBuilder() {
     if (goalHit !== null) return;
     if (GOAL_CHOICES[i].correct) {
       setGoalHit(i); sCorrect();
-      window.setTimeout(() => { setPhase("tap-var"); setFeedback("Tap the variable you're solving for."); }, 650);
+      window.setTimeout(() => { setPhase("tap-var"); setFeedback("Identify the variable."); }, 650);
     } else {
       sWrong();
       setGoalWrong((w) => new Set(w).add(i));
@@ -204,7 +217,7 @@ export default function EquationBuilder() {
   function submitGoalText() {
     if (goalTextOk(goalText)) {
       setGoalHit(0); sCorrect();
-      window.setTimeout(() => { setPhase("tap-var"); setFeedback("Tap the variable you're solving for."); }, 650);
+      window.setTimeout(() => { setPhase("tap-var"); setFeedback("Identify the variable."); }, 650);
     } else {
       sWrong(); setGoalTries((t) => t + 1);
       setFeedback(goalTries >= 2 ? "Hint: it starts with “isolate…” — what do you want to happen to the variable?" : "Not quite — what do you want the variable to end up like?");
@@ -212,23 +225,23 @@ export default function EquationBuilder() {
   }
 
   // ── tap the variable itself ──
-  function tapPart(part: "coef" | "const" | "rhs" | "x") {
+  function tapPart(part: "coef" | "const" | "rhs" | "div" | "x") {
     if (phase !== "tap-var" || tapHit) return;
     if (part === "x") {
-      setTapHit(true); sCorrect();
+      setTapHit(true); setVarFound(true); sCorrect();
       window.setTimeout(() => {
         setTapWrong(new Set());
         beginMove("What is the first move I can make to isolate the variable?");
-      }, 500);
+      }, 600);
       return;
     }
     sWrong();
     setTapWrong((w) => new Set(w).add(part));
     setFeedback(part === "coef"
-      ? `That's the coefficient — the number multiplying the variable. Tap the letter itself.`
-      : part === "const"
-      ? "That's the constant. Tap the variable — the letter you're solving for."
-      : "That side is just a number. Tap the variable — the letter.");
+      ? "No — that's a coefficient. Remember: a variable is always a symbol, not a number. Try again."
+      : part === "div"
+      ? "No — that's a divisor. Remember: a variable is always a symbol, not a number. Try again."
+      : "No — that's a constant. Remember: a variable is always a symbol, not a number. Try again.");
   }
 
   function beginMove(q: string, line?: Line) {
@@ -244,12 +257,26 @@ export default function EquationBuilder() {
     const l = lines[lines.length - 1];
     if (moves[i].correct) {
       setMoveHit(i); sCorrect(); setHint(null);
-      const op: PendingOp = stepOf(l) === "cancel" ? { kind: "cancel", val: l.constant } : { kind: "divide", val: l.coef };
+      const s = stepOf(l);
+      const op: PendingOp = s === "cancel" ? { kind: "cancel", val: l.constant }
+        : s === "times" ? { kind: "times", val: l.div! }
+        : { kind: "divide", val: l.coef };
       window.setTimeout(() => {
         setPendingOp(op); setPhase("anim"); sDrop();
-        setFeedback(op.kind === "cancel" ? "The inverse drops onto BOTH sides…" : "Divide both sides…");
+        setFeedback(op.kind === "cancel" ? "The inverse drops onto BOTH sides…" : op.kind === "times" ? "Multiply both sides…" : "Divide both sides…");
         window.setTimeout(() => {
-          if (op.kind === "cancel") { setPhase("pull"); setFeedback("Now pull down the remaining terms — drag the variable term to the next line."); }
+          if (op.kind === "cancel") {
+            // show the zero pair making 0, let it vanish, then auto-drop the
+            // variable term to the next line — the student computes the other side
+            setPhase("zero");
+            setFeedback(`${sign(l.constant)}${Math.abs(l.constant)} and ${sign(-l.constant)}${Math.abs(l.constant)} make a zero pair — that's 0!`);
+            window.setTimeout(() => {
+              setLines((ls) => [...ls.slice(0, -1), { ...ls[ls.length - 1], zeroed: true }]);
+              sDrop();
+              setPhase("write"); setFeedback("It vanishes — now do the math on the other side.");
+            }, 1500);
+          }
+          else if (op.kind === "times") { setPhase("write"); setFeedback("The divisor cancels — now compute the other side."); }
           else { setPhase("write"); setFeedback("The coefficient cancels — now compute the other side."); }
         }, 1100);
       }, 550);
@@ -257,51 +284,24 @@ export default function EquationBuilder() {
       sWrong();
       setMoveWrong((w) => {
         const nw = new Set(w).add(i);
-        if (nw.size >= 2) setHint(stepOf(l) === "cancel"
-          ? `The constant is ${sign(l.constant)}${Math.abs(l.constant)}. Undo it with the OPPOSITE operation — on both sides.`
-          : `x is multiplied by ${l.coef}. Undo multiplication with its inverse.`);
+        if (nw.size >= 2) {
+          const s = stepOf(l);
+          setHint(s === "cancel"
+            ? `The constant is ${sign(l.constant)}${Math.abs(l.constant)}. Undo it with the OPPOSITE operation — on both sides.`
+            : s === "times"
+            ? `x is divided by ${l.div}. Undo division with its inverse.`
+            : `x is multiplied by ${l.coef}. Undo multiplication with its inverse.`);
+        }
         return nw;
       });
     }
   }
 
-  // ── drag the variable term down ──
-  function onTermPointerDown(e: React.PointerEvent) {
-    if (phase !== "pull" || pulled) return;
-    e.preventDefault();
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    setDrag({ x: e.clientX, y: e.clientY });
-  }
-  function onTermPointerMove(e: React.PointerEvent) {
-    if (drag) setDrag({ x: e.clientX, y: e.clientY });
-  }
-  function onTermPointerUp(e: React.PointerEvent) {
-    if (!drag) return;
-    const r = dropRef.current?.getBoundingClientRect();
-    const pad = 34;
-    if (r && e.clientX > r.left - pad && e.clientX < r.right + pad && e.clientY > r.top - pad && e.clientY < r.bottom + pad) {
-      landPull();
-    } else {
-      setPullMisses((m) => m + 1);
-      if (pullMisses >= 1) setHint("Drag the variable term straight down into the dashed box on the next line.");
-    }
-    setDrag(null);
-  }
-  function landPull() {
-    setPulled(true); sDrop();
-    setPhase("write");
-    setFeedback("It copies down. Now write what each side becomes.");
-  }
+  // ── write the result on the side the student computes ──
+  const rhsExpected = pendingOp?.kind === "cancel" ? cur.rhs - cur.constant
+    : pendingOp?.kind === "times" ? cur.rhs * pendingOp.val
+    : pendingOp ? cur.rhs / pendingOp.val : 0;
 
-  // ── write the results ──
-  const zeroExpected = 0;
-  const rhsExpected = pendingOp?.kind === "cancel" ? cur.rhs - cur.constant : pendingOp ? cur.rhs / pendingOp.val : 0;
-
-  function checkZero() {
-    if (zeroInput.trim() === "") return;
-    if (Number(zeroInput) === zeroExpected) { setZeroOk("ok"); sCorrect(); }
-    else { setZeroOk("bad"); sWrong(); setFeedback(`${sign(cur.constant)}${Math.abs(cur.constant)} and ${sign(-cur.constant)}${Math.abs(cur.constant)} make a zero pair — what's left?`); }
-  }
   function checkRhs() {
     if (rhsInput.trim() === "") return;
     if (Number(rhsInput) === rhsExpected) { setRhsOk("ok"); sCorrect(); }
@@ -309,21 +309,21 @@ export default function EquationBuilder() {
       setRhsOk("bad"); sWrong();
       setFeedback(pendingOp?.kind === "cancel"
         ? `Recompute ${cur.rhs} ${sign(-cur.constant)} ${Math.abs(cur.constant)}.`
+        : pendingOp?.kind === "times"
+        ? `Recompute ${cur.rhs} × ${pendingOp.val}.`
         : `Recompute ${cur.rhs} ÷ ${pendingOp?.val}.`);
     }
   }
   useEffect(() => {
-    if (phase !== "write" || !pendingOp) return;
-    const need = pendingOp.kind === "cancel" ? zeroOk === "ok" && rhsOk === "ok" : rhsOk === "ok";
-    if (!need) return;
+    if (phase !== "write" || !pendingOp || rhsOk !== "ok") return;
     const t = window.setTimeout(() => {
       const next: Line = pendingOp.kind === "cancel"
-        ? { coef: cur.coef, constant: 0, rhs: rhsExpected, showZero: true }
-        : { coef: 1, constant: 0, rhs: rhsExpected };
+        ? { coef: cur.coef, div: cur.div, constant: 0, rhs: rhsExpected, flip: cur.flip }
+        : { coef: 1, constant: 0, rhs: rhsExpected, flip: cur.flip };
       // keep the inverse annotations + rule on the finished line, like paper
       setLines((l) => [...l.slice(0, -1), { ...l[l.length - 1], opAfter: pendingOp }, next]);
-      setPendingOp(null); setPulled(false);
-      setZeroInput(""); setRhsInput(""); setZeroOk("idle"); setRhsOk("idle");
+      setPendingOp(null);
+      setRhsInput(""); setRhsOk("idle");
       if (stepOf(next) === "done") {
         setPhase("celebrate"); setFeedback(""); sSolved();
         setStreak((s) => s + 1);
@@ -333,30 +333,36 @@ export default function EquationBuilder() {
       }
     }, 550);
     return () => window.clearTimeout(t);
-  }, [phase, pendingOp, zeroOk, rhsOk]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [phase, pendingOp, rhsOk]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── glyph renderers (big serif, colored characters — no boxes) ──
+  // ── glyph renderers (big squared-off characters — no boxes) ──
   function varTerm(l: Line, opts: { tapZone?: boolean; pullable?: boolean; faded?: boolean } = {}) {
-    const coefEl = l.coef !== 1 && (
-      <span
-        className={`eq-g eq-coef${opts.tapZone ? " eq-tap" : ""}${opts.tapZone && tapWrong.has("coef") ? " eq-wrongglyph" : ""}`}
-        onClick={opts.tapZone ? () => tapPart("coef") : undefined}
-      >{l.coef}</span>
-    );
     const xEl = (
       <span
-        className={`eq-g eq-x${opts.tapZone ? " eq-tap eq-tap-x" : ""}${opts.tapZone && tapHit ? " eq-hitglyph" : ""}`}
+        className={`eq-g eq-x${opts.tapZone ? " eq-tap eq-tap-x" : ""}`}
         onClick={opts.tapZone ? () => tapPart("x") : undefined}
       >x</span>
     );
-    const inner = <>{coefEl}{xEl}</>;
-    if (opts.pullable) {
-      return (
-        <span
-          className={`eq-term eq-pullable${drag ? " eq-dragging" : ""}`}
-          onPointerDown={onTermPointerDown} onPointerMove={onTermPointerMove} onPointerUp={onTermPointerUp}
-        >{inner}</span>
+    let inner: React.ReactNode;
+    if ((l.div ?? 1) > 1) {
+      inner = (
+        <span className="eq-frac">
+          {xEl}
+          <span className="eq-fracbar" />
+          <span
+            className={`eq-g eq-coef${opts.tapZone ? " eq-tap" : ""}${opts.tapZone && tapWrong.has("div") ? " eq-wrongglyph" : ""}`}
+            onClick={opts.tapZone ? () => tapPart("div") : undefined}
+          >{l.div}</span>
+        </span>
       );
+    } else {
+      const coefEl = l.coef !== 1 && (
+        <span
+          className={`eq-g eq-coef${opts.tapZone ? " eq-tap" : ""}${opts.tapZone && tapWrong.has("coef") ? " eq-wrongglyph" : ""}`}
+          onClick={opts.tapZone ? () => tapPart("coef") : undefined}
+        >{l.coef}</span>
+      );
+      inner = <>{coefEl}{xEl}</>;
     }
     return <span className={`eq-term${opts.faded ? " eq-faded" : ""}`}>{inner}</span>;
   }
@@ -365,101 +371,76 @@ export default function EquationBuilder() {
     const out: React.ReactNode[] = [];
     lines.forEach((l, i) => {
       const isLast = i === lines.length - 1;
-      const liveOp = isLast && pendingOp && (phase === "anim" || phase === "pull" || phase === "write") ? pendingOp : null;
+      const liveOp = isLast && pendingOp && (phase === "anim" || phase === "zero" || phase === "write") ? pendingOp : null;
       const shownOp = liveOp ?? l.opAfter ?? null;
 
-      out.push(
+      const flip = !!l.flip;
+      const pushRow = (varCell: React.ReactNode, constCell: React.ReactNode, eqCell: React.ReactNode, rhsCell: React.ReactNode) => {
+        if (flip) out.push(rhsCell, eqCell, varCell, constCell);
+        else out.push(varCell, constCell, eqCell, rhsCell);
+      };
+
+      pushRow(
         <div className="eq-cell c-var" key={`v${i}`}>
-          {varTerm(l, {
-            tapZone: isLast && phase === "tap-var",
-            pullable: isLast && phase === "pull" && !pulled,
-            faded: false,
-          })}
+          {varTerm(l, { tapZone: isLast && phase === "tap-var" })}
           {shownOp?.kind === "divide" && <span className="eq-under eq-drop">÷ {shownOp.val}</span>}
-        </div>
-      );
-      out.push(
+          {shownOp?.kind === "times" && <span className="eq-under eq-drop">× {shownOp.val}</span>}
+        </div>,
         <div className="eq-cell c-const" key={`c${i}`}>
-          {l.constant !== 0 ? (
-            <span
-              className={`eq-g eq-const${isLast && phase === "tap-var" ? " eq-tap" : ""}${tapWrong.has("const") && isLast ? " eq-wrongglyph" : ""}`}
-              onClick={isLast && phase === "tap-var" ? () => tapPart("const") : undefined}
-            >{sign(l.constant)} {Math.abs(l.constant)}</span>
-          ) : l.showZero ? (
-            <span className="eq-g eq-zero">+ 0</span>
-          ) : null}
-          {shownOp?.kind === "cancel" && <span className="eq-under eq-drop">{sign(-shownOp.val)} {Math.abs(shownOp.val)}</span>}
-        </div>
-      );
-      out.push(<div className="eq-cell c-eq" key={`e${i}`}><span className="eq-g eq-equals">=</span></div>);
-      out.push(
+          {l.constant !== 0 && (
+            <span className={`eq-zwrap${l.zeroed ? " eq-vanish" : ""}`}>
+              <span
+                className={`eq-g eq-const${isLast && phase === "tap-var" ? " eq-tap" : ""}${tapWrong.has("const") && isLast ? " eq-wrongglyph" : ""}`}
+                onClick={isLast && phase === "tap-var" ? () => tapPart("const") : undefined}
+              >{sign(l.constant)} {Math.abs(l.constant)}</span>
+              {shownOp?.kind === "cancel" && <span className="eq-under eq-drop">{sign(-shownOp.val)} {Math.abs(shownOp.val)}</span>}
+              {isLast && phase === "zero" && <span className="eq-zeropop">= 0</span>}
+            </span>
+          )}
+        </div>,
+        <div className="eq-cell c-eq" key={`e${i}`}><span className="eq-g eq-equals">=</span></div>,
         <div className="eq-cell c-rhs" key={`r${i}`}>
           <span
             className={`eq-g eq-rhs${isLast && phase === "tap-var" ? " eq-tap" : ""}${tapWrong.has("rhs") && isLast ? " eq-wrongglyph" : ""}`}
             onClick={isLast && phase === "tap-var" ? () => tapPart("rhs") : undefined}
           >{l.rhs}</span>
-          {shownOp && <span className="eq-under eq-drop">{shownOp.kind === "cancel" ? `${sign(-shownOp.val)} ${Math.abs(shownOp.val)}` : `÷ ${shownOp.val}`}</span>}
+          {shownOp && (
+            <span className="eq-under eq-drop">
+              {shownOp.kind === "cancel" ? `${sign(-shownOp.val)} ${Math.abs(shownOp.val)}` : shownOp.kind === "times" ? `× ${shownOp.val}` : `÷ ${shownOp.val}`}
+            </span>
+          )}
         </div>
       );
 
       if (shownOp) out.push(<div className="eq-rule" key={`hr${i}`} />);
       if (liveOp) {
         // pending next line
-        if (liveOp.kind === "cancel") {
-          out.push(
+        const rhsInputCell = (disabled: boolean) => (
+          <div className="eq-cell c-rhs" key={`pr${i}`}>
+            <input
+              className={`eq-input${rhsOk === "ok" ? " ok" : rhsOk === "bad" ? " bad" : ""}`}
+              type="number" inputMode="numeric" placeholder="?" disabled={disabled || rhsOk === "ok"}
+              value={rhsInput}
+              onChange={(e) => { setRhsInput(e.target.value); setRhsOk("idle"); }}
+              onBlur={checkRhs}
+              onKeyDown={(e) => { if (e.key === "Enter") checkRhs(); }}
+              aria-label="Compute the other side"
+            />
+          </div>
+        );
+        if (phase === "write") {
+          // the variable term drops down to the next line by itself; the
+          // student computes the other side
+          pushRow(
             <div className="eq-cell c-var" key={`pv${i}`}>
-              {pulled ? (
-                <span className="eq-term eq-landed">{cur.coef !== 1 && <span className="eq-g eq-coef">{cur.coef}</span>}<span className="eq-g eq-x">x</span></span>
-              ) : (
-                <div className={`eq-slot${drag ? " eq-slot-hot" : ""}`} ref={dropRef}>{phase === "pull" ? "drop here" : ""}</div>
-              )}
-            </div>
-          );
-          out.push(
-            <div className="eq-cell c-const" key={`pc${i}`}>
-              <input
-                className={`eq-input${zeroOk === "ok" ? " ok" : zeroOk === "bad" ? " bad" : ""}`}
-                type="number" inputMode="numeric" placeholder="?" disabled={!pulled || zeroOk === "ok"}
-                value={zeroInput}
-                onChange={(e) => { setZeroInput(e.target.value); setZeroOk("idle"); }}
-                onBlur={checkZero}
-                onKeyDown={(e) => { if (e.key === "Enter") checkZero(); }}
-                aria-label="What does the zero pair make?"
-              />
-            </div>
-          );
-          out.push(<div className="eq-cell c-eq" key={`pe${i}`}><span className="eq-g eq-equals eq-faded">=</span></div>);
-          out.push(
-            <div className="eq-cell c-rhs" key={`pr${i}`}>
-              <input
-                className={`eq-input${rhsOk === "ok" ? " ok" : rhsOk === "bad" ? " bad" : ""}`}
-                type="number" inputMode="numeric" placeholder="?" disabled={!pulled || rhsOk === "ok"}
-                value={rhsInput}
-                onChange={(e) => { setRhsInput(e.target.value); setRhsOk("idle"); }}
-                onBlur={checkRhs}
-                onKeyDown={(e) => { if (e.key === "Enter") checkRhs(); }}
-                aria-label="Compute the right side"
-              />
-            </div>
-          );
-        } else if (phase === "write") {
-          out.push(
-            <div className="eq-cell c-var" key={`pv${i}`}><span className="eq-term eq-landed"><span className="eq-g eq-x">x</span></span></div>
-          );
-          out.push(<div className="eq-cell c-const" key={`pc${i}`} />);
-          out.push(<div className="eq-cell c-eq" key={`pe${i}`}><span className="eq-g eq-equals eq-faded">=</span></div>);
-          out.push(
-            <div className="eq-cell c-rhs" key={`pr${i}`}>
-              <input
-                className={`eq-input${rhsOk === "ok" ? " ok" : rhsOk === "bad" ? " bad" : ""}`}
-                type="number" inputMode="numeric" placeholder="?" autoFocus
-                value={rhsInput}
-                onChange={(e) => { setRhsInput(e.target.value); setRhsOk("idle"); }}
-                onBlur={checkRhs}
-                onKeyDown={(e) => { if (e.key === "Enter") checkRhs(); }}
-                aria-label="Compute the right side"
-              />
-            </div>
+              <span className="eq-term eq-landed">
+                {liveOp.kind === "cancel" && cur.coef !== 1 && <span className="eq-g eq-coef">{cur.coef}</span>}
+                <span className="eq-g eq-x">x</span>
+              </span>
+            </div>,
+            <div className="eq-cell c-const" key={`pc${i}`} />,
+            <div className="eq-cell c-eq" key={`pe${i}`}><span className="eq-g eq-equals eq-faded">=</span></div>,
+            rhsInputCell(false)
           );
         }
       }
@@ -479,6 +460,19 @@ export default function EquationBuilder() {
         .eqb-seg button { border:none; background:transparent; border-radius:999px; padding:7px 14px; font:inherit; font-weight:600; font-size:0.82rem; color:var(--bdb-ink-soft); cursor:pointer; }
         .eqb-seg button.on { background:var(--bdb-ink); color:#fff; }
         .eqb-seg.lvl button.on { background:var(--bdb-coral); }
+        .eqb-lvlwrap { position:relative; display:inline-flex; }
+        .eqb-seg.bump { animation:eqbBump 0.5s cubic-bezier(0.2,1.6,0.4,1); }
+        @keyframes eqbBump { 35%{ transform:scale(1.12); } }
+        .eqb-lvlfx { position:absolute; left:50%; top:calc(100% + 6px); transform:translateX(-50%); white-space:nowrap; font-weight:800; font-size:0.8rem; background:var(--bdb-ink); color:#fff; border-radius:999px; padding:6px 14px; z-index:30; pointer-events:none; animation:eqbFxPop 1.5s ease forwards; }
+        .eqb-lvlfx.up { background:var(--bdb-coral); }
+        @keyframes eqbFxPop { 0%{opacity:0; transform:translateX(-50%) translateY(-6px) scale(0.5);} 18%{opacity:1; transform:translateX(-50%) translateY(0) scale(1.08);} 30%{transform:translateX(-50%) scale(1);} 80%{opacity:1;} 100%{opacity:0; transform:translateX(-50%) translateY(8px);} }
+
+        /* inverse-operations key, pinned to the left side */
+        .eqb-key { position:fixed; left:clamp(8px,1.6vw,26px); top:50%; transform:translateY(-50%); z-index:10; background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:16px; padding:14px 16px; box-shadow:var(--bdb-shadow-sm); display:grid; gap:8px; justify-items:center; }
+        .eqb-key-title { font-size:0.68rem; font-weight:800; letter-spacing:0.09em; text-transform:uppercase; color:var(--bdb-ink-faint); }
+        .eqb-key-row { display:flex; align-items:center; gap:10px; font-family:"Chakra Petch", "Albert Sans", ui-sans-serif, sans-serif; font-weight:700; font-size:1.5rem; color:var(--bdb-ink); }
+        .eqb-key-row .arr { color:var(--bdb-coral); font-size:1.2rem; }
+        @media (max-width:1050px) { .eqb-key { position:static; transform:none; grid-auto-flow:column; align-items:center; gap:14px; padding:8px 14px; margin:0 auto; } .eqb-key-title { max-width:90px; text-align:center; } }
         .eqb-streak { margin-left:auto; margin-right:auto; display:inline-flex; align-items:center; gap:8px; font-weight:800; font-size:1.02rem; background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:999px; padding:8px 18px; box-shadow:var(--bdb-shadow-sm); }
         .eqb-streak b { color:var(--bdb-coral); font-size:1.2rem; }
         .eqb-new { font-size:0.84rem; font-weight:600; color:var(--bdb-ink-soft); background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:999px; padding:8px 14px; cursor:pointer; }
@@ -487,17 +481,23 @@ export default function EquationBuilder() {
         .eqb-main { flex:1; padding:clamp(18px,3vw,34px); display:flex; flex-direction:column; gap:clamp(14px,2.4vw,22px); align-items:center; max-width:980px; margin:0 auto; width:100%; box-sizing:border-box; }
 
         /* ── the equation: big, serif, colored characters ── */
-        .eq-work { display:grid; grid-template-columns:minmax(90px,auto) minmax(90px,auto) auto minmax(90px,auto); align-items:start; column-gap:clamp(10px,2.4vw,22px); row-gap:clamp(10px,2vw,18px); justify-content:center; margin-top:6px; }
+        /* column-gap stays 0 so an empty constant column takes no width —
+           spacing comes from the = sign and from non-empty constant content */
+        .eq-work { display:grid; grid-template-columns:minmax(0,auto) minmax(0,auto) auto minmax(0,auto); align-items:start; column-gap:0; row-gap:clamp(10px,2vw,18px); justify-content:center; margin-top:clamp(14px,3vh,34px); }
+        .eq-work.roomy { margin-top:clamp(60px,16vh,170px); }
+        .eq-cell.c-eq { margin:0 clamp(10px,2.2vw,20px); }
+        .eq-cell.c-const > * { margin-left:clamp(10px,2.2vw,20px); }
+        .eq-work.flip .c-var { align-items:flex-start; }
+        .eq-work.flip .c-rhs { align-items:flex-end; }
         .eq-cell { display:flex; flex-direction:column; align-items:center; gap:4px; min-height:1px; animation:eqIn 0.4s ease; }
         .eq-cell.c-var { align-items:flex-end; }
         .eq-cell.c-const, .eq-cell.c-rhs { align-items:flex-start; }
         @keyframes eqIn { from{opacity:0; transform:translateY(-8px);} to{opacity:1; transform:none;} }
-        .eq-g { font-family:Georgia, "Times New Roman", serif; font-weight:700; font-size:clamp(2.5rem,7.5vw,4.4rem); line-height:1.06; white-space:nowrap; }
-        .eq-coef { color:#2456b8; }
-        .eq-x { color:#0c7268; font-style:italic; padding-right:2px; }
-        .eq-const { color:#c2410c; }
-        .eq-equals { color:var(--bdb-ink); }
-        .eq-rhs { color:#6d28d9; }
+        .eq-g { font-family:"Chakra Petch", "Albert Sans", ui-sans-serif, sans-serif; font-weight:700; font-size:clamp(2.5rem,7.5vw,4.4rem); line-height:1.06; white-space:nowrap; }
+        .eq-coef, .eq-const, .eq-equals, .eq-rhs { color:var(--bdb-ink); }
+        .eq-x { color:var(--bdb-ink); font-style:italic; padding-right:2px; border-radius:10px; }
+        /* once the student identifies the variable it stays highlighted, like a highlighter */
+        .eq-found .eq-x { background:color-mix(in srgb, var(--bdb-amber) 55%, white); box-shadow:0 0 0 2px color-mix(in srgb, var(--bdb-amber) 70%, white); padding:0 6px; }
         .eq-zero { color:var(--bdb-ink-faint); }
         .eq-faded { opacity:0.45; }
         .eq-term { display:inline-flex; align-items:baseline; }
@@ -506,22 +506,27 @@ export default function EquationBuilder() {
         .eq-tap:hover { background:color-mix(in srgb, var(--bdb-amber) 22%, transparent); }
         .eq-tap-x { box-shadow:0 0 0 0 transparent; }
         .eq-wrongglyph { background:color-mix(in srgb, #ef4444 16%, transparent); box-shadow:0 0 0 3px color-mix(in srgb, #ef4444 45%, transparent); border-radius:14px; }
-        .eq-hitglyph { background:color-mix(in srgb, var(--bdb-green) 18%, transparent); box-shadow:0 0 0 3px color-mix(in srgb, var(--bdb-green) 55%, transparent); border-radius:14px; }
 
-        .eq-under { font-family:Georgia, "Times New Roman", serif; font-weight:700; font-size:clamp(1.5rem,4.2vw,2.5rem); color:var(--bdb-coral); white-space:nowrap; }
+        .eq-under { font-family:"Chakra Petch", "Albert Sans", ui-sans-serif, sans-serif; font-weight:700; font-size:clamp(1.5rem,4.2vw,2.5rem); color:var(--bdb-coral); white-space:nowrap; }
         .eq-drop { animation:eqDropIn 0.7s cubic-bezier(0.2,1.4,0.4,1); }
         @keyframes eqDropIn { from{opacity:0; transform:translateY(-46px) scale(0.7);} 60%{opacity:1;} to{opacity:1; transform:none;} }
         .eq-rule { grid-column:1 / -1; height:0; border-top:4px solid var(--bdb-ink); border-radius:2px; margin:2px 0; animation:eqRule 0.5s ease; }
         @keyframes eqRule { from{opacity:0; transform:scaleX(0.1);} to{opacity:1; transform:scaleX(1);} }
 
-        .eq-pullable { cursor:grab; touch-action:none; border-radius:16px; padding:2px 8px; background:color-mix(in srgb, var(--bdb-teal) 14%, transparent); box-shadow:0 0 0 3px color-mix(in srgb, var(--bdb-teal) 45%, transparent); animation:eqPulse 1.1s ease-in-out infinite; user-select:none; }
-        .eq-pullable:active, .eq-dragging { cursor:grabbing; }
-        .eq-slot { min-width:clamp(90px,16vw,150px); min-height:clamp(52px,9vw,84px); border:3px dashed var(--bdb-ink-faint); border-radius:16px; display:grid; place-items:center; color:var(--bdb-ink-faint); font-weight:700; font-size:0.82rem; letter-spacing:0.04em; text-transform:uppercase; }
-        .eq-slot-hot { border-color:var(--bdb-teal); color:var(--bdb-teal); background:color-mix(in srgb, var(--bdb-teal) 8%, transparent); }
-        .eq-landed { animation:eqDropIn 0.5s cubic-bezier(0.2,1.4,0.4,1); }
-        .eq-ghost { position:fixed; z-index:60; pointer-events:none; transform:translate(-50%,-50%) scale(0.92); opacity:0.9; }
+        /* x over a divisor, rendered as a stacked fraction */
+        .eq-frac { display:inline-flex; flex-direction:column; align-items:center; gap:2px; }
+        .eq-fracbar { height:4px; min-width:44px; width:100%; background:var(--bdb-ink); border-radius:2px; }
 
-        .eq-input { font-family:Georgia, "Times New Roman", serif; font-weight:700; font-size:clamp(1.7rem,4.6vw,2.7rem); text-align:center; width:clamp(84px,14vw,130px); padding:6px 8px; border-radius:14px; border:3px solid var(--bdb-line); background:var(--bdb-card); color:var(--bdb-ink); outline:none; }
+        .eq-landed { animation:eqDropIn 0.5s cubic-bezier(0.2,1.4,0.4,1); }
+
+        /* the zero pair announces "= 0", then the whole stack vanishes */
+        .eq-zwrap { display:flex; flex-direction:column; align-items:center; gap:4px; }
+        .eq-vanish { animation:eqVanish 0.6s ease forwards; }
+        @keyframes eqVanish { to { opacity:0; transform:scale(0.7); } }
+        .eq-zeropop { font-family:"Chakra Petch", "Albert Sans", ui-sans-serif, sans-serif; font-weight:700; font-size:clamp(1.3rem,3.4vw,2rem); color:var(--bdb-green); background:color-mix(in srgb, var(--bdb-green) 14%, white); border:3px solid var(--bdb-green); border-radius:14px; padding:2px 14px; animation:eqZeroPop 0.55s cubic-bezier(0.2,1.5,0.4,1); }
+        @keyframes eqZeroPop { from { opacity:0; transform:scale(0.2); } to { opacity:1; transform:scale(1); } }
+
+        .eq-input { font-family:"Chakra Petch", "Albert Sans", ui-sans-serif, sans-serif; font-weight:700; font-size:clamp(1.7rem,4.6vw,2.7rem); text-align:center; width:clamp(84px,14vw,130px); padding:6px 8px; border-radius:14px; border:3px solid var(--bdb-line); background:var(--bdb-card); color:var(--bdb-ink); outline:none; }
         .eq-input:focus { border-color:var(--bdb-teal); }
         .eq-input.ok { border-color:var(--bdb-green); background:color-mix(in srgb, var(--bdb-green) 10%, white); color:var(--bdb-green); }
         .eq-input.bad { border-color:#ef4444; background:color-mix(in srgb, #ef4444 8%, white); animation:eqShake 0.35s ease; }
@@ -546,7 +551,6 @@ export default function EquationBuilder() {
           0%,100% { transform:translateY(0) scale(1); box-shadow:0 14px 30px -10px color-mix(in srgb, var(--bdb-coral) 75%, transparent); }
           50% { transform:translateY(-5px) scale(1.035); box-shadow:0 24px 42px -12px color-mix(in srgb, var(--bdb-coral) 85%, transparent); }
         }
-        @keyframes eqPulse { 50%{ box-shadow:0 0 0 8px color-mix(in srgb, var(--bdb-teal) 18%, transparent); } }
 
         /* ── goal popup: zooms out of the middle toward you ── */
         .eqb-modal { position:fixed; inset:0; background:rgba(32,30,26,0.5); display:grid; place-items:center; z-index:40; padding:20px; animation:eqbFade 0.25s ease; }
@@ -558,7 +562,7 @@ export default function EquationBuilder() {
 
         /* ── celebration ── */
         .eqb-celebrate { display:grid; justify-items:center; gap:12px; text-align:center; }
-        .eqb-solved-eq { font-family:Georgia, "Times New Roman", serif; font-size:clamp(2.6rem,8vw,4.6rem); font-weight:700; color:var(--bdb-green); animation:eqDropIn 0.6s cubic-bezier(0.2,1.4,0.4,1); }
+        .eqb-solved-eq { font-family:"Chakra Petch", "Albert Sans", ui-sans-serif, sans-serif; font-size:clamp(2.6rem,8vw,4.6rem); font-weight:700; color:var(--bdb-green); animation:eqDropIn 0.6s cubic-bezier(0.2,1.4,0.4,1); }
         .eqb-cheer { font-size:1.12rem; font-weight:700; color:var(--bdb-ink); }
         .eqb-confetti { position:fixed; inset:0; pointer-events:none; overflow:hidden; z-index:50; }
         .eqb-cf { position:absolute; top:-14px; width:10px; height:16px; border-radius:3px; animation:eqbFall 1.8s ease-in forwards; }
@@ -566,15 +570,17 @@ export default function EquationBuilder() {
       `}</style>
 
       <div className="eqb-strip">
-        <div className="eqb-seg" role="group" aria-label="Equation type">
-          <button className={steps === "one" ? "on" : ""} onClick={() => saveSteps("one")}>1-step</button>
-          <button className={steps === "two" ? "on" : ""} onClick={() => saveSteps("two")}>2-step</button>
-          <button className={steps === "mix" ? "on" : ""} onClick={() => saveSteps("mix")}>Mix</button>
-        </div>
         <div className="eqb-streak" title="Equations solved this session">⭐ <b>{streak}</b> in a row</div>
-        <div className="eqb-seg lvl" role="group" aria-label="Difficulty">
-          <button className={level === "regular" ? "on" : ""} onClick={() => saveLevel("regular")}>Regular</button>
-          <button className={level === "levelup" ? "on" : ""} onClick={() => saveLevel("levelup")}>Level Up!</button>
+        <div className="eqb-lvlwrap">
+          <div className={`eqb-seg lvl${levelFx ? " bump" : ""}`} role="group" aria-label="Difficulty">
+            <button className={level === "regular" ? "on" : ""} onClick={() => saveLevel("regular")}>Regular</button>
+            <button className={level === "levelup" ? "on" : ""} onClick={() => saveLevel("levelup")}>Level Up!</button>
+          </div>
+          {levelFx && (
+            <div className={`eqb-lvlfx${levelFx === "levelup" ? " up" : ""}`}>
+              {levelFx === "levelup" ? "⬆ Level Up! mode" : "Regular mode"}
+            </div>
+          )}
         </div>
         <button className="eqb-new" onClick={() => freshQuestion()}>↻ New equation</button>
       </div>
@@ -582,7 +588,13 @@ export default function EquationBuilder() {
       <main className="eqb-main">
         <LiveToolBanner tool={liveTool} />
 
-        <div className="eq-work">{renderWorked()}</div>
+        <aside className="eqb-key" aria-label="Inverse operations key">
+          <div className="eqb-key-title">Inverse operations</div>
+          <div className="eqb-key-row"><span>+</span><span className="arr">↔</span><span>−</span></div>
+          <div className="eqb-key-row"><span>×</span><span className="arr">↔</span><span>÷</span></div>
+        </aside>
+
+        <div className={`eq-work${varFound ? " eq-found" : ""}${phase === "idle" ? " roomy" : ""}${lines[0]?.flip ? " flip" : ""}`}>{renderWorked()}</div>
 
         {phase === "idle" && (
           <>
@@ -621,7 +633,7 @@ export default function EquationBuilder() {
           </div>
         )}
 
-        {(phase === "tap-var" || phase === "move" || phase === "anim" || phase === "pull" || phase === "write") && (
+        {(phase === "tap-var" || phase === "move" || phase === "anim" || phase === "zero" || phase === "write") && (
           <>
             <p className="eqb-q">{feedback}</p>
             {phase === "move" && (
@@ -648,12 +660,6 @@ export default function EquationBuilder() {
           </div>
         )}
       </main>
-
-      {drag && (
-        <span className="eq-ghost" style={{ left: drag.x, top: drag.y }}>
-          <span className="eq-term">{cur.coef !== 1 && <span className="eq-g eq-coef">{cur.coef}</span>}<span className="eq-g eq-x">x</span></span>
-        </span>
-      )}
 
       {confetti.length > 0 && (
         <div className="eqb-confetti" aria-hidden>
