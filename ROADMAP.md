@@ -18,7 +18,7 @@ Checkpoint delivery · iPad ink → board · Abbiliathan 3000 (voice + Stream De
 mastery board + growth charts, /api/evidence, clustering + archetypes
 (golden-tested 25/25), Right-now view w/ Notion Misconception Plans merge ·
 **Checkpoint CSV upload** (/teacher/checkpoint-upload — tier + SBAC flags,
-idempotent, auto-recompute) · Figma lesson-flow template
+idempotent, auto-recompute) · **Tool evidence emitters** (EB/GEMS/CLT → mastery, session-gated) · Figma lesson-flow template
 
 ## In progress 🔨
 - **Week builder** — code shipped (warmup-pools-data.gs + warmup-week-builder.gs +
@@ -27,7 +27,6 @@ idempotent, auto-recompute) · Figma lesson-flow template
 - Warm-up → spine bridge — live and verified (Evidence post 200, 7/4)
 
 ## Planned 🧭
-- Tool evidence emitters (Equation Builder, GEMS, CLT → responses)
 - Claude enrichment (score short-answer reasoning; sharpen next moves)
 - RLS tightening on legacy tables (required before real student data)
 - Reskin remaining tools; vertical draggable control sequence
