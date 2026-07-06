@@ -195,6 +195,9 @@ function getNotionLessonsForWeek_(startDate) {
 
   const start = getWarmupDayInfo_(startDate, 0).isoDate;
   const end = getWarmupDayInfo_(startDate, 4).isoDate;
+  // Query back 3 weeks so a multi-day lesson whose date RANGE started before
+  // this week (e.g. Thu → Tue) is still found and expanded onto this week's days.
+  const queryStart = bdmShiftIsoDate_(start, -21);
   const lessons = {};
   const errors = [];
 
@@ -203,9 +206,9 @@ function getNotionLessonsForWeek_(startDate) {
     try {
       do {
         const body = {
-          page_size: 50,
+          page_size: 100,
           filter: { and: [
-            { property: "Date", date: { on_or_after: start } },
+            { property: "Date", date: { on_or_after: queryStart } },
             { property: "Date", date: { on_or_before: end } }
           ] }
         };
@@ -215,13 +218,23 @@ function getNotionLessonsForWeek_(startDate) {
           const p = page.properties || {};
           const status = readNotionPlain_(p["Publish Workflow"]);
           if (status && status.toLowerCase().indexOf("publish") === -1) return; // only Published
-          const date = readNotionPlain_(p["Date"]).slice(0, 10);
-          if (!date || lessons[date]) return;
-          lessons[date] = {
+          const range = readNotionDateRange_(p["Date"]);
+          if (!range.start) return;
+          const lesson = {
             title: readNotionPlain_(p["Lesson"]) || readNotionPlain_(p["Name"]),
             topic: readNotionPlain_(p["Topic"]),
             module: readNotionPlain_(p["Module #"]) || readNotionPlain_(p["Module"])
           };
+          // A multi-day lesson (date range) claims EVERY day in its span; a
+          // single-date lesson claims just that day.
+          let day = range.start;
+          const last = range.end || range.start;
+          let guard = 0;
+          while (day <= last && guard < 31) {
+            if (day >= start && day <= end && !lessons[day]) lessons[day] = lesson;
+            day = bdmShiftIsoDate_(day, 1);
+            guard++;
+          }
         });
         cursor = data.has_more ? data.next_cursor : null;
       } while (cursor);
@@ -234,6 +247,20 @@ function getNotionLessonsForWeek_(startDate) {
     throw new Error("Couldn't read lessons from Notion: " + errors[0]);
   }
   return lessons;
+}
+
+function bdmShiftIsoDate_(iso, days) {
+  const d = new Date(iso + "T12:00:00Z");
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function readNotionDateRange_(prop) {
+  if (!prop || prop.type !== "date" || !prop.date) return { start: "", end: "" };
+  return {
+    start: String(prop.date.start || "").slice(0, 10),
+    end: String(prop.date.end || "").slice(0, 10)
+  };
 }
 
 function readNotionPlain_(prop) {
@@ -325,7 +352,13 @@ function pickPoolItemsForLesson_(lesson, count) {
     throw new Error("No pool items match lesson \"" + (lesson.title || lesson.topic) +
       "\" - check the lesson's Topic wording against the Semester 1 pool, or build this day with a typed topic.");
   }
-  return rotatePicks_("q45:" + group[0].lesson, group, count);
+  // Multi-day lessons can outrun their concept's few items: extend the rotation
+  // with the rest of the SAME TOPIC's items (still on-module, still tagged), so
+  // nothing repeats until the whole topic pool is exhausted.
+  const topicRest = BDM_Q4Q5_POOL.filter(function (item) {
+    return item.topic === group[0].topic && item.lesson !== group[0].lesson;
+  });
+  return rotatePicks_("q45:" + group[0].lesson, group.concat(topicRest), count);
 }
 
 function pickShortAnswerForLesson_(lesson) {
