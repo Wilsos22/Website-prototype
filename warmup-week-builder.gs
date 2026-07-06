@@ -64,8 +64,13 @@ function buildDayFromNotionLesson_(safeConfig, dayIndex, lessons) {
   const isRetention = !!target;
   if (!target) target = lesson;
 
-  // 1. Pool picks for Q4/Q5 (+ short answer), matched to the target lesson, rotated.
-  const picks = pickPoolItemsForLesson_(target, 2);
+  // 1. Q4/Q5 come from the target lesson's "Retention Q4/Q5" Notion fields when
+  //    filled (teacher-editable — your text wins). Empty fields pull from the
+  //    pool, and the picks are WRITTEN BACK to the lesson page so you can see
+  //    and edit them. On later days of a multi-day run the fields are considered
+  //    "already used" and fresh pool items rotate in instead (no repeat mornings).
+  const retention = getRetentionSlots_(target, dayInfo.isoDate);
+  const picks = retention.picks;
   const saPick = pickShortAnswerForLesson_(target);
 
   // 2. AI fills the rest: Q1 fluency, Q2–Q3 spiral, plus 2 extra distractors
@@ -156,11 +161,94 @@ function buildDayFromNotionLesson_(safeConfig, dayIndex, lessons) {
     editUrl: formResult.form.getEditUrl(),
     publishedUrl: formResult.form.getPublishedUrl(),
     responseTabName: formResult.responseTabName,
-    source: "Notion lesson + curated pool - Q4/Q5 " +
-      (isRetention ? "retention from " + (target.title || target.topic || targetDate) : "from today's lesson (no prior lesson found)"),
+    source: "Q4/Q5 " +
+      (isRetention ? "retention from " + (target.title || target.topic || targetDate) : "from today's lesson (no prior lesson found)") +
+      (retention.usedOverrides ? " - " + retention.usedOverrides + " teacher-defined" : " - from pool (written to the lesson page for editing)"),
     notionStatus: linkStatus,
     triggerStatus: triggerStatus
   };
+}
+
+// --- Retention Q4/Q5: Notion fields first, pool fallback + write-back --------
+
+// Field format (forgiving): "Question | ans: correct | wrong: value -> tag | ccss: 6.NS.B.4"
+// Question + ans are required; wrong/tag/ccss optional.
+function parseRetentionOverride_(raw) {
+  const text = String(raw || "").trim();
+  if (!text) return null;
+  const parts = text.split("|").map(function (s) { return s.trim(); }).filter(Boolean);
+  if (!parts.length) return null;
+  const out = { q: parts[0], correct: "", wrong: "", tag: "", ccss: "" };
+  for (let i = 1; i < parts.length; i++) {
+    const seg = parts[i];
+    const m = seg.match(/^(ans|answer|correct|wrong|ccss|standard)\s*:\s*(.+)$/i);
+    if (!m) continue;
+    const label = m[1].toLowerCase();
+    const value = m[2].trim();
+    if (label === "ans" || label === "answer" || label === "correct") out.correct = value;
+    else if (label === "wrong") {
+      const arrow = value.split("->");
+      out.wrong = arrow[0].trim();
+      out.tag = (arrow[1] || "").trim();
+    } else out.ccss = value;
+  }
+  return out.q && out.correct ? out : null;
+}
+
+function formatRetentionField_(item) {
+  let s = item.q + " | ans: " + item.correct;
+  if (item.wrong) s += " | wrong: " + item.wrong + (item.tag ? " -> " + item.tag : "");
+  if (item.ccss) s += " | ccss: " + item.ccss;
+  return s.slice(0, 1900);
+}
+
+function getRetentionSlots_(target, buildIsoDate) {
+  const props = PropertiesService.getScriptProperties();
+  const usedKey = target.pageId ? "bdm_ret_used_" + target.pageId : "";
+  const usedOn = usedKey ? props.getProperty(usedKey) : "";
+  // Fields apply to the FIRST warm-up after the lesson (or a same-day rebuild);
+  // later days of a multi-day run rotate fresh pool items instead.
+  const fieldsLive = !usedOn || usedOn === buildIsoDate;
+
+  const rawFields = [target.retentionQ4 || "", target.retentionQ5 || ""];
+  const overrides = fieldsLive ? rawFields.map(parseRetentionOverride_) : [null, null];
+  const poolNeeded = overrides.filter(function (o) { return !o; }).length;
+  const poolItems = poolNeeded > 0 ? pickPoolItemsForLesson_(target, poolNeeded) : [];
+
+  const picks = [];
+  const writeBack = {};
+  let pi = 0;
+  for (let slot = 0; slot < 2; slot++) {
+    const o = overrides[slot];
+    if (o) {
+      picks.push({ q: o.q, correct: o.correct, wrong: o.wrong, tag: o.tag, ccss: o.ccss, topic: "", lesson: "(teacher-defined)" });
+    } else {
+      const item = poolItems[pi++];
+      picks.push(item);
+      // Only write back into fields that were BLANK (never clobber teacher text).
+      if (fieldsLive && target.pageId && !String(rawFields[slot]).trim()) {
+        writeBack["Retention Q" + (slot + 4)] = formatRetentionField_(item);
+      }
+    }
+  }
+
+  if (Object.keys(writeBack).length) writeRetentionFieldsSafely_(target.pageId, writeBack);
+  if (usedKey && fieldsLive) props.setProperty(usedKey, buildIsoDate);
+  return { picks: picks, usedOverrides: overrides.filter(Boolean).length };
+}
+
+function writeRetentionFieldsSafely_(pageId, fields) {
+  try {
+    const properties = {};
+    Object.keys(fields).forEach(function (name) {
+      properties[name] = { rich_text: [{ type: "text", text: { content: fields[name] } }] };
+    });
+    notionRequest_("patch", "/pages/" + pageId, { properties: properties }, getWarmupNotionConfig_());
+    return { ok: true };
+  } catch (err) {
+    Logger.log("Retention write-back skipped: " + (err && err.message ? err.message : err));
+    return { ok: false, error: String(err && err.message ? err.message : err) };
+  }
 }
 
 // Build EXACTLY 4 unique choices (Google Forms rejects duplicates; the form
@@ -236,9 +324,12 @@ function getNotionLessonsForWeek_(startDate) {
           const range = readNotionDateRange_(p["Date"]);
           if (!range.start) return;
           const lesson = {
+            pageId: page.id,
             title: readNotionPlain_(p["Lesson"]) || readNotionPlain_(p["Name"]),
             topic: readNotionPlain_(p["Topic"]),
-            module: readNotionPlain_(p["Module #"]) || readNotionPlain_(p["Module"])
+            module: readNotionPlain_(p["Module #"]) || readNotionPlain_(p["Module"]),
+            retentionQ4: readNotionPlain_(p["Retention Q4"]),
+            retentionQ5: readNotionPlain_(p["Retention Q5"])
           };
           // A multi-day lesson (date range) claims EVERY day in its span; a
           // single-date lesson claims just that day. Days BEFORE the build week
