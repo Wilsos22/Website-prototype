@@ -51,9 +51,27 @@ function buildDayFromNotionLesson_(safeConfig, dayIndex, lessons) {
   }
   const topic = lesson.topic || lesson.title || "math";
 
-  // 1. Pool picks for Q4/Q5 (+ short answer), matched to the lesson, rotated.
-  const picks = pickPoolItemsForLesson_(lesson, 2);
-  const saPick = pickShortAnswerForLesson_(lesson);
+  // Q4/Q5 are the RETENTION pull: they target the PREVIOUS school day's lesson
+  // (did it stick?), never today's — and never material not yet taught. Walk
+  // back up to 14 days to find the most recent prior lesson; the first lesson
+  // of a term falls back to today's.
+  let target = null;
+  let targetDate = "";
+  for (let back = 1; back <= 14 && !target; back++) {
+    const d = bdmShiftIsoDate_(dayInfo.isoDate, -back);
+    if (lessons[d]) { target = lessons[d]; targetDate = d; }
+  }
+  const isRetention = !!target;
+  if (!target) target = lesson;
+
+  // 1. Q4/Q5 come from the target lesson's "Retention Q4/Q5" Notion fields when
+  //    filled (teacher-editable — your text wins). Empty fields pull from the
+  //    pool, and the picks are WRITTEN BACK to the lesson page so you can see
+  //    and edit them. On later days of a multi-day run the fields are considered
+  //    "already used" and fresh pool items rotate in instead (no repeat mornings).
+  const retention = getRetentionSlots_(target, dayInfo.isoDate);
+  const picks = retention.picks;
+  const saPick = pickShortAnswerForLesson_(target);
 
   // 2. AI fills the rest: Q1 fluency, Q2–Q3 spiral, plus 2 extra distractors
   //    and feedback for each pool item.
@@ -102,6 +120,7 @@ function buildDayFromNotionLesson_(safeConfig, dayIndex, lessons) {
     topic: topic,
     isoDate: dayInfo.isoDate,
     lessonTitle: lesson.title,
+    q4q5Target: { title: target.title || "", topic: target.topic || "", date: targetDate, retention: isRetention },
     questions: questions
       .map(function (q, i) { return { index: i, ccss: q.ccss || "", misconceptions: q.misconceptions || {} }; })
       .filter(function (q, i) { return i < 5; })
@@ -142,10 +161,94 @@ function buildDayFromNotionLesson_(safeConfig, dayIndex, lessons) {
     editUrl: formResult.form.getEditUrl(),
     publishedUrl: formResult.form.getPublishedUrl(),
     responseTabName: formResult.responseTabName,
-    source: "Notion lesson + curated pool (" + picks.length + " pool items)",
+    source: "Q4/Q5 " +
+      (isRetention ? "retention from " + (target.title || target.topic || targetDate) : "from today's lesson (no prior lesson found)") +
+      (retention.usedOverrides ? " - " + retention.usedOverrides + " teacher-defined" : " - from pool (written to the lesson page for editing)"),
     notionStatus: linkStatus,
     triggerStatus: triggerStatus
   };
+}
+
+// --- Retention Q4/Q5: Notion fields first, pool fallback + write-back --------
+
+// Field format (forgiving): "Question | ans: correct | wrong: value -> tag | ccss: 6.NS.B.4"
+// Question + ans are required; wrong/tag/ccss optional.
+function parseRetentionOverride_(raw) {
+  const text = String(raw || "").trim();
+  if (!text) return null;
+  const parts = text.split("|").map(function (s) { return s.trim(); }).filter(Boolean);
+  if (!parts.length) return null;
+  const out = { q: parts[0], correct: "", wrong: "", tag: "", ccss: "" };
+  for (let i = 1; i < parts.length; i++) {
+    const seg = parts[i];
+    const m = seg.match(/^(ans|answer|correct|wrong|ccss|standard)\s*:\s*(.+)$/i);
+    if (!m) continue;
+    const label = m[1].toLowerCase();
+    const value = m[2].trim();
+    if (label === "ans" || label === "answer" || label === "correct") out.correct = value;
+    else if (label === "wrong") {
+      const arrow = value.split("->");
+      out.wrong = arrow[0].trim();
+      out.tag = (arrow[1] || "").trim();
+    } else out.ccss = value;
+  }
+  return out.q && out.correct ? out : null;
+}
+
+function formatRetentionField_(item) {
+  let s = item.q + " | ans: " + item.correct;
+  if (item.wrong) s += " | wrong: " + item.wrong + (item.tag ? " -> " + item.tag : "");
+  if (item.ccss) s += " | ccss: " + item.ccss;
+  return s.slice(0, 1900);
+}
+
+function getRetentionSlots_(target, buildIsoDate) {
+  const props = PropertiesService.getScriptProperties();
+  const usedKey = target.pageId ? "bdm_ret_used_" + target.pageId : "";
+  const usedOn = usedKey ? props.getProperty(usedKey) : "";
+  // Fields apply to the FIRST warm-up after the lesson (or a same-day rebuild);
+  // later days of a multi-day run rotate fresh pool items instead.
+  const fieldsLive = !usedOn || usedOn === buildIsoDate;
+
+  const rawFields = [target.retentionQ4 || "", target.retentionQ5 || ""];
+  const overrides = fieldsLive ? rawFields.map(parseRetentionOverride_) : [null, null];
+  const poolNeeded = overrides.filter(function (o) { return !o; }).length;
+  const poolItems = poolNeeded > 0 ? pickPoolItemsForLesson_(target, poolNeeded) : [];
+
+  const picks = [];
+  const writeBack = {};
+  let pi = 0;
+  for (let slot = 0; slot < 2; slot++) {
+    const o = overrides[slot];
+    if (o) {
+      picks.push({ q: o.q, correct: o.correct, wrong: o.wrong, tag: o.tag, ccss: o.ccss, topic: "", lesson: "(teacher-defined)" });
+    } else {
+      const item = poolItems[pi++];
+      picks.push(item);
+      // Only write back into fields that were BLANK (never clobber teacher text).
+      if (fieldsLive && target.pageId && !String(rawFields[slot]).trim()) {
+        writeBack["Retention Q" + (slot + 4)] = formatRetentionField_(item);
+      }
+    }
+  }
+
+  if (Object.keys(writeBack).length) writeRetentionFieldsSafely_(target.pageId, writeBack);
+  if (usedKey && fieldsLive) props.setProperty(usedKey, buildIsoDate);
+  return { picks: picks, usedOverrides: overrides.filter(Boolean).length };
+}
+
+function writeRetentionFieldsSafely_(pageId, fields) {
+  try {
+    const properties = {};
+    Object.keys(fields).forEach(function (name) {
+      properties[name] = { rich_text: [{ type: "text", text: { content: fields[name] } }] };
+    });
+    notionRequest_("patch", "/pages/" + pageId, { properties: properties }, getWarmupNotionConfig_());
+    return { ok: true };
+  } catch (err) {
+    Logger.log("Retention write-back skipped: " + (err && err.message ? err.message : err));
+    return { ok: false, error: String(err && err.message ? err.message : err) };
+  }
 }
 
 // Build EXACTLY 4 unique choices (Google Forms rejects duplicates; the form
@@ -195,6 +298,9 @@ function getNotionLessonsForWeek_(startDate) {
 
   const start = getWarmupDayInfo_(startDate, 0).isoDate;
   const end = getWarmupDayInfo_(startDate, 4).isoDate;
+  // Query back 3 weeks so a multi-day lesson whose date RANGE started before
+  // this week (e.g. Thu → Tue) is still found and expanded onto this week's days.
+  const queryStart = bdmShiftIsoDate_(start, -21);
   const lessons = {};
   const errors = [];
 
@@ -203,9 +309,9 @@ function getNotionLessonsForWeek_(startDate) {
     try {
       do {
         const body = {
-          page_size: 50,
+          page_size: 100,
           filter: { and: [
-            { property: "Date", date: { on_or_after: start } },
+            { property: "Date", date: { on_or_after: queryStart } },
             { property: "Date", date: { on_or_before: end } }
           ] }
         };
@@ -215,13 +321,28 @@ function getNotionLessonsForWeek_(startDate) {
           const p = page.properties || {};
           const status = readNotionPlain_(p["Publish Workflow"]);
           if (status && status.toLowerCase().indexOf("publish") === -1) return; // only Published
-          const date = readNotionPlain_(p["Date"]).slice(0, 10);
-          if (!date || lessons[date]) return;
-          lessons[date] = {
+          const range = readNotionDateRange_(p["Date"]);
+          if (!range.start) return;
+          const lesson = {
+            pageId: page.id,
             title: readNotionPlain_(p["Lesson"]) || readNotionPlain_(p["Name"]),
             topic: readNotionPlain_(p["Topic"]),
-            module: readNotionPlain_(p["Module #"]) || readNotionPlain_(p["Module"])
+            module: readNotionPlain_(p["Module #"]) || readNotionPlain_(p["Module"]),
+            retentionQ4: readNotionPlain_(p["Retention Q4"]),
+            retentionQ5: readNotionPlain_(p["Retention Q5"])
           };
+          // A multi-day lesson (date range) claims EVERY day in its span; a
+          // single-date lesson claims just that day. Days BEFORE the build week
+          // are kept too — they're how each day finds "yesterday's lesson" for
+          // the Q4/Q5 retention pull.
+          let day = range.start;
+          const last = range.end || range.start;
+          let guard = 0;
+          while (day <= last && guard < 31) {
+            if (day <= end && !lessons[day]) lessons[day] = lesson;
+            day = bdmShiftIsoDate_(day, 1);
+            guard++;
+          }
         });
         cursor = data.has_more ? data.next_cursor : null;
       } while (cursor);
@@ -234,6 +355,20 @@ function getNotionLessonsForWeek_(startDate) {
     throw new Error("Couldn't read lessons from Notion: " + errors[0]);
   }
   return lessons;
+}
+
+function bdmShiftIsoDate_(iso, days) {
+  const d = new Date(iso + "T12:00:00Z");
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function readNotionDateRange_(prop) {
+  if (!prop || prop.type !== "date" || !prop.date) return { start: "", end: "" };
+  return {
+    start: String(prop.date.start || "").slice(0, 10),
+    end: String(prop.date.end || "").slice(0, 10)
+  };
 }
 
 function readNotionPlain_(prop) {
@@ -325,7 +460,20 @@ function pickPoolItemsForLesson_(lesson, count) {
     throw new Error("No pool items match lesson \"" + (lesson.title || lesson.topic) +
       "\" - check the lesson's Topic wording against the Semester 1 pool, or build this day with a typed topic.");
   }
-  return rotatePicks_("q45:" + group[0].lesson, group, count);
+  // Multi-day lessons can outrun their concept's few items. The pool is authored
+  // in pacing order, so extend the rotation BACKWARD only — earlier concepts in
+  // the same topic (already taught, still retention) — NEVER forward into
+  // concepts that haven't been covered yet. Nearest-past concepts come first.
+  let groupStart = BDM_Q4Q5_POOL.length;
+  BDM_Q4Q5_POOL.forEach(function (item, idx) {
+    if (item.lesson === group[0].lesson && item.topic === group[0].topic && idx < groupStart) groupStart = idx;
+  });
+  const earlier = [];
+  for (let idx = groupStart - 1; idx >= 0; idx--) {
+    const item = BDM_Q4Q5_POOL[idx];
+    if (item.topic === group[0].topic && item.lesson !== group[0].lesson) earlier.push(item);
+  }
+  return rotatePicks_("q45:" + group[0].lesson, group.concat(earlier), count);
 }
 
 function pickShortAnswerForLesson_(lesson) {

@@ -10,6 +10,7 @@
 // the next thing to evaluate and it computes automatically.
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { reportToolResult } from "@/lib/toolEvidence";
 import { LiveToolBanner, useLiveToolConfig } from "./useLiveToolConfig";
 
 type Tokens = string[];
@@ -95,6 +96,7 @@ export default function OrderOfOperations() {
   const [hint, setHint] = useState<string | null>(null);
   const [startTokens, setStartTokens] = useState<Tokens>(PRESETS[0].tokens);
   const audioRef = useRef<AudioContext | null>(null);
+  const wrongRef = useRef(0); // wrong steps on the current problem (evidence)
 
   function initRows(t: Tokens, m: Mode): Row[] {
     const r: Row[] = LEVELS.map(() => ({ tokens: [] as Tokens, status: "upcoming" as Status }));
@@ -127,6 +129,7 @@ export default function OrderOfOperations() {
   const load = useCallback((t: Tokens, m: Mode) => {
     setStartTokens(t);
     setRows(initRows(t, m));
+    wrongRef.current = 0;
     setLevel(0);
     setPending(null); setInput(""); setSolvedValue(null); setHint(null);
     setFeedback(m === "beginner" ? LEVELS[0].gate : LEVELS[categoryStart(t)].pick);
@@ -161,6 +164,7 @@ export default function OrderOfOperations() {
       }
     } else {
       tone([180, 140]);
+      wrongRef.current += 1;
       if (correctYes) {
         setHint(`Look again — there ${LEVELS[level].cat === "G" ? "is a grouping symbol" : LEVELS[level].cat === "E" ? "is an exponent" : LEVELS[level].cat === "M" ? "is a × or ÷" : "is a + or −"} to handle here.`);
       } else {
@@ -187,6 +191,14 @@ export default function OrderOfOperations() {
     setSolvedValue(tokens[0]);
     setFeedback("");
     tone([523, 659, 784, 1047], 0.1, 0.2);
+    // Evidence: one report per finished expression (live sessions only).
+    reportToolResult({
+      tool: "gems",
+      correct: wrongRef.current === 0,
+      standardId: "6.EE.A.1",
+      misconception: wrongRef.current > 0 ? "ignores order of operations" : null,
+      problemId: startTokens.join(""),
+    });
   }
 
   // --- clicking an operation in the active row ---
@@ -196,6 +208,7 @@ export default function OrderOfOperations() {
     if (rows[level].status !== "working") return;
     if (k !== nextOpIndex(cur)) {
       tone([180, 140]);
+      wrongRef.current += 1;
       setHint("Not first — inside this level, do the highest-priority operation, working left to right.");
       return;
     }
@@ -218,6 +231,7 @@ export default function OrderOfOperations() {
       applyResult(k, correct);
     } else {
       tone([180, 140]);
+      wrongRef.current += 1;
       setFeedback(`Recompute: what is ${pending.a} ${pending.op} ${pending.b}?`);
     }
   }
@@ -259,19 +273,20 @@ export default function OrderOfOperations() {
   // render an expression with superscript exponents and clickable operators
   function renderExpr(tks: Tokens, interactive: boolean) {
     const out: React.ReactNode[] = [];
+    const target = interactive ? nextOpIndex(tks) : -1;
     for (let i = 0; i < tks.length; i++) {
       const t = tks[i];
       if (isNum(t) && tks[i + 1] === "^" && isNum(tks[i + 2])) {
         const opIdx = i + 1;
         out.push(
-          <button key={i} className={`oo-pow${interactive ? " live" : ""}`} disabled={!interactive} onClick={() => clickOp(opIdx)}>
+          <button key={i} className={`oo-pow${interactive ? " live" : ""}${opIdx === target ? " target" : ""}`} disabled={!interactive} onClick={() => clickOp(opIdx)}>
             {t}<sup>{tks[i + 2]}</sup>
           </button>
         );
         i += 2; continue;
       }
       if (isOp(t)) out.push(
-        <button key={i} className={`oo-op${interactive ? " live" : ""}`} disabled={!interactive} onClick={() => clickOp(i)}>{t}</button>
+        <button key={i} className={`oo-op${interactive ? " live" : ""}${i === target ? " target" : ""}`} disabled={!interactive} onClick={() => clickOp(i)}>{t}</button>
       );
       else out.push(<span key={i} className={`oo-tok${t === "(" || t === ")" ? " oo-paren" : ""}`}>{t}</span>);
     }
@@ -294,6 +309,9 @@ export default function OrderOfOperations() {
         .oo-btn:hover { border-color:var(--bdb-ink-faint); color:var(--bdb-ink); }
 
         .oo-main { flex:1; display:flex; flex-direction:column; gap:18px; padding:clamp(16px,3vw,32px); max-width:1100px; margin:0 auto; width:100%; box-sizing:border-box; }
+        .oo-stepbar { display:grid; grid-template-columns:auto minmax(0,1fr); gap:12px; align-items:center; width:min(100%,760px); align-self:center; border:3px solid var(--bdb-coral); border-radius:14px; background:color-mix(in srgb,var(--bdb-coral) 8%,#fff); padding:12px 16px; box-shadow:0 0 0 5px color-mix(in srgb,var(--bdb-coral) 12%,transparent); }
+        .oo-stepnum { display:grid; width:44px; height:44px; place-items:center; border-radius:10px; background:var(--bdb-coral); color:#fff; font-size:1.2rem; font-weight:900; }
+        .oo-stepcopy { color:var(--bdb-ink); font-size:clamp(1.05rem,2.5vw,1.35rem); font-weight:900; line-height:1.25; }
 
         .oo-grid { flex:1; display:grid; grid-template-columns:auto 1fr; gap:clamp(14px,2.5vw,30px) clamp(14px,3vw,34px); align-content:center; }
         .oo-tile { width:clamp(64px,9vw,108px); height:clamp(64px,9vw,108px); border-radius:20px; display:grid; place-items:center; position:relative;
@@ -318,6 +336,8 @@ export default function OrderOfOperations() {
         .oo-pow sup { font-size:0.55em; }
         .oo-op.live, .oo-pow.live { color:var(--bdb-ink); cursor:pointer; border-color:color-mix(in srgb,var(--c,#674a40) 50%,var(--bdb-line)); }
         .oo-op.live:hover, .oo-pow.live:hover { background:color-mix(in srgb,var(--c,#674a40) 16%,white); border-color:var(--c,#674a40); transform:translateY(-1px); }
+        .oo-op.target, .oo-pow.target { background:var(--bdb-coral); border-color:var(--bdb-coral); color:#fff; box-shadow:0 0 0 5px color-mix(in srgb,var(--bdb-coral) 20%,transparent); animation:ooTarget 1s ease-in-out infinite; }
+        @keyframes ooTarget { 50% { transform:scale(1.08); } }
 
         .oo-row.is-active .oo-tok, .oo-row.is-active .oo-op, .oo-row.is-active .oo-pow { font-size:clamp(2rem,6.5vw,3.6rem); }
         .oo-row.is-active .oo-op, .oo-row.is-active .oo-pow { padding:6px 16px; border-radius:14px; }
@@ -365,6 +385,14 @@ export default function OrderOfOperations() {
 
       <main className="oo-main">
         <LiveToolBanner tool={liveTool} />
+        {!solvedValue && (
+          <div className="oo-stepbar" aria-live="polite">
+            <span className="oo-stepnum">{LEVELS[level]?.cat ?? "G"}</span>
+            <span className="oo-stepcopy">
+              {gateOpen ? LEVELS[level].gate : pending ? "Do the highlighted calculation." : LEVELS[level]?.pick ?? "Choose the next operation."}
+            </span>
+          </div>
+        )}
 
         <div className="oo-grid">
           {LEVELS.map((lv, i) => {

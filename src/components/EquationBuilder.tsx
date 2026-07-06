@@ -12,6 +12,7 @@
 // into the next one, with a running "in a row" session count.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { reportToolResult } from "@/lib/toolEvidence";
 import { LiveToolBanner, useLiveToolConfig } from "./useLiveToolConfig";
 
 type Phase = "idle" | "goal" | "tap-var" | "move" | "anim" | "zero" | "write" | "celebrate";
@@ -182,6 +183,15 @@ export default function EquationBuilder() {
     const { coefficient, constant, solution } = liveTool.config;
     freshQuestion({ coef: coefficient, constant, rhs: coefficient * solution + constant });
   }, [liveTool?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Evidence: one report per solved equation (only fires inside a live session).
+  useEffect(() => {
+    if (phase !== "celebrate") return;
+    const l = lines[lines.length - 1];
+    const pid = l.div ? `x/${l.div}=${l.rhs}` : `${l.coef > 1 ? l.coef : ""}x${l.constant !== 0 ? (l.constant > 0 ? `+${l.constant}` : l.constant) : ""}=${l.rhs}`;
+    const wrong = goalWrong.size + tapWrong.size + moveWrong.size;
+    reportToolResult({ tool: "equation-builder", correct: wrong === 0, problemId: pid });
+  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function resetQuestionState() {
     setPendingOp(null); setFeedback(""); setHint(null);

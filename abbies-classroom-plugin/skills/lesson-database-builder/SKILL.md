@@ -46,6 +46,19 @@ Every lesson is a single Notion page with these fields populated:
 | Warm Up Link | Relation to a Warm Ups database page (built separately) |
 | Exit Ticket Link | Relation to an Exit Tickets database page |
 | Assignment | URL or short text describing the assigned practice |
+| Retention Q4 / Retention Q5 | Usually LEAVE BLANK — the warm-up week builder fills them from the curated pool and Steele edits there. Format if authoring by hand: `Question \| ans: correct \| wrong: value -> misconception tag \| ccss: 6.NS.B.4` |
+
+### Multi-day lessons: ONE PAGE PER TEACHING DAY (locked convention, 2026-07-05)
+
+Never give a lesson a Date **range**. A lesson that runs 3 days gets **3 pages**, each with a single
+Date, each Published — e.g. `M1.T1.L1 Area Model Multiplication — Day 2`. Same Module/Topic # on all
+of them; per-day Agenda/Learning Intention/Success Criteria on each. Why this is load-bearing:
+
+1. The site (`/api/today`) finds lessons by **exact date** — a range-dated lesson vanishes from the
+   student lesson page and control panel on days 2+.
+2. The warm-up **retention chain** targets "the previous school day's page": day 2's warm-up Q4/Q5
+   check day 1's page (its Retention Q4/Q5 fields), day 3 checks day 2, and so on. One page per day
+   is what makes each day's retention questions align to that day's actual content.
 
 ### Agenda lines — match the control panel state sequence
 
