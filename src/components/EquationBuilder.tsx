@@ -7,6 +7,7 @@
 // vanish); the result then drops one row lower. Columns stay aligned on a grid.
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { reportToolResult } from "@/lib/toolEvidence";
 import { LiveToolBanner, useLiveToolConfig } from "./useLiveToolConfig";
 
 type Op = "add" | "subtract" | "multiply" | "divide";
@@ -93,6 +94,12 @@ export default function EquationBuilder() {
     setVarOp("×");
     setPhase("build"); setRows([]); setFeedback(""); setHint(null); setWrong(0);
   }, [liveTool?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Evidence: one report per solved equation (only fires inside a live session).
+  useEffect(() => {
+    if (phase !== "solved") return;
+    reportToolResult({ tool: "equation-builder", correct: wrong === 0, problemId: `${a}${varOp}x+${b}=${c}` });
+  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function pickGoal(correct: boolean) {
     if (correct) { sCorrect(); setFeedback(""); setPhase("tap-var"); }
@@ -312,10 +319,10 @@ export default function EquationBuilder() {
         .eqb-btn { font-size:0.84rem; font-weight:600; color:var(--bdb-ink-soft); background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:var(--bdb-r-pill); padding:8px 14px; cursor:pointer; text-decoration:none; }
         .eqb-btn:hover { border-color:var(--bdb-ink-faint); color:var(--bdb-ink); }
 
-        .eqb-main { flex:1; padding:clamp(18px,3vw,34px); display:flex; flex-direction:column; gap:clamp(16px,3vw,28px); align-items:center; max-width:920px; margin:0 auto; width:100%; box-sizing:border-box; }
+        .eqb-main { flex:1; padding:clamp(18px,3vw,34px); display:flex; flex-direction:column; gap:clamp(16px,3vw,28px); align-items:center; max-width:1040px; margin:0 auto; width:100%; box-sizing:border-box; }
 
         .eqb-build { display:grid; gap:18px; justify-items:center; }
-        .eqb-preview { display:flex; align-items:center; gap:12px; justify-content:center; }
+        .eqb-preview { display:flex; align-items:center; gap:clamp(12px,2vw,20px); justify-content:center; padding:14px 18px; border:3px solid var(--bdb-ink); border-radius:16px; background:#fff; box-shadow:0 14px 0 var(--bdb-ink); }
         .eqb-steppers { display:flex; gap:22px; flex-wrap:wrap; justify-content:center; }
         .eqb-stp { display:grid; justify-items:center; gap:6px; }
         .eqb-stp-label { font-size:0.7rem; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; color:var(--bdb-ink-faint); }
@@ -325,11 +332,12 @@ export default function EquationBuilder() {
         .eqb-presets { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
         .eqb-preset { font-size:0.85rem; font-weight:600; color:var(--bdb-ink-soft); background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:999px; padding:7px 14px; cursor:pointer; }
         .eqb-preset:hover { border-color:var(--bdb-ink-faint); }
-        .eqb-start { font-size:1.15rem; font-weight:700; color:#fff; background:var(--bdb-teal); border:none; border-radius:14px; padding:14px 38px; cursor:pointer; }
+        .eqb-start { font-size:clamp(1.25rem,2.8vw,1.65rem); font-weight:900; color:#fff; background:var(--bdb-coral); border:none; border-radius:16px; padding:18px 48px; cursor:pointer; box-shadow:0 10px 0 color-mix(in srgb,var(--bdb-coral) 70%,black); animation:eqbCall 1.2s ease-in-out infinite; }
+        @keyframes eqbCall { 50% { transform:translateY(-2px); filter:brightness(1.04); } }
 
         /* Worked solution — fixed columns so every row lines up */
         .eqb-work { display:flex; justify-content:center; width:100%; }
-        .eqb-grid { display:grid; grid-template-columns:clamp(82px,15vw,128px) clamp(78px,14vw,120px) clamp(40px,7vw,54px) clamp(78px,14vw,120px); align-items:center; gap:14px 12px; }
+        .eqb-grid { display:grid; grid-template-columns:clamp(104px,18vw,164px) clamp(92px,16vw,144px) clamp(52px,8vw,68px) clamp(96px,16vw,150px); align-items:center; gap:18px 14px; }
         .gc { display:flex; align-items:center; min-height:1px; animation:eqbDrop 0.4s ease; }
         @keyframes eqbDrop { from{opacity:0; transform:translateY(-10px);} to{opacity:1; transform:none;} }
         .gc.coef { justify-content:flex-end; }
@@ -340,18 +348,18 @@ export default function EquationBuilder() {
         .gc.hr { grid-column:1 / -1; height:0; border-top:3px solid var(--bdb-ink-faint); margin:2px 0; animation:eqbLineIn 0.45s ease; }
         @keyframes eqbLineIn { from{opacity:0; transform:scaleX(0.15);} to{opacity:1; transform:scaleX(1);} }
 
-        .eqb-eqsign { font-size:clamp(1.8rem,5vw,2.6rem); font-weight:800; color:var(--bdb-ink-soft); }
-        .eqb-chip { display:inline-flex; align-items:center; justify-content:center; font-weight:800; border-radius:12px; padding:10px 14px; font-size:clamp(1.3rem,3.6vw,2rem); min-width:46px; border:2px solid transparent; }
+        .eqb-eqsign { font-size:clamp(2.4rem,6vw,3.6rem); font-weight:900; color:var(--bdb-ink-soft); }
+        .eqb-chip { display:inline-flex; align-items:center; justify-content:center; font-weight:900; border-radius:14px; padding:12px 18px; font-size:clamp(1.7rem,4.8vw,2.9rem); min-width:58px; border:2px solid transparent; }
         .eqb-x { background:color-mix(in srgb,var(--bdb-teal) 20%,white); color:color-mix(in srgb,var(--bdb-teal) 80%,black); border-color:var(--bdb-teal); }
         .eqb-x-click { cursor:pointer; box-shadow:0 0 0 3px color-mix(in srgb,var(--bdb-teal) 45%,white); animation:eqbPulse 1s ease-in-out infinite; }
         .eqb-pos { background:color-mix(in srgb,var(--bdb-amber) 22%,white); color:#8a5a0b; border-color:var(--bdb-amber); }
         .eqb-neg { background:color-mix(in srgb,var(--bdb-coral) 18%,white); color:#9a3412; border-color:var(--bdb-coral); }
         .eqb-rhs { background:color-mix(in srgb,#4d8df6 18%,white); color:#0c447c; border-color:#4d8df6; }
-        .eqb-under-chip { font-weight:800; color:var(--bdb-coral); font-size:clamp(1.15rem,3.2vw,1.7rem); padding:4px 10px; }
+        .eqb-under-chip { font-weight:900; color:var(--bdb-coral); font-size:clamp(1.35rem,3.8vw,2.1rem); padding:4px 10px; }
 
         /* division shown as a fraction with the coefficient cancelling */
         .eqb-frac { display:inline-grid; justify-items:center; gap:3px; }
-        .eqb-frac .num, .eqb-frac .den { font-weight:800; font-size:clamp(1.3rem,3.6vw,2rem); display:inline-flex; }
+        .eqb-frac .num, .eqb-frac .den { font-weight:900; font-size:clamp(1.7rem,4.8vw,2.9rem); display:inline-flex; }
         .eqb-frac .bar { width:100%; min-width:46px; height:3px; background:var(--bdb-ink); border-radius:2px; }
         .eqb-xkeep { color:color-mix(in srgb,var(--bdb-teal) 80%,black); }
         .eqb-canc { position:relative; color:var(--bdb-ink-soft); }
