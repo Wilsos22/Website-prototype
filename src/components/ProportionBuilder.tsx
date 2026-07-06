@@ -114,19 +114,24 @@ export default function ProportionBuilder() {
         .pb-btn { font-size:0.8rem; font-weight:700; color:var(--bdb-ink-soft); background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:999px; padding:8px 13px; cursor:pointer; text-decoration:none; }
         .pb-btn:hover { border-color:var(--bdb-coral); color:var(--bdb-ink); }
 
-        .pb-main { padding:28px 24px; display:grid; gap:26px; align-content:start; justify-items:center; max-width:820px; margin:0 auto; width:100%; }
+        .pb-main { padding:28px 24px; display:grid; gap:26px; align-content:start; justify-items:center; max-width:960px; margin:0 auto; width:100%; }
 
-        .pb-prop { display:grid; grid-template-columns:auto auto auto; grid-template-rows:auto auto auto; align-items:center; gap:6px 20px; }
-        .pb-cell { font-size:clamp(2rem,7vw,3.6rem); font-weight:800; text-align:center; min-width:74px; }
+        .pb-step-banner { display:grid; grid-template-columns:auto minmax(0,1fr); gap:12px; align-items:center; width:min(100%,720px); border:3px solid var(--bdb-coral); border-radius:14px; background:color-mix(in srgb,var(--bdb-coral) 8%,#fff); padding:12px 16px; box-shadow:0 0 0 5px color-mix(in srgb,var(--bdb-coral) 12%,transparent); }
+        .pb-step-num { display:grid; width:44px; height:44px; place-items:center; border-radius:10px; background:var(--bdb-coral); color:#fff; font-weight:950; font-size:1.25rem; }
+        .pb-step-copy { color:var(--bdb-ink); font-size:clamp(1.05rem,2.5vw,1.35rem); font-weight:950; line-height:1.25; }
+        .pb-prop { display:grid; grid-template-columns:auto auto auto; grid-template-rows:auto auto auto; align-items:center; gap:10px 28px; }
+        .pb-cell { font-size:clamp(2.6rem,9vw,5.2rem); font-weight:900; text-align:center; min-width:94px; }
         .pb-num { color:var(--bdb-coral); } .pb-den { color:var(--bdb-teal); }
         .pb-bar-l, .pb-bar-r { border-top:4px solid var(--bdb-ink-soft); align-self:center; height:0; }
         .pb-eq { font-size:clamp(1.8rem,5vw,2.8rem); font-weight:800; color:var(--bdb-ink-soft); text-align:center; }
-        .pb-blank { display:inline-grid; place-items:center; min-width:74px; height:64px; border:3px dashed var(--bdb-coral); border-radius:12px; color:var(--bdb-coral); }
-        .pb-blank input { width:80px; background:var(--bdb-card); border:none; color:var(--bdb-ink); font-size:2rem; font-weight:800; text-align:center; }
+        .pb-blank { display:inline-grid; place-items:center; min-width:94px; height:76px; border:4px dashed var(--bdb-coral); border-radius:12px; color:var(--bdb-coral); box-shadow:0 0 0 5px color-mix(in srgb,var(--bdb-coral) 12%,transparent); }
+        .pb-blank input { width:88px; background:var(--bdb-card); border:none; color:var(--bdb-ink); font-size:2.4rem; font-weight:900; text-align:center; }
 
-        .pb-scale { font-size:1.2rem; font-weight:800; color:var(--bdb-teal); background:color-mix(in srgb, var(--bdb-teal) 12%, var(--bdb-card)); border:1px solid color-mix(in srgb, var(--bdb-teal) 38%, transparent); border-radius:9px; padding:5px 10px; white-space:nowrap; display:flex; align-items:center; gap:2px; justify-content:center; }
+        .pb-scale { font-size:1.35rem; font-weight:900; color:var(--bdb-teal); background:color-mix(in srgb, var(--bdb-teal) 12%, var(--bdb-card)); border:2px solid color-mix(in srgb, var(--bdb-teal) 38%, transparent); border-radius:9px; padding:8px 12px; white-space:nowrap; display:flex; align-items:center; gap:2px; justify-content:center; position:relative; }
         .pb-scale.done { color:var(--bdb-green); background:color-mix(in srgb, var(--bdb-green) 14%, var(--bdb-card)); border-color:color-mix(in srgb, var(--bdb-green) 40%, transparent); }
-        .pb-scale.live { border-color:var(--bdb-coral); color:var(--bdb-coral); }
+        .pb-scale.live { border-color:var(--bdb-coral); color:var(--bdb-coral); box-shadow:0 0 0 5px color-mix(in srgb,var(--bdb-coral) 14%,transparent); animation:pbPulse 1s ease-in-out infinite; }
+        .pb-scale.live::after { content:"→"; position:absolute; right:-25px; color:var(--bdb-coral); font-size:1.6rem; font-weight:950; }
+        @keyframes pbPulse { 50% { transform:scale(1.04); } }
         .pb-kin { width:54px; background:var(--bdb-card); border:none; color:var(--bdb-ink); font-size:1.2rem; font-weight:800; text-align:center; }
 
         .pb-q { font-size:clamp(1.05rem,2.6vw,1.4rem); font-weight:700; text-align:center; color:var(--bdb-ink); min-height:1.4em; }
@@ -149,6 +154,18 @@ export default function ProportionBuilder() {
       </header>
 
       <main className="pb-main">
+        <div className="pb-step-banner" aria-live="polite">
+          <span className="pb-step-num">{phase === "scale" ? "1" : "2"}</span>
+          <span className="pb-step-copy">
+            {phase === "scale"
+              ? knownSide === "num"
+                ? `First find the scale factor: ${p} times what equals ${r}?`
+                : `First find the scale factor: ${q} times what equals ${s}?`
+              : knownSide === "num"
+              ? `Second use the same factor below: ${q} × ${k} = ?`
+              : `Second use the same factor above: ${p} × ${k} = ?`}
+          </span>
+        </div>
         <div className="pb-prop">
           {/* numerator row */}
           <div className="pb-cell pb-num">{p}</div>

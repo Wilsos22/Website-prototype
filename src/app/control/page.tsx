@@ -31,7 +31,7 @@ import {
   type LessonPreset,
 } from "@/lib/lessonPresets";
 import { SKILLS } from "@/lib/challengeSkills";
-import { launchChallenge, endChallenge, type ChallengeRow } from "@/lib/challenges";
+import { launchChallenge, endChallenge, fetchLeaderboard, type ChallengeRow, type LeaderRow } from "@/lib/challenges";
 import { launchExitTicket, type ExitKind } from "@/lib/exitTickets";
 import { SBAC_CHECKPOINTS, getCheckpoint } from "@/lib/sbacCheckpoints";
 import { launchCheckpoint } from "@/lib/checkpoints";
@@ -398,6 +398,7 @@ export default function ControlPage() {
   const [publishedTool, setPublishedTool] = useState<PublishedTool | null>(null);
   const [toolError, setToolError] = useState<string | null>(null);
   const [liveChallenge, setLiveChallenge] = useState<ChallengeRow | null>(null);
+  const [liveChallengeBoard, setLiveChallengeBoard] = useState<LeaderRow[]>([]);
 
   const secRef = useRef(0);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -648,8 +649,29 @@ export default function ControlPage() {
     if (liveChallenge && supabase) {
       void endChallenge(supabase, liveChallenge.id);
       setLiveChallenge(null);
+      setLiveChallengeBoard([]);
     }
   }, [activeToolState, liveChallenge, supabase]);
+
+  useEffect(() => {
+    if (!supabase || !liveChallenge) {
+      setLiveChallengeBoard([]);
+      return;
+    }
+
+    let stopped = false;
+    const loadBoard = async () => {
+      const rows = await fetchLeaderboard(supabase, liveChallenge.id);
+      if (!stopped) setLiveChallengeBoard(rows);
+    };
+
+    void loadBoard();
+    const interval = window.setInterval(loadBoard, 3000);
+    return () => {
+      stopped = true;
+      window.clearInterval(interval);
+    };
+  }, [liveChallenge, supabase]);
 
   useEffect(() => {
     if (!controlPoll || !supabase) return;
@@ -1263,6 +1285,13 @@ export default function ControlPage() {
         .cx-tool-field.wide { grid-column:1 / -1; }
         .cx-tool-input, .cx-tool-select { width:100%; min-height:42px; box-sizing:border-box; border:1px solid #3f3725; border-radius:8px; background:#120f0a; color:#fff; padding:9px 10px; font:inherit; font-weight:750; }
         .cx-tool-status { color:#a7f3d0; font-size:0.82rem; font-weight:800; }
+        .cx-leader { display:grid; gap:8px; border:1px solid #3a3322; border-radius:10px; background:#120f0a; padding:12px; }
+        .cx-leader-title { color:#e0f2fe; font-size:0.78rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; }
+        .cx-leader-row { display:grid; grid-template-columns:auto minmax(0,1fr) auto auto; gap:10px; align-items:center; border:1px solid #2f281a; border-radius:8px; background:#19150e; padding:9px 10px; color:#efe9df; font-size:0.86rem; font-weight:850; }
+        .cx-leader-rank { display:grid; width:28px; height:28px; place-items:center; border-radius:6px; background:${accent}; color:#fff; font-weight:950; }
+        .cx-leader-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .cx-leader-acc { color:#9fb7c8; font-size:0.78rem; }
+        .cx-leader-points { color:#a7f3d0; font-weight:950; }
         @media (max-width:640px) { .cx-poll-grid { grid-template-columns:1fr; } .cx-poll-choices { grid-template-columns:1fr; } }
         @media (max-width:640px) { .cx-tool-grid { grid-template-columns:1fr; } }
 
@@ -1624,12 +1653,29 @@ export default function ControlPage() {
                   {publishedTool?.stateId === activeToolState && (
                     <div className="cx-tool-status">
                       {activeToolState === "tool-game"
-                        ? "The live game is running — watch the leaderboard on the Session page."
+                        ? "The live game is running — leaderboard is below."
                         : activeToolState === "tool-exit-ticket"
                           ? "Exit ticket sent — responses are saving. Review them under 📝 Practice → Exit tickets."
                           : activeToolState === "tool-checkpoint"
                             ? "Checkpoint sent — auto-graded answers are saving. Review under ✅ Checkpoints."
                             : "Student screens are on this configured tool."}
+                    </div>
+                  )}
+                  {activeToolState === "tool-game" && publishedTool?.stateId === activeToolState && (
+                    <div className="cx-leader" aria-label="Live game leaderboard">
+                      <span className="cx-leader-title">Live Leaderboard</span>
+                      {liveChallengeBoard.length === 0 ? (
+                        <span className="cx-tool-note">Waiting for scored answers.</span>
+                      ) : (
+                        liveChallengeBoard.slice(0, 8).map((row, index) => (
+                          <div className="cx-leader-row" key={row.key}>
+                            <span className="cx-leader-rank">{index + 1}</span>
+                            <span className="cx-leader-name">{row.name}</span>
+                            <span className="cx-leader-acc">{row.correct}/{row.total}</span>
+                            <span className="cx-leader-points">{row.points}</span>
+                          </div>
+                        ))
+                      )}
                     </div>
                   )}
                   <div className="cx-actions" style={{ justifyContent: "flex-start" }}>

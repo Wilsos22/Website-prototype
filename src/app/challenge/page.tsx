@@ -277,16 +277,20 @@ export default function ChallengePage() {
             )}
           </div>
 
-          {board.length > 0 && (
-            <div className="cg-mini">
-              {board.slice(0, 3).map((r, i) => (
+          <div className="cg-mini">
+            {board.length === 0 ? (
+              <span className="cg-mini-row">Leaderboard appears after the first scored answer.</span>
+            ) : (
+              <>
+                {board.slice(0, 3).map((r, i) => (
                 <span key={r.key} className={`cg-mini-row${session && r.key === session.studentId ? " me" : ""}`}>
                   <b>{["🥇", "🥈", "🥉"][i]}</b> {r.name.split(" ")[0]} · {r.points}
                 </span>
-              ))}
-              {myRank > 3 && <span className="cg-mini-row me">You · #{myRank} · {score}</span>}
-            </div>
-          )}
+                ))}
+                {myRank > 3 && <span className="cg-mini-row me">You · #{myRank} · {score}</span>}
+              </>
+            )}
+          </div>
         </div>
       )}
 

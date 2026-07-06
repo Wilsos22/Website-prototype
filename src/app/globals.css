@@ -420,6 +420,41 @@ a {
 .fraction-bar {
   height: 46px;
   overflow: hidden;
+  z-index: 2;
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgb(255 255 255 / 0%) 0,
+    rgb(255 255 255 / 0%) calc((100% / var(--bar-denominator)) - 2px),
+    rgb(255 255 255 / 72%) calc((100% / var(--bar-denominator)) - 2px),
+    rgb(255 255 255 / 72%) calc(100% / var(--bar-denominator))
+  );
+}
+
+.fraction-guide-row {
+  position: absolute;
+  z-index: 1;
+  display: grid;
+  height: 46px;
+  align-items: center;
+  border: 2px dashed rgb(32 30 26 / 24%);
+  border-radius: 8px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgb(32 30 26 / 0%) 0,
+      rgb(32 30 26 / 0%) calc((100% / var(--guide-denominator)) - 2px),
+      rgb(32 30 26 / 22%) calc((100% / var(--guide-denominator)) - 2px),
+      rgb(32 30 26 / 22%) calc(100% / var(--guide-denominator))
+    ),
+    rgb(255 255 255 / 34%);
+  color: rgb(32 30 26 / 42%);
+  font-size: 0.74rem;
+  font-weight: 900;
+  pointer-events: none;
+}
+
+.fraction-guide-row span {
+  padding-left: 8px;
 }
 
 .fraction-label {

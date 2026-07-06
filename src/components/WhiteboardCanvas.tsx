@@ -15,6 +15,7 @@ interface Point {
 export function WhiteboardCanvas() {
   const liveTool = useLiveToolConfig("/whiteboard");
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
   const lastPointRef = useRef<Point | null>(null);
   const isDrawingRef = useRef(false);
   const [tool, setTool] = useState<DrawTool>("pen");
@@ -215,6 +216,38 @@ export function WhiteboardCanvas() {
     setSnapshotStatus("Exported PNG.");
   }, [createWhiteSnapshot]);
 
+  const importImage = useCallback((file: File | undefined) => {
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext("2d");
+
+    if (!file || !canvas || !context) {
+      return;
+    }
+
+    const image = new Image();
+    const url = URL.createObjectURL(file);
+
+    image.addEventListener("load", () => {
+      const rect = canvas.getBoundingClientRect();
+      const scale = Math.min((rect.width * 0.92) / image.width, (rect.height * 0.92) / image.height, 1);
+      const width = image.width * scale;
+      const height = image.height * scale;
+      const x = (rect.width - width) / 2;
+      const y = (rect.height - height) / 2;
+      context.globalCompositeOperation = "source-over";
+      context.drawImage(image, x, y, width, height);
+      URL.revokeObjectURL(url);
+      setSnapshotStatus("Imported image.");
+    });
+
+    image.addEventListener("error", () => {
+      URL.revokeObjectURL(url);
+      setSnapshotStatus("Image could not be imported.");
+    });
+
+    image.src = url;
+  }, []);
+
   return (
     <>
       <ToolHeader title="Whiteboard">
@@ -241,6 +274,19 @@ export function WhiteboardCanvas() {
         <button className="tool-button" onClick={restoreSnapshot} type="button">
           Restore
         </button>
+        <button className="tool-button" onClick={() => imageInputRef.current?.click()} type="button">
+          Import Image
+        </button>
+        <input
+          ref={imageInputRef}
+          accept="image/*"
+          hidden
+          type="file"
+          onChange={(event) => {
+            importImage(event.target.files?.[0]);
+            event.target.value = "";
+          }}
+        />
         <button className="tool-button" onClick={exportSnapshot} type="button">
           Export PNG
         </button>

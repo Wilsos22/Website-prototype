@@ -362,7 +362,6 @@ function PracticeGame() {
         </div>
 
         <div className="mf-problem-zone">
-          <DotField />
           {phase === "summary" ? (
             <SummaryCard
               title="Practice Complete"
@@ -692,7 +691,6 @@ function MasteryGame() {
         </div>
 
         <div className="mf-problem-zone">
-          <DotField />
           {phase === "summary" ? (
             <div className="mf-summary">
               <div className="mf-medal" style={{ "--medal": medalColor(medal) } as CSSProperties}>

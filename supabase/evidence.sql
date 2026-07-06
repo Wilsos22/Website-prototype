@@ -22,11 +22,11 @@ alter table checkpoint_runs add column if not exists is_sbac boolean not null de
 create table if not exists iready_scores (
   id          uuid primary key default gen_random_uuid(),
   student_id  uuid not null references students(id) on delete cascade,
-  window      text not null,            -- 'Fall' | 'Winter' | 'Spring'
+  "window"    text not null,            -- 'Fall' | 'Winter' | 'Spring'
   domain      text not null,            -- i-Ready domain name
   scale_score numeric,
   created_at  timestamptz not null default now(),
-  unique (student_id, window, domain)
+  unique (student_id, "window", domain)
 );
 
 -- iready_scores is server-only, like mastery (reads/writes via service-role API routes).

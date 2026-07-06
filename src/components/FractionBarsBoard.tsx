@@ -52,7 +52,7 @@ export function FractionBarsBoard() {
   const guideLeftRef = useRef(leftGuideFallback);
   const [bars, setBars] = useState<FractionBar[]>(() => createInitialBars(leftGuideFallback));
   const [selectedBarId, setSelectedBarId] = useState(`${fractionTemplates[0].label}-starter`);
-  const [snapToGrid, setSnapToGrid] = useState(false);
+  const [snapToGrid, setSnapToGrid] = useState(true);
   const [guideLeft, setGuideLeft] = useState(leftGuideFallback);
   const [columnStep, setColumnStep] = useState(fallbackColumnStep);
 
@@ -244,6 +244,21 @@ export function FractionBarsBoard() {
             backgroundSize: `${columnStep}px ${rowStep}px, ${columnStep}px ${rowStep}px, ${columnStep}px ${rowStep}px`,
           }}
         >
+          {fractionTemplates.map((template, index) => (
+            <div
+              aria-hidden="true"
+              className="fraction-guide-row"
+              key={template.label}
+              style={{
+                left: guideLeft,
+                top: rowGuide + index * rowStep,
+                width: "var(--whole-width)",
+                ["--guide-denominator" as string]: template.denominator,
+              } as React.CSSProperties}
+            >
+              <span>{template.label}</span>
+            </div>
+          ))}
           {bars.map((bar) => (
             <div
               key={bar.id}
@@ -251,10 +266,11 @@ export function FractionBarsBoard() {
               className={`fraction-bar ${selectedBarId === bar.id ? "selected" : ""}`}
               onPointerDown={(event) => startDrag(event, bar)}
               style={{
-                background: bar.color,
+                backgroundColor: bar.color,
                 left: bar.x,
                 top: bar.y,
                 width: `calc(var(--whole-width) * ${bar.value})`,
+                ["--bar-denominator" as string]: bar.denominator,
               }}
               tabIndex={0}
             >

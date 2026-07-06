@@ -3,16 +3,18 @@
 // NOT real security — the PIN check runs in the browser. Before storing real
 // student data, upgrade to real auth (Supabase Auth / Google sign-in).
 //
-// Set your own PIN with the NEXT_PUBLIC_TEACHER_PIN env var in Vercel.
-// If unset, it falls back to the default below.
+// Set a PIN with the NEXT_PUBLIC_TEACHER_PIN env var in Vercel.
+// If unset, the teacher area stays open.
 
 export const TEACHER_OK_KEY = "bdm-teacher-ok";
 
-export function teacherPin(): string {
-  return (process.env.NEXT_PUBLIC_TEACHER_PIN || "bigdog").trim();
+export function teacherPin(): string | null {
+  const pin = process.env.NEXT_PUBLIC_TEACHER_PIN?.trim();
+  return pin || null;
 }
 
 export function isTeacherUnlocked(): boolean {
+  if (!teacherPin()) return true;
   try {
     return localStorage.getItem(TEACHER_OK_KEY) === "1";
   } catch {
@@ -21,7 +23,9 @@ export function isTeacherUnlocked(): boolean {
 }
 
 export function tryUnlockTeacher(pin: string): boolean {
-  const ok = pin.trim().toLowerCase() === teacherPin().toLowerCase();
+  const configuredPin = teacherPin();
+  if (!configuredPin) return true;
+  const ok = pin.trim().toLowerCase() === configuredPin.toLowerCase();
   if (ok) {
     try {
       localStorage.setItem(TEACHER_OK_KEY, "1");

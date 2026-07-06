@@ -469,11 +469,11 @@ export function AlgebraTilesBoard() {
   const dragRef = useRef<{ id: string; offsetX: number; offsetY: number } | null>(null);
   const [tiles, setTiles] = useState<AlgebraTile[]>(initialTiles);
   const [selectedTileId, setSelectedTileId] = useState(initialTiles[0]?.id ?? "");
-  const [snapToGrid, setSnapToGrid] = useState(false);
+  const [snapToGrid, setSnapToGrid] = useState(true);
   const [expressionInput, setExpressionInput] = useState("");
   const [modeledExpression, setModeledExpression] = useState("");
   const [expressionStatus, setExpressionStatus] = useState("");
-  const showEqualsSign = modeledExpression.includes("=");
+  const [showEqualsSign, setShowEqualsSign] = useState(false);
 
   const addTile = useCallback((template: Omit<AlgebraTile, "id" | "x" | "y">) => {
     setTiles((currentTiles) => {
@@ -603,6 +603,7 @@ export function AlgebraTilesBoard() {
       setTiles(nextTiles);
       setSelectedTileId(nextTiles[0]?.id ?? "");
       setModeledExpression(expression);
+      setShowEqualsSign(isEquation);
       setExpressionStatus("Built with tiles.");
     },
     [],
@@ -626,6 +627,7 @@ export function AlgebraTilesBoard() {
     setTiles(initialTiles);
     setSelectedTileId(initialTiles[0]?.id ?? "");
     setModeledExpression("");
+    setShowEqualsSign(false);
     setExpressionStatus("");
   }, []);
 
@@ -698,6 +700,13 @@ export function AlgebraTilesBoard() {
           type="button"
         >
           Snap Grid
+        </button>
+        <button
+          className={`small-button ${showEqualsSign ? "active" : ""}`}
+          onClick={() => setShowEqualsSign((currentValue) => !currentValue)}
+          type="button"
+        >
+          Equal Sign
         </button>
         <button className="small-button" onClick={snapAllTiles} type="button">
           Snap All

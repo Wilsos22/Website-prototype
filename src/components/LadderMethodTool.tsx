@@ -30,6 +30,14 @@ function pickProblem(current?: [number, number]): [number, number] {
 }
 
 const START_MSG = "Type a number that divides BOTH numbers, then press Divide.";
+const DIVISIBILITY_RULES = [
+  ["2", "last digit is even"],
+  ["3", "digits add to a multiple of 3"],
+  ["4", "last two digits divide by 4"],
+  ["5", "ends in 0 or 5"],
+  ["6", "divides by 2 and 3"],
+  ["7", "double the last digit, subtract it from the rest"],
+] as const;
 
 export default function LadderMethodTool() {
   const [problem, setProblem] = useState<[number, number]>(() => PROBLEMS[0]);
@@ -184,6 +192,55 @@ export default function LadderMethodTool() {
           font-weight: 600; line-height: 1.35;
           text-align: center;
         }
+        .lad-rules {
+          border: 2px solid color-mix(in srgb, var(--bdb-teal) 42%, var(--bdb-line));
+          border-radius: var(--bdb-r);
+          background: color-mix(in srgb, var(--bdb-teal) 9%, var(--bdb-card));
+          padding: 12px;
+          display: grid;
+          gap: 8px;
+        }
+        .lad-rules-title {
+          margin: 0;
+          color: var(--bdb-teal);
+          font-size: 0.72rem;
+          font-weight: 900;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          text-align: center;
+        }
+        .lad-rule-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 8px;
+        }
+        .lad-rule {
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr);
+          gap: 8px;
+          align-items: center;
+          border: 1px solid color-mix(in srgb, var(--bdb-teal) 28%, var(--bdb-line));
+          border-radius: 10px;
+          background: #fff;
+          padding: 8px;
+        }
+        .lad-rule-num {
+          display: grid;
+          width: 34px;
+          height: 34px;
+          place-items: center;
+          border-radius: 8px;
+          background: var(--bdb-teal);
+          color: #fff;
+          font-size: 1.15rem;
+          font-weight: 900;
+        }
+        .lad-rule-text {
+          color: var(--bdb-ink-soft);
+          font-size: 0.82rem;
+          font-weight: 750;
+          line-height: 1.25;
+        }
         .lad-stack { display: grid; gap: 4px; justify-items: stretch; }
         .lad-row, .lad-band, .lad-entry {
           display: grid;
@@ -315,6 +372,7 @@ export default function LadderMethodTool() {
         @media (max-width: 560px) {
           .lad-row, .lad-band, .lad-entry { grid-template-columns: 76px 1fr 1fr; gap: 8px; }
           .lad-results { grid-template-columns: 1fr; }
+          .lad-rule-grid { grid-template-columns: 1fr; }
         }
       `}</style>
 
@@ -367,6 +425,17 @@ export default function LadderMethodTool() {
       </div>
 
       <div className="lad-feedback">{feedback}</div>
+      <section className="lad-rules" aria-label="Divisibility rules reminder">
+        <p className="lad-rules-title">Divisibility Rules</p>
+        <div className="lad-rule-grid">
+          {DIVISIBILITY_RULES.map(([number, rule]) => (
+            <div className="lad-rule" key={number}>
+              <span className="lad-rule-num">{number}</span>
+              <span className="lad-rule-text">{rule}</span>
+            </div>
+          ))}
+        </div>
+      </section>
 
       {(phase === "gcf" || phase === "lcm" || phase === "done") && (
         <div className="lad-card">

@@ -7,12 +7,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Bucket = "coefficient" | "variable" | "operation" | "constant";
+type Level = 1 | 2 | 3;
 
 interface Problem {
-  coef: number;
-  variable: string;
-  op: "+" | "−";
-  constant: number;
+  expression: string;
+  tokens: Token[];
 }
 
 interface Token {
@@ -30,35 +29,67 @@ const BUCKETS: { id: Bucket; label: string; hint: string; color: string }[] = [
 
 const VARS = ["x", "y", "n", "a", "m", "b"];
 
-function makeProblem(prev?: Problem): Problem {
-  for (let tries = 0; tries < 20; tries++) {
-    const p: Problem = {
-      coef: 2 + Math.floor(Math.random() * 8), // 2..9
-      variable: VARS[Math.floor(Math.random() * VARS.length)],
-      op: Math.random() < 0.5 ? "+" : "−",
-      constant: 1 + Math.floor(Math.random() * 12), // 1..12
-    };
-    if (!prev || p.coef !== prev.coef || p.variable !== prev.variable || p.constant !== prev.constant) return p;
-  }
-  return { coef: 3, variable: "x", op: "+", constant: 7 };
+function randomVariable(level: Level) {
+  const pool = level === 1 ? ["x"] : VARS;
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
-function tokensFor(p: Problem): Token[] {
-  return [
-    { id: "coef", text: String(p.coef), bucket: "coefficient" },
-    { id: "var", text: p.variable, bucket: "variable" },
-    { id: "op", text: p.op, bucket: "operation" },
-    { id: "const", text: String(p.constant), bucket: "constant" },
-  ];
+function makeProblem(level: Level, prev?: Problem): Problem {
+  for (let tries = 0; tries < 20; tries++) {
+    const termCount = level + 1;
+    const tokens: Token[] = [];
+    const expressionParts: string[] = [];
+    let hasConstant = false;
+    let hasVariable = false;
+
+    for (let term = 0; term < termCount; term += 1) {
+      if (term > 0) {
+        const op = Math.random() < 0.55 ? "+" : "−";
+        tokens.push({ id: `op-${term}`, text: op, bucket: "operation" });
+        expressionParts.push(op);
+      }
+
+      const mustBeConstant = term === termCount - 1 && !hasConstant;
+      const mustBeVariable = term === termCount - 1 && !hasVariable;
+      const isVariableTerm = mustBeVariable || (!mustBeConstant && (term === 0 || Math.random() < 0.62));
+
+      if (isVariableTerm) {
+        const coef = 1 + Math.floor(Math.random() * 8);
+        const variable = randomVariable(level);
+        tokens.push({ id: `coef-${term}`, text: String(coef), bucket: "coefficient" });
+        tokens.push({ id: `var-${term}`, text: variable, bucket: "variable" });
+        expressionParts.push(`${coef}${variable}`);
+        hasVariable = true;
+      } else {
+        const constant = 1 + Math.floor(Math.random() * (level === 3 ? 18 : 12));
+        tokens.push({ id: `const-${term}`, text: String(constant), bucket: "constant" });
+        expressionParts.push(String(constant));
+        hasConstant = true;
+      }
+    }
+
+    const problem = { expression: expressionParts.join(" "), tokens };
+    if (!prev || problem.expression !== prev.expression) return problem;
+  }
+  return {
+    expression: "3x + 7",
+    tokens: [
+      { id: "coef-0", text: "3", bucket: "coefficient" },
+      { id: "var-0", text: "x", bucket: "variable" },
+      { id: "op-1", text: "+", bucket: "operation" },
+      { id: "const-1", text: "7", bucket: "constant" },
+    ],
+  };
 }
 
 const PRAISE = ["Yes!", "Nailed it.", "That's it.", "Correct.", "Good eye."];
 
 export default function TermIdentifier() {
-  const [problem, setProblem] = useState<Problem>(() => makeProblem());
+  const [level, setLevel] = useState<Level>(1);
+  const [problem, setProblem] = useState<Problem>(() => makeProblem(1));
   const [placed, setPlaced] = useState<Record<string, Bucket>>({});
   const [selected, setSelected] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState("Drag each part to its bucket — or tap a part, then tap its bucket.");
+  const [feedback, setFeedback] = useState("Level 1: drag each part to its bucket.");
   const [shakeBucket, setShakeBucket] = useState<Bucket | null>(null);
 
   // drag state
@@ -66,8 +97,9 @@ export default function TermIdentifier() {
   const [ghost, setGhost] = useState<{ x: number; y: number; text: string } | null>(null);
   const startRef = useRef<{ x: number; y: number; moved: boolean }>({ x: 0, y: 0, moved: false });
   const audioRef = useRef<AudioContext | null>(null);
+  const advanceTimerRef = useRef<number | null>(null);
 
-  const tokens = tokensFor(problem);
+  const tokens = problem.tokens;
   const solved = tokens.every((t) => placed[t.id]);
 
   const tone = useCallback((freqs: number[], dur = 0.14) => {
@@ -92,9 +124,27 @@ export default function TermIdentifier() {
     }
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (advanceTimerRef.current !== null) window.clearTimeout(advanceTimerRef.current);
+    };
+  }, []);
+
+  function loadLevel(nextLevel: Level) {
+    if (advanceTimerRef.current !== null) {
+      window.clearTimeout(advanceTimerRef.current);
+      advanceTimerRef.current = null;
+    }
+    setLevel(nextLevel);
+    setProblem((current) => makeProblem(nextLevel, current));
+    setPlaced({});
+    setSelected(null);
+    setFeedback(`Level ${nextLevel}: ${nextLevel === 1 ? "sort the basic parts" : nextLevel === 2 ? "more terms, same buckets" : "reach all buckets with a longer expression"}.`);
+  }
+
   const place = useCallback(
     (tokenId: string, bucket: Bucket) => {
-      const token = tokensFor(problem).find((t) => t.id === tokenId);
+      const token = problem.tokens.find((t) => t.id === tokenId);
       if (!token || placed[tokenId]) return;
       const def = BUCKETS.find((b) => b.id === bucket);
       if (token.bucket === bucket) {
@@ -102,17 +152,23 @@ export default function TermIdentifier() {
         setSelected(null);
         tone([523, 784]);
         const next = { ...placed, [tokenId]: bucket };
-        const done = tokensFor(problem).every((t) => next[t.id]);
-        setFeedback(done ? "🎉 Every part identified — nice work!" : `${PRAISE[Math.floor(Math.random() * PRAISE.length)]} “${token.text}” is the ${bucket}.`);
-        if (done) tone([523, 659, 784, 1047], 0.18);
+        const done = problem.tokens.every((t) => next[t.id]);
+        if (done) {
+          const nextLevel = Math.min(3, level + 1) as Level;
+          tone([523, 659, 784, 1047], 0.18);
+          setFeedback(level === 3 ? "Level 3 complete. Loading another Level 3 expression." : `Level ${level} complete. Loading Level ${nextLevel}.`);
+          advanceTimerRef.current = window.setTimeout(() => loadLevel(nextLevel), 1100);
+        } else {
+          setFeedback(`${PRAISE[Math.floor(Math.random() * PRAISE.length)]} "${token.text}" is ${bucket}.`);
+        }
       } else {
         tone([180, 140]);
         setShakeBucket(bucket);
         setTimeout(() => setShakeBucket(null), 380);
-        setFeedback(`Not the ${bucket} — that's ${def ? def.hint : "something else"}. Where does “${token.text}” belong?`);
+        setFeedback(`Not ${bucket}. ${def ? def.hint : "Try a different bucket."}`);
       }
     },
-    [problem, placed, tone],
+    [level, placed, problem.tokens, tone],
   );
 
   // global pointer handlers for dragging
@@ -122,7 +178,7 @@ export default function TermIdentifier() {
       const dx = e.clientX - startRef.current.x;
       const dy = e.clientY - startRef.current.y;
       if (Math.abs(dx) > 6 || Math.abs(dy) > 6) startRef.current.moved = true;
-      const tok = tokensFor(problem).find((t) => t.id === dragId);
+      const tok = problem.tokens.find((t) => t.id === dragId);
       setGhost({ x: e.clientX, y: e.clientY, text: tok ? tok.text : "" });
     }
     function up(e: PointerEvent) {
@@ -158,10 +214,10 @@ export default function TermIdentifier() {
   }
 
   function newProblem() {
-    setProblem((p) => makeProblem(p));
+    setProblem((p) => makeProblem(level, p));
     setPlaced({});
     setSelected(null);
-    setFeedback("Drag each part to its bucket — or tap a part, then tap its bucket.");
+    setFeedback(`Level ${level}: drag each part to its bucket.`);
   }
 
   function reset() {
@@ -170,7 +226,7 @@ export default function TermIdentifier() {
     setFeedback("Cleared. Try again!");
   }
 
-  const placedToken = (bucket: Bucket) => tokens.find((t) => placed[t.id] === bucket);
+  const placedTokens = (bucket: Bucket) => tokens.filter((t) => placed[t.id] === bucket);
 
   return (
     <main className="ti-root">
@@ -184,6 +240,11 @@ export default function TermIdentifier() {
         .ti-main { display:grid; gap:22px; align-content:start; justify-items:center; max-width:880px; width:100%;
           margin:0 auto; padding:clamp(16px,4vw,32px) 18px; }
 
+        .ti-levels { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+        .ti-level { border:2px solid var(--bdb-line); border-radius:999px; background:#fff; color:var(--bdb-ink-soft); padding:7px 14px; font-size:0.82rem; font-weight:900; }
+        .ti-level.on { border-color:var(--bdb-teal); background:var(--bdb-teal); color:#fff; }
+        .ti-level.done { border-color:var(--bdb-green); color:var(--bdb-green); }
+        .ti-expression-label { margin:0; color:var(--bdb-ink-soft); font-size:0.82rem; font-weight:850; text-align:center; }
         .ti-expr { display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:center; }
         .ti-chip { position:relative; min-width:54px; min-height:64px; padding:8px 16px; border-radius:14px;
           border:2px solid var(--bdb-ink); background:var(--bdb-card); color:var(--bdb-ink);
@@ -210,8 +271,9 @@ export default function TermIdentifier() {
         @keyframes tiShake { 0%,100%{transform:translateX(0);} 25%{transform:translateX(-6px);} 75%{transform:translateX(6px);} }
         .ti-b-label { font-size:0.92rem; font-weight:800; color:var(--bdb-ink); }
         .ti-b-hint { font-size:0.74rem; font-weight:600; color:var(--bdb-ink-faint); line-height:1.3; }
-        .ti-slot { margin-top:4px; min-width:52px; min-height:56px; border-radius:12px; display:grid; place-items:center;
-          font-size:1.9rem; font-weight:800; }
+        .ti-slot-list { display:flex; flex-wrap:wrap; justify-content:center; gap:6px; min-height:56px; align-items:center; }
+        .ti-slot { min-width:52px; min-height:56px; border-radius:12px; display:grid; place-items:center;
+          font-size:1.75rem; font-weight:800; }
         .ti-slot.empty { border:2px dashed var(--bdb-line); color:var(--bdb-ink-faint); font-size:1rem; font-weight:600; padding:0 8px; }
         .ti-slot.full { color:#fff; animation:tiDrop 0.36s cubic-bezier(.2,.8,.2,1.2); }
         @keyframes tiDrop { from{ transform:scale(.4); opacity:0; } to{ transform:scale(1); opacity:1; } }
@@ -226,29 +288,21 @@ export default function TermIdentifier() {
 
       <div className="ti-main">
         <p className="ti-mark">Identify the Terms</p>
-        <div className={`ti-expr`}>
-          {/* coef + variable sit together (3x), then op, then constant */}
-          <span className="ti-expr ti-tight">
-            {["coef", "var"].map((id) => {
-              const t = tokens.find((x) => x.id === id)!;
-              return (
-                <span
-                  key={id}
-                  className={`ti-chip${placed[id] ? " done" : ""}${selected === id ? " sel" : ""}${dragId === id ? " dragging" : ""}`}
-                  onPointerDown={(e) => onChipDown(e, id)}
-                >
-                  {t.text}
-                </span>
-              );
-            })}
-          </span>
-          {["op", "const"].map((id) => {
-            const t = tokens.find((x) => x.id === id)!;
+        <div className="ti-levels" aria-label="Term identifier levels">
+          {[1, 2, 3].map((item) => (
+            <span className={`ti-level${level === item ? " on" : ""}${level > item ? " done" : ""}`} key={item}>
+              Level {item}
+            </span>
+          ))}
+        </div>
+        <p className="ti-expression-label">{problem.expression}</p>
+        <div className="ti-expr">
+          {tokens.map((t) => {
             return (
               <span
-                key={id}
-                className={`ti-chip${placed[id] ? " done" : ""}${selected === id ? " sel" : ""}${dragId === id ? " dragging" : ""}`}
-                onPointerDown={(e) => onChipDown(e, id)}
+                key={t.id}
+                className={`ti-chip${placed[t.id] ? " done" : ""}${selected === t.id ? " sel" : ""}${dragId === t.id ? " dragging" : ""}`}
+                onPointerDown={(e) => onChipDown(e, t.id)}
               >
                 {t.text}
               </span>
@@ -260,19 +314,23 @@ export default function TermIdentifier() {
 
         <div className="ti-buckets">
           {BUCKETS.map((b) => {
-            const tok = placedToken(b.id);
+            const bucketTokens = placedTokens(b.id);
             return (
               <div
                 key={b.id}
                 data-bucket={b.id}
-                className={`ti-bucket${tok ? " filled" : ""}${shakeBucket === b.id ? " shake" : ""}`}
-                style={{ "--bdb-c": b.color, borderColor: tok ? b.color : undefined } as React.CSSProperties}
+                className={`ti-bucket${bucketTokens.length ? " filled" : ""}${shakeBucket === b.id ? " shake" : ""}`}
+                style={{ "--bdb-c": b.color, borderColor: bucketTokens.length ? b.color : undefined } as React.CSSProperties}
                 onClick={() => onBucketClick(b.id)}
               >
                 <span className="ti-b-label">{b.label}</span>
                 <span className="ti-b-hint">{b.hint}</span>
-                {tok ? (
-                  <span className="ti-slot full" style={{ background: b.color }}>{tok.text}</span>
+                {bucketTokens.length ? (
+                  <span className="ti-slot-list">
+                    {bucketTokens.map((tok) => (
+                      <span className="ti-slot full" key={tok.id} style={{ background: b.color }}>{tok.text}</span>
+                    ))}
+                  </span>
                 ) : (
                   <span className="ti-slot empty">drop here</span>
                 )}
@@ -284,6 +342,9 @@ export default function TermIdentifier() {
 
       <footer className="ti-foot">
         <button className="ti-btn" onClick={reset}>Reset</button>
+        <button className="ti-btn" onClick={() => loadLevel(1)}>Level 1</button>
+        <button className="ti-btn" onClick={() => loadLevel(2)}>Level 2</button>
+        <button className="ti-btn" onClick={() => loadLevel(3)}>Level 3</button>
         <button className="ti-btn" onClick={newProblem}>New expression</button>
       </footer>
 
