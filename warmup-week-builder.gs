@@ -51,9 +51,22 @@ function buildDayFromNotionLesson_(safeConfig, dayIndex, lessons) {
   }
   const topic = lesson.topic || lesson.title || "math";
 
-  // 1. Pool picks for Q4/Q5 (+ short answer), matched to the lesson, rotated.
-  const picks = pickPoolItemsForLesson_(lesson, 2);
-  const saPick = pickShortAnswerForLesson_(lesson);
+  // Q4/Q5 are the RETENTION pull: they target the PREVIOUS school day's lesson
+  // (did it stick?), never today's — and never material not yet taught. Walk
+  // back up to 14 days to find the most recent prior lesson; the first lesson
+  // of a term falls back to today's.
+  let target = null;
+  let targetDate = "";
+  for (let back = 1; back <= 14 && !target; back++) {
+    const d = bdmShiftIsoDate_(dayInfo.isoDate, -back);
+    if (lessons[d]) { target = lessons[d]; targetDate = d; }
+  }
+  const isRetention = !!target;
+  if (!target) target = lesson;
+
+  // 1. Pool picks for Q4/Q5 (+ short answer), matched to the target lesson, rotated.
+  const picks = pickPoolItemsForLesson_(target, 2);
+  const saPick = pickShortAnswerForLesson_(target);
 
   // 2. AI fills the rest: Q1 fluency, Q2–Q3 spiral, plus 2 extra distractors
   //    and feedback for each pool item.
@@ -102,6 +115,7 @@ function buildDayFromNotionLesson_(safeConfig, dayIndex, lessons) {
     topic: topic,
     isoDate: dayInfo.isoDate,
     lessonTitle: lesson.title,
+    q4q5Target: { title: target.title || "", topic: target.topic || "", date: targetDate, retention: isRetention },
     questions: questions
       .map(function (q, i) { return { index: i, ccss: q.ccss || "", misconceptions: q.misconceptions || {} }; })
       .filter(function (q, i) { return i < 5; })
@@ -142,7 +156,8 @@ function buildDayFromNotionLesson_(safeConfig, dayIndex, lessons) {
     editUrl: formResult.form.getEditUrl(),
     publishedUrl: formResult.form.getPublishedUrl(),
     responseTabName: formResult.responseTabName,
-    source: "Notion lesson + curated pool (" + picks.length + " pool items)",
+    source: "Notion lesson + curated pool - Q4/Q5 " +
+      (isRetention ? "retention from " + (target.title || target.topic || targetDate) : "from today's lesson (no prior lesson found)"),
     notionStatus: linkStatus,
     triggerStatus: triggerStatus
   };
@@ -226,12 +241,14 @@ function getNotionLessonsForWeek_(startDate) {
             module: readNotionPlain_(p["Module #"]) || readNotionPlain_(p["Module"])
           };
           // A multi-day lesson (date range) claims EVERY day in its span; a
-          // single-date lesson claims just that day.
+          // single-date lesson claims just that day. Days BEFORE the build week
+          // are kept too — they're how each day finds "yesterday's lesson" for
+          // the Q4/Q5 retention pull.
           let day = range.start;
           const last = range.end || range.start;
           let guard = 0;
           while (day <= last && guard < 31) {
-            if (day >= start && day <= end && !lessons[day]) lessons[day] = lesson;
+            if (day <= end && !lessons[day]) lessons[day] = lesson;
             day = bdmShiftIsoDate_(day, 1);
             guard++;
           }
@@ -352,13 +369,20 @@ function pickPoolItemsForLesson_(lesson, count) {
     throw new Error("No pool items match lesson \"" + (lesson.title || lesson.topic) +
       "\" - check the lesson's Topic wording against the Semester 1 pool, or build this day with a typed topic.");
   }
-  // Multi-day lessons can outrun their concept's few items: extend the rotation
-  // with the rest of the SAME TOPIC's items (still on-module, still tagged), so
-  // nothing repeats until the whole topic pool is exhausted.
-  const topicRest = BDM_Q4Q5_POOL.filter(function (item) {
-    return item.topic === group[0].topic && item.lesson !== group[0].lesson;
+  // Multi-day lessons can outrun their concept's few items. The pool is authored
+  // in pacing order, so extend the rotation BACKWARD only — earlier concepts in
+  // the same topic (already taught, still retention) — NEVER forward into
+  // concepts that haven't been covered yet. Nearest-past concepts come first.
+  let groupStart = BDM_Q4Q5_POOL.length;
+  BDM_Q4Q5_POOL.forEach(function (item, idx) {
+    if (item.lesson === group[0].lesson && item.topic === group[0].topic && idx < groupStart) groupStart = idx;
   });
-  return rotatePicks_("q45:" + group[0].lesson, group.concat(topicRest), count);
+  const earlier = [];
+  for (let idx = groupStart - 1; idx >= 0; idx--) {
+    const item = BDM_Q4Q5_POOL[idx];
+    if (item.topic === group[0].topic && item.lesson !== group[0].lesson) earlier.push(item);
+  }
+  return rotatePicks_("q45:" + group[0].lesson, group.concat(earlier), count);
 }
 
 function pickShortAnswerForLesson_(lesson) {
