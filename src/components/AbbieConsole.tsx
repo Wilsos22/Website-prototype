@@ -14,6 +14,7 @@ import {
   dismissAbbieQuestion,
   type AbbieQuestion,
 } from "@/lib/abbieQuestions";
+import { subscribeAbbieLine } from "@/lib/abbieBus";
 
 interface Lesson { title?: string; learningIntention?: string; successCriteria?: string }
 
@@ -218,6 +219,12 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
     setQueue((qs) => qs.filter((row) => row.id !== id));
     await dismissAbbieQuestion(id);
   }, []);
+
+  // Let other control-panel surfaces (poll results, spinner) ask Abbie to react
+  // out loud. A ref keeps the subscription pointed at the latest summon().
+  const summonRef = useRef(summon);
+  useEffect(() => { summonRef.current = summon; }, [summon]);
+  useEffect(() => subscribeAbbieLine((direction) => { void summonRef.current(direction); }), []);
 
   return (
     <>

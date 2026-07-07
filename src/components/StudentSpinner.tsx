@@ -8,6 +8,7 @@
 // Used standalone (/spinner) and as an overlay at the end of the Warm-Up step.
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { requestAbbieLine, hasAbbieListener } from "@/lib/abbieBus";
 
 interface ClassRoster {
   names: string[];
@@ -41,6 +42,10 @@ export default function StudentSpinner({ onClose }: { onClose?: () => void }) {
   const [display, setDisplay] = useState<string[]>(["—", "—", "—"]);
   const [landed, setLanded] = useState<boolean[]>([true, true, true]);
   const [spinning, setSpinning] = useState(false);
+  // Who the last spin landed on, and whether an Abbie console is around to react.
+  const [lastPicks, setLastPicks] = useState<string[]>([]);
+  const [abbiePresent, setAbbiePresent] = useState(false);
+  useEffect(() => { setAbbiePresent(hasAbbieListener()); }, []);
 
   const usedRef = useRef<Set<string>>(new Set());
   const cycleRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -134,6 +139,7 @@ export default function StudentSpinner({ onClose }: { onClose?: () => void }) {
     }
 
     setSpinning(true);
+    setLastPicks([]);
     setLanded(Array(wheels).fill(false));
     setDisplay((d) => d.map((v, i) => (i < wheels ? v : v)));
 
@@ -157,8 +163,16 @@ export default function StudentSpinner({ onClose }: { onClose?: () => void }) {
       setSpinning(false);
       tone(880, 0.18);
       if (fair) picks.forEach((p) => p !== "—" && usedRef.current.add(p));
+      setLastPicks(picks.filter((p) => p !== "—"));
     }, 1300 + (wheels - 1) * 750 + 300);
     timeoutsRef.current.push(end);
+  }
+
+  // Hand the spinner's pick to Abbie so she announces it for the class.
+  function announceWithAbbie() {
+    if (!lastPicks.length) return;
+    const names = lastPicks.join(" and ");
+    requestAbbieLine(`The spinner just landed on ${names} to share with the class. Announce it out loud in your voice - a bit of "the Abbiliathan has spoken" energy - and hype them up. One line.`);
   }
 
   // ── Roster editing ──────────────────────────────────────────────────────
@@ -219,6 +233,8 @@ export default function StudentSpinner({ onClose }: { onClose?: () => void }) {
         .sp-spin-btn { font-size:1.4rem; font-weight:800; letter-spacing:0.04em; color:#fff; background:var(--bdb-coral); border:none; border-radius:14px; padding:18px 48px; cursor:pointer; box-shadow:0 10px 30px -12px var(--bdb-coral); transition:transform 120ms ease, filter 140ms; }
         .sp-spin-btn:hover { filter:brightness(1.05); transform:translateY(-1px); }
         .sp-spin-btn:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
+        .sp-abbie-btn { margin-top:12px; font-size:0.95rem; font-weight:800; color:var(--bdb-teal); background:transparent; border:1px solid var(--bdb-teal); border-radius:12px; padding:11px 22px; cursor:pointer; transition:background 140ms; }
+        .sp-abbie-btn:hover { background:color-mix(in srgb,var(--bdb-teal) 12%,transparent); }
 
         .sp-foot { padding:12px 24px; border-top:1px solid var(--bdb-line); display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
         .sp-fair { display:flex; align-items:center; gap:8px; color:var(--bdb-ink-soft); font-size:0.85rem; font-weight:600; }
@@ -273,6 +289,9 @@ export default function StudentSpinner({ onClose }: { onClose?: () => void }) {
         <button className="sp-spin-btn" onClick={spin} disabled={spinning || !current}>
           {spinning ? "Spinning…" : "🎰 SPIN"}
         </button>
+        {abbiePresent && !spinning && lastPicks.length > 0 && (
+          <button className="sp-abbie-btn" onClick={announceWithAbbie}>Have Abbie announce it</button>
+        )}
       </main>
 
       <footer className="sp-foot">
