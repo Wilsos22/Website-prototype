@@ -1871,7 +1871,7 @@ export default function ControlPage() {
           <div className="cx-overlay"><DiscussionProtocol onClose={closeDiscussion} onFlowChange={handleDiscussionFlowChange} /></div>
         )}
 
-        <AbbieConsole stateLabel={activeState?.label} stateDesc={activeState?.desc} />
+        <AbbieConsole stateLabel={activeState?.label} stateDesc={activeState?.desc} sessionId={teacherSession?.status === "open" ? teacherSession.id : null} />
       </div>
     </>
   );

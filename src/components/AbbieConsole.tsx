@@ -7,6 +7,7 @@
 // and (unless voice is muted) she says it out loud through her real voice.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getSupabase } from "@/lib/supabase";
 
 interface Lesson { title?: string; learningIntention?: string; successCriteria?: string }
 
@@ -30,7 +31,8 @@ const MOODS: Mood[] = [
 
 const LS_VOICE = "bdm-abbie-voice-on";
 
-export default function AbbieConsole({ stateLabel, stateDesc }: { stateLabel?: string; stateDesc?: string }) {
+export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { stateLabel?: string; stateDesc?: string; sessionId?: string | null }) {
+  const supabase = getSupabase();
   const [open, setOpen] = useState(false);
   const [line, setLine] = useState<string | null>(null);
   const [thinking, setThinking] = useState(false);
@@ -41,6 +43,20 @@ export default function AbbieConsole({ stateLabel, stateDesc }: { stateLabel?: s
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const dismissRef = useRef<number | null>(null);
+  const broadcastClearRef = useRef<number | null>(null);
+
+  // Pop Abbie's line onto joined student screens (own sessions.abbie column, so
+  // it works whatever mode students are in), then clear it a few seconds later
+  // so a late-joining device doesn't resurface a stale line.
+  const broadcast = useCallback((text: string) => {
+    if (!supabase || !sessionId) return;
+    const payload = { nonce: `${Date.now()}-${Math.round(Math.random() * 1e6)}`, text, at: new Date().toISOString() };
+    void supabase.from("sessions").update({ abbie: payload }).eq("id", sessionId);
+    if (broadcastClearRef.current) window.clearTimeout(broadcastClearRef.current);
+    broadcastClearRef.current = window.setTimeout(() => {
+      void supabase.from("sessions").update({ abbie: null }).eq("id", sessionId);
+    }, 15000);
+  }, [supabase, sessionId]);
 
   useEffect(() => {
     try {
@@ -126,6 +142,7 @@ export default function AbbieConsole({ stateLabel, stateDesc }: { stateLabel?: s
       if (data.error) { setError(data.error); }
       else if (data.reply) {
         showLine(data.reply);
+        broadcast(data.reply);
         if (voiceOn) void speak(data.reply);
       }
     } catch {
@@ -133,7 +150,7 @@ export default function AbbieConsole({ stateLabel, stateDesc }: { stateLabel?: s
     } finally {
       setThinking(false);
     }
-  }, [thinking, lesson, contextString, showLine, voiceOn, speak]);
+  }, [thinking, lesson, contextString, showLine, broadcast, voiceOn, speak]);
 
   const sendTyped = useCallback(() => {
     const t = typed.trim();
