@@ -121,6 +121,16 @@ export interface LiveClassFlowSnapshot {
   tool: LiveToolConfig | null;
 }
 
+// A single thing Abbie says, broadcast to joined student screens. `nonce` is
+// unique per utterance so a device shows each line exactly once. Lives in its
+// own sessions.abbie column so it's independent of class-mode broadcast state —
+// she can pop up over the lesson, a tool, or the Live Flow screen.
+export interface AbbieBroadcast {
+  nonce: string;
+  text: string;
+  at: string;
+}
+
 export interface StoredStudentSession {
   sessionId: string;
   studentId: string;

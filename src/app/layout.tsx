@@ -3,6 +3,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import ClassSync from "@/components/ClassSync";
+import AbbieStudentBubble from "@/components/AbbieStudentBubble";
 
 export const metadata: Metadata = {
   title: "Big Dog Math Classroom System",
@@ -22,7 +23,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}<ClassSync /></body>
+      <body>{children}<ClassSync /><AbbieStudentBubble /></body>
     </html>
   );
 }
