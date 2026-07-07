@@ -47,7 +47,7 @@ export async function POST(req: Request) {
     return Response.json({ error: "Abbie's brain isn't connected yet — add ANTHROPIC_API_KEY in Vercel (or .env.local) and redeploy." });
   }
 
-  let body: { messages?: ChatMsg[]; lesson?: Lesson };
+  let body: { messages?: ChatMsg[]; lesson?: Lesson; context?: string };
   try { body = await req.json(); } catch { return Response.json({ error: "Bad request." }); }
 
   const messages = Array.isArray(body.messages)
@@ -56,9 +56,15 @@ export async function POST(req: Request) {
   if (!messages.length) return Response.json({ error: "Nothing to say to." });
 
   const l = body.lesson;
-  const system = l && (l.learningIntention || l.title)
-    ? `${SYSTEM}\n\nToday's class: ${l.title || "math"}. Learning intention: ${l.learningIntention || "—"}. Success criteria: ${l.successCriteria || "—"}. Weave this in only if it fits naturally.`
-    : SYSTEM;
+  const lessonLine = l && (l.learningIntention || l.title)
+    ? `\n\nToday's class: ${l.title || "math"}. Learning intention: ${l.learningIntention || "—"}. Success criteria: ${l.successCriteria || "—"}. Weave this in only if it fits naturally.`
+    : "";
+  // Live classroom context — the teacher's control panel tells Abbie what's
+  // happening right now (which state, which activity) so her line fits the room.
+  const contextLine = typeof body.context === "string" && body.context.trim()
+    ? `\n\nRight now in the room: ${body.context.trim()}`
+    : "";
+  const system = `${SYSTEM}${lessonLine}${contextLine}`;
 
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {

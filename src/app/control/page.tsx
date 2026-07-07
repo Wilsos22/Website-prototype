@@ -13,6 +13,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import StudentSpinner from "@/components/StudentSpinner";
 import DiscussionProtocol from "@/components/DiscussionProtocol";
+import AbbieConsole from "@/components/AbbieConsole";
 import { getSupabase } from "@/lib/supabase";
 import {
   LIVE_FLOW_MODE,
@@ -1869,6 +1870,8 @@ export default function ControlPage() {
         {showDiscussion && (
           <div className="cx-overlay"><DiscussionProtocol onClose={closeDiscussion} onFlowChange={handleDiscussionFlowChange} /></div>
         )}
+
+        <AbbieConsole stateLabel={activeState?.label} stateDesc={activeState?.desc} />
       </div>
     </>
   );
