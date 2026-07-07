@@ -37,7 +37,11 @@ voice, voice/text-only toggle; /api/abbie takes a `context` field; roast
 material loaded — Kendrick, tight pants, Legos, dog-park small talk, etc.) ·
 **Abbie on student screens** (7/7 — her line broadcasts to a dedicated
 sessions.abbie column and pops a teal bubble on every joined student's screen,
-any mode; global AbbieStudentBubble in the layout; needs abbie-broadcast.sql)
+any mode; global AbbieStudentBubble in the layout; needs abbie-broadcast.sql) ·
+**Moderated Ask-Abbie queue** (7/7 — students type a question from an "Ask
+Abbie" button; lands in the control-panel queue with a count badge; teacher
+edits/approves and she answers the room, or dismisses; one pending per student;
+abbie_questions table, needs abbie-questions.sql)
 
 ## In progress 🔨
 - **Week builder** — code shipped (warmup-pools-data.gs + warmup-week-builder.gs +
@@ -47,9 +51,9 @@ any mode; global AbbieStudentBubble in the layout; needs abbie-broadcast.sql)
 
 ## Planned 🧭
 - **Abbie everywhere** (queued in tracker, Area=Abbie): student-screen
-  broadcast (shipped 7/7) then moderated "Ask Abbie" student queue (teacher
-  approves; no yelling), contextual reactions (poll results, spinner pick),
-  bits (Red Bull counter, cross-day memory)
+  broadcast + moderated "Ask Abbie" queue both shipped 7/7; still to do:
+  contextual reactions (poll results, spinner pick), bits (Red Bull counter,
+  cross-day memory)
 - Claude enrichment: score short-answer reasoning (next-move sharpening now Live)
 - RLS tightening on legacy tables (required before real student data)
 - Reskin remaining tools; vertical draggable control sequence
@@ -65,5 +69,7 @@ Infinite Campus push · Scan/OCR checkpoint pipeline · Google student sign-in
 3. Vercel envs: `NOTION_ROSTER_DB_ID`, `CRON_SECRET`, later `EVIDENCE_INGEST_KEY`;
    delete unused `NEXT_PUBLIC_TEACHER_PIN`.
 4. Share the roster Notion DB with the integration.
+5. Run `supabase/abbie-broadcast.sql` (done) and `supabase/abbie-questions.sql`
+   once each so Abbie's student bubble and the Ask-Abbie queue work in class.
 5. Run `supabase/abbie-broadcast.sql` once (adds the `abbie` column so her line
    pops on student screens in class mode).
