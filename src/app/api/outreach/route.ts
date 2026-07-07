@@ -1,192 +1,98 @@
-// Teacher-only (middleware gates /api/outreach): parent-outreach candidates +
-// the draft queue. All computation is server-side with the service-role client,
-// so guardian emails and student data never travel over the browser anon path.
-//   GET  -> { connected, concern[], praise[], queue[], possibleDays }
-//   POST -> { action: 'queue' | 'send' | 'dismiss' | 'update', ... }
-import { getSupabaseAdmin } from "@/lib/supabaseServer";
-import { buildEmail, gmailComposeUrl, type OutreachKind } from "@/lib/parentOutreach";
+// Teacher-only (middleware gates /api/outreach): parent-outreach candidates from
+// the Notion roster + writing Draft entries into the Notion Parent Contact Log.
+//   GET  -> { connected, daily, concern[], praise[], roster[] }
+//   POST { action: 'draft', kind, studentPageId, studentName, parentEmail, ... }
+//        -> creates a Draft in the Contact Log; returns { ok, notionUrl, gmailUrl }
+// Everything runs server-side with NOTION_TOKEN; parent emails never travel over
+// the browser anon path (they arrive only on this gated teacher route).
+import { fetchOutreachRoster, createContactLogDraft, outreachConfigured, type OutreachStudent } from "@/lib/notionOutreach";
+import { buildEmail, gmailComposeUrl, firstName, type OutreachKind } from "@/lib/parentOutreach";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const NON_SUBMIT_RATE = 0.45; // below this share of warm-up days = a nudge candidate
-const MIN_DAYS = 3;           // need at least this many warm-up days to judge
-const PERFECT_WINDOW_DAYS = 7;
-const STAGE_WINDOW_DAYS = 21;
+const NON_SUBMIT_RATE = 0.45; // below this share of the class-high submissions = behind
+const PRAISE_TOP = 8;         // how many top warm-up averages to surface
 
-function daysAgoIso(n: number): string {
-  return new Date(Date.now() - n * 86400000).toISOString();
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
 }
-function humanStage(s: string): string {
-  return s === "complete" ? "Complete" : s === "mastered" ? "Mastered" : s;
+// Stable day-based index so the "parent of the day" pick is the same all day and
+// rotates through the roster over the year.
+function dayOfYear(): number {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 0);
+  return Math.floor((now.getTime() - start.getTime()) / 86400000);
 }
 
-interface StudentRow { id: string; full_name: string; period_id: string }
+function pub(s: OutreachStudent) {
+  return { studentPageId: s.pageId, name: s.name, period: s.period, parentEmail: s.parentEmail, hasEmail: Boolean(s.parentEmail) };
+}
 
 export async function GET() {
-  const db = getSupabaseAdmin();
-  if (!db) return Response.json({ connected: false, concern: [], praise: [], queue: [], possibleDays: 0 });
-
+  if (!outreachConfigured()) return Response.json({ connected: false, daily: null, concern: [], praise: [], roster: [] });
   try {
-    const [{ data: students }, { data: periods }, { data: guardians }] = await Promise.all([
-      db.from("students").select("id,full_name,period_id"),
-      db.from("periods").select("id,name"),
-      db.from("student_guardians").select("student_id,email,name"),
-    ]);
-    const roster = (students || []) as StudentRow[];
-    if (!roster.length) return Response.json({ connected: true, concern: [], praise: [], queue: [], roster: [], possibleDays: 0 });
+    const roster = await fetchOutreachRoster();
+    if (!roster.length) return Response.json({ connected: true, daily: null, concern: [], praise: [], roster: [] });
 
-    const periodName = new Map(((periods || []) as { id: string; name: string }[]).map((p) => [p.id, p.name]));
-    const guardian = new Map(((guardians || []) as { student_id: string; email: string | null; name: string | null }[]).map((g) => [g.student_id, g]));
-    const nameOf = new Map(roster.map((s) => [s.id, s.full_name]));
-
-    // Warm-up submission history (aggregate rows only: standard_id null, source 'warmup').
-    const { data: warm } = await db
-      .from("responses")
-      .select("student_id,score,submitted_at")
-      .eq("source", "warmup")
-      .is("standard_id", null)
-      .gte("submitted_at", daysAgoIso(35))
-      .limit(50000);
-    const warmRows = (warm || []) as { student_id: string; score: number | null; submitted_at: string }[];
-
-    const classDays = new Set<string>();
-    const studentDays = new Map<string, Set<string>>();
-    const perfectRecent = new Map<string, string>(); // student_id -> most recent perfect date
-    const perfectCutoff = daysAgoIso(PERFECT_WINDOW_DAYS);
-    for (const r of warmRows) {
-      const day = String(r.submitted_at).slice(0, 10);
-      classDays.add(day);
-      (studentDays.get(r.student_id) || studentDays.set(r.student_id, new Set()).get(r.student_id)!).add(day);
-      if (Number(r.score) >= 5 && r.submitted_at >= perfectCutoff) {
-        const prev = perfectRecent.get(r.student_id);
-        if (!prev || r.submitted_at > prev) perfectRecent.set(r.student_id, day);
-      }
-    }
-    const possibleDays = classDays.size;
-
-    // Concern candidates: below the submission-rate floor, with enough data to judge.
-    const concern = possibleDays >= MIN_DAYS
+    // Behind on warm-ups: fewest submissions, relative to the class high.
+    const submitted = roster.map((s) => s.warmupsSubmitted).filter((n): n is number => n != null);
+    const classHigh = submitted.length ? Math.max(...submitted) : 0;
+    const concern = classHigh >= 3
       ? roster
-          .map((s) => ({ s, submitted: studentDays.get(s.id)?.size || 0 }))
-          .filter(({ submitted }) => submitted / possibleDays < NON_SUBMIT_RATE)
-          .map(({ s, submitted }) => {
-            const g = guardian.get(s.id);
-            return { studentId: s.id, name: s.full_name, period: periodName.get(s.period_id) || "", submitted, possible: possibleDays, email: g?.email || null, hasEmail: Boolean(g?.email) };
-          })
-          .sort((a, b) => a.submitted - b.submitted)
+          .filter((s) => s.warmupsSubmitted != null && (s.warmupsSubmitted as number) < classHigh * NON_SUBMIT_RATE)
+          .sort((a, b) => (a.warmupsSubmitted as number) - (b.warmupsSubmitted as number))
+          .map((s) => ({ ...pub(s), submitted: s.warmupsSubmitted as number, possible: classHigh }))
       : [];
 
-    // Praise candidates: a recent perfect warm-up, or a recent Mastered/Complete stage.
-    const { data: mastery } = await db
-      .from("mastery")
-      .select("student_id,domain,stage,updated_at")
-      .in("stage", ["mastered", "complete"])
-      .gte("updated_at", daysAgoIso(STAGE_WINDOW_DAYS))
-      .limit(20000);
-    const praiseMap = new Map<string, { reason: string }>();
-    for (const [sid, day] of perfectRecent) {
-      praiseMap.set(sid, { reason: `${(nameOf.get(sid) || "").split(/\s+/)[0] || "your student"} earned a perfect warm-up score on ${day}` });
-    }
-    for (const m of (mastery || []) as { student_id: string; domain: string; stage: string }[]) {
-      if (praiseMap.has(m.student_id)) continue; // one reason per student is enough
-      const fn = (nameOf.get(m.student_id) || "").split(/\s+/)[0] || "your student";
-      praiseMap.set(m.student_id, { reason: `${fn} reached ${humanStage(m.stage)} in ${m.domain}` });
-    }
-    const praise = [...praiseMap.entries()]
-      .filter(([sid]) => nameOf.has(sid))
-      .map(([sid, v]) => {
-        const s = roster.find((r) => r.id === sid)!;
-        const g = guardian.get(sid);
-        return { studentId: sid, name: s.full_name, period: periodName.get(s.period_id) || "", reason: v.reason, email: g?.email || null, hasEmail: Boolean(g?.email) };
-      });
+    // Bright spots: highest warm-up averages, above the class average.
+    const avgs = roster.map((s) => s.warmupAvg).filter((n): n is number => n != null);
+    const classAvg = avgs.length ? avgs.reduce((a, b) => a + b, 0) / avgs.length : 0;
+    const praise = roster
+      .filter((s) => s.warmupAvg != null && (s.warmupAvg as number) >= classAvg)
+      .sort((a, b) => (b.warmupAvg as number) - (a.warmupAvg as number))
+      .slice(0, PRAISE_TOP)
+      .map((s) => ({ ...pub(s), avg: Math.round((s.warmupAvg as number) * 10) / 10, reason: `${firstName(s.name)} is one of your top warm-up performers (avg ${Math.round((s.warmupAvg as number) * 10) / 10})` }));
 
-    // The current draft queue (unsent).
-    const { data: q } = await db
-      .from("parent_outreach")
-      .select("id,kind,student_id,to_email,to_name,subject,body,reason,status,created_at")
-      .eq("status", "draft")
-      .order("created_at", { ascending: true });
-    const queue = ((q || []) as { id: string; kind: string; student_id: string; to_email: string | null; to_name: string | null; subject: string; body: string; reason: string | null }[]).map((d) => ({
-      id: d.id, kind: d.kind, name: nameOf.get(d.student_id) || d.to_name || "Student",
-      toEmail: d.to_email, subject: d.subject, body: d.body, reason: d.reason,
-      gmailUrl: d.to_email ? gmailComposeUrl(d.to_email, d.subject, d.body) : null,
-    }));
+    // Parent of the day: rotates by date, positive by default.
+    const sorted = [...roster].sort((a, b) => a.name.localeCompare(b.name));
+    const daily = sorted.length ? pub(sorted[dayOfYear() % sorted.length]) : null;
 
-    // Names only (no guardian PII) so the page can offer a "praise anyone" picker.
-    const rosterList = roster
-      .map((s) => ({ id: s.id, name: s.full_name, period: periodName.get(s.period_id) || "" }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-
-    return Response.json({ connected: true, possibleDays, concern, praise, queue, roster: rosterList });
+    const rosterList = sorted.map((s) => ({ studentPageId: s.pageId, name: s.name, period: s.period, parentEmail: s.parentEmail, hasEmail: Boolean(s.parentEmail) }));
+    return Response.json({ connected: true, daily, concern, praise, roster: rosterList });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Outreach unavailable.";
-    // Most likely the proficiency/outreach migrations haven't been run yet.
-    return Response.json({ connected: true, concern: [], praise: [], queue: [], roster: [], possibleDays: 0, error: msg });
+    return Response.json({ connected: true, daily: null, concern: [], praise: [], roster: [], error: e instanceof Error ? e.message : "Outreach unavailable." });
   }
 }
 
 interface PostBody {
-  action?: "queue" | "send" | "dismiss" | "update";
-  id?: string;
-  kind?: OutreachKind;
-  studentId?: string;
+  action?: "draft";
+  kind?: OutreachKind | "note";
+  studentPageId?: string;
+  studentName?: string;
+  parentEmail?: string | null;
+  submitted?: number;
+  possible?: number;
   reason?: string;
-  subject?: string;
-  body?: string;
 }
 
 export async function POST(req: Request) {
-  const db = getSupabaseAdmin();
-  if (!db) return Response.json({ error: "Database not configured." }, { status: 503 });
   let b: PostBody;
   try { b = await req.json(); } catch { return Response.json({ error: "Bad request." }, { status: 400 }); }
-
+  if (b.action !== "draft" || !b.studentPageId || !b.studentName || !b.kind) {
+    return Response.json({ error: "Missing draft fields." }, { status: 400 });
+  }
+  const kind: "concern" | "praise" | "note" = b.kind === "praise" ? "praise" : b.kind === "note" ? "note" : "concern";
+  const { subject, body } = buildEmail(kind === "note" ? "praise" : kind, b.studentName, { submitted: b.submitted, possible: b.possible, reason: b.reason });
   try {
-    if (b.action === "send" && b.id) {
-      await db.from("parent_outreach").update({ status: "sent", sent_at: new Date().toISOString() }).eq("id", b.id);
-      return Response.json({ ok: true });
-    }
-    if (b.action === "dismiss" && b.id) {
-      await db.from("parent_outreach").update({ status: "dismissed" }).eq("id", b.id);
-      return Response.json({ ok: true });
-    }
-    if (b.action === "update" && b.id) {
-      const patch: Record<string, string> = {};
-      if (typeof b.subject === "string") patch.subject = b.subject;
-      if (typeof b.body === "string") patch.body = b.body;
-      if (Object.keys(patch).length) await db.from("parent_outreach").update(patch).eq("id", b.id);
-      return Response.json({ ok: true });
-    }
-    if (b.action === "queue" && b.studentId && (b.kind === "concern" || b.kind === "praise")) {
-      const { data: s } = await db.from("students").select("id,full_name").eq("id", b.studentId).single();
-      if (!s) return Response.json({ error: "Student not found." }, { status: 404 });
-      const name = (s as { full_name: string }).full_name;
-      const { data: g } = await db.from("student_guardians").select("email,name").eq("student_id", b.studentId).maybeSingle();
-      const guardian = g as { email: string | null; name: string | null } | null;
-
-      // For a concern, recompute this student's warm-up counts server-side.
-      let submitted = 0, possible = 0;
-      if (b.kind === "concern") {
-        const { data: warm } = await db.from("responses").select("submitted_at").eq("source", "warmup").is("standard_id", null).gte("submitted_at", daysAgoIso(35)).limit(50000);
-        const all = new Set<string>(); const mine = new Set<string>();
-        const { data: mineRows } = await db.from("responses").select("submitted_at").eq("source", "warmup").is("standard_id", null).eq("student_id", b.studentId).gte("submitted_at", daysAgoIso(35));
-        for (const r of (warm || []) as { submitted_at: string }[]) all.add(String(r.submitted_at).slice(0, 10));
-        for (const r of (mineRows || []) as { submitted_at: string }[]) mine.add(String(r.submitted_at).slice(0, 10));
-        possible = all.size; submitted = mine.size;
-      }
-
-      const { subject, body } = buildEmail(b.kind, name, { submitted, possible, reason: b.reason });
-      const { data: inserted, error } = await db.from("parent_outreach").insert({
-        student_id: b.studentId, kind: b.kind, to_email: guardian?.email || null, to_name: guardian?.name || null,
-        subject, body, reason: b.reason || null, status: "draft",
-      }).select("id").single();
-      if (error) return Response.json({ error: error.message }, { status: 500 });
-      return Response.json({ ok: true, id: (inserted as { id: string }).id, hasEmail: Boolean(guardian?.email) });
-    }
-    return Response.json({ error: "Unknown action." }, { status: 400 });
+    const { url } = await createContactLogDraft({
+      studentPageId: b.studentPageId, studentName: b.studentName, parentEmail: b.parentEmail || null,
+      kind, subject, body, date: todayIso(),
+    });
+    const gmailUrl = b.parentEmail ? gmailComposeUrl(b.parentEmail, subject, body) : null;
+    return Response.json({ ok: true, notionUrl: url, gmailUrl });
   } catch (e) {
-    return Response.json({ error: e instanceof Error ? e.message : "Outreach action failed." }, { status: 500 });
+    return Response.json({ error: e instanceof Error ? e.message : "Draft failed." }, { status: 500 });
   }
 }
