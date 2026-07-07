@@ -41,7 +41,10 @@ any mode; global AbbieStudentBubble in the layout; needs abbie-broadcast.sql) ·
 **Moderated Ask-Abbie queue** (7/7 — students type a question from an "Ask
 Abbie" button; lands in the control-panel queue with a count badge; teacher
 edits/approves and she answers the room, or dismisses; one pending per student;
-abbie_questions table, needs abbie-questions.sql)
+abbie_questions table, needs abbie-questions.sql) ·
+**Abbie contextual reactions** (7/7 — teacher-triggered: "Have Abbie react" on
+poll results hands her the tally for a one-line take; "Have Abbie announce it"
+on the spinner has her call the pick; shared abbieBus, no new setup)
 
 ## In progress 🔨
 - **Week builder** — code shipped (warmup-pools-data.gs + warmup-week-builder.gs +
@@ -51,9 +54,8 @@ abbie_questions table, needs abbie-questions.sql)
 
 ## Planned 🧭
 - **Abbie everywhere** (queued in tracker, Area=Abbie): student-screen
-  broadcast + moderated "Ask Abbie" queue both shipped 7/7; still to do:
-  contextual reactions (poll results, spinner pick), bits (Red Bull counter,
-  cross-day memory)
+  broadcast + Ask-Abbie queue + contextual reactions all shipped 7/7; still to
+  do: bits (Red Bull counter, cross-day memory)
 - Claude enrichment: score short-answer reasoning (next-move sharpening now Live)
 - RLS tightening on legacy tables (required before real student data)
 - Reskin remaining tools; vertical draggable control sequence
