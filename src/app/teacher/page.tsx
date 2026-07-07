@@ -20,6 +20,8 @@ const RUN: LinkItem[] = [
   { href: "/spinner", label: "Student spinner", letter: "R", color: "#7c5cd6", desc: "Random picker from the roster" },
   { href: "/timer", label: "Timer", letter: "T", color: "#674a40", desc: "Big classroom countdown" },
   { href: "/whiteboard", label: "Whiteboard", letter: "W", color: "#4d8df6", desc: "Full-screen board canvas" },
+  { href: "/ipad", label: "iPad pen", letter: "i", color: "#50a3a4", desc: "Write from your iPad — shows on the Board" },
+  { href: "/board", label: "Board display", letter: "B", color: "#f5b915", desc: "Open on the projector to show your iPad ink" },
 ];
 
 // See the learning.
