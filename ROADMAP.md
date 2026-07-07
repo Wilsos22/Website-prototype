@@ -31,7 +31,11 @@ celebration + in-a-row counter; Regular/Level Up! naming here + GEMS) ·
 **Abbie Console** (7/7 — summon the Abbiliathan from the control panel: 6
 quick-tap moods + type-to-say, no open student mic; context-aware (current
 state + lesson intention); teal projector bubble the class sees + her real
-voice, voice/text-only toggle; /api/abbie takes a `context` field)
+voice, voice/text-only toggle; /api/abbie takes a `context` field; roast
+material loaded — Kendrick, tight pants, Legos, dog-park small talk, etc.) ·
+**Abbie on student screens** (7/7 — her line broadcasts to a dedicated
+sessions.abbie column and pops a teal bubble on every joined student's screen,
+any mode; global AbbieStudentBubble in the layout; needs abbie-broadcast.sql)
 
 ## In progress 🔨
 - **Week builder** — code shipped (warmup-pools-data.gs + warmup-week-builder.gs +
@@ -40,8 +44,8 @@ voice, voice/text-only toggle; /api/abbie takes a `context` field)
 - Warm-up → spine bridge — live and verified (Evidence post 200, 7/4)
 
 ## Planned 🧭
-- **Abbie everywhere** (queued in tracker, Area=Abbie): student-screen broadcast
-  of her line in class mode → moderated "Ask Abbie" student queue (teacher
+- **Abbie everywhere** (queued in tracker, Area=Abbie): ~~student-screen
+  broadcast~~ (shipped 7/7) → moderated "Ask Abbie" student queue (teacher
   approves; no yelling) → contextual reactions (poll results, spinner pick) →
   bits (Red Bull counter, cross-day memory)
 - Claude enrichment (score short-answer reasoning; sharpen next moves)
@@ -59,3 +63,5 @@ Infinite Campus push · Scan/OCR checkpoint pipeline · Google student sign-in
 3. Vercel envs: `NOTION_ROSTER_DB_ID`, `CRON_SECRET`, later `EVIDENCE_INGEST_KEY`;
    delete unused `NEXT_PUBLIC_TEACHER_PIN`.
 4. Share the roster Notion DB with the integration.
+5. Run `supabase/abbie-broadcast.sql` once (adds the `abbie` column so her line
+   pops on student screens in class mode).
