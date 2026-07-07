@@ -36,6 +36,7 @@ const LEARN: LinkItem[] = [
 // Manage the class.
 const MANAGE: LinkItem[] = [
   { href: "/roster", label: "Rosters", letter: "R", color: "#50a3a4", desc: "Periods and students" },
+  { href: "/teacher/parent-outreach", label: "Parent outreach", letter: "@", color: "#f95335", desc: "Draft notes home — nudges and praise" },
   { href: "/teacher/checkpoint-upload", label: "Upload checkpoints", letter: "U", color: "#fcaf38", desc: "Import checkpoint CSVs" },
   { href: "/builder", label: "Sequence builder", letter: "B", color: "#674a40", desc: "Build a class flow" },
 ];
