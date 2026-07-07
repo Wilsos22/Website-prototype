@@ -8,6 +8,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
+import {
+  fetchPendingAbbieQuestions,
+  markAbbieQuestionAnswered,
+  dismissAbbieQuestion,
+  type AbbieQuestion,
+} from "@/lib/abbieQuestions";
 
 interface Lesson { title?: string; learningIntention?: string; successCriteria?: string }
 
@@ -42,6 +48,11 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
   const [typed, setTyped] = useState("");
   const [lesson, setLesson] = useState<Lesson | null>(null);
 
+  // Moderated "Ask Abbie" queue — pending student questions, edited in place.
+  const [queue, setQueue] = useState<AbbieQuestion[]>([]);
+  const [edits, setEdits] = useState<Record<string, string>>({});
+  const [answeringId, setAnsweringId] = useState<string | null>(null);
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const dismissRef = useRef<number | null>(null);
   const broadcastClearRef = useRef<number | null>(null);
@@ -69,6 +80,31 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
       .then((d) => { if (d?.lesson) setLesson(d.lesson); })
       .catch(() => { /* no lesson today is fine */ });
   }, []);
+
+  // Poll the moderated "Ask Abbie" queue for this session's pending questions.
+  useEffect(() => {
+    if (!supabase || !sessionId) { setQueue([]); return; }
+    let stopped = false;
+    const load = async () => {
+      const rows = await fetchPendingAbbieQuestions(sessionId);
+      if (!stopped) setQueue(rows);
+    };
+    void load();
+    const interval = window.setInterval(load, 2500);
+    const channel = supabase
+      .channel(`abbie-q-${sessionId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "abbie_questions", filter: `session_id=eq.${sessionId}` },
+        () => { void load(); },
+      )
+      .subscribe();
+    return () => {
+      stopped = true;
+      window.clearInterval(interval);
+      void supabase.removeChannel(channel);
+    };
+  }, [supabase, sessionId]);
 
   const setVoice = useCallback((on: boolean) => {
     setVoiceOn(on);
@@ -125,8 +161,8 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
     dismissRef.current = window.setTimeout(() => setLine(null), 16000);
   }, []);
 
-  const summon = useCallback(async (direction: string) => {
-    if (thinking) return;
+  const summon = useCallback(async (direction: string): Promise<string | null> => {
+    if (thinking) return null;
     setThinking(true);
     setError(null);
     try {
@@ -140,14 +176,17 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
         }),
       });
       const data = await res.json();
-      if (data.error) { setError(data.error); }
-      else if (data.reply) {
+      if (data.error) { setError(data.error); return null; }
+      if (data.reply) {
         showLine(data.reply);
         broadcast(data.reply);
         if (voiceOn) void speak(data.reply);
+        return data.reply as string;
       }
+      return null;
     } catch {
       setError("Couldn't reach Abbie's brain — check the connection.");
+      return null;
     } finally {
       setThinking(false);
     }
@@ -159,6 +198,26 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
     setTyped("");
     void summon(`Say this to the class, in your own voice: ${t}`);
   }, [typed, summon]);
+
+  // Approve a queued student question: Abbie answers it for the class, then the
+  // row is marked answered. Uses the edited text if the teacher tweaked it.
+  const answerQuestion = useCallback(async (q: AbbieQuestion) => {
+    if (thinking) return;
+    const text = (edits[q.id] ?? q.question).trim();
+    if (!text) return;
+    setAnsweringId(q.id);
+    const who = q.display_name ? `A student named ${q.display_name}` : "A student";
+    const reply = await summon(`${who} asked, during class: "${text}". Answer them out loud for the whole room, in your voice. Keep it short; if it's a math question, actually help them think it through rather than just giving the answer.`);
+    if (reply) await markAbbieQuestionAnswered(q.id, reply);
+    setQueue((qs) => qs.filter((row) => row.id !== q.id));
+    setEdits((e) => { const n = { ...e }; delete n[q.id]; return n; });
+    setAnsweringId(null);
+  }, [thinking, edits, summon]);
+
+  const dismiss = useCallback(async (id: string) => {
+    setQueue((qs) => qs.filter((row) => row.id !== id));
+    await dismissAbbieQuestion(id);
+  }, []);
 
   return (
     <>
@@ -201,6 +260,22 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
         .abc-toggle.on .abc-knob { transform:translateX(16px); background:#5eead4; }
         .abc-err { color:#fca5a5; font-size:0.78rem; font-weight:800; }
 
+        .abc-badge { min-width:20px; height:20px; padding:0 5px; margin-left:2px; border-radius:999px; background:#f95335; color:#fff; font-size:0.72rem; font-weight:900; display:inline-flex; align-items:center; justify-content:center; }
+
+        /* Moderated "Ask Abbie" queue */
+        .abc-queue { display:grid; gap:9px; border-top:1px solid #17302b; padding-top:12px; }
+        .abc-queue-title { font-size:0.7rem; font-weight:900; letter-spacing:0.09em; text-transform:uppercase; color:#8fb8af; }
+        .abc-qitem { display:grid; gap:7px; border:1px solid #23413b; border-radius:12px; background:#101d19; padding:11px 12px; }
+        .abc-qwho { font-size:0.74rem; font-weight:800; color:#6f9a90; }
+        .abc-qtext { width:100%; box-sizing:border-box; resize:vertical; background:#0a1310; border:1px solid #23413b; color:#eafff9; border-radius:9px; padding:8px 10px; font:inherit; font-weight:600; font-size:0.9rem; line-height:1.35; }
+        .abc-qtext:focus { outline:none; border-color:#2dd4bf; }
+        .abc-qactions { display:flex; gap:8px; }
+        .abc-qapprove { flex:1; border:1px solid #2dd4bf; background:#0f3630; color:#5eead4; border-radius:9px; padding:9px 10px; font:inherit; font-weight:900; font-size:0.84rem; cursor:pointer; }
+        .abc-qapprove:disabled { opacity:0.5; cursor:default; }
+        .abc-qdismiss { border:1px solid #3a2420; background:transparent; color:#e79a8f; border-radius:9px; padding:9px 12px; font:inherit; font-weight:800; font-size:0.84rem; cursor:pointer; }
+        .abc-qdismiss:hover:not(:disabled) { border-color:#f95335; color:#fca5a5; }
+        .abc-qdismiss:disabled { opacity:0.5; cursor:default; }
+
         /* Projector bubble — what the class sees when Abbie speaks */
         .abc-stage { position:fixed; left:50%; bottom:26px; transform:translateX(-50%); z-index:72; width:min(92vw,860px); }
         .abc-bubble { position:relative; display:flex; gap:16px; align-items:flex-start; background:#0d1f1b; border:1px solid #1f4d45; border-left:6px solid #2dd4bf; border-radius:18px; padding:20px 24px; box-shadow:0 20px 60px rgba(0,0,0,0.55); animation:abcIn 0.32s cubic-bezier(0.2,1.3,0.4,1); }
@@ -220,6 +295,7 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
           <img src="/big-dog-mark.png" alt="" />
           <span className="dotlive" />
           Abbie
+          {queue.length > 0 && <span className="abc-badge" aria-label={`${queue.length} pending questions`}>{queue.length}</span>}
         </button>
       )}
 
@@ -259,6 +335,29 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
 
             {thinking && <div className="abc-thinking">…Abbie&apos;s thinking</div>}
             {error && <div className="abc-err">{error}</div>}
+
+            {queue.length > 0 && (
+              <div className="abc-queue">
+                <div className="abc-queue-title">Student questions ({queue.length})</div>
+                {queue.map((q) => (
+                  <div key={q.id} className="abc-qitem">
+                    <div className="abc-qwho">{q.display_name || "A student"} asked</div>
+                    <textarea
+                      className="abc-qtext"
+                      value={edits[q.id] ?? q.question}
+                      onChange={(e) => setEdits((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                      rows={2}
+                    />
+                    <div className="abc-qactions">
+                      <button className="abc-qapprove" disabled={thinking} onClick={() => answerQuestion(q)}>
+                        {answeringId === q.id ? "Answering…" : "Approve — Abbie answers"}
+                      </button>
+                      <button className="abc-qdismiss" disabled={answeringId === q.id} onClick={() => dismiss(q.id)}>Dismiss</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div className="abc-foot">
               <label className="abc-voice" onClick={() => setVoice(!voiceOn)}>
