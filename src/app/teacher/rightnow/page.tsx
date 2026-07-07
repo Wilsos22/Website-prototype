@@ -43,6 +43,8 @@ export default function RightNowPage() {
   const [status, setStatus] = useState<string | null>(null);
   const [plans, setPlans] = useState<Map<string, string>>(new Map());
   const [lessonTitle, setLessonTitle] = useState("");
+  // AI-sharpened moves, keyed by `${misconception}|||${archetype}`.
+  const [sharp, setSharp] = useState<Record<string, { move: string; loading: boolean; note?: string }>>({});
 
   // Today's lesson plans from Notion ("Misconception Plans" property).
   useEffect(() => {
@@ -87,6 +89,33 @@ export default function RightNowPage() {
   }, []);
   useEffect(() => { void load(periodId); }, [periodId, load]);
 
+  // Ask Claude to sharpen one archetype sub-group's templated move into a
+  // concrete, ready-to-run reteach. Teacher-gated (same cookie as this page);
+  // the route falls back to the template on any AI failure, so this never breaks.
+  const sharpen = useCallback(async (c: ClusterOut, m: Move) => {
+    const key = `${c.misconception}|||${m.archetype}`;
+    setSharp((s) => ({ ...s, [key]: { move: s[key]?.move || "", loading: true } }));
+    try {
+      const res = await fetch("/api/live/next-move", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          misconception: c.misconception,
+          archetype: m.archetype,
+          domain: c.domain || undefined,
+          students: m.students,
+          corroborated: c.corroborated || undefined,
+          templateMove: m.move,
+        }),
+      });
+      const d = await res.json();
+      if (d.move) setSharp((s) => ({ ...s, [key]: { move: d.move, loading: false, note: d.enriched ? undefined : "AI unavailable — showing the template." } }));
+      else setSharp((s) => ({ ...s, [key]: { move: "", loading: false, note: d.error || "No move returned." } }));
+    } catch {
+      setSharp((s) => ({ ...s, [key]: { move: "", loading: false, note: "Couldn't reach the sharpener." } }));
+    }
+  }, []);
+
   return (
     <div className="rn-page">
       <SiteNav variant="teacher" />
@@ -117,6 +146,13 @@ export default function RightNowPage() {
         .rn-plan b { color: #0f5e5f; }
         .rn-plan p { margin: 4px 0 0; color: #14484a; line-height: 1.5; font-size: 0.98rem; font-weight: 600; }
         .rn-waiting { border: 1px dashed #cfe8e2; background: #f7fcfa; }
+        .rn-sharpbtn { font: inherit; font-size: 0.82rem; font-weight: 700; margin-top: 8px; padding: 6px 12px; border-radius: 999px; border: 1px solid #cfe8e2; background: #fff; color: #0f5e5f; cursor: pointer; }
+        .rn-sharpbtn:hover:not(:disabled) { background: #eefaf7; }
+        .rn-sharpbtn:disabled { opacity: 0.6; cursor: default; }
+        .rn-sharp { border-left: 4px solid #14b8a6; background: #eefaf7; padding: 10px 14px; margin: 10px 0 0; border-radius: 0 12px 12px 0; }
+        .rn-sharp-tag { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.02em; color: #0f5e5f; text-transform: uppercase; }
+        .rn-sharp p { margin: 4px 0 0; color: #14484a; line-height: 1.5; font-size: 0.95rem; font-weight: 600; }
+        .rn-sharp-note { font-size: 0.8rem; color: #9a6a00; margin-top: 6px; }
       `}</style>
 
       <div className="rn-wrap">
@@ -154,12 +190,26 @@ export default function RightNowPage() {
                   <p>{plans.get(c.misconception.toLowerCase())}</p>
                 </div>
               )}
-              {c.moves.map((m) => (
-                <div className="rn-move" key={m.archetype} style={{ borderLeftColor: ARCH_COLOR[m.archetype] }}>
-                  <b>{ARCHETYPE_LABEL[m.archetype]}</b> — {m.students.join(", ")}
-                  <p>{m.move}</p>
-                </div>
-              ))}
+              {c.moves.map((m) => {
+                const key = `${c.misconception}|||${m.archetype}`;
+                const s = sharp[key];
+                return (
+                  <div className="rn-move" key={m.archetype} style={{ borderLeftColor: ARCH_COLOR[m.archetype] }}>
+                    <b>{ARCHETYPE_LABEL[m.archetype]}</b> — {m.students.join(", ")}
+                    <p>{m.move}</p>
+                    {s?.move && (
+                      <div className="rn-sharp">
+                        <span className="rn-sharp-tag">✨ Sharpened for these {m.students.length} student{m.students.length === 1 ? "" : "s"}</span>
+                        <p>{s.move}</p>
+                      </div>
+                    )}
+                    {s?.note && <div className="rn-sharp-note">{s.note}</div>}
+                    <button className="rn-sharpbtn" onClick={() => void sharpen(c, m)} disabled={s?.loading}>
+                      {s?.loading ? "Sharpening…" : s?.move ? "↻ Re-sharpen" : "✨ Sharpen this move"}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           ))}
 
