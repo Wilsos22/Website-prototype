@@ -156,7 +156,7 @@ export default function RightNowPage() {
       `}</style>
 
       <div className="rn-wrap">
-        <h1 className="rn-h1">🌱 Growth</h1>
+        <h1 className="rn-h1">Growth</h1>
         <div className="rn-sub">Your immediate next steps, right now — who to pull and what to do, grouped by the misconception their work keeps showing. A tag needs 2+ hits to count, and the ✓ badge means i-Ready agrees.</div>
 
         <div className="rn-controls">
@@ -199,13 +199,13 @@ export default function RightNowPage() {
                     <p>{m.move}</p>
                     {s?.move && (
                       <div className="rn-sharp">
-                        <span className="rn-sharp-tag">✨ Sharpened for these {m.students.length} student{m.students.length === 1 ? "" : "s"}</span>
+                        <span className="rn-sharp-tag">Sharpened for these {m.students.length} student{m.students.length === 1 ? "" : "s"}</span>
                         <p>{s.move}</p>
                       </div>
                     )}
                     {s?.note && <div className="rn-sharp-note">{s.note}</div>}
                     <button className="rn-sharpbtn" onClick={() => void sharpen(c, m)} disabled={s?.loading}>
-                      {s?.loading ? "Sharpening…" : s?.move ? "↻ Re-sharpen" : "✨ Sharpen this move"}
+                      {s?.loading ? "Sharpening…" : s?.move ? "Re-sharpen" : "Sharpen this move"}
                     </button>
                   </div>
                 );

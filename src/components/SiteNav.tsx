@@ -14,7 +14,7 @@ const TEACHER = [
   { href: "/teacher/assignments", label: "📝 Practice" },
   { href: "/teacher/exit-tickets", label: "🎟 Exit" },
   { href: "/teacher/checkpoints", label: "✅ Checks" },
-  { href: "/teacher/rightnow", label: "🌱 Growth" },
+  { href: "/teacher/rightnow", label: "Growth" },
   { href: "/roster",    label: "👥 Rosters" },
   { href: "/",          label: "Student view" },
 ];
