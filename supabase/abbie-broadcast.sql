@@ -1,5 +1,5 @@
 -- Big Dog Math — Abbie broadcast (pop Abbie's line onto student screens).
--- Run once in Supabase (SQL Editor → New query → paste → Run).
+-- Run once in Supabase (SQL Editor, New query, paste, Run).
 -- Adds an "abbie" field to sessions: when the teacher summons Abbie from the
 -- control panel, her line is written here as { nonce, text, at }. Joined
 -- students show a short-lived speech bubble on whatever screen they're on

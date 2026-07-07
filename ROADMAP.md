@@ -27,7 +27,9 @@ pair "= 0" pop that vanishes, term auto-drops, student computes the other
 side, inverse-ops key, level-switch fanfare, x on either side in Level Up!,
 celebration + in-a-row counter; Regular/Level Up! naming here + GEMS) ·
 **Growth view** (Right Now is now "🌱 Growth", linked from teacher nav + home;
-/teacher/growth redirects) ·
+/teacher/growth redirects) · **Claude-sharpened next moves** (7/6 —
+/api/live/next-move + per-archetype "Sharpen this move" button on each Growth
+cluster; archetype-aware, tool-grounded, reuses ANTHROPIC_API_KEY, template fallback) ·
 **Abbie Console** (7/7 — summon the Abbiliathan from the control panel: 6
 quick-tap moods + type-to-say, no open student mic; context-aware (current
 state + lesson intention); teal projector bubble the class sees + her real
@@ -44,11 +46,11 @@ any mode; global AbbieStudentBubble in the layout; needs abbie-broadcast.sql)
 - Warm-up → spine bridge — live and verified (Evidence post 200, 7/4)
 
 ## Planned 🧭
-- **Abbie everywhere** (queued in tracker, Area=Abbie): ~~student-screen
-  broadcast~~ (shipped 7/7) → moderated "Ask Abbie" student queue (teacher
-  approves; no yelling) → contextual reactions (poll results, spinner pick) →
+- **Abbie everywhere** (queued in tracker, Area=Abbie): student-screen
+  broadcast (shipped 7/7) then moderated "Ask Abbie" student queue (teacher
+  approves; no yelling), contextual reactions (poll results, spinner pick),
   bits (Red Bull counter, cross-day memory)
-- Claude enrichment (score short-answer reasoning; sharpen next moves)
+- Claude enrichment: score short-answer reasoning (next-move sharpening now Live)
 - RLS tightening on legacy tables (required before real student data)
 - Reskin remaining tools; vertical draggable control sequence
 - Abbie lesson-sequence phases 2–5 (auto-built spinner/misconception/flashback/exit)

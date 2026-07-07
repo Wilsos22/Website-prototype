@@ -13,20 +13,21 @@ interface Lesson { title?: string; learningIntention?: string; successCriteria?:
 
 interface Mood {
   id: string;
-  emoji: string;
+  tone: string;
   label: string;
   dir: string;
 }
 
 // Each mood is a stage direction handed to Abbie's brain — she phrases the line
-// herself, in character, so it never sounds canned.
+// herself, in character, so it never sounds canned. `tone` is a scannable dot
+// color, not decoration for its own sake.
 const MOODS: Mood[] = [
-  { id: "hype", emoji: "🔥", label: "Hype us up", dir: "Pump up the class — we're about to get into it. Bring real energy, keep it short." },
-  { id: "goal", emoji: "🎯", label: "Today's goal", dir: "Tell the class what we're working on today and why it's worth their time — use the learning intention. Make it land; don't be dry." },
-  { id: "move", emoji: "⏭️", label: "Move us on", dir: "Wrap up what we're doing and push the class to the next thing. Keep it moving." },
-  { id: "settle", emoji: "🤫", label: "Settle the room", dir: "The room's getting loud. Pull them back and refocus them — deadpan, not a nag." },
-  { id: "roast", emoji: "😏", label: "Roast dad", dir: "Roast dad for the class about something true — the Red Bulls, the dancing, the slang, the knees. One clean burn." },
-  { id: "stuck", emoji: "💪", label: "We're stuck", dir: "The class is stuck and getting frustrated. Remind them being confused is step one, and nudge them to just try something." },
+  { id: "hype", tone: "#ff6b3d", label: "Hype us up", dir: "Pump up the class — we're about to get into it. Bring real energy, keep it short." },
+  { id: "goal", tone: "#2dd4bf", label: "Today's goal", dir: "Tell the class what we're working on today and why it's worth their time — use the learning intention. Make it land; don't be dry." },
+  { id: "move", tone: "#4d8df6", label: "Move us on", dir: "Wrap up what we're doing and push the class to the next thing. Keep it moving." },
+  { id: "settle", tone: "#f5b915", label: "Settle the room", dir: "The room's getting loud. Pull them back and refocus them — deadpan, not a nag." },
+  { id: "roast", tone: "#a855f7", label: "Roast dad", dir: "Roast dad for the class about something true — the Red Bulls, the dancing, the slang, the knees. One clean burn." },
+  { id: "stuck", tone: "#22c55e", label: "We're stuck", dir: "The class is stuck and getting frustrated. Remind them being confused is step one, and nudge them to just try something." },
 ];
 
 const LS_VOICE = "bdm-abbie-voice-on";
@@ -184,7 +185,7 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
         .abc-mood { display:flex; align-items:center; gap:9px; border:1px solid #23413b; border-radius:11px; background:#101d19; color:#d6f5ee; padding:11px 12px; font:inherit; font-weight:850; font-size:0.9rem; cursor:pointer; text-align:left; }
         .abc-mood:hover:not(:disabled) { border-color:#2dd4bf; background:#12241f; }
         .abc-mood:disabled { opacity:0.45; cursor:default; }
-        .abc-mood .e { font-size:1.15rem; line-height:1; flex:none; }
+        .abc-dot { width:10px; height:10px; border-radius:50%; flex:none; }
 
         .abc-typerow { display:flex; gap:8px; }
         .abc-in { flex:1; min-width:0; background:#0a1310; border:1px solid #23413b; color:#eafff9; border-radius:11px; padding:11px 13px; font:inherit; font-weight:700; font-size:0.92rem; }
@@ -230,7 +231,7 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
               <div className="abc-title">Abbiliathan 3000</div>
               <div className="abc-sub">tap a mood or tell her what to say</div>
             </div>
-            <button className="abc-x" onClick={() => setOpen(false)} aria-label="Close">✕</button>
+            <button className="abc-x" onClick={() => setOpen(false)} aria-label="Close">×</button>
           </div>
 
           <div className="abc-body">
@@ -239,7 +240,7 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
             <div className="abc-moods">
               {MOODS.map((m) => (
                 <button key={m.id} className="abc-mood" disabled={thinking} onClick={() => summon(m.dir)}>
-                  <span className="e">{m.emoji}</span>{m.label}
+                  <span className="abc-dot" style={{ background: m.tone }} />{m.label}
                 </button>
               ))}
             </div>
@@ -262,7 +263,7 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
             <div className="abc-foot">
               <label className="abc-voice" onClick={() => setVoice(!voiceOn)}>
                 <span className={`abc-toggle${voiceOn ? " on" : ""}`}><span className="abc-knob" /></span>
-                {voiceOn ? "🔊 Voice on" : "🔇 Text only"}
+                {voiceOn ? "Voice on" : "Text only"}
               </label>
             </div>
           </div>
@@ -272,7 +273,7 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
       {line && (
         <div className="abc-stage" aria-live="polite">
           <div className="abc-bubble">
-            <button className="abc-bclose" onClick={() => setLine(null)} aria-label="Dismiss">✕</button>
+            <button className="abc-bclose" onClick={() => setLine(null)} aria-label="Dismiss">×</button>
             <div className="abc-bavatar">{/* eslint-disable-next-line @next/next/no-img-element */}<img src="/big-dog-mark.png" alt="" /></div>
             <div>
               <div className="abc-bname">Abbie</div>

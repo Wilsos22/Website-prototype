@@ -49,7 +49,7 @@ export default function AbbieStudentBubble() {
         .select("abbie")
         .eq("id", sessionId)
         .maybeSingle();
-      // Missing column / transient error → just don't show anything.
+      // Missing column / transient error - just don't show anything.
       if (error || stopped || !data) return;
       apply((data as { abbie: AbbieBroadcast | null }).abbie ?? null);
     };
