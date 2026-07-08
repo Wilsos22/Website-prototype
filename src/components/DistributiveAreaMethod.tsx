@@ -426,7 +426,7 @@ export default function DistributiveAreaMethod() {
               <button className="da-btn ghost" onClick={keepWhole}>Keep it whole</button>
               {pending != null
                 ? <button className="da-btn" onClick={lockSplit}>Lock this split</button>
-                : <span className="da-hint">Tap a spot inside the rectangle to place your cut.</span>}
+                : <span className="da-hint">Tap a spot to place your cut. Not sure where? Pulling out a ten is always a safe bet.</span>}
             </div>
           )}
 
