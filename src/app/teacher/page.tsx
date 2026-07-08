@@ -50,6 +50,7 @@ const TOOLS: LinkItem[] = [
   { href: "/number-line-plus", label: "Number Line", letter: "N", color: "#674a40", desc: "Single or double number line" },
   { href: "/coordinate-grid", label: "Coordinate Grid", letter: "+", color: "#4d8df6", desc: "Plot points on the plane" },
   { href: "/equation-builder", label: "Equation Builder", letter: "E", color: "#2f9e6f", desc: "Guided step-by-step solve" },
+  { href: "/balance-beam", label: "Balance Beam", letter: "B", color: "#50a3a4", desc: "Keep the scale even to solve" },
   { href: "/order-of-operations", label: "GEMS Order of Ops", letter: "G", color: "#7c5cd6", desc: "Pick the step, build the line" },
   { href: "/combine-like-terms", label: "Combine Like Terms", letter: "C", color: "#f95335", desc: "Zero pairs and simplifying" },
   { href: "/proportions", label: "Proportion Builder", letter: "P", color: "#50a3a4", desc: "Scale factors, missing values" },

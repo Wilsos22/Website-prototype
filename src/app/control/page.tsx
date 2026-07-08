@@ -58,6 +58,7 @@ const TOOL_STATE_INFO = {
   "tool-number-line": { route: "/number-line-plus", label: "Number Line" },
   "tool-percent-bar": { route: "/percent-bar", label: "Percent Bar" },
   "tool-equation-builder": { route: "/equation-builder", label: "Equation Builder" },
+  "tool-balance-beam": { route: "/balance-beam", label: "Balance Beam" },
   "tool-gems": { route: "/order-of-operations", label: "GEMS" },
   "tool-fraction-bars": { route: "/fraction-bars", label: "Fraction Bars" },
   "tool-algebra-tiles": { route: "/algebra-tiles", label: "Algebra Tiles" },
@@ -226,6 +227,8 @@ function buildLiveToolConfig(stateId: ToolStateId, values: ToolSetupValues): Liv
           solution: Math.max(1, Math.round(numericValue(values.equationSolution, 4))),
         },
       };
+    case "tool-balance-beam":
+      return { ...base, route: "/balance-beam", config: {} };
     case "tool-gems":
       return { ...base, route: "/order-of-operations", config: { expression: values.gemsExpression.trim() } };
     case "tool-algebra-tiles":

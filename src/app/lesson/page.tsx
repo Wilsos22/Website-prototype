@@ -31,6 +31,7 @@ const TOOL_ROUTES: Record<string, string> = {
   "group bars": "/group-bars", "percent bar": "/percent-bar", "algebra tiles": "/algebra-tiles",
   "equation builder": "/equation-builder", "gems": "/order-of-operations", "order of operations": "/order-of-operations",
   "combine like terms": "/combine-like-terms", "proportions": "/proportions", "proportion builder": "/proportions", "timer": "/timer",
+  "balance beam": "/balance-beam",
 };
 function lines(text?: string) {
   return (text || "").split(/[\n,]/).map((s) => s.trim()).filter(Boolean);

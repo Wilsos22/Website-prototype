@@ -22,6 +22,7 @@ export const DEFAULT_STATES: ClassState[] = [
   { id: "tool-number-line", label: "Number Line", minutes: 5, color: "#38bdf8", desc: "Model the problem on the number line." },
   { id: "tool-percent-bar", label: "Percent Bar", minutes: 5, color: "#f472b6", desc: "Use the percent bar to make sense of the relationship." },
   { id: "tool-equation-builder", label: "Equation Builder", minutes: 6, color: "#2f9e6f", desc: "Build and solve the equation one step at a time." },
+  { id: "tool-balance-beam", label: "Balance Beam", minutes: 6, color: "#50a3a4", desc: "Keep the beam level — do the same to both sides to solve." },
   { id: "tool-gems", label: "GEMS", minutes: 5, color: "#a78bfa", desc: "Use GEMS to decide which operation comes first." },
   { id: "tool-fraction-bars", label: "Fraction Bars", minutes: 5, color: "#f59e0b", desc: "Model the fraction relationship with bars." },
   { id: "tool-algebra-tiles", label: "Algebra Tiles", minutes: 6, color: "#fb7185", desc: "Build the expression with algebra tiles." },
@@ -61,7 +62,7 @@ export const BANK_GROUPS = [
     id: "process",
     label: "Guided Processes",
     hint: "Step-by-step math thinking routines",
-    stateIds: ["tool-gems", "tool-equation-builder", "tool-combine", "tool-ladder", "tool-proportions", "tool-term-identifier"],
+    stateIds: ["tool-gems", "tool-equation-builder", "tool-balance-beam", "tool-combine", "tool-ladder", "tool-proportions", "tool-term-identifier"],
   },
   {
     id: "manipulatives",

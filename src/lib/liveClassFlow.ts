@@ -13,6 +13,7 @@ export type LiveToolRoute =
   | "/number-line-plus"
   | "/percent-bar"
   | "/equation-builder"
+  | "/balance-beam"
   | "/order-of-operations"
   | "/fraction-bars"
   | "/algebra-tiles"
@@ -33,6 +34,7 @@ export type LiveToolConfig =
       id: string;
       route:
         | "/whiteboard"
+        | "/balance-beam"
         | "/fraction-bars"
         | "/area-model"
         | "/multiplication-fluency"

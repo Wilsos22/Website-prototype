@@ -11,12 +11,13 @@
 // never blocks or breaks the tool.
 import { getSupabase } from "@/lib/supabase";
 
-export type EvidenceTool = "equation-builder" | "gems" | "combine-like-terms";
+export type EvidenceTool = "equation-builder" | "gems" | "combine-like-terms" | "balance-beam";
 
 const TOOL_DOMAIN: Record<EvidenceTool, string> = {
   "equation-builder": "Algebra and Algebraic Thinking",
   "gems": "Algebra and Algebraic Thinking",
   "combine-like-terms": "Algebra and Algebraic Thinking",
+  "balance-beam": "Algebra and Algebraic Thinking",
 };
 
 export interface ToolResult {
