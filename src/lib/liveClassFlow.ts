@@ -14,6 +14,7 @@ export type LiveToolRoute =
   | "/percent-bar"
   | "/equation-builder"
   | "/balance-beam"
+  | "/distributive-area"
   | "/order-of-operations"
   | "/fraction-bars"
   | "/algebra-tiles"
@@ -35,6 +36,7 @@ export type LiveToolConfig =
       route:
         | "/whiteboard"
         | "/balance-beam"
+        | "/distributive-area"
         | "/fraction-bars"
         | "/area-model"
         | "/multiplication-fluency"

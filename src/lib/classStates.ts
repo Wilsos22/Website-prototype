@@ -26,7 +26,8 @@ export const DEFAULT_STATES: ClassState[] = [
   { id: "tool-gems", label: "GEMS", minutes: 5, color: "#a78bfa", desc: "Use GEMS to decide which operation comes first." },
   { id: "tool-fraction-bars", label: "Fraction Bars", minutes: 5, color: "#f59e0b", desc: "Model the fraction relationship with bars." },
   { id: "tool-algebra-tiles", label: "Algebra Tiles", minutes: 6, color: "#fb7185", desc: "Build the expression with algebra tiles." },
-  { id: "tool-area-model", label: "Area Model", minutes: 6, color: "#fcaf38", desc: "Build the rectangle and split it into partial products." },
+  { id: "tool-area-model", label: "Box Method", minutes: 6, color: "#fcaf38", desc: "Fill in the boxes to multiply with the box method." },
+  { id: "tool-distributive-area", label: "Distributive Area Method", minutes: 6, color: "#50a3a4", desc: "Split the rectangle your own way, then find each partial product." },
   { id: "tool-combine", label: "Combine Like Terms", minutes: 6, color: "#f95335", desc: "Group like terms and simplify the expression." },
   { id: "tool-ladder", label: "Ladder Method", minutes: 6, color: "#674a40", desc: "Divide down the ladder to find GCF and LCM." },
   { id: "tool-proportions", label: "Proportions", minutes: 6, color: "#50a3a4", desc: "Find the scale factor and the missing value." },
@@ -68,6 +69,6 @@ export const BANK_GROUPS = [
     id: "manipulatives",
     label: "Manipulatives",
     hint: "Student screens switch to digital math tools",
-    stateIds: ["tool-whiteboard", "tool-number-line", "tool-percent-bar", "tool-fraction-bars", "tool-algebra-tiles", "tool-area-model", "tool-group-bars", "tool-coordinate-grid", "tool-multiplication", "manip"],
+    stateIds: ["tool-whiteboard", "tool-number-line", "tool-percent-bar", "tool-fraction-bars", "tool-algebra-tiles", "tool-area-model", "tool-distributive-area", "tool-group-bars", "tool-coordinate-grid", "tool-multiplication", "manip"],
   },
 ] as const;

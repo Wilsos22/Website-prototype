@@ -62,7 +62,8 @@ const TOOL_STATE_INFO = {
   "tool-gems": { route: "/order-of-operations", label: "GEMS" },
   "tool-fraction-bars": { route: "/fraction-bars", label: "Fraction Bars" },
   "tool-algebra-tiles": { route: "/algebra-tiles", label: "Algebra Tiles" },
-  "tool-area-model": { route: "/area-model", label: "Area Model" },
+  "tool-area-model": { route: "/area-model", label: "Box Method" },
+  "tool-distributive-area": { route: "/distributive-area", label: "Distributive Area Method" },
   "tool-combine": { route: "/combine-like-terms", label: "Combine Like Terms" },
   "tool-ladder": { route: "/ladder-method", label: "Ladder Method" },
   "tool-proportions": { route: "/proportions", label: "Proportions" },
@@ -235,6 +236,8 @@ function buildLiveToolConfig(stateId: ToolStateId, values: ToolSetupValues): Liv
       return { ...base, route: "/algebra-tiles", config: { expression: values.algebraExpression.trim() } };
     case "tool-area-model":
       return { ...base, route: "/area-model", config: {} };
+    case "tool-distributive-area":
+      return { ...base, route: "/distributive-area", config: {} };
     case "tool-combine":
       return { ...base, route: "/combine-like-terms", config: {} };
     case "tool-ladder":
