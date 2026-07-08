@@ -6,7 +6,7 @@
 // multiplying easier), color the regions, then fill each region's partial
 // product and combine them. Squared corners + a unit grid, on purpose.
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { reportToolResult } from "@/lib/toolEvidence";
 
 type Phase = "enter" | "split" | "products" | "combine" | "done";
@@ -38,20 +38,44 @@ export default function DistributiveAreaMethod() {
   const [entry, setEntry] = useState("");
   const [note, setNote] = useState<string | null>(null);
   const [totalEntry, setTotalEntry] = useState("");
+  const [intro, setIntro] = useState(false);
 
   const rectRef = useRef<HTMLDivElement | null>(null);
   const cell = useMemo(() => cellSize(top, side), [top, side]);
   const solvedRef = useRef(false);
 
-  const start = useCallback(() => {
-    const t = clamp(Math.round(Number(inTop) || 0), 2, 20);
-    const s = clamp(Math.round(Number(inSide) || 0), 2, 20);
-    setTop(t); setSide(s);
+  const beginWith = useCallback((t: number, s: number) => {
+    setTop(t); setSide(s); setInTop(String(t)); setInSide(String(s));
     setTopSplit(null); setSideSplit(null); setSplitStep("top"); setHover(null);
     setRegions([]); setActive(0); setEntry(""); setTotalEntry(""); setNote(null);
     solvedRef.current = false;
     setPhase("split");
-  }, [inTop, inSide]);
+  }, []);
+  const start = useCallback(() => {
+    beginWith(clamp(Math.round(Number(inTop) || 0), 2, 20), clamp(Math.round(Number(inSide) || 0), 2, 20));
+  }, [inTop, inSide, beginWith]);
+  const resetProblem = useCallback(() => beginWith(top, side), [beginWith, top, side]);
+  const randomProblem = useCallback(() => beginWith(11 + Math.floor(Math.random() * 9), 4 + Math.floor(Math.random() * 12)), [beginWith]);
+  const back = useCallback(() => {
+    setNote(null);
+    if (phase === "done") { setPhase("combine"); return; }
+    if (phase === "combine") { setActive(Math.max(0, regions.length - 1)); setPhase("products"); return; }
+    if (phase === "products") {
+      if (active > 0) { setActive(active - 1); setEntry(""); return; }
+      setRegions([]); setEntry(""); setSideSplit(null); setSplitStep("side"); setPhase("split"); return;
+    }
+    if (splitStep === "side") { setSplitStep("top"); setTopSplit(null); setHover(null); return; }
+    setPhase("enter");
+  }, [phase, active, regions.length, splitStep]);
+
+  // Each region's two dimensions travel toward each other before the answer box
+  // appears — one region at a time.
+  useEffect(() => {
+    if (phase !== "products") { setIntro(false); return; }
+    setIntro(true);
+    const t = window.setTimeout(() => setIntro(false), 1000);
+    return () => window.clearTimeout(t);
+  }, [phase, active]);
 
   const buildRegions = useCallback((tSplit: number | null, sSplit: number | null) => {
     const c = cellSize(top, side);
@@ -137,6 +161,16 @@ export default function DistributiveAreaMethod() {
         .da-region.solved .da-prod { animation:daDrop 320ms cubic-bezier(.2,.8,.3,1); }
         @keyframes daDrop { from { transform:translateY(-10px) scale(1.2); opacity:0; } to { transform:none; opacity:1; } }
         .da-dims { font-weight:800; font-size:0.9rem; color:var(--bdb-ink); opacity:0.75; }
+        .da-conv { display:flex; align-items:center; gap:8px; font-weight:900; font-size:1.4rem; color:var(--bdb-ink); }
+        .da-cn.a { animation:daFromTop .85s cubic-bezier(.3,.7,.3,1) both; }
+        .da-cn.b { animation:daFromSide .85s cubic-bezier(.3,.7,.3,1) both; }
+        .da-cn.x { animation:daFade .85s ease .35s both; }
+        @keyframes daFromTop { from { transform:translateY(-34px); opacity:0; } to { transform:none; opacity:1; } }
+        @keyframes daFromSide { from { transform:translateX(34px); opacity:0; } to { transform:none; opacity:1; } }
+        @keyframes daFade { from { opacity:0; } to { opacity:1; } }
+        .da-tools { display:flex; gap:8px; justify-content:center; margin-bottom:12px; }
+        .da-tbtn { font:inherit; font-weight:700; font-size:0.82rem; padding:6px 13px; border-radius:999px; border:1px solid var(--bdb-line); background:var(--bdb-card); color:var(--bdb-ink-soft); cursor:pointer; }
+        .da-tbtn:hover { color:var(--bdb-ink); }
         .da-prod { font-weight:900; font-size:1.3rem; color:var(--bdb-ink); }
         .da-pin { width:74px; font:inherit; font-size:1.1rem; font-weight:800; text-align:center; padding:5px; border:2px solid var(--bdb-ink); border-radius:8px; background:#fff; }
         .da-bar { display:flex; gap:8px; justify-content:center; align-items:center; margin-top:16px; flex-wrap:wrap; }
@@ -176,6 +210,12 @@ export default function DistributiveAreaMethod() {
             {phase === "products" && "Fill in this region's area, then the next."}
             {phase === "combine" && "Add every region's product for the whole area."}
             {phase === "done" && "Same total area, no matter how you cut it up."}
+          </div>
+
+          <div className="da-tools">
+            <button className="da-tbtn" onClick={back}>Back</button>
+            <button className="da-tbtn" onClick={resetProblem}>Reset</button>
+            <button className="da-tbtn" onClick={randomProblem}>Random</button>
           </div>
 
           <div className="da-stage">
@@ -220,12 +260,20 @@ export default function DistributiveAreaMethod() {
                   {(phase === "products" && i < active) || phase === "combine" || phase === "done" ? (
                     <span className="da-prod">{r.tw * r.th}</span>
                   ) : phase === "products" && i === active ? (
-                    <div>
-                      <div className="da-dims">{r.tw} x {r.th}</div>
-                      <input className="da-pin" autoFocus value={entry} inputMode="numeric"
-                        onChange={(e) => setEntry(e.target.value.replace(/\D/g, ""))}
-                        onKeyDown={(e) => e.key === "Enter" && submitProduct()} onClick={(e) => e.stopPropagation()} />
-                    </div>
+                    intro ? (
+                      <div className="da-conv" onClick={(e) => e.stopPropagation()}>
+                        <span className="da-cn a">{r.tw}</span>
+                        <span className="da-cn x">x</span>
+                        <span className="da-cn b">{r.th}</span>
+                      </div>
+                    ) : (
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <div className="da-dims">{r.tw} x {r.th}</div>
+                        <input className="da-pin" autoFocus value={entry} inputMode="numeric"
+                          onChange={(e) => setEntry(e.target.value.replace(/\D/g, ""))}
+                          onKeyDown={(e) => e.key === "Enter" && submitProduct()} onClick={(e) => e.stopPropagation()} />
+                      </div>
+                    )
                   ) : (
                     <span className="da-dims">{r.tw} x {r.th}</span>
                   )}
