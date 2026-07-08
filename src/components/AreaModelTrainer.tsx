@@ -3,6 +3,7 @@
 // Area Model Trainer lets students decompose two factors, fill the four
 // partial-products, and see how the rectangle pieces add back to the product.
 import { type CSSProperties, useState } from "react";
+import { reportToolResult } from "@/lib/toolEvidence";
 
 type Problem = {
   top: number;
@@ -241,6 +242,7 @@ export default function AreaModelTrainer() {
       kind: "success",
       text: `Nice work. ${problem.top} x ${problem.side} = ${correctTotal}, and every rectangle matches the decomposition.`,
     });
+    reportToolResult({ tool: "area-model", correct: true, problemId: `${problem.top}x${problem.side}` });
   }
 
   const modelStyle = {

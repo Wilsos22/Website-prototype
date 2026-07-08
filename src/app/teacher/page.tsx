@@ -27,6 +27,7 @@ const RUN: LinkItem[] = [
 // See the learning.
 const LEARN: LinkItem[] = [
   { href: "/teacher/rightnow", label: "Growth", letter: "G", color: "#2f9e6f", desc: "Who to pull, grouped by misconception" },
+  { href: "/teacher/day-review", label: "Day review", letter: "D", color: "#f5b915", desc: "What each student did in the tools today" },
   { href: "/teacher/mastery", label: "Mastery", letter: "M", color: "#50a3a4", desc: "Per-domain bars and year growth" },
   { href: "/teacher/checkpoints", label: "Checkpoints", letter: "K", color: "#fcaf38", desc: "Tier-2 checkpoint results" },
   { href: "/teacher/exit-tickets", label: "Exit tickets", letter: "X", color: "#f95335", desc: "End-of-class checks" },
