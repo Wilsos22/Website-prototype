@@ -391,6 +391,7 @@ export default function ControlPage() {
   const [autoAdvance, setAutoAdvance] = useState(true);
   const [soundUrls, setSoundUrls] = useState<Record<string, string>>({});
   const [teacherSession, setTeacherSession] = useState<TeacherSessionRow | null>(null);
+  const [joinCode, setJoinCode] = useState<string | null>(null);
   const [discussionFlow, setDiscussionFlow] = useState<DiscussionPhaseSnapshot | null>(null);
   const [controlPoll, setControlPoll] = useState<ControlPoll | null>(null);
   const [pollKind, setPollKind] = useState<LivePollKind>("short-answer");
@@ -497,6 +498,23 @@ export default function ControlPage() {
       stopped = true;
       window.clearInterval(interval);
     };
+  }, [supabase]);
+
+  // Show the join code on the pacer during arrival/warm-up. Polls the newest
+  // open session's code directly, so it works on the second-board device even
+  // though that machine has no stored teacher session of its own.
+  useEffect(() => {
+    if (!supabase) return;
+    let stop = false;
+    const tick = async () => {
+      const { data } = await supabase
+        .from("sessions").select("join_code").eq("status", "open")
+        .order("started_at", { ascending: false }).limit(1).maybeSingle();
+      if (!stop) setJoinCode((data as { join_code: string | null } | null)?.join_code || null);
+    };
+    void tick();
+    const t = window.setInterval(tick, 4000);
+    return () => { stop = true; window.clearInterval(t); };
   }, [supabase]);
 
   const persistBank = useCallback((next: ClassState[]) => {
@@ -1272,6 +1290,9 @@ export default function ControlPage() {
         .cx-note { font-size:1.1rem; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; min-height:1.3em; }
         .cx-warn { color:#fcaf38; } .cx-fin { color:#f95335; } .cx-idle { color:#5a5142; font-weight:700; max-width:440px; text-transform:none; letter-spacing:0; }
         .cx-desc { font-size:clamp(1.1rem,3vw,1.9rem); font-weight:800; color:#efe9df; max-width:780px; line-height:1.3; }
+        .cx-join { display:inline-flex; align-items:center; gap:16px; margin-bottom:18px; padding:10px 22px; border-radius:16px; background:#101820; border:1px solid #2a3a44; }
+        .cx-join-label { font-size:0.8rem; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; color:#7fd6cf; }
+        .cx-join-code { font-size:clamp(2.2rem,6vw,3.6rem); font-weight:900; letter-spacing:0.16em; color:#5eead4; line-height:1; }
         .cx-progress { width:min(82vw,760px); height:16px; border-radius:999px; background:#241f15; overflow:hidden; border:1px solid #34301f; }
         .cx-progress-fill { height:100%; border-radius:999px; transition:width 1s linear, background 300ms ease; }
         .cx-upnext { font-size:0.82rem; font-weight:800; color:#7c7363; text-transform:uppercase; letter-spacing:0.07em; }
@@ -1410,6 +1431,12 @@ export default function ControlPage() {
         )}
 
         <main className="cx-main">
+          {joinCode && (currentIndex === -1 || activeState?.id === "warmup") && (
+            <div className="cx-join">
+              <span className="cx-join-label">Join code</span>
+              <span className="cx-join-code">{joinCode}</span>
+            </div>
+          )}
           {activeState ? (
             <>
               <div className="cx-pos">Step {currentIndex + 1} of {lineup.length}</div>
