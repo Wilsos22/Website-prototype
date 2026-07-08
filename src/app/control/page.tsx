@@ -14,6 +14,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import StudentSpinner from "@/components/StudentSpinner";
 import DiscussionProtocol from "@/components/DiscussionProtocol";
 import AbbieConsole from "@/components/AbbieConsole";
+import { requestAbbieLine } from "@/lib/abbieBus";
 import { getSupabase } from "@/lib/supabase";
 import {
   LIVE_FLOW_MODE,
@@ -770,6 +771,26 @@ export default function ControlPage() {
     setFinished(false);
   }
 
+  // Hand the just-closed poll's tally to Abbie for a one-line, in-character take.
+  function haveAbbieReactToPoll() {
+    if (!controlPoll) return;
+    const total = pollAnswers.length;
+    let tally: string;
+    if (controlPoll.kind === "short-answer") {
+      tally = `${total} student${total === 1 ? "" : "s"} wrote short answers`;
+    } else {
+      tally = (controlPoll.choices || [])
+        .map((choice) => {
+          const count = pollAnswers.filter((a) => a.answer === choice).length;
+          const pct = total ? Math.round((count / total) * 100) : 0;
+          const label = controlPoll.kind === "fist-to-five" ? `${choice}/5` : choice;
+          return `${label}: ${count} (${pct}%)`;
+        })
+        .join(", ");
+    }
+    requestAbbieLine(`The class just voted on "${controlPoll.question}". Results: ${tally}. React to that in one line for the room - call out the split or the surprise and nudge them toward the reasoning. Do NOT reveal which answer is correct.`);
+  }
+
   function updateToolSetup(key: keyof ToolSetupValues, value: string) {
     setToolSetup((current) => ({ ...current, [key]: value } as ToolSetupValues));
   }
@@ -1494,6 +1515,9 @@ export default function ControlPage() {
                       )}
                       <div className="cx-actions" style={{ justifyContent: "flex-start" }}>
                         <button className="cx-btn" onClick={prepareAnotherPoll}>New {activeInteractiveState === "question" ? "question" : "poll"}</button>
+                        {pollAnswers.length > 0 && (
+                          <button className="cx-btn" style={{ borderColor: "#2dd4bf", color: "#5eead4" }} onClick={haveAbbieReactToPoll}>Have Abbie react</button>
+                        )}
                       </div>
                     </>
                   )}
