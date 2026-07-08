@@ -30,11 +30,13 @@ celebration + in-a-row counter; Regular/Level Up! naming here + GEMS) ·
 /teacher/growth redirects) · **Claude-sharpened next moves** (7/6 —
 /api/live/next-move + per-archetype "Sharpen this move" button on each Growth
 cluster; archetype-aware, tool-grounded, reuses ANTHROPIC_API_KEY, template fallback) ·
-**Abbie Console** (7/7 — summon the Abbiliathan from the control panel: 6
-quick-tap moods + type-to-say, no open student mic; context-aware (current
-state + lesson intention); teal projector bubble the class sees + her real
-voice, voice/text-only toggle; /api/abbie takes a `context` field; roast
-material loaded — Kendrick, tight pants, Legos, dog-park small talk, etc.) ·
+**Abbie Console** (7/7 — summon the Abbiliathan from the control panel:
+hold-to-talk mic (Web Speech STT + Stream Deck F8/?ptt=) for free-form live
+conversation with running history, plus 6 quick-tap moods and a type/ask box;
+context-aware (current state + lesson intention); teal projector bubble the
+class sees + her real voice, voice/text-only toggle; /api/abbie takes a
+`context` field; roast material loaded — Kendrick, tight pants, Legos, dog-park
+small talk, etc.) ·
 **Abbie on student screens** (7/7 — her line broadcasts to a dedicated
 sessions.abbie column and pops a teal bubble on every joined student's screen,
 any mode; global AbbieStudentBubble in the layout; needs abbie-broadcast.sql) ·
