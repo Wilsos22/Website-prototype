@@ -19,7 +19,6 @@ interface Region { id: number; tw: number; th: number; color: string; x: number;
 interface Arcs { w: number; h: number; b: string; c: string; endB: { x: number; y: number }; endC: { x: number; y: number } }
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
-const friendly = (n: number) => n % 10 === 0 || n === 5 || n < 10; // tens, five, single digits
 
 function cellSize(top: number, side: number) {
   return Math.max(13, Math.min(26, Math.floor(Math.min(460 / top, 320 / side))));
@@ -67,7 +66,9 @@ export default function DistributiveAreaMethod() {
     setPhase("split");
   }, []);
   const start = useCallback(() => {
-    beginWith(clamp(Math.round(Number(inTop) || 0), 2, 20), clamp(Math.round(Number(inSide) || 0), 2, 20));
+    // Top is the factor being split — allow two digits (24 x 8) so 2-digit x
+    // 1-digit distributive problems fit. Side is the outside factor, kept smaller.
+    beginWith(clamp(Math.round(Number(inTop) || 0), 2, 30), clamp(Math.round(Number(inSide) || 0), 2, 20));
   }, [inTop, inSide, beginWith]);
   const resetProblem = useCallback(() => beginWith(top, side), [beginWith, top, side]);
   const randomProblem = useCallback(
@@ -205,18 +206,20 @@ export default function DistributiveAreaMethod() {
   const prod1ok = topSplit != null && prod1 !== "" && Number(prod1) === a * c;
   const splitParts: [number, number] | null =
     pending != null ? [pending, top - pending] : topSplit != null ? [topSplit, top - topSplit] : null;
-  // Praise the split only when it actually hits the teaching target — a part
-  // that is a multiple of ten. A coincidental all-single-digit cut (16 into
-  // 8 + 8) is NOT the friendly move the tool keeps coaching toward.
+  // Two smart strategies earn tailored praise: pulling out a ten (place value)
+  // and an even split you can double (24 into 12 + 12). Everything else gets a
+  // nudge toward one of them — an arbitrary cut like 15 into 7 + 8 is not easier.
   const hasTen = topSplit != null && (b % 10 === 0 || c % 10 === 0);
-  const friendlyBoth = topSplit != null && friendly(b) && friendly(c) && hasTen;
+  const isDouble = topSplit != null && b === c;
 
   const doneReflect =
     topSplit == null
       ? `That works, but the whole point is to break it up. Try again and split the ${top} into a ten and some ones — you will see why it is easier.`
-      : friendlyBoth
-      ? `That is the distributive property. The ${side} spread across ${b} and ${c}, and the pieces were easy to multiply.`
-      : `That is the distributive property — it works with any split. But ${b} and ${c} were not the easiest to multiply. Try cutting into a ten next time and feel the difference.`;
+      : hasTen
+      ? `That is the distributive property. Pulling a ten out of the ${top} makes each product quick to do in your head.`
+      : isDouble
+      ? `That is the distributive property — and splitting the ${top} in half is a smart move. Both pieces are ${side} x ${b}, so you can work one out and double it.`
+      : `That is the distributive property — it works with any split. But ${b} and ${c} were not the easiest to multiply. Try pulling out a ten, or splitting into two equal parts you can double.`;
 
   return (
     <div className="da-wrap">
