@@ -17,6 +17,17 @@ import {
 import { subscribeAbbieLine } from "@/lib/abbieBus";
 
 interface Lesson { title?: string; learningIntention?: string; successCriteria?: string }
+interface Msg { role: "user" | "assistant"; content: string }
+
+// Minimal shape for the (un-typed) Web Speech API, same as AbbieTalk.
+interface SRResult { readonly isFinal: boolean; readonly length: number; readonly [i: number]: { readonly transcript: string } }
+interface SREvent { readonly resultIndex: number; readonly results: ArrayLike<SRResult> }
+interface SR { lang: string; interimResults: boolean; continuous: boolean; start: () => void; stop: () => void; onresult: ((e: SREvent) => void) | null; onend: (() => void) | null; onerror: (() => void) | null }
+
+// Physical push-to-talk key (map a Stream Deck button to it). Override live with
+// ?ptt=<key> on the /control URL. Matches the AbbieTalk default so one Stream
+// Deck button works on both surfaces.
+const TRIGGER_KEY = "F8";
 
 interface Mood {
   id: string;
@@ -47,6 +58,22 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
   const [error, setError] = useState<string | null>(null);
   const [voiceOn, setVoiceOn] = useState(true);
   const [typed, setTyped] = useState("");
+
+  // Free-form voice ask: hold the mic (or a Stream Deck key) and talk to her.
+  const [listening, setListening] = useState(false);
+  const [interim, setInterim] = useState("");
+  const [sttSupported, setSttSupported] = useState(false);
+  const [convo, setConvo] = useState<Msg[]>([]);
+  const recRef = useRef<SR | null>(null);
+  const heardRef = useRef("");
+  const listeningRef = useRef(false);
+  const thinkingRef = useRef(false);
+  const askRef = useRef<(t: string) => void>(() => {});
+  const convoRef = useRef<Msg[]>([]);
+  const triggerKeyRef = useRef(TRIGGER_KEY);
+  useEffect(() => { listeningRef.current = listening; }, [listening]);
+  useEffect(() => { thinkingRef.current = thinking; }, [thinking]);
+  useEffect(() => { convoRef.current = convo; }, [convo]);
   const [lesson, setLesson] = useState<Lesson | null>(null);
 
   // Moderated "Ask Abbie" queue — pending student questions, edited in place.
@@ -162,6 +189,13 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
     dismissRef.current = window.setTimeout(() => setLine(null), 16000);
   }, []);
 
+  // Put a line on the projector, send it to student screens, and say it aloud.
+  const deliver = useCallback((reply: string) => {
+    showLine(reply);
+    broadcast(reply);
+    if (voiceOn) void speak(reply);
+  }, [showLine, broadcast, voiceOn, speak]);
+
   const summon = useCallback(async (direction: string): Promise<string | null> => {
     if (thinking) return null;
     setThinking(true);
@@ -178,12 +212,7 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
       });
       const data = await res.json();
       if (data.error) { setError(data.error); return null; }
-      if (data.reply) {
-        showLine(data.reply);
-        broadcast(data.reply);
-        if (voiceOn) void speak(data.reply);
-        return data.reply as string;
-      }
+      if (data.reply) { deliver(data.reply); return data.reply as string; }
       return null;
     } catch {
       setError("Couldn't reach Abbie's brain — check the connection.");
@@ -191,14 +220,119 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
     } finally {
       setThinking(false);
     }
-  }, [thinking, lesson, contextString, showLine, broadcast, voiceOn, speak]);
+  }, [thinking, lesson, contextString, deliver]);
+
+  // Free-form conversation: the teacher's actual words (typed or spoken) go to
+  // Abbie as a real turn — no stage direction — and she answers live, in
+  // character, keeping a short running thread so follow-ups make sense.
+  const ask = useCallback(async (text: string) => {
+    const content = text.trim();
+    if (!content || thinkingRef.current) return;
+    setThinking(true);
+    setError(null);
+    const next = [...convoRef.current, { role: "user" as const, content }].slice(-16);
+    setConvo(next);
+    try {
+      const res = await fetch("/api/abbie", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: next, lesson, context: contextString() }),
+      });
+      const data = await res.json();
+      if (data.error) { setError(data.error); }
+      else if (data.reply) {
+        setConvo((c) => [...c, { role: "assistant" as const, content: data.reply as string }].slice(-16));
+        deliver(data.reply);
+      }
+    } catch {
+      setError("Couldn't reach Abbie's brain — check the connection.");
+    } finally {
+      setThinking(false);
+    }
+  }, [lesson, contextString, deliver]);
+  useEffect(() => { askRef.current = (t: string) => { void ask(t); }; }, [ask]);
 
   const sendTyped = useCallback(() => {
     const t = typed.trim();
     if (!t) return;
     setTyped("");
-    void summon(`Say this to the class, in your own voice: ${t}`);
-  }, [typed, summon]);
+    void ask(t);
+  }, [typed, ask]);
+
+  // Detect Web Speech support and pick up a ?ptt=<key> Stream Deck override.
+  useEffect(() => {
+    const w = window as unknown as { SpeechRecognition?: new () => SR; webkitSpeechRecognition?: new () => SR };
+    setSttSupported(Boolean(w.SpeechRecognition || w.webkitSpeechRecognition));
+    try {
+      const ptt = new URLSearchParams(window.location.search).get("ptt");
+      if (ptt) triggerKeyRef.current = ptt;
+    } catch { /* ignore */ }
+  }, []);
+
+  // Reused speech recognizer (building it once avoids per-press start-up lag).
+  const ensureRecognizer = useCallback((): SR | null => {
+    if (recRef.current) return recRef.current;
+    const w = window as unknown as { SpeechRecognition?: new () => SR; webkitSpeechRecognition?: new () => SR };
+    const Ctor = w.SpeechRecognition || w.webkitSpeechRecognition;
+    if (!Ctor) return null;
+    const rec = new Ctor();
+    rec.lang = "en-US";
+    rec.interimResults = true;
+    rec.continuous = true;
+    rec.onresult = (e) => {
+      let t = "";
+      for (let i = 0; i < e.results.length; i += 1) t += e.results[i][0]?.transcript || "";
+      heardRef.current = t.trim();
+      setInterim(t.trim());
+    };
+    rec.onerror = () => { setError("Didn't catch that — try again."); };
+    rec.onend = () => {
+      setListening(false);
+      const said = heardRef.current.trim();
+      setInterim("");
+      if (said) askRef.current(said);
+    };
+    recRef.current = rec;
+    return rec;
+  }, []);
+
+  const startListening = useCallback(() => {
+    if (listeningRef.current || thinkingRef.current) return;
+    const rec = ensureRecognizer();
+    if (!rec) return;
+    heardRef.current = "";
+    setInterim("");
+    setListening(true);
+    setError(null);
+    try { rec.start(); } catch { /* already listening */ }
+  }, [ensureRecognizer]);
+
+  const stopListening = useCallback(() => {
+    try { recRef.current?.stop(); } catch { /* ignore */ }
+  }, []);
+
+  // Physical push-to-talk (Stream Deck key = TRIGGER_KEY, or ?ptt=). Only while
+  // this tab is focused and not typing in a field.
+  useEffect(() => {
+    if (!sttSupported) return;
+    const isTyping = () => {
+      const el = document.activeElement as HTMLElement | null;
+      return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA");
+    };
+    const onDown = (e: KeyboardEvent) => {
+      if (e.key !== triggerKeyRef.current || e.repeat || isTyping()) return;
+      e.preventDefault();
+      if (!listeningRef.current && !thinkingRef.current) startListening();
+    };
+    const onUp = (e: KeyboardEvent) => {
+      if (e.key !== triggerKeyRef.current) return;
+      e.preventDefault();
+      if (listeningRef.current) stopListening();
+    };
+    window.addEventListener("keydown", onDown);
+    window.addEventListener("keyup", onUp);
+    return () => { window.removeEventListener("keydown", onDown); window.removeEventListener("keyup", onUp); };
+  }, [sttSupported, startListening, stopListening]);
 
   // Approve a queued student question: Abbie answers it for the class, then the
   // row is marked answered. Uses the edited text if the teacher tweaked it.
@@ -259,6 +393,14 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
         .abc-say { flex:none; border:1px solid #2dd4bf; background:#0f3630; color:#5eead4; border-radius:11px; padding:0 16px; font:inherit; font-weight:900; cursor:pointer; }
         .abc-say:disabled { opacity:0.45; cursor:default; }
 
+        .abc-mic { display:flex; align-items:center; justify-content:center; gap:9px; width:100%; min-height:52px; border:1px solid #23413b; border-radius:12px; background:#101d19; color:#d6f5ee; font:inherit; font-weight:900; font-size:0.95rem; cursor:pointer; touch-action:none; user-select:none; }
+        .abc-mic:hover:not(:disabled) { border-color:#2dd4bf; }
+        .abc-mic:disabled { opacity:0.45; cursor:default; }
+        .abc-mic.on { background:#3a1414; border-color:#ff6b6b; color:#ffd9d9; }
+        .abc-mic .rec { width:11px; height:11px; border-radius:50%; background:#ff5a5a; animation:abcRec 1s ease-in-out infinite; }
+        @keyframes abcRec { 50%{opacity:0.25;} }
+        .abc-interim { font-size:0.82rem; font-weight:700; color:#8fb8af; min-height:1.1em; text-align:center; font-style:italic; }
+
         .abc-foot { display:flex; align-items:center; justify-content:space-between; gap:10px; padding-top:2px; }
         .abc-voice { display:flex; align-items:center; gap:8px; font-size:0.8rem; font-weight:800; color:#8fb8af; cursor:pointer; user-select:none; }
         .abc-toggle { width:38px; height:22px; border-radius:999px; border:1px solid #23413b; background:#0a1310; position:relative; transition:background 140ms; flex:none; }
@@ -312,13 +454,28 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
             <div className="abc-mark">{/* eslint-disable-next-line @next/next/no-img-element */}<img src="/big-dog-mark.png" alt="" /></div>
             <div>
               <div className="abc-title">Abbiliathan 3000</div>
-              <div className="abc-sub">tap a mood or tell her what to say</div>
+              <div className="abc-sub">hold the mic and ask, tap a mood, or type</div>
             </div>
             <button className="abc-x" onClick={() => setOpen(false)} aria-label="Close">×</button>
           </div>
 
           <div className="abc-body">
             {stateLabel && <div className="abc-ctx">she knows you&apos;re in <b>{stateLabel}</b></div>}
+
+            {sttSupported && (
+              <>
+                <button
+                  className={`abc-mic${listening ? " on" : ""}`}
+                  disabled={thinking}
+                  onPointerDown={(e) => { e.preventDefault(); startListening(); }}
+                  onPointerUp={(e) => { e.preventDefault(); stopListening(); }}
+                  onPointerLeave={() => { if (listening) stopListening(); }}
+                >
+                  {listening ? <><span className="rec" />Listening — release to send</> : "Hold to talk to Abbie"}
+                </button>
+                {(listening || interim) && <div className="abc-interim">{interim ? `“${interim}”` : "…"}</div>}
+              </>
+            )}
 
             <div className="abc-moods">
               {MOODS.map((m) => (
@@ -332,12 +489,12 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
               <input
                 className="abc-in"
                 value={typed}
-                placeholder="Tell Abbie what to say…"
+                placeholder="…or ask/tell Abbie by typing"
                 disabled={thinking}
                 onChange={(e) => setTyped(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") sendTyped(); }}
               />
-              <button className="abc-say" disabled={thinking || !typed.trim()} onClick={sendTyped}>Say it</button>
+              <button className="abc-say" disabled={thinking || !typed.trim()} onClick={sendTyped}>Ask</button>
             </div>
 
             {thinking && <div className="abc-thinking">…Abbie&apos;s thinking</div>}
