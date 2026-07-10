@@ -44,25 +44,46 @@ const MANAGE: LinkItem[] = [
   { href: "/builder", label: "Sequence builder", letter: "B", color: "#674a40", desc: "Build a class flow" },
 ];
 
-// Teaching tools (secondary).
-const TOOLS: LinkItem[] = [
-  { href: "/algebra-tiles", label: "Algebra Tiles", letter: "A", color: "#2f9e6f", desc: "Expression builder" },
-  { href: "/fraction-bars", label: "Fraction Bars", letter: "F", color: "#fcaf38", desc: "Fractions, decimals, percents" },
-  { href: "/number-line-plus", label: "Number Line", letter: "N", color: "#674a40", desc: "Single or double number line" },
-  { href: "/coordinate-grid", label: "Coordinate Grid", letter: "+", color: "#4d8df6", desc: "Plot points on the plane" },
-  { href: "/equation-builder", label: "Equation Builder", letter: "E", color: "#2f9e6f", desc: "Guided step-by-step solve" },
-  { href: "/balance-beam", label: "Balance Beam", letter: "B", color: "#50a3a4", desc: "Keep the scale even to solve" },
-  { href: "/order-of-operations", label: "GEMS Order of Ops", letter: "G", color: "#7c5cd6", desc: "Pick the step, build the line" },
-  { href: "/combine-like-terms", label: "Combine Like Terms", letter: "C", color: "#f95335", desc: "Zero pairs and simplifying" },
-  { href: "/proportions", label: "Proportion Builder", letter: "P", color: "#50a3a4", desc: "Scale factors, missing values" },
-  { href: "/percent-bar", label: "Percent Bar", letter: "%", color: "#cf6f9b", desc: "Parts, wholes, benchmarks" },
-  { href: "/area-model", label: "Box Method", letter: "B", color: "#fcaf38", desc: "Fill-in-the-boxes multiplication" },
-  { href: "/distributive-area", label: "Distributive Area Method", letter: "D", color: "#50a3a4", desc: "Split the rectangle to decompose" },
-  { href: "/area-explorer", label: "Area Explorer", letter: "A", color: "#50a3a4", desc: "Area of 2D shapes: solve and derive" },
-  { href: "/ladder-method", label: "Ladder Method", letter: "L", color: "#674a40", desc: "GCF, LCM, prime factors" },
-  { href: "/multiplication-fluency", label: "Multiplication", letter: "x", color: "#3b7fc4", desc: "Fast-facts practice" },
-  { href: "/group-bars", label: "Group Bars", letter: "G", color: "#2f9e6f", desc: "Equal groups and ratios" },
-  { href: "/term-identifier", label: "Identify Terms", letter: "T", color: "#50a3a4", desc: "Sort the parts of an expression" },
+// Teaching tools, grouped by math strand. Move any tool between groups freely —
+// this is a curated grouping, not derived from lesson data.
+const TOOL_GROUPS: { label: string; tools: LinkItem[] }[] = [
+  {
+    label: "Number & Operations",
+    tools: [
+      { href: "/area-model", label: "Box Method", letter: "B", color: "#fcaf38", desc: "Fill-in-the-boxes multiplication" },
+      { href: "/distributive-area", label: "Distributive Area Method", letter: "D", color: "#50a3a4", desc: "Split the rectangle to decompose" },
+      { href: "/multiplication-fluency", label: "Multiplication", letter: "x", color: "#3b7fc4", desc: "Fast-facts practice" },
+      { href: "/fraction-bars", label: "Fraction Bars", letter: "F", color: "#fcaf38", desc: "Fractions, decimals, percents" },
+      { href: "/ladder-method", label: "Ladder Method", letter: "L", color: "#674a40", desc: "GCF, LCM, prime factors" },
+    ],
+  },
+  {
+    label: "Ratios & Proportions",
+    tools: [
+      { href: "/proportions", label: "Proportion Builder", letter: "P", color: "#50a3a4", desc: "Scale factors, missing values" },
+      { href: "/percent-bar", label: "Percent Bar", letter: "%", color: "#cf6f9b", desc: "Parts, wholes, benchmarks" },
+      { href: "/group-bars", label: "Group Bars", letter: "G", color: "#2f9e6f", desc: "Equal groups and ratios" },
+      { href: "/number-line-plus", label: "Number Line", letter: "N", color: "#674a40", desc: "Single or double number line" },
+    ],
+  },
+  {
+    label: "Expressions & Equations",
+    tools: [
+      { href: "/order-of-operations", label: "GEMS Order of Ops", letter: "G", color: "#7c5cd6", desc: "Pick the step, build the line" },
+      { href: "/equation-builder", label: "Equation Builder", letter: "E", color: "#2f9e6f", desc: "Guided step-by-step solve" },
+      { href: "/balance-beam", label: "Balance Beam", letter: "B", color: "#50a3a4", desc: "Keep the scale even to solve" },
+      { href: "/combine-like-terms", label: "Combine Like Terms", letter: "C", color: "#f95335", desc: "Zero pairs and simplifying" },
+      { href: "/algebra-tiles", label: "Algebra Tiles", letter: "A", color: "#2f9e6f", desc: "Expression builder" },
+      { href: "/term-identifier", label: "Identify Terms", letter: "T", color: "#50a3a4", desc: "Sort the parts of an expression" },
+    ],
+  },
+  {
+    label: "Geometry",
+    tools: [
+      { href: "/area-explorer", label: "Area Explorer", letter: "A", color: "#50a3a4", desc: "Area of 2D shapes: solve and derive" },
+      { href: "/coordinate-grid", label: "Coordinate Grid", letter: "+", color: "#4d8df6", desc: "Plot points on the plane" },
+    ],
+  },
 ];
 
 const JUMP = [
@@ -164,7 +185,12 @@ export default function TeacherHome() {
   }, [supabase]);
 
   const q = query.trim().toLowerCase();
-  const tools = useMemo(() => TOOLS.filter((t) => !q || t.label.toLowerCase().includes(q) || t.desc.toLowerCase().includes(q)), [q]);
+  const toolGroups = useMemo(
+    () => TOOL_GROUPS
+      .map((g) => ({ label: g.label, tools: g.tools.filter((t) => !q || t.label.toLowerCase().includes(q) || t.desc.toLowerCase().includes(q)) }))
+      .filter((g) => g.tools.length > 0),
+    [q],
+  );
   const lessons = useMemo(() => presets.filter((p) => !q || p.code.toLowerCase().includes(q) || p.title.toLowerCase().includes(q)), [presets, q]);
 
   return (
@@ -200,6 +226,9 @@ export default function TeacherHome() {
 
         .bd-sec-h { font-size:0.72rem; font-weight:800; letter-spacing:0.13em; text-transform:uppercase; color:var(--bdb-ink-faint); margin:30px 2px 12px; scroll-margin-top:80px; }
         .bd-sec-h:first-of-type { margin-top:6px; }
+        .bd-strand { margin-top:2px; }
+        .bd-strand-h { display:flex; align-items:center; gap:8px; font-size:0.84rem; font-weight:800; color:var(--bdb-ink-soft); margin:16px 2px 10px; }
+        .bd-strand-h::before { content:""; width:8px; height:8px; border-radius:2px; background:var(--bdb-teal); flex:none; }
 
         /* Right-now status band */
         .bd-status { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px,1fr)); gap:14px; scroll-margin-top:80px; }
@@ -376,15 +405,20 @@ export default function TeacherHome() {
             </>
           )}
 
-          {/* TEACHING TOOLS (secondary) */}
+          {/* TEACHING TOOLS — grouped by math strand */}
           <h2 className="bd-sec-h" id="tools">Teaching tools</h2>
-          <div className="bd-grid tools">
-            {tools.length === 0 ? (
-              <div className="bd-empty">No tools match &ldquo;{query}&rdquo;.</div>
-            ) : (
-              tools.map((i) => <LinkCard key={i.href} item={i} />)
-            )}
-          </div>
+          {toolGroups.length === 0 ? (
+            <div className="bd-empty">No tools match &ldquo;{query}&rdquo;.</div>
+          ) : (
+            toolGroups.map((g) => (
+              <div key={g.label} className="bd-strand">
+                <h3 className="bd-strand-h">{g.label}</h3>
+                <div className="bd-grid tools">
+                  {g.tools.map((i) => <LinkCard key={i.href} item={i} />)}
+                </div>
+              </div>
+            ))
+          )}
         </main>
       </div>
     </div>
