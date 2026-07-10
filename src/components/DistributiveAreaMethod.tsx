@@ -33,6 +33,7 @@ export default function DistributiveAreaMethod() {
 
   const [topSplit, setTopSplit] = useState<number | null>(null); // committed cut
   const [pending, setPending] = useState<number | null>(null);   // tapped, not yet locked
+  const [hoverCut, setHoverCut] = useState<number | null>(null); // fine-pointer live preview before the click
 
   const [regions, setRegions] = useState<Region[]>([]);
   const [active, setActive] = useState(0);
@@ -150,24 +151,32 @@ export default function DistributiveAreaMethod() {
     setPhase("products");
   }, [top, side]);
 
-  // Split interaction — tap anywhere to snap a cut to the nearest gridline;
-  // pointer events so it works with mouse, finger, and pen (no hover).
-  const placeCut = (clientX: number) => {
+  // Split interaction. On a mouse/pen the cut previews under the cursor as you
+  // move and a click locks it. On touch (no hover) you drag to place a pending
+  // cut, then tap Lock. Cuts snap to the nearest gridline.
+  const columnAt = (clientX: number): number | null => {
     const r = rectRef.current?.getBoundingClientRect();
-    if (!r) return;
-    setPending(clamp(Math.round((clientX - r.left) / cell), 1, top - 1));
+    if (!r) return null;
+    return clamp(Math.round((clientX - r.left) / cell), 1, top - 1);
   };
   const onRectDown = (e: React.PointerEvent) => {
     if (phase !== "split") return;
+    if (finePointer) {
+      const col = columnAt(e.clientX);
+      if (col != null) { setHoverCut(null); setTopSplit(col); buildRegions(col); } // hover already showed it — the click locks it
+      return;
+    }
     draggingRef.current = true;
     rectRef.current?.setPointerCapture?.(e.pointerId);
-    placeCut(e.clientX);
+    setPending(columnAt(e.clientX));
   };
   const onRectMove = (e: React.PointerEvent) => {
-    if (phase !== "split" || !draggingRef.current) return;
-    placeCut(e.clientX);
+    if (phase !== "split") return;
+    if (draggingRef.current) { setPending(columnAt(e.clientX)); return; }
+    if (finePointer) setHoverCut(columnAt(e.clientX)); // preview follows the cursor
   };
   const onRectUp = () => { draggingRef.current = false; };
+  const onRectLeave = () => { setHoverCut(null); };
 
   const lockSplit = () => { if (pending != null) { setTopSplit(pending); buildRegions(pending); } };
   const keepWhole = () => { setTopSplit(null); setPending(null); buildRegions(null); };
@@ -233,12 +242,14 @@ export default function DistributiveAreaMethod() {
         .da-tip { text-align:center; color:var(--bdb-ink-faint); font-size:0.82rem; margin:8px 0 0; }
         .da-stage { position:relative; margin:0 auto; width:max-content; padding:46px 0 0 46px; }
         .da-rect { position:relative; border:3px solid var(--bdb-ink); border-radius:0; touch-action:none; cursor:pointer; }
-        .da-toplbl { position:absolute; top:8px; display:flex; align-items:center; justify-content:center; gap:5px; font-weight:900; }
-        .da-sidelbl { position:absolute; left:8px; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:1.4rem; color:var(--bdb-ink); }
-        .da-single { font-size:1.4rem; color:var(--bdb-ink); }
-        .da-lp { color:var(--bdb-ink-soft); font-size:1.3rem; }
-        .da-pa { font-size:1.3rem; font-weight:900; }
+        .da-toplbl { position:absolute; top:4px; height:36px; font-weight:900; }
+        .da-abs { position:absolute; top:2px; white-space:nowrap; }
+        .da-sidelbl { position:absolute; left:8px; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:1.6rem; color:var(--bdb-ink); }
+        .da-single { font-size:1.7rem; color:var(--bdb-ink); }
+        .da-lp { color:var(--bdb-ink-soft); font-size:1.5rem; }
+        .da-pa { font-size:1.9rem; font-weight:900; line-height:1; }
         .da-line { position:absolute; background:var(--bdb-coral); z-index:5; pointer-events:none; }
+        .da-line-ghost { opacity:0.4; }
         .da-region { position:absolute; border-radius:0; display:grid; place-items:center; text-align:center; transition:background 220ms ease; }
         .da-region.on { outline:3px solid var(--bdb-ink); outline-offset:-3px; }
         .da-region.solved .da-prod { animation:daDrop 320ms var(--da-settle); }
@@ -298,6 +309,8 @@ export default function DistributiveAreaMethod() {
         .da-arcdot { fill:var(--bdb-coral); opacity:0; }
         .da-arcdot.d1 { animation:daFade .2s ease .82s forwards; }
         .da-arcdot.d2 { animation:daFade .2s ease 1.02s forwards; }
+        .da-carry { position:absolute; left:0; top:0; z-index:2; font-weight:900; font-size:1.1rem; color:var(--bdb-coral); pointer-events:none; offset-rotate:0deg; opacity:0; animation:daCarry .78s var(--da-carry) forwards; }
+        @keyframes daCarry { 0% { offset-distance:0%; opacity:0; } 14% { opacity:1; } 80% { offset-distance:100%; opacity:1; } 100% { offset-distance:100%; opacity:0; } }
 
         @media (prefers-reduced-motion: reduce) {
           .da-cn.side, .da-cn.add, .da-cn.x, .da-fade, .da-reveal, .da-av, .da-vout.pulse, .da-region.solved .da-prod, .da-slot.wrong { animation:none !important; }
@@ -305,6 +318,7 @@ export default function DistributiveAreaMethod() {
           .da-region { transition:none !important; }
           .da-arc { stroke-dashoffset:0 !important; animation:none !important; }
           .da-arcdot { opacity:1 !important; animation:none !important; }
+          .da-carry { animation:none !important; opacity:0 !important; }
         }
       `}</style>
 
@@ -332,7 +346,7 @@ export default function DistributiveAreaMethod() {
             {phase === "done" && `${top} x ${side} = ${total}`}
           </div>
           <div className="da-sub">
-            {phase === "split" && "Tap where you want to cut. Parts that end in a ten are the easiest to multiply — but try any cut and see."}
+            {phase === "split" && (finePointer ? "Move your cursor over the rectangle to preview the cut, then click to lock it. Parts that end in a ten are easiest." : "Drag to place your cut, then lock it. Parts that end in a ten are easiest.")}
             {phase === "products" && (topSplit == null ? "You kept it whole — multiply the whole rectangle." : "Multiply the side by this part.")}
             {phase === "combine" && "Add the two products to get the whole area."}
             {phase === "distribute" && `The ${side} multiplies each part. Watch it spread out.`}
@@ -347,18 +361,19 @@ export default function DistributiveAreaMethod() {
 
           {phase !== "distribute" && (
             <div className="da-stage">
-              {/* top factor label — parenthesized once a split exists */}
+              {/* top factor label — each addend sits directly over its own
+                  section, still parenthesized with the + between them */}
               <div className="da-toplbl" style={{ left: 46, width: top * cell }}>
                 {splitParts ? (
                   <>
-                    <span className="da-lp">(</span>
-                    <span className="da-pa" style={{ color: TEAL }}>{splitParts[0]}</span>
-                    <span className="da-lp">+</span>
-                    <span className="da-pa" style={{ color: AMBER }}>{splitParts[1]}</span>
-                    <span className="da-lp">)</span>
+                    <span className="da-lp da-abs" style={{ left: -8, transform: "translateX(-100%)" }}>(</span>
+                    <span className="da-pa da-abs" style={{ left: (splitParts[0] / 2) * cell, transform: "translateX(-50%)", color: TEAL }}>{splitParts[0]}</span>
+                    <span className="da-lp da-abs" style={{ left: splitParts[0] * cell, transform: "translateX(-50%)" }}>+</span>
+                    <span className="da-pa da-abs" style={{ left: (splitParts[0] + splitParts[1] / 2) * cell, transform: "translateX(-50%)", color: AMBER }}>{splitParts[1]}</span>
+                    <span className="da-lp da-abs" style={{ left: top * cell + 8 }}>)</span>
                   </>
                 ) : (
-                  <span className="da-single">{top}</span>
+                  <span className="da-single da-abs" style={{ left: (top * cell) / 2, transform: "translateX(-50%)" }}>{top}</span>
                 )}
               </div>
 
@@ -379,6 +394,7 @@ export default function DistributiveAreaMethod() {
                 onPointerMove={onRectMove}
                 onPointerUp={onRectUp}
                 onPointerCancel={onRectUp}
+                onPointerLeave={onRectLeave}
               >
                 {regions.map((r, i) => {
                   const solved = (phase === "products" && i < active) || phase === "combine" || phase === "done";
@@ -413,9 +429,12 @@ export default function DistributiveAreaMethod() {
                   );
                 })}
 
-                {/* live cut */}
+                {/* live cut (touch: placed; mouse/pen: hover preview) */}
                 {phase === "split" && pending != null && (
                   <div className="da-line" style={{ left: pending * cell - 1.5, top: 0, width: 3, height: side * cell }} />
+                )}
+                {phase === "split" && pending == null && finePointer && hoverCut != null && (
+                  <div className="da-line da-line-ghost" style={{ left: hoverCut * cell - 1.5, top: 0, width: 3, height: side * cell }} />
                 )}
               </div>
             </div>
@@ -426,7 +445,7 @@ export default function DistributiveAreaMethod() {
               <button className="da-btn ghost" onClick={keepWhole}>Keep it whole</button>
               {pending != null
                 ? <button className="da-btn" onClick={lockSplit}>Lock this split</button>
-                : <span className="da-hint">Tap a spot to place your cut. Not sure where? Pulling out a ten is always a safe bet.</span>}
+                : <span className="da-hint">{finePointer ? "Click the rectangle where you want to cut. Not sure where? Pulling out a ten is always a safe bet." : "Tap a spot to place your cut. Not sure where? Pulling out a ten is always a safe bet."}</span>}
             </div>
           )}
 
@@ -457,14 +476,20 @@ export default function DistributiveAreaMethod() {
                 <span className="da-paren">)</span>
               </div>
 
-              {/* arcs: the outside factor carried onto each addend */}
+              {/* arcs: the outside factor reaches over and drops onto each addend
+                  — the line draws, a copy of the number rides along it, and an
+                  arrowhead lands on the term */}
               {dRow === 1 && arcs && (
-                <svg className="da-arcsvg" width={arcs.w} height={arcs.h}>
-                  <path className="da-arc c1" d={arcs.b} pathLength={1} />
-                  <path className="da-arc c2" d={arcs.c} pathLength={1} />
-                  <circle className="da-arcdot d1" cx={arcs.endB.x} cy={arcs.endB.y} r={4} />
-                  <circle className="da-arcdot d2" cx={arcs.endC.x} cy={arcs.endC.y} r={4} />
-                </svg>
+                <>
+                  <svg className="da-arcsvg" width={arcs.w} height={arcs.h}>
+                    <path className="da-arc c1" d={arcs.b} pathLength={1} />
+                    <path className="da-arc c2" d={arcs.c} pathLength={1} />
+                    <path className="da-arcdot d1" d={`M ${arcs.endB.x - 5} ${arcs.endB.y - 9} L ${arcs.endB.x + 5} ${arcs.endB.y - 9} L ${arcs.endB.x} ${arcs.endB.y} z`} />
+                    <path className="da-arcdot d2" d={`M ${arcs.endC.x - 5} ${arcs.endC.y - 9} L ${arcs.endC.x + 5} ${arcs.endC.y - 9} L ${arcs.endC.x} ${arcs.endC.y} z`} />
+                  </svg>
+                  <span className="da-carry" style={{ offsetPath: `path('${arcs.b}')`, animationDelay: "0.12s" } as React.CSSProperties}>{a}</span>
+                  <span className="da-carry" style={{ offsetPath: `path('${arcs.c}')`, animationDelay: "0.3s" } as React.CSSProperties}>{a}</span>
+                </>
               )}
 
               {/* Row 2 — distributed form; the only inputs on this screen */}
