@@ -14,6 +14,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import StudentSpinner from "@/components/StudentSpinner";
 import DiscussionProtocol from "@/components/DiscussionProtocol";
 import AbbieConsole from "@/components/AbbieConsole";
+import RedBullCounter from "@/components/RedBullCounter";
 import { requestAbbieLine } from "@/lib/abbieBus";
 import { getSupabase } from "@/lib/supabase";
 import {
@@ -1929,6 +1930,7 @@ export default function ControlPage() {
         )}
 
         <AbbieConsole stateLabel={activeState?.label} stateDesc={activeState?.desc} sessionId={teacherSession?.status === "open" ? teacherSession.id : null} />
+        <RedBullCounter />
       </div>
     </>
   );
