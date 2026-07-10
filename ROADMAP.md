@@ -46,7 +46,10 @@ edits/approves and she answers the room, or dismisses; one pending per student;
 abbie_questions table, needs abbie-questions.sql) ·
 **Abbie contextual reactions** (7/7 — teacher-triggered: "Have Abbie react" on
 poll results hands her the tally for a one-line take; "Have Abbie announce it"
-on the spinner has her call the pick; shared abbieBus, no new setup)
+on the spinner has her call the pick; shared abbieBus, no new setup) ·
+**Abbie bits** (7/7 — Red Bull counter chip that roasts dad's hypocrisy on tap;
+cross-day memory note in the console woven into her context; personality tuned
+to complaining-teen, less Red Bull, shorter replies)
 
 ## In progress 🔨
 - **Week builder** — code shipped (warmup-pools-data.gs + warmup-week-builder.gs +
@@ -55,9 +58,10 @@ on the spinner has her call the pick; shared abbieBus, no new setup)
 - Warm-up → spine bridge — live and verified (Evidence post 200, 7/4)
 
 ## Planned 🧭
-- **Abbie everywhere** (queued in tracker, Area=Abbie): student-screen
-  broadcast + Ask-Abbie queue + contextual reactions all shipped 7/7; still to
-  do: bits (Red Bull counter, cross-day memory)
+- **Abbie everywhere** — DONE (Area=Abbie): console + mic, student-screen
+  broadcast, Ask-Abbie queue, contextual reactions, and bits all shipped 7/7-8.
+  Later, optional: server-side cross-day memory (auto-summarized) instead of the
+  device-local note.
 - Claude enrichment: score short-answer reasoning (next-move sharpening now Live)
 - RLS tightening on legacy tables (required before real student data)
 - Reskin remaining tools; vertical draggable control sequence
