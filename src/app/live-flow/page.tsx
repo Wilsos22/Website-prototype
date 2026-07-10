@@ -124,6 +124,9 @@ export default function LiveFlowPage() {
       } else {
         setEmptyMessage("Waiting for the teacher.");
       }
+      // While the session is open, hold students on a calm "get ready" screen
+      // instead of a bare waiting message — even before the pacer sets a state.
+      setHolding(row?.status === "open");
       setFlow(isLiveFlow ? row.live_flow : null);
       setLoading(false);
     };
@@ -285,6 +288,10 @@ export default function LiveFlowPage() {
         .lf-result-bar { height:13px; overflow:hidden; border-radius:999px; background:#20283b; }
         .lf-result-fill { height:100%; border-radius:inherit; background:var(--lf-accent); transition:width 220ms ease; }
         .lf-wait { color:#c8cedd; font-size:clamp(2rem,5vw,4.2rem); font-weight:900; line-height:1.1; }
+        .lf-ready { display:inline-flex; align-items:center; gap:9px; color:#8a93ad; font-size:0.95rem; font-weight:800; letter-spacing:0.04em; text-transform:uppercase; }
+        .lf-ready-dot { width:11px; height:11px; border-radius:50%; background:var(--lf-accent); animation:lfPulse 1.8s ease-out infinite; }
+        @keyframes lfPulse { 0% { box-shadow:0 0 0 0 rgba(20,184,166,0.5); } 70% { box-shadow:0 0 0 12px rgba(20,184,166,0); } 100% { box-shadow:0 0 0 0 rgba(20,184,166,0); } }
+        @media (prefers-reduced-motion: reduce) { .lf-ready-dot { animation:none; } }
         .lf-switches { display:flex; flex-wrap:wrap; justify-content:center; gap:10px; }
         .lf-switch { display:inline-flex; align-items:center; justify-content:center; min-height:48px; border:1px solid #29324a; border-radius:10px; background:#151a27; color:#5eead4; padding:0 18px; text-decoration:none; font-size:0.9rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; }
         .lf-switch:hover, .lf-switch:focus-visible { border-color:#14b8a6; outline:none; }
@@ -300,13 +307,21 @@ export default function LiveFlowPage() {
         {loading ? (
           <p className="lf-loading">Connecting to class…</p>
         ) : !flow?.state ? (
-          <>
-            <h1 className="lf-wait">{emptyMessage}</h1>
-            <div className="lf-switches">
-              <a className="lf-switch" href="/?leaveClass=1">Return to website</a>
-              <a className="lf-switch" href="/join?leaveClass=1">Join a different session</a>
-            </div>
-          </>
+          holding ? (
+            <>
+              <h1 className="lf-title">Class is starting</h1>
+              <p className="lf-subtitle">Get your warm-up out and get ready. Your screen updates the moment we begin.</p>
+              <div className="lf-ready"><span className="lf-ready-dot" />You&apos;re connected</div>
+            </>
+          ) : (
+            <>
+              <h1 className="lf-wait">{emptyMessage}</h1>
+              <div className="lf-switches">
+                <a className="lf-switch" href="/?leaveClass=1">Return to website</a>
+                <a className="lf-switch" href="/join?leaveClass=1">Join a different session</a>
+              </div>
+            </>
+          )
         ) : (
           <>
             {!activePoll && <h1 className="lf-title">{title}</h1>}

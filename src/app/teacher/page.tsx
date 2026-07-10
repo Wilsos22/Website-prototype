@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
 import { listLessonPresets, type LessonPreset } from "@/lib/lessonPresets";
+import { LIVE_FLOW_MODE, type LiveClassFlowSnapshot } from "@/lib/liveClassFlow";
 
 interface LinkItem { href: string; label: string; letter: string; color: string; desc: string }
 
