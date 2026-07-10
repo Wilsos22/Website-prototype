@@ -20,11 +20,10 @@ const C_BASE = "#50a3a4";
 const C_HEIGHT = "#fcaf38";
 const C_B2 = "#f95335";
 
-// Label placement: keep the height pill on the opposite side from the slant
-// decoy so the two never collide (decoy sits left on para/trapezoid, right on
-// triangle, and is a centered diagonal on rectangle/square).
-const HEIGHT_OFF: Record<ShapeType, number> = { rectangle: 40, square: 40, parallelogram: 40, triangle: -44, trapezoid: 40 };
-const DECOY_OFF: Record<ShapeType, [number, number]> = { rectangle: [30, -16], square: [30, -16], parallelogram: [-30, -14], triangle: [36, -14], trapezoid: [-30, -14] };
+// Decoy (slant/diagonal) label offset from its edge midpoint, kept clear of the
+// shape's other marks (decoy sits left on para/trapezoid, right on triangle, and
+// is a centered diagonal on rectangle/square).
+const DECOY_OFF: Record<ShapeType, [number, number]> = { rectangle: [34, -18], square: [34, -18], parallelogram: [-34, -16], triangle: [40, -16], trapezoid: [-34, -16] };
 
 const SHAPE_NAMES: Record<ShapeType, string> = {
   rectangle: "Rectangle", square: "Square", parallelogram: "Parallelogram", triangle: "Triangle", trapezoid: "Trapezoid",
@@ -300,8 +299,10 @@ export default function AreaExplorer() {
         .ae-btn.ghost { background:var(--bdb-card); color:var(--bdb-ink); }
         .ae-btn:disabled { opacity:0.42; cursor:not-allowed; }
         .ae-link { font:inherit; font-weight:700; font-size:0.82rem; color:var(--bdb-ink-soft); background:none; border:none; text-decoration:underline; cursor:pointer; }
-        .ae-note { text-align:center; color:var(--bdb-coral); font-weight:700; font-size:0.9rem; min-height:20px; margin-top:8px; }
-        .ae-why { max-width:480px; margin:8px auto 0; text-align:center; color:var(--bdb-ink-soft); font-size:0.92rem; line-height:1.5; }
+        .ae-note { text-align:center; min-height:26px; margin-top:12px; }
+        .ae-note .ae-note-in { display:inline-block; color:var(--bdb-coral); font-weight:800; font-size:clamp(1.05rem,3.2vw,1.4rem); line-height:1.35; padding:8px 16px; border-radius:12px; background:color-mix(in srgb, var(--bdb-coral) 12%, transparent); animation:aeNotePop .32s var(--ae-carry); }
+        @keyframes aeNotePop { from { transform:scale(.9); opacity:0; } to { transform:scale(1); opacity:1; } }
+        .ae-why { max-width:520px; margin:12px auto 0; text-align:center; color:var(--bdb-ink); font-weight:600; font-size:clamp(1.02rem,2.8vw,1.22rem); line-height:1.55; }
         .ae-done .eq { text-align:center; font-size:clamp(1.6rem,5vw,2.6rem); font-weight:900; margin:8px 0; }
         .ae-modebar { display:flex; justify-content:center; margin:0 0 14px; }
         .ae-modeseg { display:inline-flex; border:2px solid var(--bdb-line); border-radius:999px; overflow:hidden; background:var(--bdb-card); }
@@ -317,8 +318,10 @@ export default function AreaExplorer() {
         @keyframes aeSlide { to { transform:translateX(var(--dx)); } }
         .ae-flip { animation:aeFlip .85s var(--ae-carry) forwards; transform-box:view-box; }
         @keyframes aeFlip { from { transform:rotate(180deg); } to { transform:rotate(0deg); } }
+        .ae-count-cell { animation:aeCountIn .34s var(--ae-carry) backwards; transform-box:fill-box; transform-origin:center; }
+        @keyframes aeCountIn { from { opacity:0; transform:scale(.55); } 60% { opacity:1; transform:scale(1.09); } to { opacity:1; transform:scale(1); } }
         .ae-soon { font-size:0.72rem; font-weight:800; color:var(--bdb-ink-faint); }
-        @media (prefers-reduced-motion: reduce) { .ae-mark-pulse, .ae-chip.picked { animation:none; } .ae-slide { animation:none; transform:translateX(var(--dx)); } .ae-flip { animation:none; } }
+        @media (prefers-reduced-motion: reduce) { .ae-mark-pulse, .ae-chip.picked { animation:none; } .ae-slide { animation:none; transform:translateX(var(--dx)); } .ae-flip { animation:none; } .ae-count-cell { animation:none; } }
       `}</style>
 
       <div className="ae-modebar">
@@ -438,7 +441,7 @@ export default function AreaExplorer() {
             )}
           </div>
 
-          <div className="ae-note">{note}</div>
+          <div className="ae-note">{note && <span key={note} className="ae-note-in">{note}</span>}</div>
         </>
       )}
     </div>
@@ -448,16 +451,19 @@ export default function AreaExplorer() {
 // ── Shape rendering ─────────────────────────────────────────────────────────
 function ShapeSvg({ shape, phase, activeMark, showCount, whySquared }: { shape: Shape; phase: Phase; activeMark: MarkKind | null; showCount: boolean; whySquared: boolean }) {
   const U = Math.max(28, Math.min(52, Math.floor(Math.min(460 / shape.cols, 300 / shape.rows))));
-  const M = Math.round(1.4 * U);
-  const sx = (gx: number) => M + gx * U;
-  const sy = (gy: number) => M + gy * U;
-  const W = 2 * M + shape.cols * U;
-  const H = 2 * M + shape.rows * U;
+  // asymmetric margins so every measurement label sits OUTSIDE the shape:
+  // room on the left for the height, below for the base, above for a top base.
+  const ML = 80, MR = 34, MT = 44, MB = 48;
+  const sx = (gx: number) => ML + gx * U;
+  const sy = (gy: number) => MT + gy * U;
+  const W = ML + shape.cols * U + MR;
+  const H = MT + shape.rows * U + MB;
   const solved = phase === "done";
   const region = solved ? `color-mix(in srgb, ${C_BASE} 42%, transparent)` : `color-mix(in srgb, ${C_BASE} 20%, transparent)`;
 
-  const countCells = useMemo(() => {
-    if (!showCount && !whySquared) return [];
+  // interior unit squares, in reading order (left-to-right, top-to-bottom)
+  const orderedCells = useMemo(() => {
+    if (!showCount && !whySquared) return [] as Pt[];
     const cells: Pt[] = [];
     for (let gy = 0; gy < shape.rows; gy++) for (let gx = 0; gx < shape.cols; gx++) {
       if (inPoly(gx + 0.5, gy + 0.5, shape.verts)) cells.push([gx, gy]);
@@ -465,40 +471,37 @@ function ShapeSvg({ shape, phase, activeMark, showCount, whySquared }: { shape: 
     return whySquared ? cells.slice(0, 1) : cells;
   }, [showCount, whySquared, shape]);
 
+  // stagger the count reveal one square at a time (CSS-driven, no per-tick
+  // re-render) — numbers appear left-to-right, top-to-bottom
+  const per = orderedCells.length ? Math.max(45, Math.min(150, Math.round(1500 / orderedCells.length))) : 0;
+
   const pts = shape.verts.map((v) => `${sx(v[0])},${sy(v[1])}`).join(" ");
   const mid = (a: Pt, b: Pt): Pt => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  const numSize = Math.max(11, Math.min(18, Math.round(U * 0.44)));
 
-  const pill = (at: Pt, dx: number, dy: number, text: string, color: string, muted = false) => {
-    const cx = sx(at[0]) + dx, cy = sy(at[1]) + dy;
-    const w = Math.max(30, 13 + text.length * 10), hgt = 24;
-    return (
-      <g key={`${text}-${cx}-${cy}`} className={!muted && activeMark && ((color === C_BASE && activeMark === "base") || (color === C_HEIGHT && activeMark === "height") || (color === C_B2 && activeMark === "b2")) ? "ae-mark-pulse" : undefined}>
-        <rect x={cx - w / 2} y={cy - hgt / 2} width={w} height={hgt} rx={5} fill="var(--bdb-card)" stroke={muted ? "var(--bdb-line)" : color} strokeWidth={1.5} />
-        <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central" fontSize={15} fontWeight={900} fill={muted ? "var(--bdb-ink-faint)" : color}>{text}</text>
-      </g>
-    );
-  };
+  // outside dimension label — bold colored text with a ground-colored halo so it
+  // stays legible over the grid lines
+  const dimLabel = (x: number, y: number, text: string, color: string, anchor: "middle" | "end" = "middle") => (
+    <text x={x} y={y} textAnchor={anchor} dominantBaseline="central" fontSize={16} fontWeight={900}
+      fill={color} stroke="var(--bdb-ground)" strokeWidth={3.6} style={{ paintOrder: "stroke" }}>{text}</text>
+  );
 
-  const bm = mid(shape.base.a, shape.base.b);
-  const hm = mid(shape.height.a, shape.height.b);
   const dm = mid(shape.decoy.a, shape.decoy.b);
   const b2m = shape.base2 ? mid(shape.base2.a, shape.base2.b) : null;
   const foot = shape.height.foot;
   const raSign = shape.height.a[0] <= shape.base.b[0] ? 1 : -1; // right-angle mark direction along base
+  const baseMidX = (shape.base.a[0] + shape.base.b[0]) / 2;
+  const gridTop = sy(0), gridBot = sy(shape.rows);
+  const pulse = (mark: MarkKind) => (activeMark === mark ? "ae-mark-pulse" : undefined);
 
   return (
     <svg className="ae-svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${shape.type} on a grid`}>
       <defs>
         <pattern id={`ae-cell-${shape.type}`} width={U} height={U} patternUnits="userSpaceOnUse">
-          <path d={`M ${U} 0 L 0 0 0 ${U}`} fill="none" stroke="var(--bdb-line)" strokeWidth={1} opacity={0.75} />
+          <path d={`M ${U} 0 L 0 0 0 ${U}`} fill="none" stroke="var(--bdb-line)" strokeWidth={1} opacity={0.85} />
         </pattern>
       </defs>
-      <rect x={M} y={M} width={shape.cols * U} height={shape.rows * U} fill={`url(#ae-cell-${shape.type})`} />
-
-      {/* count-squares / why-squared shading */}
-      {countCells.map(([gx, gy]) => (
-        <rect key={`c-${gx}-${gy}`} x={sx(gx)} y={sy(gy)} width={U} height={U} fill={whySquared ? C_HEIGHT : C_BASE} opacity={whySquared ? 0.6 : 0.28} />
-      ))}
+      <rect x={ML} y={MT} width={shape.cols * U} height={shape.rows * U} fill={`url(#ae-cell-${shape.type})`} />
 
       {/* shape */}
       <polygon points={pts} fill={region} stroke="var(--bdb-ink)" strokeWidth={3} strokeLinejoin="miter" />
@@ -506,19 +509,45 @@ function ShapeSvg({ shape, phase, activeMark, showCount, whySquared }: { shape: 
       {/* decoy edge (faint) */}
       <line x1={sx(shape.decoy.a[0])} y1={sy(shape.decoy.a[1])} x2={sx(shape.decoy.b[0])} y2={sy(shape.decoy.b[1])} stroke="var(--bdb-ink-faint)" strokeWidth={2} strokeDasharray="2 4" />
 
-      {/* base bracket */}
-      <path d={`M ${sx(shape.base.a[0])} ${sy(shape.base.a[1]) + 10} L ${sx(shape.base.a[0])} ${sy(shape.base.a[1]) + 16} L ${sx(shape.base.b[0])} ${sy(shape.base.b[1]) + 16} L ${sx(shape.base.b[0])} ${sy(shape.base.b[1]) + 10}`}
-        fill="none" stroke={C_BASE} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+      {/* count-the-squares: reveal + number one square at a time (staggered) */}
+      {!whySquared && showCount && orderedCells.map(([gx, gy], i) => (
+        <g key={`c-${gx}-${gy}`} className="ae-count-cell" style={{ animationDelay: `${i * per}ms` }}>
+          <rect x={sx(gx)} y={sy(gy)} width={U} height={U} fill={C_BASE} opacity={0.32} />
+          <text x={sx(gx) + U / 2} y={sy(gy) + U / 2} textAnchor="middle" dominantBaseline="central" fontSize={numSize} fontWeight={900} fill="var(--bdb-ink)">{i + 1}</text>
+        </g>
+      ))}
 
-      {/* perpendicular height (dashed) + right-angle mark */}
-      <line x1={sx(shape.height.a[0])} y1={sy(shape.height.a[1])} x2={sx(shape.height.b[0])} y2={sy(shape.height.b[1])} stroke={C_HEIGHT} strokeWidth={2.5} strokeDasharray="7 5" />
-      <path d={`M ${sx(foot[0]) + raSign * 9} ${sy(foot[1])} L ${sx(foot[0]) + raSign * 9} ${sy(foot[1]) - 9} L ${sx(foot[0])} ${sy(foot[1]) - 9}`} fill="none" stroke={C_HEIGHT} strokeWidth={2} />
+      {/* why-squared: a single highlighted unit square */}
+      {whySquared && orderedCells.map(([gx, gy]) => (
+        <rect key={`w-${gx}-${gy}`} x={sx(gx)} y={sy(gy)} width={U} height={U} fill={C_HEIGHT} opacity={0.6} />
+      ))}
 
-      {/* pills */}
-      {pill(bm, 0, 30, `${shape.base.label} = ${shape.base.value}`, C_BASE)}
-      {pill(hm, HEIGHT_OFF[shape.type], 0, `${shape.height.label} = ${shape.height.value}`, C_HEIGHT)}
-      {shape.base2 && b2m && pill(b2m, 0, -28, `${shape.base2.label} = ${shape.base2.value}`, C_B2)}
-      {pill(dm, DECOY_OFF[shape.type][0], DECOY_OFF[shape.type][1], `${shape.decoy.name} ${shape.decoy.value}`, "var(--bdb-ink-faint)", true)}
+      {/* base — bracket + label below (outside) */}
+      <g className={pulse("base")}>
+        <path d={`M ${sx(shape.base.a[0])} ${sy(shape.base.a[1]) + 10} L ${sx(shape.base.a[0])} ${sy(shape.base.a[1]) + 16} L ${sx(shape.base.b[0])} ${sy(shape.base.b[1]) + 16} L ${sx(shape.base.b[0])} ${sy(shape.base.b[1]) + 10}`}
+          fill="none" stroke={C_BASE} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+        {dimLabel(sx(baseMidX), sy(shape.base.a[1]) + 32, `${shape.base.label} = ${shape.base.value}`, C_BASE)}
+      </g>
+
+      {/* height — interior perpendicular + right-angle mark, plus a left bracket + label (outside) */}
+      <g className={pulse("height")}>
+        <line x1={sx(shape.height.a[0])} y1={sy(shape.height.a[1])} x2={sx(shape.height.b[0])} y2={sy(shape.height.b[1])} stroke={C_HEIGHT} strokeWidth={2.5} strokeDasharray="7 5" />
+        <path d={`M ${sx(foot[0]) + raSign * 9} ${sy(foot[1])} L ${sx(foot[0]) + raSign * 9} ${sy(foot[1]) - 9} L ${sx(foot[0])} ${sy(foot[1]) - 9}`} fill="none" stroke={C_HEIGHT} strokeWidth={2} />
+        <path d={`M ${ML - 10} ${gridTop} L ${ML - 16} ${gridTop} L ${ML - 16} ${gridBot} L ${ML - 10} ${gridBot}`} fill="none" stroke={C_HEIGHT} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+        {dimLabel(ML - 24, (gridTop + gridBot) / 2, `${shape.height.label} = ${shape.height.value}`, C_HEIGHT, "end")}
+      </g>
+
+      {/* trapezoid top base — bracket + label above (outside) */}
+      {shape.base2 && b2m && (
+        <g className={pulse("b2")}>
+          <path d={`M ${sx(shape.base2.a[0])} ${sy(shape.base2.a[1]) - 10} L ${sx(shape.base2.a[0])} ${sy(shape.base2.a[1]) - 16} L ${sx(shape.base2.b[0])} ${sy(shape.base2.b[1]) - 16} L ${sx(shape.base2.b[0])} ${sy(shape.base2.b[1]) - 10}`}
+            fill="none" stroke={C_B2} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+          {dimLabel(sx(b2m[0]), sy(shape.base2.a[1]) - 32, `${shape.base2.label} = ${shape.base2.value}`, C_B2)}
+        </g>
+      )}
+
+      {/* decoy label (muted, near its edge) */}
+      {dimLabel(sx(dm[0]) + DECOY_OFF[shape.type][0], sy(dm[1]) + DECOY_OFF[shape.type][1], `${shape.decoy.name} ${shape.decoy.value}`, "var(--bdb-ink-faint)")}
     </svg>
   );
 }
