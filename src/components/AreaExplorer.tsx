@@ -315,8 +315,10 @@ export default function AreaExplorer() {
         .ae-stat.muted b { color:var(--bdb-ink-faint); }
         .ae-slide { animation:aeSlide .72s var(--ae-carry) forwards; }
         @keyframes aeSlide { to { transform:translateX(var(--dx)); } }
+        .ae-flip { animation:aeFlip .85s var(--ae-carry) forwards; transform-box:view-box; }
+        @keyframes aeFlip { from { transform:rotate(180deg); } to { transform:rotate(0deg); } }
         .ae-soon { font-size:0.72rem; font-weight:800; color:var(--bdb-ink-faint); }
-        @media (prefers-reduced-motion: reduce) { .ae-mark-pulse, .ae-chip.picked { animation:none; } .ae-slide { animation:none; transform:translateX(var(--dx)); } }
+        @media (prefers-reduced-motion: reduce) { .ae-mark-pulse, .ae-chip.picked { animation:none; } .ae-slide { animation:none; transform:translateX(var(--dx)); } .ae-flip { animation:none; } }
       `}</style>
 
       <div className="ae-modebar">
@@ -540,21 +542,23 @@ function ShapeIcon({ type }: { type: ShapeType }) {
 
 // ── Sandbox: derive the formulas by reshaping ───────────────────────────────
 function AreaSandbox() {
-  const [story, setStory] = useState<"para" | null>(null);
+  const [story, setStory] = useState<"para" | "tri" | "trap" | null>(null);
   if (story === "para") return <SandboxPara onBack={() => setStory(null)} />;
+  if (story === "tri") return <SandboxDouble kind="triangle" onBack={() => setStory(null)} />;
+  if (story === "trap") return <SandboxDouble kind="trapezoid" onBack={() => setStory(null)} />;
   return (
     <div className="ae-stage">
       <div className="ae-prompt">Build a shape to see where its formula comes from.</div>
-      <div className="ae-sub">Reshape a rectangle and watch the area stay the same.</div>
+      <div className="ae-sub">Reshape or double a shape and watch the area stay the same.</div>
       <div className="ae-bank">
         <button className="ae-shapecard" onClick={() => setStory("para")}>
           <ShapeIcon type="parallelogram" /><span>Parallelogram from a rectangle</span>
         </button>
-        <button className="ae-shapecard" disabled style={{ opacity: 0.5, cursor: "not-allowed" }}>
-          <ShapeIcon type="triangle" /><span>Triangle is half</span><span className="ae-soon">Coming soon</span>
+        <button className="ae-shapecard" onClick={() => setStory("tri")}>
+          <ShapeIcon type="triangle" /><span>Triangle is half</span>
         </button>
-        <button className="ae-shapecard" disabled style={{ opacity: 0.5, cursor: "not-allowed" }}>
-          <ShapeIcon type="trapezoid" /><span>Trapezoid from two</span><span className="ae-soon">Coming soon</span>
+        <button className="ae-shapecard" onClick={() => setStory("trap")}>
+          <ShapeIcon type="trapezoid" /><span>Trapezoid from two</span>
         </button>
       </div>
     </div>
@@ -648,6 +652,94 @@ function SandboxPara({ onBack }: { onBack: () => void }) {
         {step === "done" && <button className="ae-btn ghost" onClick={reset}>Back to a rectangle</button>}
       </div>
       {step === "done" && <p className="ae-why">Same base, same height, same area. A parallelogram is just a rectangle rearranged — that is why A = base times height.</p>}
+    </div>
+  );
+}
+
+// Triangle / trapezoid -> parallelogram by doubling: a congruent copy rotated
+// 180 degrees about the midpoint of the right edge closes into a parallelogram.
+// The copy is drawn in its FINAL position and the flip animation runs
+// rotate(180deg) -> rotate(0deg) about that same midpoint, so at the start of
+// the swing the copy sits exactly on the original (looks like one shape) and
+// then peels off to complete the parallelogram. One triangle/trapezoid is half.
+function SandboxDouble({ kind, onBack }: { kind: "triangle" | "trapezoid"; onBack: () => void }) {
+  const spec = kind === "triangle"
+    ? { verts: [[3, 0], [0, 5], [8, 5]] as Pt[], pivot: [5.5, 2.5] as Pt, cols: 11, rows: 5, area: 40,
+        stats: [{ k: "base", v: "8" }, { k: "height", v: "5" }] }
+    : { verts: [[2, 0], [6, 0], [8, 4], [0, 4]] as Pt[], pivot: [7, 2] as Pt, cols: 14, rows: 4, area: 48,
+        stats: [{ k: "b₁", v: "8" }, { k: "b₂", v: "4" }, { k: "height", v: "4" }] };
+  const copyVerts: Pt[] = spec.verts.map((v) => [2 * spec.pivot[0] - v[0], 2 * spec.pivot[1] - v[1]]);
+
+  const U = Math.max(28, Math.min(52, Math.floor(Math.min(460 / spec.cols, 300 / spec.rows))));
+  const M = Math.round(1.4 * U);
+  const W = 2 * M + spec.cols * U, H = 2 * M + spec.rows * U;
+  const sx = (gx: number) => M + gx * U;
+  const sy = (gy: number) => M + gy * U;
+  const toStr = (vs: Pt[]) => vs.map((v) => `${sx(v[0])},${sy(v[1])}`).join(" ");
+
+  const [step, setStep] = useState<"start" | "joining" | "done">("start");
+  const reset = () => setStep("start");
+
+  const areaLabel = kind === "triangle" ? "Parallelogram = base x height" : "Parallelogram = (b₁ + b₂) x h";
+  const halfLabel = kind === "triangle" ? "triangle = half" : "trapezoid = half";
+
+  return (
+    <div className="ae-stage">
+      <div className="ae-prompt">
+        {step === "done"
+          ? (kind === "triangle" ? "Two triangles make a parallelogram." : "Two trapezoids make a parallelogram.")
+          : (kind === "triangle" ? "A triangle is half of a parallelogram." : "Two trapezoids build a parallelogram.")}
+      </div>
+      <div className="ae-sub">
+        {step === "start" ? "Copy the shape and spin the copy around."
+          : step === "joining" ? "The copy rotates into place." : "So one shape is exactly half of it."}
+      </div>
+
+      <div className="ae-tools">
+        <button className="ae-tbtn" onClick={onBack}>Back</button>
+        <button className="ae-tbtn" onClick={reset}>Reset</button>
+      </div>
+
+      <svg className="ae-svg" viewBox={`0 0 ${W} ${H}`}>
+        <defs>
+          <pattern id={`ae-db-cell-${kind}`} width={U} height={U} patternUnits="userSpaceOnUse">
+            <path d={`M ${U} 0 L 0 0 0 ${U}`} fill="none" stroke="var(--bdb-line)" strokeWidth={1} opacity={0.75} />
+          </pattern>
+        </defs>
+        <rect x={M} y={M} width={spec.cols * U} height={spec.rows * U} fill={`url(#ae-db-cell-${kind})`} />
+
+        <polygon points={toStr(spec.verts)} fill={`color-mix(in srgb, ${C_BASE} 28%, transparent)`} stroke="var(--bdb-ink)" strokeWidth={3} strokeLinejoin="miter" />
+
+        {step !== "start" && (
+          <polygon
+            className={step === "joining" ? "ae-flip" : undefined}
+            style={{ transformOrigin: `${sx(spec.pivot[0])}px ${sy(spec.pivot[1])}px` }}
+            points={toStr(copyVerts)}
+            fill={`color-mix(in srgb, ${C_HEIGHT} 45%, transparent)`} stroke="var(--bdb-ink)" strokeWidth={3} strokeLinejoin="miter"
+          />
+        )}
+      </svg>
+
+      <div className="ae-stats">
+        {spec.stats.map((s) => (
+          <div key={s.k} className="ae-stat"><span>{s.k}</span><b>{s.v}</b></div>
+        ))}
+        <div className="ae-stat hl"><span>{areaLabel}</span><b>{step === "start" ? "?" : spec.area}</b></div>
+        <div className="ae-stat muted"><span>{halfLabel}</span><b>{step === "done" ? spec.area / 2 : "-"}</b></div>
+      </div>
+
+      <div className="ae-bar">
+        {step === "start" && <button className="ae-btn" onClick={() => { setStep("joining"); window.setTimeout(() => setStep("done"), 880); }}>Double it</button>}
+        {step === "done" && <button className="ae-btn ghost" onClick={reset}>Back to one shape</button>}
+      </div>
+
+      {step === "done" && (
+        <p className="ae-why">
+          {kind === "triangle"
+            ? "The parallelogram is base x height = 40. Your triangle is exactly half of it, so A = ½ x base x height."
+            : "The parallelogram's base is b₁ + b₂ and its height is h, so its area is (b₁ + b₂) x h = 48. One trapezoid is half, so A = ½ x (b₁ + b₂) x h."}
+        </p>
+      )}
     </div>
   );
 }
