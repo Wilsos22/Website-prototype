@@ -1,6 +1,6 @@
 "use client";
 
-// Abbie Console — summon the Abbiliathan 3000 from the teacher control panel.
+// Abbie Console — summon Abbie (wordmark "Abbie³") from the teacher control panel.
 // Two quiet ways in (no open student mic): tap a MOOD button, or TYPE a line and
 // she says it in her own voice. She knows the current classroom state, so her
 // line fits the room. Her reply shows as a big projector bubble the class sees,
@@ -390,6 +390,7 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
         .abc-mark { width:34px; height:34px; border-radius:50%; background:#14241f; display:grid; place-items:center; overflow:hidden; flex:none; }
         .abc-mark img { width:30px; height:30px; object-fit:contain; }
         .abc-title { font-weight:900; color:#e8fff9; font-size:0.98rem; line-height:1.1; }
+        .abc-sq { color:#5eead4; font-size:0.62em; font-weight:900; vertical-align:super; margin:0 0.02em; }
         .abc-sub { font-size:0.72rem; color:#5f8a80; font-weight:700; }
         .abc-x { margin-left:auto; background:transparent; border:1px solid #23413b; color:#7fb3a8; border-radius:8px; width:30px; height:30px; cursor:pointer; font-weight:900; }
         .abc-x:hover { color:#fff; border-color:#2dd4bf; }
@@ -461,7 +462,7 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
       `}</style>
 
       {!open && (
-        <button className="abc-fab" onClick={() => setOpen(true)} title="Summon the Abbiliathan 3000">
+        <button className="abc-fab" onClick={() => setOpen(true)} title="Summon Abbie (Abbie cubed)">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/big-dog-mark.png" alt="" />
           <span className="dotlive" />
@@ -475,7 +476,7 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
           <div className="abc-head">
             <div className="abc-mark">{/* eslint-disable-next-line @next/next/no-img-element */}<img src="/big-dog-mark.png" alt="" /></div>
             <div>
-              <div className="abc-title">Abbiliathan 3000</div>
+              <div className="abc-title">Abbie<sup className="abc-sq">3</sup></div>
               <div className="abc-sub">hold the mic and ask, tap a mood, or type</div>
             </div>
             <button className="abc-x" onClick={() => setOpen(false)} aria-label="Close">×</button>

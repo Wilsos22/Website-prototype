@@ -172,7 +172,7 @@ export default function StudentSpinner({ onClose }: { onClose?: () => void }) {
   function announceWithAbbie() {
     if (!lastPicks.length) return;
     const names = lastPicks.join(" and ");
-    requestAbbieLine(`The spinner just landed on ${names} to share with the class. Announce it out loud in your voice - a bit of "the Abbiliathan has spoken" energy - and hype them up. One line.`);
+    requestAbbieLine(`The spinner just landed on ${names} to share with the class. Announce it out loud in your voice - big final-verdict energy, like the pick is destiny - and hype them up. One line.`);
   }
 
   // ── Roster editing ──────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 "use client";
 
-// Proof-of-concept bench: have a real conversation with Abbiliathan and judge it.
+// Proof-of-concept bench: have a real conversation with Abbie and judge it.
 
 import AbbieTalk from "@/components/AbbieTalk";
 
@@ -19,7 +19,7 @@ export default function AbbiePage() {
           <img src="/big-dog-mark.png" alt="" style={{ width: 38, height: 38, objectFit: "contain" }} />
         </div>
         <div>
-          <div style={{ fontWeight: 800, fontSize: "1.1rem" }}>Abbiliathan 3000</div>
+          <div style={{ fontWeight: 800, fontSize: "1.1rem" }}>Abbie<sup style={{ color: "#5eead4", fontSize: "0.62em", verticalAlign: "super" }}>3</sup></div>
           <div style={{ fontSize: "0.8rem", color: "#8a93ad" }}>proof of concept — talk to her</div>
         </div>
       </header>

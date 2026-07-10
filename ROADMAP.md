@@ -13,7 +13,7 @@ Live polls (stuck-poll trap fixed) · Class mode broadcast · Challenge games ·
 Today's boards · Control panel · Session controls · Rosters ·
 **Notion roster sync** (needs `NOTION_ROSTER_DB_ID` + `CRON_SECRET` envs) ·
 Teacher login (6-month device cookie; PIN gate removed) · Warm-up analytics ·
-Checkpoint delivery · iPad ink → board · Abbiliathan 3000 (voice + Stream Deck) ·
+Checkpoint delivery · iPad ink → board · Abbie³ (voice + Stream Deck) ·
 **Proficiency spine**: schema/seeds, EWMA engine (golden-tested 25/25),
 mastery board + growth charts, /api/evidence, clustering + archetypes
 (golden-tested 25/25), Right-now view w/ Notion Misconception Plans merge ·
@@ -30,7 +30,7 @@ celebration + in-a-row counter; Regular/Level Up! naming here + GEMS) ·
 /teacher/growth redirects) · **Claude-sharpened next moves** (7/6 —
 /api/live/next-move + per-archetype "Sharpen this move" button on each Growth
 cluster; archetype-aware, tool-grounded, reuses ANTHROPIC_API_KEY, template fallback) ·
-**Abbie Console** (7/7 — summon the Abbiliathan from the control panel:
+**Abbie Console** (7/7 — summon Abbie³ from the control panel:
 hold-to-talk mic (Web Speech STT + Stream Deck F8/?ptt=) for free-form live
 conversation with running history, plus 6 quick-tap moods and a type/ask box;
 context-aware (current state + lesson intention); teal projector bubble the
@@ -79,5 +79,3 @@ Infinite Campus push · Scan/OCR checkpoint pipeline · Google student sign-in
 4. Share the roster Notion DB with the integration.
 5. Run `supabase/abbie-broadcast.sql` (done) and `supabase/abbie-questions.sql`
    once each so Abbie's student bubble and the Ask-Abbie queue work in class.
-5. Run `supabase/abbie-broadcast.sql` once (adds the `abbie` column so her line
-   pops on student screens in class mode).
