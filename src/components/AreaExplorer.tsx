@@ -281,7 +281,7 @@ export default function AreaExplorer() {
         .ae-shapecard { display:grid; place-items:center; gap:8px; min-height:120px; padding:14px; border:2px solid var(--bdb-line); border-radius:0; background:var(--bdb-card); color:var(--bdb-ink); font-weight:800; font-size:1rem; cursor:pointer; }
         .ae-shapecard:active, .ae-shapecard:focus-visible { border-color:var(--bdb-ink); }
         .ae-stage { display:grid; justify-items:center; gap:6px; }
-        .ae-svg { width:100%; max-width:560px; height:auto; touch-action:none; }
+        .ae-svg { width:100%; max-width:560px; height:auto; touch-action:none; user-select:none; -webkit-user-select:none; }
         .ae-mark-pulse { animation:aePulse 1s ease-in-out infinite; transform-box:fill-box; transform-origin:center; }
         @keyframes aePulse { 0%,100% { opacity:1; } 50% { opacity:0.35; } }
         .ae-formula { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:8px; font-weight:900; font-size:clamp(1.3rem,4vw,1.9rem); margin:12px 0 4px; }
@@ -566,47 +566,86 @@ function AreaSandbox() {
 }
 
 // Rectangle -> parallelogram: shear the top edge (base & height are fixed by
-// construction, so the Area readout never moves), then cut-and-slide the
-// overhang triangle back into an identical rectangle.
+// construction, so the Area readout never moves), then cut the overhang
+// triangle loose. After the cut the triangle stays a free, draggable piece —
+// students can slide it anywhere and drop it in the gap to rebuild the
+// rectangle. Base and height are labelled right on the figure.
 function SandboxPara({ onBack }: { onBack: () => void }) {
   const b = 8, h = 5;
   const cols = 2 * b, rows = h;
   const U = Math.max(28, Math.min(52, Math.floor(Math.min(460 / cols, 300 / rows))));
-  const M = Math.round(1.4 * U);
+  const M = Math.max(Math.round(1.4 * U), 66); // extra left room for the height label
   const W = 2 * M + cols * U, H = 2 * M + rows * U;
   const sx = (gx: number) => M + gx * U;
   const sy = (gy: number) => M + gy * U;
-  const [k, setK] = useState(0);
-  const [step, setStep] = useState<"shear" | "sliding" | "done">("shear");
-  const svgRef = useRef<SVGSVGElement | null>(null);
-  const dragRef = useRef(false);
+  const target = b * U; // slide that drops the triangle into the gap
 
+  const [k, setK] = useState(0);
+  const [step, setStep] = useState<"shear" | "cut">("shear");
+  const [piece, setPiece] = useState({ x: 0, y: 0 }); // triangle offset in svg px
+  const [dragging, setDragging] = useState(false);
+
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const modeRef = useRef<null | "corner" | "piece">(null);
+  const startRef = useRef({ cx: 0, cy: 0, ox: 0, oy: 0 });
+
+  const scaleOf = () => { const r = svgRef.current?.getBoundingClientRect(); return r ? r.width / W : 1; };
   const setKfromClient = (clientX: number) => {
     const r = svgRef.current?.getBoundingClientRect();
     if (!r) return;
     const svgX = (clientX - r.left) / (r.width / W);
     setK(clamp(Math.round((svgX - M) / U), 0, b));
   };
-  const onDown = (e: React.PointerEvent) => { if (step !== "shear") return; dragRef.current = true; svgRef.current?.setPointerCapture?.(e.pointerId); setKfromClient(e.clientX); };
-  const onMove = (e: React.PointerEvent) => { if (dragRef.current) setKfromClient(e.clientX); };
-  const onUp = () => { dragRef.current = false; };
-  const reset = () => { setK(0); setStep("shear"); };
 
+  const onSvgDown = (e: React.PointerEvent) => {
+    if (step !== "shear") return;
+    modeRef.current = "corner"; svgRef.current?.setPointerCapture?.(e.pointerId); setKfromClient(e.clientX);
+  };
+  const onPieceDown = (e: React.PointerEvent) => {
+    if (step !== "cut") return;
+    e.stopPropagation();
+    modeRef.current = "piece"; setDragging(true);
+    startRef.current = { cx: e.clientX, cy: e.clientY, ox: piece.x, oy: piece.y };
+    svgRef.current?.setPointerCapture?.(e.pointerId);
+  };
+  const onSvgMove = (e: React.PointerEvent) => {
+    if (modeRef.current === "corner") { setKfromClient(e.clientX); return; }
+    if (modeRef.current === "piece") {
+      const s = scaleOf();
+      const nx = clamp(startRef.current.ox + (e.clientX - startRef.current.cx) / s, -k * U, cols * U);
+      const ny = clamp(startRef.current.oy + (e.clientY - startRef.current.cy) / s, -rows * U, rows * U);
+      setPiece({ x: nx, y: ny });
+    }
+  };
+  const onSvgUp = () => {
+    if (modeRef.current === "piece") {
+      setDragging(false);
+      setPiece((p) => (Math.hypot(p.x - target, p.y) < 0.7 * U ? { x: target, y: 0 } : p)); // snap into the gap
+    }
+    modeRef.current = null;
+  };
+
+  // Cut frees the overhang triangle in place — the student drags it into the
+  // gap themselves (it snaps + transitions home on release, see onSvgUp).
+  const cut = () => { setStep("cut"); setPiece({ x: 0, y: 0 }); };
+  const reset = () => { setK(0); setStep("shear"); setPiece({ x: 0, y: 0 }); setDragging(false); };
+
+  const snapped = step === "cut" && Math.abs(piece.x - target) < 1 && Math.abs(piece.y) < 1;
   const slant = round1(Math.hypot(k, h));
   const para = `${sx(k)},${sy(0)} ${sx(b + k)},${sy(0)} ${sx(b)},${sy(h)} ${sx(0)},${sy(h)}`;
-  const tri = `${sx(0)},${sy(h)} ${sx(k)},${sy(h)} ${sx(k)},${sy(0)}`;
   const remain = `${sx(k)},${sy(0)} ${sx(b + k)},${sy(0)} ${sx(b)},${sy(h)} ${sx(k)},${sy(h)}`;
-  const rect = `${sx(k)},${sy(0)} ${sx(b + k)},${sy(0)} ${sx(b + k)},${sy(h)} ${sx(k)},${sy(h)}`;
+  const tri = `${sx(0)},${sy(h)} ${sx(k)},${sy(h)} ${sx(k)},${sy(0)}`;
   const fillB = `color-mix(in srgb, ${C_BASE} 20%, transparent)`;
+  const fillTri = `color-mix(in srgb, ${C_HEIGHT} 45%, transparent)`;
 
   return (
     <div className="ae-stage">
       <div className="ae-prompt">
-        {step === "done" ? "Same area — a rectangle rearranged." : "Lean the rectangle into a parallelogram."}
+        {step === "cut" ? (snapped ? "Same area — a rectangle rearranged." : "The corner is a free piece now.") : "Lean the rectangle into a parallelogram."}
       </div>
       <div className="ae-sub">
         {step === "shear" ? (k > 0 ? "The slant grew — but the base and height did not." : "Drag the top corner across the grid.")
-          : step === "sliding" ? "The corner slides over to fill the gap." : "That is why A = base times height."}
+          : snapped ? "It fills the gap exactly — that is why A = base times height." : "Drag the amber triangle anywhere, or drop it in the gap on the right."}
       </div>
 
       <div className="ae-tools">
@@ -614,7 +653,7 @@ function SandboxPara({ onBack }: { onBack: () => void }) {
         <button className="ae-tbtn" onClick={reset}>Reset</button>
       </div>
 
-      <svg ref={svgRef} className="ae-svg" viewBox={`0 0 ${W} ${H}`} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
+      <svg ref={svgRef} className="ae-svg" viewBox={`0 0 ${W} ${H}`} onPointerDown={onSvgDown} onPointerMove={onSvgMove} onPointerUp={onSvgUp} onPointerCancel={onSvgUp}>
         <defs>
           <pattern id="ae-sb-cell" width={U} height={U} patternUnits="userSpaceOnUse">
             <path d={`M ${U} 0 L 0 0 0 ${U}`} fill="none" stroke="var(--bdb-line)" strokeWidth={1} opacity={0.75} />
@@ -629,15 +668,24 @@ function SandboxPara({ onBack }: { onBack: () => void }) {
             <circle cx={sx(k)} cy={sy(0)} r={5} fill="#fff" style={{ pointerEvents: "none" }} />
           </>
         )}
-        {step === "sliding" && (
+        {step === "cut" && (
           <>
             <polygon points={remain} fill={fillB} stroke="var(--bdb-ink)" strokeWidth={3} strokeLinejoin="miter" />
-            <polygon className="ae-slide" points={tri} fill={`color-mix(in srgb, ${C_HEIGHT} 45%, transparent)`} stroke="var(--bdb-ink)" strokeWidth={3} strokeLinejoin="miter" style={{ ["--dx" as string]: `${b * U}px` } as React.CSSProperties} />
+            <polygon points={tri} fill={fillTri} stroke="var(--bdb-ink)" strokeWidth={3} strokeLinejoin="miter"
+              transform={`translate(${piece.x} ${piece.y})`} onPointerDown={onPieceDown}
+              style={{ cursor: dragging ? "grabbing" : "grab", transition: dragging ? "none" : "transform .7s var(--ae-carry)", touchAction: "none" }} />
           </>
         )}
-        {step === "done" && (
-          <polygon points={rect} fill={`color-mix(in srgb, ${C_BASE} 32%, transparent)`} stroke="var(--bdb-ink)" strokeWidth={3} strokeLinejoin="miter" />
-        )}
+
+        {/* base bracket + label */}
+        <path d={`M ${sx(0)} ${sy(h) + 12} L ${sx(0)} ${sy(h) + 18} L ${sx(b)} ${sy(h) + 18} L ${sx(b)} ${sy(h) + 12}`}
+          fill="none" stroke={C_BASE} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+        <text x={sx(b / 2)} y={sy(h) + 34} textAnchor="middle" dominantBaseline="hanging" fontSize={15} fontWeight={900} fill={C_BASE}>b = {b}</text>
+
+        {/* height line (dashed) + right-angle mark + label */}
+        <line x1={sx(0)} y1={sy(0)} x2={sx(0)} y2={sy(h)} stroke={C_HEIGHT} strokeWidth={2.5} strokeDasharray="7 5" />
+        <path d={`M ${sx(0) + 9} ${sy(h)} L ${sx(0) + 9} ${sy(h) - 9} L ${sx(0)} ${sy(h) - 9}`} fill="none" stroke={C_HEIGHT} strokeWidth={2} />
+        <text x={sx(0) - 12} y={sy(h / 2)} textAnchor="end" dominantBaseline="central" fontSize={15} fontWeight={900} fill={C_HEIGHT}>h = {h}</text>
       </svg>
 
       <div className="ae-stats">
@@ -648,10 +696,10 @@ function SandboxPara({ onBack }: { onBack: () => void }) {
       </div>
 
       <div className="ae-bar">
-        {step === "shear" && <button className="ae-btn" disabled={k === 0} onClick={() => { setStep("sliding"); window.setTimeout(() => setStep("done"), 760); }}>Cut and slide</button>}
-        {step === "done" && <button className="ae-btn ghost" onClick={reset}>Back to a rectangle</button>}
+        {step === "shear" && <button className="ae-btn" disabled={k === 0} onClick={cut}>Cut the corner</button>}
+        {step === "cut" && <button className="ae-btn ghost" onClick={reset}>Back to a rectangle</button>}
       </div>
-      {step === "done" && <p className="ae-why">Same base, same height, same area. A parallelogram is just a rectangle rearranged — that is why A = base times height.</p>}
+      {snapped && <p className="ae-why">Same base, same height, same area. A parallelogram is just a rectangle rearranged — that is why A = base times height.</p>}
     </div>
   );
 }
