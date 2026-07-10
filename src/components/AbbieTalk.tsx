@@ -1,6 +1,6 @@
 "use client";
 
-// Proof-of-concept: talk to Abbiliathan. Push-to-talk (Web Speech STT) → Claude
+// Proof-of-concept: talk to Abbie. Push-to-talk (Web Speech STT) -> Claude
 // (/api/abbie, in character) → browser speech synthesis. Text box as a fallback.
 
 import { useCallback, useEffect, useRef, useState } from "react";

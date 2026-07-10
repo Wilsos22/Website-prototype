@@ -1,6 +1,6 @@
 "use client";
 
-// Warm-up projector screen — Abbiliathan 3000 runs the room.
+// Warm-up projector screen — Abbie (wordmark "Abbie³") runs the room.
 // Pulls Learning Intention + Success Criteria from today's Notion lesson,
 // runs the countdown with a 30s alert and a red 0:10 countdown + cue sounds.
 
@@ -139,6 +139,7 @@ export default function WarmupPage() {
         .wu-mark { width:46px; height:46px; border-radius:50%; background:#14241f; display:grid; place-items:center; overflow:hidden; flex:none; }
         .wu-mark img { width:42px; height:42px; object-fit:contain; }
         .wu-name { font-weight:800; font-size:1.05rem; letter-spacing:-0.01em; }
+        .wu-sq { color:#5eead4; font-size:0.62em; font-weight:900; vertical-align:super; margin:0 0.02em; }
         .wu-status { font-size:0.8rem; color:#8a93ad; display:flex; align-items:center; gap:6px; }
         .wu-dot { width:7px; height:7px; border-radius:50%; background:var(--wu-accent); animation:wu-blink 1.6s ease-in-out infinite; }
         @keyframes wu-blink { 0%,100%{opacity:1} 50%{opacity:.3} }
@@ -167,7 +168,7 @@ export default function WarmupPage() {
         <div className="wu-brand">
           <div className="wu-mark">{/* eslint-disable-next-line @next/next/no-img-element */}<img src="/big-dog-mark.png" alt="" /></div>
           <div>
-            <div className="wu-name">Abbiliathan 3000</div>
+            <div className="wu-name">Abbie<sup className="wu-sq">3</sup></div>
             <div className="wu-status"><span className="wu-dot" /> running the warm-up{lesson?.module ? ` · ${lesson.module}` : ""}</div>
           </div>
         </div>

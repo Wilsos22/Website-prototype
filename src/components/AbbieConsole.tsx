@@ -1,6 +1,6 @@
 "use client";
 
-// Abbie Console — summon the Abbiliathan 3000 from the teacher control panel.
+// Abbie Console — summon Abbie (wordmark "Abbie³") from the teacher control panel.
 // Two quiet ways in (no open student mic): tap a MOOD button, or TYPE a line and
 // she says it in her own voice. She knows the current classroom state, so her
 // line fits the room. Her reply shows as a big projector bubble the class sees,
@@ -49,6 +49,7 @@ const MOODS: Mood[] = [
 ];
 
 const LS_VOICE = "bdm-abbie-voice-on";
+const LS_MEMORY = "bdm-abbie-memory";
 
 export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { stateLabel?: string; stateDesc?: string; sessionId?: string | null }) {
   const supabase = getSupabase();
@@ -76,6 +77,12 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
   useEffect(() => { convoRef.current = convo; }, [convo]);
   const [lesson, setLesson] = useState<Lesson | null>(null);
 
+  // Cross-day memory: a short note the teacher keeps (e.g. "yesterday they
+  // struggled with negative fractions") that rides along in every call so Abbie
+  // can reference what happened before. Lives on this device across days.
+  const [memory, setMemory] = useState("");
+  const [memOpen, setMemOpen] = useState(false);
+
   // Moderated "Ask Abbie" queue — pending student questions, edited in place.
   const [queue, setQueue] = useState<AbbieQuestion[]>([]);
   const [edits, setEdits] = useState<Record<string, string>>({});
@@ -102,11 +109,18 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
     try {
       const v = localStorage.getItem(LS_VOICE);
       if (v === "0") setVoiceOn(false);
+      const m = localStorage.getItem(LS_MEMORY);
+      if (m) setMemory(m);
     } catch { /* ignore */ }
     fetch("/api/today", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => { if (d?.lesson) setLesson(d.lesson); })
       .catch(() => { /* no lesson today is fine */ });
+  }, []);
+
+  const saveMemory = useCallback((text: string) => {
+    setMemory(text);
+    try { localStorage.setItem(LS_MEMORY, text); } catch { /* ignore */ }
   }, []);
 
   // Poll the moderated "Ask Abbie" queue for this session's pending questions.
@@ -175,9 +189,11 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
   }, [speakFallback]);
 
   const contextString = useCallback(() => {
-    if (!stateLabel) return "";
-    return stateDesc ? `Classroom state: "${stateLabel}" — ${stateDesc}` : `Classroom state: "${stateLabel}"`;
-  }, [stateLabel, stateDesc]);
+    const parts: string[] = [];
+    if (stateLabel) parts.push(stateDesc ? `Classroom state: "${stateLabel}" — ${stateDesc}` : `Classroom state: "${stateLabel}"`);
+    if (memory.trim()) parts.push(`Things you remember from recent classes (reference naturally only if it fits): ${memory.trim()}`);
+    return parts.join(". ");
+  }, [stateLabel, stateDesc, memory]);
 
   const showLine = useCallback((text: string) => {
     setLine(text);
@@ -374,6 +390,7 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
         .abc-mark { width:34px; height:34px; border-radius:50%; background:#14241f; display:grid; place-items:center; overflow:hidden; flex:none; }
         .abc-mark img { width:30px; height:30px; object-fit:contain; }
         .abc-title { font-weight:900; color:#e8fff9; font-size:0.98rem; line-height:1.1; }
+        .abc-sq { color:#5eead4; font-size:0.62em; font-weight:900; vertical-align:super; margin:0 0.02em; }
         .abc-sub { font-size:0.72rem; color:#5f8a80; font-weight:700; }
         .abc-x { margin-left:auto; background:transparent; border:1px solid #23413b; color:#7fb3a8; border-radius:8px; width:30px; height:30px; cursor:pointer; font-weight:900; }
         .abc-x:hover { color:#fff; border-color:#2dd4bf; }
@@ -402,6 +419,12 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
         .abc-interim { font-size:0.82rem; font-weight:700; color:#8fb8af; min-height:1.1em; text-align:center; font-style:italic; }
 
         .abc-foot { display:flex; align-items:center; justify-content:space-between; gap:10px; padding-top:2px; }
+        .abc-memtoggle { background:transparent; border:1px solid #23413b; color:#8fb8af; border-radius:9px; padding:6px 12px; font:inherit; font-weight:800; font-size:0.78rem; cursor:pointer; }
+        .abc-memtoggle:hover { border-color:#2dd4bf; color:#d6f5ee; }
+        .abc-mem { display:grid; gap:6px; border-top:1px solid #17302b; padding-top:10px; }
+        .abc-mem-label { font-size:0.7rem; font-weight:900; letter-spacing:0.06em; text-transform:uppercase; color:#6f9a90; }
+        .abc-mem-text { width:100%; box-sizing:border-box; resize:vertical; background:#0a1310; border:1px solid #23413b; color:#eafff9; border-radius:10px; padding:9px 11px; font:inherit; font-weight:600; font-size:0.88rem; line-height:1.35; }
+        .abc-mem-text:focus { outline:none; border-color:#2dd4bf; }
         .abc-voice { display:flex; align-items:center; gap:8px; font-size:0.8rem; font-weight:800; color:#8fb8af; cursor:pointer; user-select:none; }
         .abc-toggle { width:38px; height:22px; border-radius:999px; border:1px solid #23413b; background:#0a1310; position:relative; transition:background 140ms; flex:none; }
         .abc-toggle.on { background:#0f3630; border-color:#2dd4bf; }
@@ -439,7 +462,7 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
       `}</style>
 
       {!open && (
-        <button className="abc-fab" onClick={() => setOpen(true)} title="Summon the Abbiliathan 3000">
+        <button className="abc-fab" onClick={() => setOpen(true)} title="Summon Abbie (Abbie cubed)">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/big-dog-mark.png" alt="" />
           <span className="dotlive" />
@@ -453,7 +476,7 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
           <div className="abc-head">
             <div className="abc-mark">{/* eslint-disable-next-line @next/next/no-img-element */}<img src="/big-dog-mark.png" alt="" /></div>
             <div>
-              <div className="abc-title">Abbiliathan 3000</div>
+              <div className="abc-title">Abbie<sup className="abc-sq">3</sup></div>
               <div className="abc-sub">hold the mic and ask, tap a mood, or type</div>
             </div>
             <button className="abc-x" onClick={() => setOpen(false)} aria-label="Close">×</button>
@@ -528,7 +551,23 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
                 <span className={`abc-toggle${voiceOn ? " on" : ""}`}><span className="abc-knob" /></span>
                 {voiceOn ? "Voice on" : "Text only"}
               </label>
+              <button className="abc-memtoggle" onClick={() => setMemOpen((v) => !v)}>
+                {memory.trim() ? "Memory (set)" : "Memory"}
+              </button>
             </div>
+
+            {memOpen && (
+              <div className="abc-mem">
+                <div className="abc-mem-label">What Abbie should remember across days</div>
+                <textarea
+                  className="abc-mem-text"
+                  value={memory}
+                  placeholder="e.g. Yesterday they struggled with negative fractions. First block is a tough crowd."
+                  onChange={(e) => saveMemory(e.target.value)}
+                  rows={3}
+                />
+              </div>
+            )}
           </div>
         </div>
       )}
