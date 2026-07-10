@@ -31,6 +31,7 @@ const SHAPE_NAMES: Record<ShapeType, string> = {
 };
 
 const rand = (lo: number, hi: number) => lo + Math.floor(Math.random() * (hi - lo + 1));
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const round1 = (n: number) => Math.round(n * 10) / 10;
 const shuffle = <T,>(a: T[]) => { const b = [...a]; for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
 
@@ -152,6 +153,7 @@ function inPoly(x: number, y: number, verts: Pt[]) {
 }
 
 export default function AreaExplorer() {
+  const [mode, setMode] = useState<"solve" | "sandbox">("solve");
   const [phase, setPhase] = useState<Phase>("bank");
   const [shape, setShape] = useState<Shape | null>(null);
   const [placed, setPlaced] = useState<Record<string, number | null>>({});
@@ -301,10 +303,32 @@ export default function AreaExplorer() {
         .ae-note { text-align:center; color:var(--bdb-coral); font-weight:700; font-size:0.9rem; min-height:20px; margin-top:8px; }
         .ae-why { max-width:480px; margin:8px auto 0; text-align:center; color:var(--bdb-ink-soft); font-size:0.92rem; line-height:1.5; }
         .ae-done .eq { text-align:center; font-size:clamp(1.6rem,5vw,2.6rem); font-weight:900; margin:8px 0; }
-        @media (prefers-reduced-motion: reduce) { .ae-mark-pulse, .ae-chip.picked { animation:none; } }
+        .ae-modebar { display:flex; justify-content:center; margin:0 0 14px; }
+        .ae-modeseg { display:inline-flex; border:2px solid var(--bdb-line); border-radius:999px; overflow:hidden; background:var(--bdb-card); }
+        .ae-modeseg button { font:inherit; font-weight:800; font-size:0.9rem; min-height:44px; padding:0 22px; border:none; background:transparent; color:var(--bdb-ink-soft); cursor:pointer; }
+        .ae-modeseg button.on { background:var(--bdb-ink); color:#fff; }
+        .ae-stats { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin:12px 0 2px; }
+        .ae-stat { display:grid; justify-items:center; gap:2px; min-width:82px; padding:8px 14px; border:1px solid var(--bdb-line); border-radius:0; background:var(--bdb-card); }
+        .ae-stat span { font-size:0.66rem; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; color:var(--bdb-ink-faint); }
+        .ae-stat b { font-size:1.4rem; font-weight:900; }
+        .ae-stat.hl { border-color:var(--bdb-ink); }
+        .ae-stat.muted b { color:var(--bdb-ink-faint); }
+        .ae-slide { animation:aeSlide .72s var(--ae-carry) forwards; }
+        @keyframes aeSlide { to { transform:translateX(var(--dx)); } }
+        .ae-soon { font-size:0.72rem; font-weight:800; color:var(--bdb-ink-faint); }
+        @media (prefers-reduced-motion: reduce) { .ae-mark-pulse, .ae-chip.picked { animation:none; } .ae-slide { animation:none; transform:translateX(var(--dx)); } }
       `}</style>
 
-      {phase === "bank" && (
+      <div className="ae-modebar">
+        <div className="ae-modeseg">
+          <button className={mode === "solve" ? "on" : ""} onClick={() => setMode("solve")}>Solve</button>
+          <button className={mode === "sandbox" ? "on" : ""} onClick={() => setMode("sandbox")}>Sandbox</button>
+        </div>
+      </div>
+
+      {mode === "sandbox" && <AreaSandbox />}
+
+      {mode === "solve" && phase === "bank" && (
         <>
           <div className="ae-prompt">Which shape do you want to find the area of?</div>
           <div className="ae-sub">Pick a shape to measure.</div>
@@ -319,7 +343,7 @@ export default function AreaExplorer() {
         </>
       )}
 
-      {phase !== "bank" && shape && (
+      {mode === "solve" && phase !== "bank" && shape && (
         <>
           <div className="ae-prompt">
             {phase === "substitute" && "Put each measurement into the formula."}
@@ -511,5 +535,119 @@ function ShapeIcon({ type }: { type: ShapeType }) {
     <svg width={48} height={44} viewBox="0 0 48 44" aria-hidden="true">
       <polygon points={shapes[type]} fill={fill} stroke={stroke} strokeWidth={2.5} strokeLinejoin="miter" />
     </svg>
+  );
+}
+
+// ── Sandbox: derive the formulas by reshaping ───────────────────────────────
+function AreaSandbox() {
+  const [story, setStory] = useState<"para" | null>(null);
+  if (story === "para") return <SandboxPara onBack={() => setStory(null)} />;
+  return (
+    <div className="ae-stage">
+      <div className="ae-prompt">Build a shape to see where its formula comes from.</div>
+      <div className="ae-sub">Reshape a rectangle and watch the area stay the same.</div>
+      <div className="ae-bank">
+        <button className="ae-shapecard" onClick={() => setStory("para")}>
+          <ShapeIcon type="parallelogram" /><span>Parallelogram from a rectangle</span>
+        </button>
+        <button className="ae-shapecard" disabled style={{ opacity: 0.5, cursor: "not-allowed" }}>
+          <ShapeIcon type="triangle" /><span>Triangle is half</span><span className="ae-soon">Coming soon</span>
+        </button>
+        <button className="ae-shapecard" disabled style={{ opacity: 0.5, cursor: "not-allowed" }}>
+          <ShapeIcon type="trapezoid" /><span>Trapezoid from two</span><span className="ae-soon">Coming soon</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Rectangle -> parallelogram: shear the top edge (base & height are fixed by
+// construction, so the Area readout never moves), then cut-and-slide the
+// overhang triangle back into an identical rectangle.
+function SandboxPara({ onBack }: { onBack: () => void }) {
+  const b = 8, h = 5;
+  const cols = 2 * b, rows = h;
+  const U = Math.max(28, Math.min(52, Math.floor(Math.min(460 / cols, 300 / rows))));
+  const M = Math.round(1.4 * U);
+  const W = 2 * M + cols * U, H = 2 * M + rows * U;
+  const sx = (gx: number) => M + gx * U;
+  const sy = (gy: number) => M + gy * U;
+  const [k, setK] = useState(0);
+  const [step, setStep] = useState<"shear" | "sliding" | "done">("shear");
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const dragRef = useRef(false);
+
+  const setKfromClient = (clientX: number) => {
+    const r = svgRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const svgX = (clientX - r.left) / (r.width / W);
+    setK(clamp(Math.round((svgX - M) / U), 0, b));
+  };
+  const onDown = (e: React.PointerEvent) => { if (step !== "shear") return; dragRef.current = true; svgRef.current?.setPointerCapture?.(e.pointerId); setKfromClient(e.clientX); };
+  const onMove = (e: React.PointerEvent) => { if (dragRef.current) setKfromClient(e.clientX); };
+  const onUp = () => { dragRef.current = false; };
+  const reset = () => { setK(0); setStep("shear"); };
+
+  const slant = round1(Math.hypot(k, h));
+  const para = `${sx(k)},${sy(0)} ${sx(b + k)},${sy(0)} ${sx(b)},${sy(h)} ${sx(0)},${sy(h)}`;
+  const tri = `${sx(0)},${sy(h)} ${sx(k)},${sy(h)} ${sx(k)},${sy(0)}`;
+  const remain = `${sx(k)},${sy(0)} ${sx(b + k)},${sy(0)} ${sx(b)},${sy(h)} ${sx(k)},${sy(h)}`;
+  const rect = `${sx(k)},${sy(0)} ${sx(b + k)},${sy(0)} ${sx(b + k)},${sy(h)} ${sx(k)},${sy(h)}`;
+  const fillB = `color-mix(in srgb, ${C_BASE} 20%, transparent)`;
+
+  return (
+    <div className="ae-stage">
+      <div className="ae-prompt">
+        {step === "done" ? "Same area — a rectangle rearranged." : "Lean the rectangle into a parallelogram."}
+      </div>
+      <div className="ae-sub">
+        {step === "shear" ? (k > 0 ? "The slant grew — but the base and height did not." : "Drag the top corner across the grid.")
+          : step === "sliding" ? "The corner slides over to fill the gap." : "That is why A = base times height."}
+      </div>
+
+      <div className="ae-tools">
+        <button className="ae-tbtn" onClick={onBack}>Back</button>
+        <button className="ae-tbtn" onClick={reset}>Reset</button>
+      </div>
+
+      <svg ref={svgRef} className="ae-svg" viewBox={`0 0 ${W} ${H}`} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
+        <defs>
+          <pattern id="ae-sb-cell" width={U} height={U} patternUnits="userSpaceOnUse">
+            <path d={`M ${U} 0 L 0 0 0 ${U}`} fill="none" stroke="var(--bdb-line)" strokeWidth={1} opacity={0.75} />
+          </pattern>
+        </defs>
+        <rect x={M} y={M} width={cols * U} height={rows * U} fill="url(#ae-sb-cell)" />
+
+        {step === "shear" && (
+          <>
+            <polygon points={para} fill={fillB} stroke="var(--bdb-ink)" strokeWidth={3} strokeLinejoin="miter" />
+            <circle cx={sx(k)} cy={sy(0)} r={14} fill="var(--bdb-ink)" style={{ cursor: "grab" }} />
+            <circle cx={sx(k)} cy={sy(0)} r={5} fill="#fff" style={{ pointerEvents: "none" }} />
+          </>
+        )}
+        {step === "sliding" && (
+          <>
+            <polygon points={remain} fill={fillB} stroke="var(--bdb-ink)" strokeWidth={3} strokeLinejoin="miter" />
+            <polygon className="ae-slide" points={tri} fill={`color-mix(in srgb, ${C_HEIGHT} 45%, transparent)`} stroke="var(--bdb-ink)" strokeWidth={3} strokeLinejoin="miter" style={{ ["--dx" as string]: `${b * U}px` } as React.CSSProperties} />
+          </>
+        )}
+        {step === "done" && (
+          <polygon points={rect} fill={`color-mix(in srgb, ${C_BASE} 32%, transparent)`} stroke="var(--bdb-ink)" strokeWidth={3} strokeLinejoin="miter" />
+        )}
+      </svg>
+
+      <div className="ae-stats">
+        <div className="ae-stat"><span>base</span><b>{b}</b></div>
+        <div className="ae-stat"><span>height</span><b>{h}</b></div>
+        <div className="ae-stat hl"><span>Area = base x height</span><b>{b * h}</b></div>
+        <div className="ae-stat muted"><span>slant</span><b>{step === "shear" ? slant : "-"}</b></div>
+      </div>
+
+      <div className="ae-bar">
+        {step === "shear" && <button className="ae-btn" disabled={k === 0} onClick={() => { setStep("sliding"); window.setTimeout(() => setStep("done"), 760); }}>Cut and slide</button>}
+        {step === "done" && <button className="ae-btn ghost" onClick={reset}>Back to a rectangle</button>}
+      </div>
+      {step === "done" && <p className="ae-why">Same base, same height, same area. A parallelogram is just a rectangle rearranged — that is why A = base times height.</p>}
+    </div>
   );
 }
