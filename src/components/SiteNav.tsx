@@ -6,22 +6,22 @@
 import { usePathname } from "next/navigation";
 
 const TEACHER = [
-  { href: "/teacher",   label: "🏠 Home" },
-  { href: "/builder",   label: "🧱 Builder" },
-  { href: "/control",   label: "🎛 Control" },
-  { href: "/session",   label: "📡 Session" },
-  { href: "/teacher/challenges", label: "🎮 Games" },
-  { href: "/teacher/assignments", label: "📝 Practice" },
-  { href: "/teacher/exit-tickets", label: "🎟 Exit" },
-  { href: "/teacher/checkpoints", label: "✅ Checks" },
+  { href: "/teacher",   label: "Home" },
+  { href: "/builder",   label: "Builder" },
+  { href: "/control",   label: "Control" },
+  { href: "/session",   label: "Session" },
+  { href: "/teacher/challenges", label: "Games" },
+  { href: "/teacher/assignments", label: "Practice" },
+  { href: "/teacher/exit-tickets", label: "Exit" },
+  { href: "/teacher/checkpoints", label: "Checks" },
   { href: "/teacher/rightnow", label: "Growth" },
-  { href: "/roster",    label: "👥 Rosters" },
+  { href: "/roster",    label: "Rosters" },
   { href: "/",          label: "Student view" },
 ];
 
 const STUDENT = [
-  { href: "/", label: "🏠 Home" },
-  { href: "/lesson", label: "📚 Lesson" },
+  { href: "/", label: "Home" },
+  { href: "/lesson", label: "Lesson" },
 ];
 
 export default function SiteNav({ variant = "teacher" }: { variant?: "teacher" | "student" }) {

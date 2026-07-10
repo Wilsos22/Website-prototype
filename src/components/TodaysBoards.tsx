@@ -32,16 +32,22 @@ export default function TodaysBoards({ date }: { date: string | null }) {
   if (urls.length === 0) return null;
 
   return (
-    <section className="ls-card">
-      <h2 className="ls-h2">Today&apos;s worked solutions</h2>
-      <div style={{ display: "grid", gap: 14 }}>
+    <section className="ls-section ls-boards">
+      <div className="ls-section-head">
+        <div>
+          <p className="ls-eyebrow">Worked solutions</p>
+          <h2 className="ls-h2">What was shown on the board</h2>
+          <p className="ls-section-copy">Use these if you were absent or need to check the model from class.</p>
+        </div>
+      </div>
+      <div className="ls-board-list">
         {urls.map((u, i) => (
           // eslint-disable-next-line @next/next/no-img-element
-          <a key={u} href={u} target="_blank" rel="noopener noreferrer" style={{ display: "block" }}>
+          <a key={u} href={u} target="_blank" rel="noopener noreferrer" className="ls-board-link">
             <img
               src={u}
               alt={`Board ${i + 1}`}
-              style={{ width: "100%", height: "auto", borderRadius: 14, border: "1px solid var(--bdb-line)", background: "#fff" }}
+              className="ls-board-image"
             />
           </a>
         ))}

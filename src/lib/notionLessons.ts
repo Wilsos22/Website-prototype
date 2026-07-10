@@ -158,6 +158,27 @@ async function resolveLink(prop: NotionProperty | undefined, token: string, cach
   return "";
 }
 
+async function resolveFirstLink(
+  properties: Record<string, NotionProperty>,
+  names: string[],
+  token: string,
+  cache: Map<string, Promise<NotionPage>>,
+): Promise<string> {
+  for (const name of names) {
+    const link = await resolveLink(properties[name], token, cache);
+    if (link) return link;
+  }
+  return "";
+}
+
+function extractFirstText(properties: Record<string, NotionProperty>, names: string[]): string {
+  for (const name of names) {
+    const text = extractText(properties[name]);
+    if (text.trim()) return text;
+  }
+  return "";
+}
+
 function splitList(text: string): string[] {
   return text
     .split(/[\n,]/)
@@ -250,18 +271,18 @@ async function mapPage(page: NotionPage, token: string, cache: Map<string, Promi
     title: extractText(p["Lesson"]),
     subtitle: extractText(p["Subtitle"]),
     essentialIdeas: extractText(p["Essential Ideas"]),
-    assignmentLink: await resolveLink(p["Assignment Link"], token, cache),
+    assignmentLink: await resolveFirstLink(p, ["Assignment Link", "Assignment", "Assignment URL"], token, cache),
     date: extractText(p["Date"]),
     dueDate: extractText(p["Due Date"]),
-    topic: extractText(p["Topic"]),
+    topic: extractFirstText(p, ["Topic", "Topic #", "Topic Code"]),
     module: extractText(p["Module #"]),
     agenda: extractText(p["Agenda"]),
     supplies: uniq([...splitList(supplyText), ...checkedSupplies]).join("\n"),
     tools: uniq([...splitList(toolText), ...checkedTools]).join("\n"),
     suppliesConfigured: Boolean(supplyText.trim()) || hasSupplyCheckboxes,
     toolsConfigured: Boolean(toolText.trim()) || hasToolCheckboxes,
-    warmUpLink: await resolveLink(p["Warm Up Link"], token, cache),
-    exitTicketLink: await resolveLink(p["Exit Ticket Link"], token, cache),
+    warmUpLink: await resolveFirstLink(p, ["Warm Up Link", "Warm-Up Link", "Warm up links 1", "Warm-Up", "Warm Up"], token, cache),
+    exitTicketLink: await resolveFirstLink(p, ["Exit Ticket Link", "Exit-Ticket Link", "Exit Ticket", "Exit Ticket URL"], token, cache),
     learningIntention: extractText(p["Learning Intention"]),
     successCriteria: extractText(p["Success Criteria"]),
     discussionPrompt: extractText(p["Discussion Prompt"]),
