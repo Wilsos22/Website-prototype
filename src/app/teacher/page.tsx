@@ -58,6 +58,7 @@ const TOOLS: LinkItem[] = [
   { href: "/percent-bar", label: "Percent Bar", letter: "%", color: "#cf6f9b", desc: "Parts, wholes, benchmarks" },
   { href: "/area-model", label: "Box Method", letter: "B", color: "#fcaf38", desc: "Fill-in-the-boxes multiplication" },
   { href: "/distributive-area", label: "Distributive Area Method", letter: "D", color: "#50a3a4", desc: "Split the rectangle to decompose" },
+  { href: "/area-explorer", label: "Area Explorer", letter: "A", color: "#50a3a4", desc: "Area of 2D shapes: solve and derive" },
   { href: "/ladder-method", label: "Ladder Method", letter: "L", color: "#674a40", desc: "GCF, LCM, prime factors" },
   { href: "/multiplication-fluency", label: "Multiplication", letter: "x", color: "#3b7fc4", desc: "Fast-facts practice" },
   { href: "/group-bars", label: "Group Bars", letter: "G", color: "#2f9e6f", desc: "Equal groups and ratios" },

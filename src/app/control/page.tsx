@@ -64,6 +64,7 @@ const TOOL_STATE_INFO = {
   "tool-algebra-tiles": { route: "/algebra-tiles", label: "Algebra Tiles" },
   "tool-area-model": { route: "/area-model", label: "Box Method" },
   "tool-distributive-area": { route: "/distributive-area", label: "Distributive Area Method" },
+  "tool-area-explorer": { route: "/area-explorer", label: "Area Explorer" },
   "tool-combine": { route: "/combine-like-terms", label: "Combine Like Terms" },
   "tool-ladder": { route: "/ladder-method", label: "Ladder Method" },
   "tool-proportions": { route: "/proportions", label: "Proportions" },
@@ -238,6 +239,8 @@ function buildLiveToolConfig(stateId: ToolStateId, values: ToolSetupValues): Liv
       return { ...base, route: "/area-model", config: {} };
     case "tool-distributive-area":
       return { ...base, route: "/distributive-area", config: {} };
+    case "tool-area-explorer":
+      return { ...base, route: "/area-explorer", config: {} };
     case "tool-combine":
       return { ...base, route: "/combine-like-terms", config: {} };
     case "tool-ladder":
@@ -328,6 +331,9 @@ const LESSON_TOOL_ALIASES: Record<string, string> = {
   fractions: "tool-fraction-bars",
   algebratiles: "tool-algebra-tiles",
   areamodel: "tool-area-model",
+  areaexplorer: "tool-area-explorer",
+  areaofshapes: "tool-area-explorer",
+  shapes: "tool-area-explorer",
   combineliketerms: "tool-combine",
   combiningliketerms: "tool-combine",
   liketerms: "tool-combine",

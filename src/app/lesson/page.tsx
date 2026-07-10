@@ -37,6 +37,7 @@ const TOOL_ROUTES: Record<string, string> = {
   "combine like terms": "/combine-like-terms", "proportions": "/proportions", "proportion builder": "/proportions", "timer": "/timer",
   "balance beam": "/balance-beam",
   "box method": "/area-model", "distributive area method": "/distributive-area", "distributive area": "/distributive-area",
+  "area explorer": "/area-explorer", "area of shapes": "/area-explorer",
 };
 function lines(text?: string) {
   return (text || "").split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
