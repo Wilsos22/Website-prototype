@@ -94,6 +94,7 @@ export default function LiveFlowPage() {
   const [flow, setFlow] = useState<LiveClassFlowSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [emptyMessage, setEmptyMessage] = useState("Waiting for the teacher.");
+  const [holding, setHolding] = useState(false);
   const [pollAnswers, setPollAnswers] = useState<PollAnswer[]>([]);
   const [pollAnswer, setPollAnswer] = useState("");
   const [fistRating, setFistRating] = useState(3);
