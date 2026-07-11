@@ -115,18 +115,103 @@ interface Item {
   correctFeedback: string;
   feedback: string;
 }
+// Difficulty ladder across the 6 questions:
+//   fluency  Q1,Q2  basic gimmes — 99% get them if they try (build confidence)
+//   review   Q3     a 4th/5th grade skill they should still have
+//   current  Q4,Q5  the day's topic at an ENTRY level — the formative data pull
+type Tier = "fluency" | "review" | "current";
 interface Template {
   id: string;
   strand: Strand;
+  tier: Tier;
   label: string; // short skill name for reviewTopics
+  topics?: string[]; // keyword hints so "current" templates match the day's focus
   gen: (rng: RNG) => Item;
 }
 
 const TEMPLATES: Template[] = [
+  // ── fluency (Q1/Q2): easy on purpose ───────────────────────────────────────
+  {
+    id: "basic-add",
+    strand: "number",
+    tier: "fluency",
+    label: "multi-digit addition",
+    gen: (rng) => {
+      const a = randInt(rng, 12, 48);
+      const b = randInt(rng, 12, 48);
+      const correct = fmt(a + b);
+      return {
+        q: `What is ${a} + ${b}?`,
+        correct,
+        distractors: [
+          { value: fmt(a + b - 10), tag: "other" },
+          { value: fmt(a + b + 10), tag: "other" },
+          { value: fmt(a + b - 1), tag: "other" },
+          { value: fmt(a + b + 1), tag: "other" },
+        ],
+        ccss: "4.NBT.B.4",
+        correctFeedback: "Quick and clean.",
+        feedback: `Add the ones, then the tens: ${a} + ${b} = ${a + b}.`,
+      };
+    },
+  },
+  {
+    id: "basic-mult",
+    strand: "number",
+    tier: "fluency",
+    label: "multiplication facts",
+    gen: (rng) => {
+      const a = randInt(rng, 3, 9);
+      const b = randInt(rng, 4, 9);
+      const correct = fmt(a * b);
+      return {
+        q: `What is ${a} × ${b}?`,
+        correct,
+        distractors: [
+          { value: fmt(a * b + a), tag: "other" },
+          { value: fmt(a * b - b), tag: "other" },
+          { value: fmt(a + b), tag: "other" },
+          { value: fmt(a * b + 1), tag: "other" },
+        ],
+        ccss: "3.OA.C.7",
+        correctFeedback: "You know your facts.",
+        feedback: `${a} groups of ${b}: ${a} × ${b} = ${a * b}.`,
+      };
+    },
+  },
+  // ── review (Q3): a 4th/5th grade skill they should still have ──────────────
+  {
+    id: "place-value",
+    strand: "number",
+    tier: "review",
+    label: "place value",
+    gen: (rng) => {
+      const d0 = randInt(rng, 1, 9);
+      const d1 = randInt(rng, 1, 9); // hundreds digit we ask about
+      const d2 = randInt(rng, 1, 9);
+      const d3 = randInt(rng, 0, 9);
+      const num = d0 * 1000 + d1 * 100 + d2 * 10 + d3;
+      const correct = fmt(d1 * 100);
+      return {
+        q: `In the number ${num}, what is the VALUE of the digit ${d1} in the hundreds place?`,
+        correct,
+        distractors: [
+          { value: fmt(d1), tag: "other" },
+          { value: fmt(d1 * 10), tag: "other" },
+          { value: fmt(d1 * 1000), tag: "other" },
+        ],
+        ccss: "5.NBT.A.1",
+        correctFeedback: "Yes — place value tells you how much a digit is worth.",
+        feedback: `The digit ${d1} sits in the hundreds place, so its value is ${d1} × 100 = ${correct}.`,
+      };
+    },
+  },
   {
     id: "decimal-divide",
     strand: "number",
+    tier: "current",
     label: "dividing decimals",
+    topics: ["decimal", "divide", "dividing", "division"],
     gen: (rng) => {
       const n = randInt(rng, 2, 9); // divisor
       const qd = randInt(rng, 2, 9); // quotient in tenths
@@ -151,6 +236,7 @@ const TEMPLATES: Template[] = [
   {
     id: "add-unlike-fractions",
     strand: "number",
+    tier: "review",
     label: "adding fractions",
     gen: (rng) => {
       const a = pick(rng, [2, 3, 4, 5, 6]);
@@ -173,10 +259,13 @@ const TEMPLATES: Template[] = [
       };
     },
   },
+  // ── current (Q4/Q5): the day's topic at an entry level, misconception-tagged ─
   {
     id: "integer-subtract",
     strand: "number",
+    tier: "current",
     label: "subtracting integers",
+    topics: ["integer", "negative", "negatives", "subtracting integers"],
     gen: (rng) => {
       const a = randInt(rng, 1, 9);
       const y = randInt(rng, 1, 9);
@@ -199,7 +288,9 @@ const TEMPLATES: Template[] = [
   {
     id: "rectangle-area",
     strand: "geometry",
+    tier: "current",
     label: "area of a rectangle",
+    topics: ["area", "rectangle", "perimeter", "geometry", "shape"],
     gen: (rng) => {
       const w = randInt(rng, 3, 12);
       let l = randInt(rng, 3, 12);
@@ -222,7 +313,9 @@ const TEMPLATES: Template[] = [
   {
     id: "triangle-area",
     strand: "geometry",
+    tier: "current",
     label: "area of a triangle",
+    topics: ["area", "triangle", "geometry", "shape"],
     gen: (rng) => {
       let b = randInt(rng, 3, 12);
       let h = randInt(rng, 2, 10);
@@ -299,11 +392,20 @@ function toMC(item: Item, rng: RNG, withMisconceptions: boolean): WarmupMC {
   };
 }
 
-const SHORT_ANSWER_PROMPTS = [
-  "Pick one problem from today's warm-up and explain every step you took to solve it.",
-  "Which question was the trickiest? Explain what made it hard and how you worked through it.",
-  "Explain your thinking on the last question as if you were teaching it to a friend.",
-];
+// Q6: thoughtful, non-googleable prompts that ask for reasoning, keyed to the
+// day's strand so the question connects to the focus.
+const THOUGHT_PROMPTS: Record<Strand, string[]> = {
+  number: [
+    "Explain, using an example, why 0.5 and 1/2 are the same amount.",
+    "A classmate says the decimal point doesn't really matter when you divide. Are they right? Use an example to explain.",
+    "Why can subtracting a number sometimes make the answer larger, and sometimes smaller? Give an example of each.",
+  ],
+  geometry: [
+    "Two rectangles have the SAME perimeter but DIFFERENT areas. Explain how that's possible, with an example.",
+    "A classmate says a shape with a bigger perimeter must have a bigger area. Are they right? Explain with an example.",
+    "Describe, in your own words, a strategy for finding the area of a shape that isn't a plain rectangle.",
+  ],
+};
 
 function strandFor(strandParam: string | undefined, topic: string | undefined, rng: RNG): Strand {
   const p = (strandParam || "").toLowerCase();
@@ -315,10 +417,22 @@ function strandFor(strandParam: string | undefined, topic: string | undefined, r
   return rng() < 0.5 ? "number" : "geometry";
 }
 
-function pickTemplate(rng: RNG, strand: Strand, used: Set<string>): Template {
-  const inStrand = TEMPLATES.filter((t) => t.strand === strand);
-  const fresh = inStrand.filter((t) => !used.has(t.id));
-  const t = pick(rng, fresh.length ? fresh : inStrand); // reuse (fresh numbers) only if the strand is exhausted
+// "current" (Q4/Q5) templates for the day: prefer ones whose topic keywords
+// match the lesson topic; fall back to the focus strand, then any current one —
+// so a blank or placeholder topic still yields a valid entry-level pair.
+function currentTemplatesFor(topic: string | undefined, focus: Strand): Template[] {
+  const t = (topic || "").toLowerCase();
+  const current = TEMPLATES.filter((x) => x.tier === "current");
+  const byTopic = current.filter((x) => (x.topics || []).some((k) => t.includes(k)));
+  if (byTopic.length) return byTopic;
+  const byStrand = current.filter((x) => x.strand === focus);
+  if (byStrand.length) return byStrand;
+  return current;
+}
+
+function pickFrom(rng: RNG, pool: Template[], used: Set<string>): Template {
+  const fresh = pool.filter((t) => !used.has(t.id));
+  const t = pick(rng, fresh.length ? fresh : pool); // reuse (with fresh numbers) only if the pool is exhausted
   used.add(t.id);
   return t;
 }
@@ -331,36 +445,39 @@ export interface BuildOptions {
   date?: string;
 }
 
-// Assemble the day's warm-up. Q1 fluency (focus strand), Q2/Q3 spiral review
-// (other strands), Q4/Q5 focus strand with misconception-tagged distractors,
-// Q6 short-answer. Always returns a complete, valid, correct set.
+// Assemble the day's warm-up along the confidence-first difficulty ladder:
+//   Q1,Q2 fluency gimmes · Q3 a 4th/5th grade review skill · Q4,Q5 the current
+//   topic at an entry level (misconception-tagged data pull) · Q6 a thoughtful
+//   short answer. Always returns a complete, valid, correct set.
 export function buildWarmupSet(opts: BuildOptions = {}): WarmupSet {
   const seed = opts.seed || `${opts.topic || ""}|${opts.date || ""}`;
   const rng = mulberry32(hashSeed(seed || "bdm-warmup"));
   const focus = strandFor(opts.strand, opts.topic, rng);
-  const others = STRANDS.filter((s) => s !== focus);
-  const otherPool = others.length ? others : STRANDS;
+
+  const fluency = TEMPLATES.filter((t) => t.tier === "fluency");
+  const review = TEMPLATES.filter((t) => t.tier === "review");
+  const current = currentTemplatesFor(opts.topic, focus);
 
   const used = new Set<string>();
-  const t1 = pickTemplate(rng, focus, used);
-  const t2 = pickTemplate(rng, pick(rng, otherPool), used);
-  const t3 = pickTemplate(rng, pick(rng, otherPool), used);
-  const t4 = pickTemplate(rng, focus, used);
-  const t5 = pickTemplate(rng, focus, used);
+  const t1 = pickFrom(rng, fluency, used);
+  const t2 = pickFrom(rng, fluency, used);
+  const t3 = pickFrom(rng, review, used);
+  const t4 = pickFrom(rng, current, used);
+  const t5 = pickFrom(rng, current, used);
 
   const questions: WarmupQuestion[] = [
-    toMC(t1.gen(rng), rng, false),
-    toMC(t2.gen(rng), rng, false),
-    toMC(t3.gen(rng), rng, false),
-    toMC(t4.gen(rng), rng, true),
-    toMC(t5.gen(rng), rng, true),
-    { q: pick(rng, SHORT_ANSWER_PROMPTS), type: "short_answer", correct: "", points: 0 },
+    toMC(t1.gen(rng), rng, false), // Q1 fluency
+    toMC(t2.gen(rng), rng, false), // Q2 fluency
+    toMC(t3.gen(rng), rng, true), // Q3 review — tag if it carries a real misconception
+    toMC(t4.gen(rng), rng, true), // Q4 current — data pull
+    toMC(t5.gen(rng), rng, true), // Q5 current — data pull
+    { q: pick(rng, THOUGHT_PROMPTS[focus] || THOUGHT_PROMPTS.number), type: "short_answer", correct: "", points: 0 },
   ];
 
   return {
     dailyTopic: opts.topic || `${focus} focus`,
     strand: focus,
-    reviewTopics: [t2.label, t3.label],
+    reviewTopics: [t3.label],
     questions,
   };
 }
