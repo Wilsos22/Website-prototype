@@ -116,16 +116,20 @@ interface Item {
   feedback: string;
 }
 // Difficulty ladder across the 6 questions:
-//   fluency  Q1,Q2  basic gimmes — 99% get them if they try (build confidence)
-//   review   Q3     a 4th/5th grade skill they should still have
-//   current  Q4,Q5  the day's topic at an ENTRY level — the formative data pull
-type Tier = "fluency" | "review" | "current";
+//   fluency   Q1,Q2  basic gimmes — 99% get them if they try (build confidence)
+//   review    Q3     a 4th/5th grade skill they should still have
+//   retention Q4,Q5  BASIC recall from this lesson or the previous one or two —
+//                    a formula, a rule, a property, or an easy problem on it. The
+//                    misconception-tagged formative data pull. Prefer a concept
+//                    (formula/property) template for one of the two.
+type Tier = "fluency" | "review" | "retention";
 interface Template {
   id: string;
   strand: Strand;
   tier: Tier;
+  concept?: boolean; // true = a formula/rule/property recall check, not a computation
   label: string; // short skill name for reviewTopics
-  topics?: string[]; // keyword hints so "current" templates match the day's focus
+  topics?: string[]; // keyword hints so retention templates match the day's/recent focus
   gen: (rng: RNG) => Item;
 }
 
@@ -209,7 +213,7 @@ const TEMPLATES: Template[] = [
   {
     id: "decimal-divide",
     strand: "number",
-    tier: "current",
+    tier: "retention",
     label: "dividing decimals",
     topics: ["decimal", "divide", "dividing", "division"],
     gen: (rng) => {
@@ -263,7 +267,7 @@ const TEMPLATES: Template[] = [
   {
     id: "integer-subtract",
     strand: "number",
-    tier: "current",
+    tier: "retention",
     label: "subtracting integers",
     topics: ["integer", "negative", "negatives", "subtracting integers"],
     gen: (rng) => {
@@ -288,7 +292,7 @@ const TEMPLATES: Template[] = [
   {
     id: "rectangle-area",
     strand: "geometry",
-    tier: "current",
+    tier: "retention",
     label: "area of a rectangle",
     topics: ["area", "rectangle", "perimeter", "geometry", "shape"],
     gen: (rng) => {
@@ -313,7 +317,7 @@ const TEMPLATES: Template[] = [
   {
     id: "triangle-area",
     strand: "geometry",
-    tier: "current",
+    tier: "retention",
     label: "area of a triangle",
     topics: ["area", "triangle", "geometry", "shape"],
     gen: (rng) => {
@@ -337,6 +341,87 @@ const TEMPLATES: Template[] = [
         feedback: `A triangle is half of a rectangle with the same base and height: ${b} × ${h} = ${b * h}, then halve it → ${correct}.`,
       };
     },
+  },
+  // ── concept retention (Q4/Q5): recall a formula / rule / property ───────────
+  {
+    id: "rectangle-area-formula",
+    strand: "geometry",
+    tier: "retention",
+    concept: true,
+    label: "rectangle area formula",
+    topics: ["area", "rectangle", "perimeter", "geometry", "shape"],
+    gen: () => ({
+      q: "What is the formula for the AREA of a rectangle?",
+      correct: "length × width",
+      distractors: [
+        { value: "2 × (length + width)", tag: "confuses area vs perimeter" },
+        { value: "length + width", tag: "other" },
+        { value: "½ × length × width", tag: "other" },
+      ],
+      ccss: "6.G.A.1",
+      correctFeedback: "Right — area covers the inside: length times width.",
+      feedback: "Area fills the inside of the rectangle: length × width. Adding the sides (2 × (length + width)) gives the perimeter instead.",
+    }),
+  },
+  {
+    id: "triangle-area-formula",
+    strand: "geometry",
+    tier: "retention",
+    concept: true,
+    label: "triangle area formula",
+    topics: ["area", "triangle", "geometry", "shape"],
+    gen: () => ({
+      q: "What is the formula for the AREA of a triangle with base b and height h?",
+      correct: "½ × b × h",
+      distractors: [
+        { value: "b × h", tag: "forgets to halve base × height for triangle area" },
+        { value: "b + h", tag: "other" },
+        { value: "2 × b × h", tag: "other" },
+      ],
+      ccss: "6.G.A.1",
+      correctFeedback: "Yes — a triangle is half of the rectangle around it.",
+      feedback: "A triangle is half of a rectangle with the same base and height, so the area is ½ × b × h. Using b × h forgets the half.",
+    }),
+  },
+  {
+    id: "shape-height-concept",
+    strand: "geometry",
+    tier: "retention",
+    concept: true,
+    label: "meaning of height",
+    topics: ["area", "triangle", "parallelogram", "height", "geometry", "shape"],
+    gen: () => ({
+      q: "When you measure the HEIGHT of a triangle or parallelogram, it must be...",
+      correct: "straight up and down, perpendicular to the base",
+      distractors: [
+        { value: "the length of the slanted side", tag: "other" },
+        { value: "any side you choose", tag: "other" },
+        { value: "always the longest side", tag: "other" },
+      ],
+      ccss: "6.G.A.1",
+      correctFeedback: "Exactly — height is the perpendicular distance to the base.",
+      feedback: "Height is the perpendicular distance from the base to the opposite corner — straight up and down, not along the slanted side.",
+    }),
+  },
+  {
+    id: "fraction-add-rule",
+    strand: "number",
+    tier: "retention",
+    concept: true,
+    label: "adding fractions rule",
+    topics: ["fraction", "fractions", "adding fractions"],
+    gen: () => ({
+      q: "To add two fractions with different denominators, what must you do FIRST?",
+      correct: "Rewrite them with a common denominator",
+      distractors: [
+        { value: "Add the tops and add the bottoms", tag: "adds denominators when adding fractions" },
+        { value: "Multiply the two fractions", tag: "other" },
+        { value: "Flip the second fraction over", tag: "other" },
+      ],
+      ccss: "5.NF.A.1",
+      correctFeedback: "Right — the pieces have to be the same size first.",
+      feedback: "You can only add fractions when the pieces are the same size, so first rewrite them with a common denominator.",
+    }),
   },
 ];
 
@@ -417,17 +502,18 @@ function strandFor(strandParam: string | undefined, topic: string | undefined, r
   return rng() < 0.5 ? "number" : "geometry";
 }
 
-// "current" (Q4/Q5) templates for the day: prefer ones whose topic keywords
-// match the lesson topic; fall back to the focus strand, then any current one —
-// so a blank or placeholder topic still yields a valid entry-level pair.
-function currentTemplatesFor(topic: string | undefined, focus: Strand): Template[] {
-  const t = (topic || "").toLowerCase();
-  const current = TEMPLATES.filter((x) => x.tier === "current");
-  const byTopic = current.filter((x) => (x.topics || []).some((k) => t.includes(k)));
+// Retention (Q4/Q5) templates: recall from this lesson or the previous one or
+// two. Prefer templates whose topic keywords match the current OR previous
+// topic; fall back to the focus strand, then any retention template — so a blank
+// or placeholder topic still yields a valid basic pair.
+function retentionTemplatesFor(topic: string | undefined, prevTopic: string | undefined, focus: Strand): Template[] {
+  const t = `${topic || ""} ${prevTopic || ""}`.toLowerCase();
+  const pool = TEMPLATES.filter((x) => x.tier === "retention");
+  const byTopic = pool.filter((x) => (x.topics || []).some((k) => t.includes(k)));
   if (byTopic.length) return byTopic;
-  const byStrand = current.filter((x) => x.strand === focus);
+  const byStrand = pool.filter((x) => x.strand === focus);
   if (byStrand.length) return byStrand;
-  return current;
+  return pool;
 }
 
 function pickFrom(rng: RNG, pool: Template[], used: Set<string>): Template {
@@ -446,8 +532,9 @@ export interface BuildOptions {
 }
 
 // Assemble the day's warm-up along the confidence-first difficulty ladder:
-//   Q1,Q2 fluency gimmes · Q3 a 4th/5th grade review skill · Q4,Q5 the current
-//   topic at an entry level (misconception-tagged data pull) · Q6 a thoughtful
+//   Q1,Q2 fluency gimmes · Q3 a 4th/5th grade review skill · Q4,Q5 BASIC
+//   retention from this lesson or the previous one or two (Q4 prefers a
+//   formula/property recall; both are misconception-tagged) · Q6 a thoughtful
 //   short answer. Always returns a complete, valid, correct set.
 export function buildWarmupSet(opts: BuildOptions = {}): WarmupSet {
   const seed = opts.seed || `${opts.topic || ""}|${opts.date || ""}`;
@@ -456,21 +543,22 @@ export function buildWarmupSet(opts: BuildOptions = {}): WarmupSet {
 
   const fluency = TEMPLATES.filter((t) => t.tier === "fluency");
   const review = TEMPLATES.filter((t) => t.tier === "review");
-  const current = currentTemplatesFor(opts.topic, focus);
+  const retention = retentionTemplatesFor(opts.topic, opts.prevTopic, focus);
+  const concepts = retention.filter((t) => t.concept);
 
   const used = new Set<string>();
   const t1 = pickFrom(rng, fluency, used);
   const t2 = pickFrom(rng, fluency, used);
   const t3 = pickFrom(rng, review, used);
-  const t4 = pickFrom(rng, current, used);
-  const t5 = pickFrom(rng, current, used);
+  const t4 = pickFrom(rng, concepts.length ? concepts : retention, used); // Q4 prefers a formula/property recall
+  const t5 = pickFrom(rng, retention, used);
 
   const questions: WarmupQuestion[] = [
     toMC(t1.gen(rng), rng, false), // Q1 fluency
     toMC(t2.gen(rng), rng, false), // Q2 fluency
     toMC(t3.gen(rng), rng, true), // Q3 review — tag if it carries a real misconception
-    toMC(t4.gen(rng), rng, true), // Q4 current — data pull
-    toMC(t5.gen(rng), rng, true), // Q5 current — data pull
+    toMC(t4.gen(rng), rng, true), // Q4 retention — concept recall, data pull
+    toMC(t5.gen(rng), rng, true), // Q5 retention — data pull
     { q: pick(rng, THOUGHT_PROMPTS[focus] || THOUGHT_PROMPTS.number), type: "short_answer", correct: "", points: 0 },
   ];
 
