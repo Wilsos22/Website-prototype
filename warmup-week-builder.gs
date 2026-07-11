@@ -21,13 +21,19 @@ const BDM_LESSONS_DATA_SOURCE_DEFAULTS = [
 
 // --- Entry points (called from the sidebar) --------------------------------
 
+// These now build through the parametric ENGINE (warmup-engine.gs -> /api/warmup)
+// instead of the Semester-1 pool. The engine resolves each day's topic AND the
+// previous taught day's topic from the Notion calendar by date, so there is no
+// pool-string matching to fail on ("No pool items match lesson ..." is gone) and
+// junk lesson topics like "Week 1 Day 3" or "Chrome" still build a valid warm-up.
+// The old pool path below (buildDayFromNotionLesson_ and its helpers) is kept for
+// reference/fallback but is no longer called.
 function buildWeekFromNotionLessons(weekConfig) {
   const safeConfig = normalizeWeekConfig_(weekConfig);
-  const lessons = getNotionLessonsForWeek_(safeConfig.startDate);
   const results = [];
   for (let dayIndex = 0; dayIndex < 5; dayIndex++) {
     try {
-      results.push(buildDayFromNotionLesson_(safeConfig, dayIndex, lessons));
+      results.push(Object.assign({ ok: true }, createWarmupFormFromEngine_(safeConfig, dayIndex)));
     } catch (err) {
       results.push({ ok: false, dayIndex: dayIndex, error: String(err && err.message ? err.message : err) });
     }
@@ -37,8 +43,7 @@ function buildWeekFromNotionLessons(weekConfig) {
 
 function buildSingleDayFromNotion(weekConfig, dayIndex) {
   const safeConfig = normalizeWeekConfig_(weekConfig);
-  const lessons = getNotionLessonsForWeek_(safeConfig.startDate);
-  return buildDayFromNotionLesson_(safeConfig, dayIndex, lessons);
+  return Object.assign({ ok: true }, createWarmupFormFromEngine_(safeConfig, dayIndex));
 }
 
 // --- Core day build ---------------------------------------------------------
