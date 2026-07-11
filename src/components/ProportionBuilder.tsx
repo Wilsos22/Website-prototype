@@ -36,11 +36,12 @@ export default function ProportionBuilder() {
   const [feedback, setFeedback] = useState("");
   const [hint, setHint] = useState<string | null>(null);
   const [wrong, setWrong] = useState(0);
+  const [showItems, setShowItems] = useState(false); // optional concrete "groups of items" view
   const audioRef = useRef<AudioContext | null>(null);
 
   const { p, q, k, knownSide } = prob;
   const r = p * k, s = q * k;
-  const missingVal = knownSide === "num" ? s : r; // num known → denominator missing (=s); den known → numerator missing (=r)
+  const missingVal = knownSide === "num" ? s : r; // num known: denominator missing (=s); den known: numerator missing (=r)
 
   const tone = useCallback((freqs: number[], gap = 0.1, dur = 0.16) => {
     try {
@@ -130,7 +131,7 @@ export default function ProportionBuilder() {
         .pb-scale { font-size:1.35rem; font-weight:900; color:var(--bdb-teal); background:color-mix(in srgb, var(--bdb-teal) 12%, var(--bdb-card)); border:2px solid color-mix(in srgb, var(--bdb-teal) 38%, transparent); border-radius:9px; padding:8px 12px; white-space:nowrap; display:flex; align-items:center; gap:2px; justify-content:center; position:relative; }
         .pb-scale.done { color:var(--bdb-green); background:color-mix(in srgb, var(--bdb-green) 14%, var(--bdb-card)); border-color:color-mix(in srgb, var(--bdb-green) 40%, transparent); }
         .pb-scale.live { border-color:var(--bdb-coral); color:var(--bdb-coral); box-shadow:0 0 0 5px color-mix(in srgb,var(--bdb-coral) 14%,transparent); animation:pbPulse 1s ease-in-out infinite; }
-        .pb-scale.live::after { content:"→"; position:absolute; right:-25px; color:var(--bdb-coral); font-size:1.6rem; font-weight:950; }
+        .pb-scale.live::after { content:""; position:absolute; right:-22px; top:50%; transform:translateY(-50%); width:0; height:0; border-top:7px solid transparent; border-bottom:7px solid transparent; border-left:11px solid var(--bdb-coral); }
         @keyframes pbPulse { 50% { transform:scale(1.04); } }
         .pb-kin { width:54px; background:var(--bdb-card); border:none; color:var(--bdb-ink); font-size:1.2rem; font-weight:800; text-align:center; }
 
@@ -139,6 +140,17 @@ export default function ProportionBuilder() {
         .pb-hint { background:color-mix(in srgb, var(--bdb-coral) 12%, var(--bdb-card)); border:1px solid color-mix(in srgb, var(--bdb-coral) 40%, transparent); color:var(--bdb-brown); border-radius:10px; padding:11px 16px; font-weight:600; font-size:0.92rem; max-width:520px; text-align:center; }
         .pb-hintbtn { font-size:0.82rem; font-weight:700; color:var(--bdb-coral); background:transparent; border:1px solid var(--bdb-line); border-radius:999px; padding:8px 14px; cursor:pointer; }
         .pb-solved { font-size:clamp(1.1rem,2.8vw,1.5rem); font-weight:800; color:var(--bdb-green); text-align:center; }
+        .pb-groups-wrap { display:grid; justify-items:center; gap:10px; width:min(100%,720px); }
+        .pb-groups { display:flex; flex-wrap:wrap; gap:12px; justify-content:center; }
+        .pb-group { display:grid; gap:6px; padding:10px 12px; border:2px solid var(--bdb-line); border-radius:12px; background:var(--bdb-card); }
+        .pb-group-lbl { font-size:0.72rem; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; color:var(--bdb-ink-faint); text-align:center; }
+        .pb-items { display:flex; flex-wrap:wrap; gap:4px; max-width:132px; justify-content:center; }
+        .pb-dot { width:17px; height:17px; border-radius:4px; }
+        .pb-dot.num { background:var(--bdb-coral); } .pb-dot.den { background:var(--bdb-teal); }
+        .pb-groups-cap { color:var(--bdb-ink-soft); font-size:0.95rem; font-weight:600; text-align:center; max-width:540px; line-height:1.45; }
+        .pb-groups-cap b { color:var(--bdb-ink); }
+        .pb-toggle { font-size:0.85rem; font-weight:700; color:var(--bdb-ink-soft); background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:999px; padding:8px 15px; cursor:pointer; }
+        .pb-toggle.on { border-color:var(--bdb-teal); color:var(--bdb-ink); background:color-mix(in srgb,var(--bdb-teal) 12%,var(--bdb-card)); }
         .pb-presets { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
         .pb-preset { font-size:0.85rem; font-weight:700; color:var(--bdb-ink-soft); background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:999px; padding:7px 13px; cursor:pointer; }
         .pb-preset:hover { border-color:var(--bdb-coral); color:var(--bdb-ink); }
@@ -148,7 +160,7 @@ export default function ProportionBuilder() {
       <header className="pb-top">
         <p className="pb-mark">Proportion Builder</p>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="pb-btn" onClick={() => load(makeProblem())}>🎲 New problem</button>
+          <button className="pb-btn" onClick={() => load(makeProblem())}>New problem</button>
           <a className="pb-btn" href="/">Home</a>
         </div>
       </header>
@@ -190,7 +202,7 @@ export default function ProportionBuilder() {
         </div>
 
         {phase === "solved" ? (
-          <div className="pb-solved">✓ {p}/{q} = {r}/{s} — both parts × {k}{wrong === 0 ? " · no mistakes!" : "!"}</div>
+          <div className="pb-solved">{p}/{q} = {r}/{s} — both parts × {k}{wrong === 0 ? " · no mistakes!" : "!"}</div>
         ) : (
           <>
             <p className="pb-q">
@@ -198,10 +210,31 @@ export default function ProportionBuilder() {
                 ? (knownSide === "num" ? `What do you multiply ${p} by to get ${r}?` : `What do you multiply ${q} by to get ${s}?`)
                 : `Now multiply the other part by ${k} to fill the blank.`}
             </p>
-            <button className="pb-go" onClick={phase === "scale" ? checkScale : checkVal}>Check →</button>
-            {hint ? <div className="pb-hint">💡 {hint}</div> : <button className="pb-hintbtn" onClick={() => setHint(phase === "scale" ? "Find the side where you know BOTH numbers, and ask: times what?" : `Use the same scale factor on the other part.`)}>Need a hint?</button>}
+            <button className="pb-go" onClick={phase === "scale" ? checkScale : checkVal}>Check</button>
+            {hint ? <div className="pb-hint">{hint}</div> : <button className="pb-hintbtn" onClick={() => setHint(phase === "scale" ? "Find the side where you know BOTH numbers, and ask: times what?" : `Use the same scale factor on the other part.`)}>Need a hint?</button>}
             {feedback && !hint && <p className="pb-q" style={{ minHeight: 0, color: "var(--bdb-ink-soft)", fontSize: "0.95rem" }}>{feedback}</p>}
           </>
+        )}
+
+        <button className={`pb-toggle ${showItems ? "on" : ""}`} onClick={() => setShowItems((v) => !v)}>
+          {showItems ? "Hide the groups" : "Show it with groups of items"}
+        </button>
+
+        {showItems && (
+          <div className="pb-groups-wrap">
+            <div className="pb-groups">
+              {Array.from({ length: k }).map((_, g) => (
+                <div className="pb-group" key={g}>
+                  <span className="pb-group-lbl">Group {g + 1}</span>
+                  <div className="pb-items num">{Array.from({ length: p }).map((_, i) => <span key={i} className="pb-dot num" />)}</div>
+                  <div className="pb-items den">{Array.from({ length: q }).map((_, i) => <span key={i} className="pb-dot den" />)}</div>
+                </div>
+              ))}
+            </div>
+            <p className="pb-groups-cap">
+              <b>{k} equal groups</b>, each one <b>{p}</b> coral to <b>{q}</b> teal. Altogether that is <b>{r}</b> to <b>{s}</b> — the same ratio, {k} times over.
+            </p>
+          </div>
         )}
 
         <div className="pb-presets">
