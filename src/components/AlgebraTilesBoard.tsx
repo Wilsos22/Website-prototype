@@ -75,8 +75,8 @@ const tileTemplates: Omit<AlgebraTile, "id" | "x" | "y">[] = [
 const initialTiles: AlgebraTile[] = tileTemplates.map((template, index) => ({
   ...template,
   id: `${template.value}-starter`,
-  x: 28 + index * 92,
-  y: 34,
+  x: 40 + index * 120, // grid-aligned starting row
+  y: 40,
 }));
 
 const gridSize = 40;
@@ -405,15 +405,16 @@ function parseExpressionSide(side: string): ParsedSide {
 }
 
 function stepForKind(kind: TileKind): { column: number; row: number } {
+  // steps are multiples of the 40px grid so laid-out tiles stay grid-aligned
   if (kind === "x2") {
-    return { column: 144, row: 136 };
+    return { column: 160, row: 160 };
   }
 
   if (kind === "x") {
-    return { column: 84, row: 154 };
+    return { column: 80, row: 160 };
   }
 
-  return { column: 72, row: 70 };
+  return { column: 80, row: 80 };
 }
 
 function buildGroupedTilesForSide(
@@ -448,8 +449,8 @@ function buildGroupedTilesForSide(
         label: term.label,
         sign: term.sign,
         value: term.label,
-        x: groupX + column * steps.column,
-        y: baseY + row * steps.row,
+        x: snap(groupX + column * steps.column),
+        y: snap(baseY + row * steps.row),
       });
     }
 
@@ -469,7 +470,6 @@ export function AlgebraTilesBoard() {
   const dragRef = useRef<{ id: string; offsetX: number; offsetY: number } | null>(null);
   const [tiles, setTiles] = useState<AlgebraTile[]>(initialTiles);
   const [selectedTileId, setSelectedTileId] = useState(initialTiles[0]?.id ?? "");
-  const [snapToGrid, setSnapToGrid] = useState(true);
   const [expressionInput, setExpressionInput] = useState("");
   const [modeledExpression, setModeledExpression] = useState("");
   const [expressionStatus, setExpressionStatus] = useState("");
@@ -484,29 +484,21 @@ export function AlgebraTilesBoard() {
         {
           ...template,
           id: `${template.value}-${crypto.randomUUID()}`,
-          x: 34 + offset * 48,
-          y: 210 + offset * 18,
+          x: snap(40 + offset * 40),
+          y: snap(200 + offset * 40),
         },
       ];
     });
   }, []);
 
-  const moveTile = useCallback(
-    (id: string, x: number, y: number) => {
-      setTiles((currentTiles) =>
-        currentTiles.map((tile) =>
-          tile.id === id
-            ? {
-                ...tile,
-                x: snapToGrid ? snap(Math.max(0, x)) : Math.max(0, x),
-                y: snapToGrid ? snap(Math.max(0, y)) : Math.max(0, y),
-              }
-            : tile,
-        ),
-      );
-    },
-    [snapToGrid],
-  );
+  // Tiles always snap to the grid on move so they stay lined up with it.
+  const moveTile = useCallback((id: string, x: number, y: number) => {
+    setTiles((currentTiles) =>
+      currentTiles.map((tile) =>
+        tile.id === id ? { ...tile, x: snap(Math.max(0, x)), y: snap(Math.max(0, y)) } : tile,
+      ),
+    );
+  }, []);
 
   const duplicateSelectedTile = useCallback(() => {
     setTiles((currentTiles) => {
@@ -519,8 +511,8 @@ export function AlgebraTilesBoard() {
       const nextTile = {
         ...selectedTile,
         id: `${selectedTile.value}-${crypto.randomUUID()}`,
-        x: selectedTile.x + 36,
-        y: selectedTile.y + 36,
+        x: selectedTile.x + gridSize,
+        y: selectedTile.y + gridSize,
       };
 
       setSelectedTileId(nextTile.id);
@@ -535,16 +527,6 @@ export function AlgebraTilesBoard() {
       return nextTiles;
     });
   }, [selectedTileId]);
-
-  const snapAllTiles = useCallback(() => {
-    setTiles((currentTiles) =>
-      currentTiles.map((tile) => ({
-        ...tile,
-        x: snap(tile.x),
-        y: snap(tile.y),
-      })),
-    );
-  }, []);
 
   const buildTilesFromExpression = useCallback(
     (rawExpression: string) => {
@@ -695,21 +677,11 @@ export function AlgebraTilesBoard() {
           Delete
         </button>
         <button
-          className={`small-button ${snapToGrid ? "active" : ""}`}
-          onClick={() => setSnapToGrid((currentValue) => !currentValue)}
-          type="button"
-        >
-          Snap Grid
-        </button>
-        <button
           className={`small-button ${showEqualsSign ? "active" : ""}`}
           onClick={() => setShowEqualsSign((currentValue) => !currentValue)}
           type="button"
         >
           Equal Sign
-        </button>
-        <button className="small-button" onClick={snapAllTiles} type="button">
-          Snap All
         </button>
         {tileTemplates.map((template) => (
           <button

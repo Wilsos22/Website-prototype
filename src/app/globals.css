@@ -368,19 +368,21 @@ a {
   background: var(--negative);
 }
 
+/* Tile sizes are multiples of the 40px board grid so a snapped tile fills whole
+   cells and lines up with the grid behind it (unit = 1x1, x = 1x3, x^2 = 3x3). */
 .tile.unit {
-  width: 58px;
-  height: 58px;
+  width: 40px;
+  height: 40px;
 }
 
 .tile.x {
-  width: 64px;
-  height: 142px;
+  width: 40px;
+  height: 120px;
 }
 
 .tile.x2 {
-  width: 122px;
-  height: 122px;
+  width: 120px;
+  height: 120px;
 }
 
 .fraction-board {
