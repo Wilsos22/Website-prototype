@@ -573,7 +573,7 @@ function ShapeIcon({ type }: { type: ShapeType }) {
 function AreaSandbox() {
   const [story, setStory] = useState<"para" | "tri" | "trap" | null>(null);
   if (story === "para") return <SandboxPara onBack={() => setStory(null)} />;
-  if (story === "tri") return <SandboxDouble kind="triangle" onBack={() => setStory(null)} />;
+  if (story === "tri") return <SandboxTriangleLock onBack={() => setStory(null)} />;
   if (story === "trap") return <SandboxDouble kind="trapezoid" onBack={() => setStory(null)} />;
   return (
     <div className="ae-stage">
@@ -817,6 +817,124 @@ function SandboxDouble({ kind, onBack }: { kind: "triangle" | "trapezoid"; onBac
             : "The parallelogram's base is b₁ + b₂ and its height is h, so its area is (b₁ + b₂) x h = 48. One trapezoid is half, so A = ½ x (b₁ + b₂) x h."}
         </p>
       )}
+    </div>
+  );
+}
+
+// Guided rotate-to-lock: two congruent triangles. One is fixed; the student
+// drags the second and spins it with the rotate handle until it is turned 180
+// degrees and sits in the gap, where it snaps to complete the parallelogram.
+// Dragging it back out unlocks it to try again.
+function SandboxTriangleLock({ onBack }: { onBack: () => void }) {
+  const TRI: Pt[] = [[3, 0], [0, 5], [8, 5]];
+  const GHOST: Pt[] = [[8, 5], [11, 0], [3, 0]]; // where the copy lands (TRI rotated 180 about the right-edge midpoint)
+  const C: Pt = [11 / 3, 10 / 3]; // centroid
+  const cols = 16, rows = 6, area = 40;
+  const U = Math.max(28, Math.min(52, Math.floor(Math.min(460 / cols, 300 / rows))));
+  const M = Math.round(1.4 * U);
+  const W = 2 * M + cols * U, H = 2 * M + rows * U;
+  const sx = (gx: number) => M + gx * U;
+  const sy = (gy: number) => M + gy * U;
+  const toStr = (vs: Pt[]) => vs.map((v) => `${sx(v[0])},${sy(v[1])}`).join(" ");
+
+  const targetTx = (2 * (5.5 - C[0])) * U; // translation (px) that lands the copy in the gap when rotated 180
+  const targetTy = (2 * (2.5 - C[1])) * U;
+  const startTx = 8 * U, startTy = 0.6 * U;
+
+  const [bT, setBT] = useState({ x: startTx, y: startTy });
+  const [bRot, setBRot] = useState(0);
+  const [locked, setLocked] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const modeRef = useRef<null | "move" | "rotate">(null);
+  const startRef = useRef({ px: 0, py: 0, tx: 0, ty: 0 });
+
+  const reset = () => { setBT({ x: startTx, y: startTy }); setBRot(0); setLocked(false); };
+  const scaleOf = () => { const r = svgRef.current?.getBoundingClientRect(); return r ? r.width / W : 1; };
+
+  const onBodyDown = (e: React.PointerEvent) => {
+    e.stopPropagation();
+    modeRef.current = "move"; setDragging(true); setLocked(false);
+    startRef.current = { px: e.clientX, py: e.clientY, tx: bT.x, ty: bT.y };
+    svgRef.current?.setPointerCapture?.(e.pointerId);
+  };
+  const onHandleDown = (e: React.PointerEvent) => {
+    e.stopPropagation();
+    modeRef.current = "rotate"; setDragging(true); setLocked(false);
+    svgRef.current?.setPointerCapture?.(e.pointerId);
+  };
+  const onSvgMove = (e: React.PointerEvent) => {
+    if (modeRef.current === "move") {
+      const s = scaleOf();
+      setBT({ x: startRef.current.tx + (e.clientX - startRef.current.px) / s, y: startRef.current.ty + (e.clientY - startRef.current.py) / s });
+    } else if (modeRef.current === "rotate") {
+      const r = svgRef.current?.getBoundingClientRect(); if (!r) return;
+      const s = r.width / W;
+      const cx = r.left + (sx(C[0]) + bT.x) * s, cy = r.top + (sy(C[1]) + bT.y) * s;
+      const deg = (Math.atan2(e.clientY - cy, e.clientX - cx) * 180) / Math.PI + 90;
+      setBRot(Math.round(deg / 15) * 15); // snap to 15-degree steps so it is controllable
+    }
+  };
+  const onSvgUp = () => {
+    if (modeRef.current) {
+      const rotN = ((bRot % 360) + 360) % 360;
+      const dist = Math.hypot(bT.x - targetTx, bT.y - targetTy);
+      if (Math.abs(rotN - 180) <= 22 && dist < 1.4 * U) { setBRot(180); setBT({ x: targetTx, y: targetTy }); setLocked(true); } // generous: snaps to the exact spot
+    }
+    modeRef.current = null; setDragging(false);
+  };
+
+  return (
+    <div className="ae-stage">
+      <div className="ae-prompt">{locked ? "Two triangles make a parallelogram." : "Turn the second triangle to complete the shape."}</div>
+      <div className="ae-sub">
+        {locked ? "So one triangle is exactly half of it." : "Drag the amber triangle, and use the round handle to spin it, until it locks into the gap."}
+      </div>
+
+      <div className="ae-tools">
+        <button className="ae-tbtn" onClick={onBack}>Back</button>
+        <button className="ae-tbtn" onClick={reset}>Reset</button>
+      </div>
+
+      <svg ref={svgRef} className="ae-svg" viewBox={`0 0 ${W} ${H}`} onPointerMove={onSvgMove} onPointerUp={onSvgUp} onPointerCancel={onSvgUp}>
+        <defs>
+          <pattern id="ae-lk-cell" width={U} height={U} patternUnits="userSpaceOnUse">
+            <path d={`M ${U} 0 L 0 0 0 ${U}`} fill="none" stroke="var(--bdb-line)" strokeWidth={1} opacity={0.75} />
+          </pattern>
+        </defs>
+        <rect x={M} y={M} width={cols * U} height={rows * U} fill="url(#ae-lk-cell)" />
+
+        {/* target hint (where the copy should land) */}
+        {!locked && <polygon points={toStr(GHOST)} fill="none" stroke="var(--bdb-ink-faint)" strokeWidth={2} strokeDasharray="6 5" />}
+
+        {/* fixed triangle */}
+        <polygon points={toStr(TRI)} fill={`color-mix(in srgb, ${C_BASE} 30%, transparent)`} stroke="var(--bdb-ink)" strokeWidth={3} strokeLinejoin="miter" />
+
+        {/* movable triangle */}
+        <g transform={`translate(${bT.x} ${bT.y}) rotate(${bRot} ${sx(C[0])} ${sy(C[1])})`}
+          style={{ transition: dragging ? "none" : "transform .25s var(--ae-carry)" }}>
+          <polygon points={toStr(TRI)} onPointerDown={onBodyDown}
+            fill={`color-mix(in srgb, ${C_HEIGHT} ${locked ? 55 : 45}%, transparent)`} stroke="var(--bdb-ink)" strokeWidth={3} strokeLinejoin="miter" style={{ cursor: dragging ? "grabbing" : "grab", touchAction: "none" }} />
+          {!locked && (
+            <g onPointerDown={onHandleDown} style={{ cursor: "grab", touchAction: "none" }}>
+              <line x1={sx(C[0])} y1={sy(C[1])} x2={sx(C[0])} y2={sy(C[1] - 1.4)} stroke={C_HEIGHT} strokeWidth={2.5} />
+              <circle cx={sx(C[0])} cy={sy(C[1] - 1.4)} r={11} fill="#fff" stroke={C_HEIGHT} strokeWidth={3} />
+            </g>
+          )}
+        </g>
+      </svg>
+
+      <div className="ae-stats">
+        <div className="ae-stat"><span>base</span><b>8</b></div>
+        <div className="ae-stat"><span>height</span><b>5</b></div>
+        <div className="ae-stat hl"><span>Parallelogram = base x height</span><b>{locked ? area : "?"}</b></div>
+        <div className="ae-stat muted"><span>triangle = half</span><b>{locked ? area / 2 : "-"}</b></div>
+      </div>
+
+      {locked && (
+        <div className="ae-bar"><button className="ae-btn ghost" onClick={reset}>Pull it back out</button></div>
+      )}
+      {locked && <p className="ae-why">The parallelogram is base x height = 40. Your triangle is exactly half of it, so A = ½ x base x height.</p>}
     </div>
   );
 }
