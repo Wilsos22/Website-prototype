@@ -44,7 +44,12 @@ function checkSet(set, label) {
 }
 
 // --- 1. Structural validity across many seeds and both strands ---------------
-const topics = ["dividing decimals", "area of shapes", "fractions", "", "Week 1 Day 2", "integers and negatives", "geometry", "adding fractions"];
+const topics = [
+  "dividing decimals", "area of shapes", "fractions", "", "Week 1 Day 2",
+  "integers and negatives", "geometry", "adding fractions", "ratios and unit rate",
+  "percent problems", "order of operations", "one-step equations", "expressions",
+  "mean median and range", "reading dot plots", "distributive property",
+];
 let built = 0;
 for (let i = 0; i < 200; i += 1) {
   const topic = topics[i % topics.length];

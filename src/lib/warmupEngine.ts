@@ -30,8 +30,10 @@ export const MISCONCEPTIONS = [
 ] as const;
 export type Misconception = (typeof MISCONCEPTIONS)[number] | "other";
 
-export type Strand = "number" | "geometry";
-export const STRANDS: Strand[] = ["number", "geometry"];
+// Aligned to the site's four mastery domains: Number & Operations (incl.
+// ratios/percent), Algebra & Algebraic Thinking, Geometry, Measurement & Data.
+export type Strand = "number" | "algebra" | "geometry" | "data";
+export const STRANDS: Strand[] = ["number", "algebra", "geometry", "data"];
 
 export interface WarmupMC {
   q: string;
@@ -423,6 +425,332 @@ const TEMPLATES: Template[] = [
       feedback: "You can only add fractions when the pieces are the same size, so first rewrite them with a common denominator.",
     }),
   },
+  // ── more review (Q3): 4th/5th grade ────────────────────────────────────────
+  {
+    id: "rounding",
+    strand: "number",
+    tier: "review",
+    label: "rounding",
+    gen: (rng) => {
+      const num = randInt(rng, 11, 89) * 100 + (randInt(rng, 0, 1) ? randInt(rng, 51, 99) : randInt(rng, 1, 49));
+      const down = Math.floor(num / 100) * 100;
+      const up = down + 100;
+      const correctN = num % 100 >= 50 ? up : down;
+      const wrongDir = correctN === up ? down : up;
+      return {
+        q: `Round ${num} to the nearest hundred.`,
+        correct: fmt(correctN),
+        distractors: [
+          { value: fmt(wrongDir), tag: "other" },
+          { value: fmt(Math.round(num / 10) * 10), tag: "other" },
+          { value: fmt(Math.round(num / 1000) * 1000), tag: "other" },
+        ],
+        ccss: "4.NBT.A.3",
+        correctFeedback: "Nice — you checked the tens digit.",
+        feedback: `The tens digit decides which hundred is closer: ${num} rounds to ${correctN}.`,
+      };
+    },
+  },
+  {
+    id: "multiply-2by1",
+    strand: "number",
+    tier: "review",
+    label: "multiplying larger numbers",
+    gen: (rng) => {
+      const a = randInt(rng, 12, 29);
+      const b = randInt(rng, 3, 8);
+      const correct = fmt(a * b);
+      return {
+        q: `What is ${a} × ${b}?`,
+        correct,
+        distractors: [
+          { value: fmt(a * b - b), tag: "other" },
+          { value: fmt(a * b + b), tag: "other" },
+          { value: fmt(a + b), tag: "other" },
+        ],
+        ccss: "5.NBT.B.5",
+        correctFeedback: "Solid multiplying.",
+        feedback: `Break it up: ${a} × ${b} = ${a * b}.`,
+      };
+    },
+  },
+  // ── retention: ratios & percent (number strand, 6.RP) ──────────────────────
+  {
+    id: "unit-rate",
+    strand: "number",
+    tier: "retention",
+    label: "unit rate",
+    topics: ["ratio", "rate", "unit rate", "proportion", "percent"],
+    gen: (rng) => {
+      const one = randInt(rng, 2, 6);
+      const n = randInt(rng, 2, 5);
+      const total = one * n;
+      return {
+        q: `If ${n} notebooks cost $${total}, how much is 1 notebook?`,
+        correct: fmt(one),
+        distractors: [
+          { value: fmt(total), tag: "other" },
+          { value: fmt(n), tag: "other" },
+          { value: fmt(total * n), tag: "other" },
+        ],
+        ccss: "6.RP.A.2",
+        correctFeedback: "Yes — that's the cost of one, the unit rate.",
+        feedback: `Divide to find the cost of one: $${total} ÷ ${n} = $${one}.`,
+      };
+    },
+  },
+  {
+    id: "ratio-equivalent",
+    strand: "number",
+    tier: "retention",
+    concept: true,
+    label: "equivalent ratios",
+    topics: ["ratio", "proportion", "rate"],
+    gen: () => ({
+      q: "Which ratio is equivalent to 2 : 3?",
+      correct: "4 : 6",
+      distractors: [
+        { value: "3 : 4", tag: "treats ratio as additive" },
+        { value: "2 : 6", tag: "other" },
+        { value: "5 : 6", tag: "other" },
+      ],
+      ccss: "6.RP.A.3a",
+      correctFeedback: "Right — multiply BOTH parts by the same number.",
+      feedback: "Equivalent ratios multiply both parts by the same number: 2:3 doubled is 4:6. Adding 1 to each part (3:4) changes the ratio.",
+    }),
+  },
+  {
+    id: "percent-rule",
+    strand: "number",
+    tier: "retention",
+    concept: true,
+    label: "finding a percent",
+    topics: ["percent", "ratio"],
+    gen: () => ({
+      q: "To find 25% of a number, you can...",
+      correct: "multiply the number by 0.25 (or divide it by 4)",
+      distractors: [
+        { value: "divide the number by 25", tag: "reverses part and whole in percent" },
+        { value: "add 25 to the number", tag: "other" },
+        { value: "subtract 25 from the number", tag: "other" },
+      ],
+      ccss: "6.RP.A.3c",
+      correctFeedback: "Yes — a percent is a part out of 100.",
+      feedback: "25% means 25 out of 100 = 0.25, so multiply the number by 0.25 (the same as dividing by 4).",
+    }),
+  },
+  // ── retention: algebra (6.EE) ──────────────────────────────────────────────
+  {
+    id: "order-of-operations",
+    strand: "algebra",
+    tier: "retention",
+    label: "order of operations",
+    topics: ["order of operation", "gems", "expression", "operations", "evaluate", "algebra"],
+    gen: (rng) => {
+      const a = randInt(rng, 2, 6);
+      const b = randInt(rng, 2, 5);
+      const c = randInt(rng, 2, 6);
+      return {
+        q: `What is ${a} + ${b} × ${c}?`,
+        correct: fmt(a + b * c),
+        distractors: [
+          { value: fmt((a + b) * c), tag: "ignores order of operations" },
+          { value: fmt(a + b + c), tag: "other" },
+          { value: fmt(a * b * c), tag: "other" },
+        ],
+        ccss: "6.EE.A.2c",
+        correctFeedback: "Yes — multiply before you add.",
+        feedback: `Multiply first: ${b} × ${c} = ${b * c}, then add ${a} → ${a + b * c}. Going left to right gives the wrong answer.`,
+      };
+    },
+  },
+  {
+    id: "evaluate-expression",
+    strand: "algebra",
+    tier: "retention",
+    label: "evaluating expressions",
+    topics: ["expression", "variable", "evaluate", "equation", "algebra"],
+    gen: (rng) => {
+      const m = randInt(rng, 2, 5);
+      const x = randInt(rng, 2, 7);
+      const k = randInt(rng, 1, 6);
+      return {
+        q: `If x = ${x}, what is ${m}x + ${k}?`,
+        correct: fmt(m * x + k),
+        distractors: [
+          { value: fmt(m * x), tag: "other" },
+          { value: fmt(m + x + k), tag: "other" },
+          { value: fmt(m * (x + k)), tag: "other" },
+        ],
+        ccss: "6.EE.A.2c",
+        correctFeedback: "Nice substitution.",
+        feedback: `Replace x with ${x}: ${m} × ${x} + ${k} = ${m * x} + ${k} = ${m * x + k}.`,
+      };
+    },
+  },
+  {
+    id: "one-step-equation",
+    strand: "algebra",
+    tier: "retention",
+    label: "one-step equations",
+    topics: ["equation", "solve", "variable", "algebra"],
+    gen: (rng) => {
+      const x = randInt(rng, 2, 12);
+      const p = randInt(rng, 2, 9);
+      return {
+        q: `If x + ${p} = ${x + p}, what is x?`,
+        correct: fmt(x),
+        distractors: [
+          { value: fmt(x + p + p), tag: "other" },
+          { value: fmt(x + p), tag: "other" },
+          { value: fmt(p), tag: "other" },
+        ],
+        ccss: "6.EE.B.7",
+        correctFeedback: "Yes — undo the addition.",
+        feedback: `Subtract ${p} from both sides: ${x + p} − ${p} = ${x}.`,
+      };
+    },
+  },
+  {
+    id: "distributive-concept",
+    strand: "algebra",
+    tier: "retention",
+    concept: true,
+    label: "distributive property",
+    topics: ["distribut", "expression", "equation", "like term", "parenthes", "algebra"],
+    gen: () => ({
+      q: "Which is equal to 3(x + 2)?",
+      correct: "3x + 6",
+      distractors: [
+        { value: "3x + 2", tag: "distributes to first term only" },
+        { value: "x + 6", tag: "other" },
+        { value: "3x + 5", tag: "other" },
+      ],
+      ccss: "6.EE.A.3",
+      correctFeedback: "Right — the 3 multiplies BOTH terms.",
+      feedback: "Distribute the 3 to each term inside: 3 × x and 3 × 2, giving 3x + 6. Only multiplying the first term gives 3x + 2.",
+    }),
+  },
+  {
+    id: "coefficient-concept",
+    strand: "algebra",
+    tier: "retention",
+    concept: true,
+    label: "parts of a term",
+    topics: ["coefficient", "exponent", "term", "expression", "variable", "algebra"],
+    gen: () => ({
+      q: "In the term 4x, what is the 4 called?",
+      correct: "the coefficient",
+      distractors: [
+        { value: "the exponent", tag: "confuses coefficient with exponent" },
+        { value: "the variable", tag: "other" },
+        { value: "the base", tag: "other" },
+      ],
+      ccss: "6.EE.A.2b",
+      correctFeedback: "Yes — the coefficient multiplies the variable.",
+      feedback: "In 4x the 4 multiplies x, so it is the coefficient. An exponent sits small and high, like the 2 in x².",
+    }),
+  },
+  // ── retention: data & statistics (6.SP) ────────────────────────────────────
+  {
+    id: "mean-compute",
+    strand: "data",
+    tier: "retention",
+    label: "finding the mean",
+    topics: ["mean", "average", "data", "statistic"],
+    gen: (rng) => {
+      let a = 0;
+      let b = 0;
+      let c = 0;
+      let mean = 0;
+      let med = 0;
+      let guard = 0;
+      do {
+        a = randInt(rng, 1, 6);
+        b = randInt(rng, 3, 9);
+        c = randInt(rng, 7, 14);
+        mean = (a + b + c) / 3;
+        med = [a, b, c].sort((x, y) => x - y)[1];
+        guard += 1;
+      } while ((!Number.isInteger(mean) || mean === med) && guard < 40);
+      return {
+        q: `What is the MEAN (average) of ${a}, ${b}, and ${c}?`,
+        correct: fmt(mean),
+        distractors: [
+          { value: fmt(med), tag: "confuses mean and median" },
+          { value: fmt(a + b + c), tag: "other" },
+          { value: fmt(Math.max(a, b, c) - Math.min(a, b, c)), tag: "other" },
+        ],
+        ccss: "6.SP.B.5c",
+        correctFeedback: "Yes — add them up and share equally.",
+        feedback: `Add them: ${a} + ${b} + ${c} = ${a + b + c}, then divide by 3 → ${fmt(mean)}. The middle value would be the median, not the mean.`,
+      };
+    },
+  },
+  {
+    id: "range-compute",
+    strand: "data",
+    tier: "retention",
+    label: "finding the range",
+    topics: ["range", "data", "statistic", "spread"],
+    gen: (rng) => {
+      const lo = randInt(rng, 1, 6);
+      const hi = lo + randInt(rng, 5, 12);
+      const mid = randInt(rng, lo + 1, hi - 1);
+      return {
+        q: `What is the RANGE of the data set ${lo}, ${mid}, ${hi}?`,
+        correct: fmt(hi - lo),
+        distractors: [
+          { value: fmt(hi), tag: "other" },
+          { value: fmt(lo + mid + hi), tag: "other" },
+          { value: fmt(mid), tag: "other" },
+        ],
+        ccss: "6.SP.B.5c",
+        correctFeedback: "Right — highest minus lowest.",
+        feedback: `Range = highest − lowest = ${hi} − ${lo} = ${hi - lo}.`,
+      };
+    },
+  },
+  {
+    id: "median-concept",
+    strand: "data",
+    tier: "retention",
+    concept: true,
+    label: "meaning of median",
+    topics: ["median", "mean", "data", "statistic", "average"],
+    gen: () => ({
+      q: "The MEDIAN of a data set is...",
+      correct: "the middle value when the data is put in order",
+      distractors: [
+        { value: "the average of all the values", tag: "confuses mean and median" },
+        { value: "the value that appears most often", tag: "other" },
+        { value: "the highest value minus the lowest", tag: "other" },
+      ],
+      ccss: "6.SP.A.2",
+      correctFeedback: "Yes — order the data, then find the middle.",
+      feedback: "The median is the middle value once the data is in order. The average of all the values is the mean, not the median.",
+    }),
+  },
+  {
+    id: "frequency-concept",
+    strand: "data",
+    tier: "retention",
+    concept: true,
+    label: "reading a dot plot",
+    topics: ["dot plot", "data", "graph", "frequency", "plot", "histogram"],
+    gen: () => ({
+      q: "On a dot plot, the number of dots stacked above a value tells you...",
+      correct: "how many times that value occurs",
+      distractors: [
+        { value: "the value itself", tag: "miscounts frequencies in a data display" },
+        { value: "the total of all the data", tag: "other" },
+        { value: "the average value", tag: "other" },
+      ],
+      ccss: "6.SP.B.4",
+      correctFeedback: "Right — each dot is one data point.",
+      feedback: "Each dot stands for one data value, so a stack of dots shows how many times that value occurs — its frequency.",
+    }),
+  },
 ];
 
 // ── assembly ─────────────────────────────────────────────────────────────────
@@ -485,35 +813,57 @@ const THOUGHT_PROMPTS: Record<Strand, string[]> = {
     "A classmate says the decimal point doesn't really matter when you divide. Are they right? Use an example to explain.",
     "Why can subtracting a number sometimes make the answer larger, and sometimes smaller? Give an example of each.",
   ],
+  algebra: [
+    "Why does 3(x + 2) equal 3x + 6 and not 3x + 2? Pick a number for x and show it works.",
+    "A classmate says 2 + 3 × 4 is 20. What did they do wrong, and what is the right answer? Explain the rule.",
+    "In the term 5x, explain the difference between the 5 and the x using a real example.",
+  ],
   geometry: [
     "Two rectangles have the SAME perimeter but DIFFERENT areas. Explain how that's possible, with an example.",
     "A classmate says a shape with a bigger perimeter must have a bigger area. Are they right? Explain with an example.",
     "Describe, in your own words, a strategy for finding the area of a shape that isn't a plain rectangle.",
+  ],
+  data: [
+    "Two data sets can have the SAME mean but look very different. Explain how, with an example.",
+    "When would the median describe a data set better than the mean? Give an example.",
+    "Explain the difference between the mean and the median as if you were teaching a friend.",
   ],
 };
 
 function strandFor(strandParam: string | undefined, topic: string | undefined, rng: RNG): Strand {
   const p = (strandParam || "").toLowerCase();
   if (p.startsWith("geo")) return "geometry";
+  if (p.startsWith("alg")) return "algebra";
+  if (p.startsWith("dat") || p.startsWith("stat")) return "data";
   if (p.startsWith("num")) return "number";
   const t = (topic || "").toLowerCase();
-  if (/area|perimeter|triangle|rectangle|geometry|coordinate|polygon|volume|shape/.test(t)) return "geometry";
-  if (/fraction|decimal|integer|divis|divide|multipl|number|operation|negative|percent|ratio/.test(t)) return "number";
-  return rng() < 0.5 ? "number" : "geometry";
+  if (/area|perimeter|triangle|rectangle|geometry|coordinate|polygon|volume|shape|angle/.test(t)) return "geometry";
+  if (/express|equation|variable|order of operation|gems|exponent|coefficient|inequalit|distribut|like term|evaluate|solve|algebra/.test(t)) return "algebra";
+  if (/mean|median|mode|range|data|statistic|graph|plot|frequency|histogram|spread/.test(t)) return "data";
+  if (/fraction|decimal|integer|divis|divide|multipl|number|operation|negative|percent|ratio|rate|proportion/.test(t)) return "number";
+  return STRANDS[Math.floor(rng() * STRANDS.length)];
+}
+
+// A keyword matches at a WORD START (so "operation" matches "operations" but
+// "ratio" does NOT match "operations" — a substring match would wrongly pull
+// ratio questions onto an order-of-operations day).
+function keywordHit(haystack: string, keyword: string): boolean {
+  const esc = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`\\b${esc}`).test(haystack);
 }
 
 // Retention (Q4/Q5) templates: recall from this lesson or the previous one or
-// two. Prefer templates whose topic keywords match the current OR previous
-// topic; fall back to the focus strand, then any retention template — so a blank
-// or placeholder topic still yields a valid basic pair.
+// two. Combine templates matching the current OR previous topic with the focus
+// strand's templates, so there's coherent variety (and a concept option) even
+// when the exact topic keyword is narrow; fall back to any retention template so
+// a blank or placeholder topic still yields a valid basic pair.
 function retentionTemplatesFor(topic: string | undefined, prevTopic: string | undefined, focus: Strand): Template[] {
   const t = `${topic || ""} ${prevTopic || ""}`.toLowerCase();
   const pool = TEMPLATES.filter((x) => x.tier === "retention");
-  const byTopic = pool.filter((x) => (x.topics || []).some((k) => t.includes(k)));
-  if (byTopic.length) return byTopic;
+  const byTopic = pool.filter((x) => (x.topics || []).some((k) => keywordHit(t, k)));
   const byStrand = pool.filter((x) => x.strand === focus);
-  if (byStrand.length) return byStrand;
-  return pool;
+  const combined = Array.from(new Set([...byTopic, ...byStrand]));
+  return combined.length ? combined : pool;
 }
 
 function pickFrom(rng: RNG, pool: Template[], used: Set<string>): Template {
