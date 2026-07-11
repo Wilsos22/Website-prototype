@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { buildWarmupSet } from "@/lib/warmupEngine";
+import { buildWarmupSet, standardToStrand } from "@/lib/warmupEngine";
 import { getAllPublishedLessons } from "@/lib/notionLessons";
 
 // Parametric warm-up generator. Returns the day's 6 questions (5 multiple choice
@@ -21,23 +21,34 @@ import { getAllPublishedLessons } from "@/lib/notionLessons";
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const date = searchParams.get("date") || new Date().toISOString().slice(0, 10);
-  const strand = searchParams.get("strand") || undefined;
+  let strand = searchParams.get("strand") || undefined;
   const seedParam = searchParams.get("seed") || undefined;
 
   let topic = searchParams.get("topic") || "";
   let prevTopic = searchParams.get("prevTopic") || "";
+  let topicHint = "";
+  let standard = "";
   let topicSource: "query" | "notion" | "fallback" = topic ? "query" : "fallback";
 
   if (!topic) {
     try {
       const lessons = await getAllPublishedLessons(); // sorted by Date, descending
-      const onDate = lessons.find((l) => l.date === date);
+      // Match the day even when a lesson is scheduled as a week-long Date range.
+      const inRange = (l: { date: string; dateEnd: string }) =>
+        l.date === date || (!!l.date && !!l.dateEnd && l.date <= date && date <= l.dateEnd);
+      const onDate = lessons.find(inRange);
+      // Previous lesson = the most recent published lesson that ended before this date.
       const prior = lessons
-        .filter((l) => l.date && l.date < date)
-        .sort((a, b) => b.date.localeCompare(a.date))[0];
-      if (onDate?.topic || prior?.topic) {
-        topic = onDate?.topic || "";
-        if (!prevTopic) prevTopic = prior?.topic || "";
+        .filter((l) => l.date && (l.dateEnd || l.date) < date)
+        .sort((a, b) => (b.dateEnd || b.date).localeCompare(a.dateEnd || a.date))[0];
+      if (onDate || prior) {
+        standard = onDate?.standard || "";
+        const derived = standardToStrand(standard); // strand straight from the CCSS code
+        if (!strand && derived) strand = derived;
+        topic = onDate?.moduleTopic || onDate?.topic || onDate?.title || "";
+        topicHint = [onDate?.moduleTopic, onDate?.topic, onDate?.title, onDate?.module, standard]
+          .filter(Boolean).join(" ");
+        if (!prevTopic) prevTopic = prior?.moduleTopic || prior?.topic || prior?.title || "";
         topicSource = "notion";
       }
     } catch {
@@ -47,7 +58,7 @@ export async function GET(req: NextRequest) {
 
   // Stable per (topic|date) so the same day rebuilds identically; pass ?seed= to force a fresh set.
   const seed = seedParam || `${topic || date}|${date}`;
-  const set = buildWarmupSet({ topic, prevTopic, strand, date, seed });
+  const set = buildWarmupSet({ topic, topicHint, prevTopic, strand, date, seed });
 
-  return Response.json({ ...set, meta: { date, topicSource, prevTopic: prevTopic || null } });
+  return Response.json({ ...set, meta: { date, topicSource, standard: standard || null, strand: strand || null, prevTopic: prevTopic || null } });
 }

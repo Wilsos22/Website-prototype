@@ -35,6 +35,19 @@ export type Misconception = (typeof MISCONCEPTIONS)[number] | "other";
 export type Strand = "number" | "algebra" | "geometry" | "data";
 export const STRANDS: Strand[] = ["number", "algebra", "geometry", "data"];
 
+// Map a CCSS code's domain to a strand — the most reliable strand signal, taken
+// straight from a lesson's standard (e.g. "6.G.A.1" -> geometry, "6.EE.A.2c" ->
+// algebra, "6.SP.B.5c" -> data, "6.RP.A.3" / "6.NS.B.3" -> number).
+export function standardToStrand(standard: string): Strand | null {
+  const m = String(standard || "").toUpperCase().match(/\b[3-8]\.(NS|RP|EE|G|SP|NBT|NF|OA|MD)\b/);
+  if (!m) return null;
+  const dom = m[1];
+  if (dom === "G") return "geometry";
+  if (dom === "EE") return "algebra";
+  if (dom === "SP" || dom === "MD") return "data";
+  return "number"; // NS, RP, NBT, NF, OA
+}
+
 export interface WarmupMC {
   q: string;
   type: "multiple_choice";
@@ -874,9 +887,10 @@ function pickFrom(rng: RNG, pool: Template[], used: Set<string>): Template {
 }
 
 export interface BuildOptions {
-  topic?: string;
-  strand?: string;
-  prevTopic?: string; // reserved: retention Q4/Q5 from the previous taught day
+  topic?: string; // display topic (shown as dailyTopic)
+  topicHint?: string; // extra keyword text for matching (title/module/standard) — falls back to topic
+  strand?: string; // explicit strand (e.g. derived from the lesson's CCSS standard) — wins over keywords
+  prevTopic?: string; // previous lesson's topic — feeds the retention questions
   seed?: string;
   date?: string;
 }
@@ -889,11 +903,12 @@ export interface BuildOptions {
 export function buildWarmupSet(opts: BuildOptions = {}): WarmupSet {
   const seed = opts.seed || `${opts.topic || ""}|${opts.date || ""}`;
   const rng = mulberry32(hashSeed(seed || "bdm-warmup"));
-  const focus = strandFor(opts.strand, opts.topic, rng);
+  const matchTopic = (opts.topicHint || opts.topic || "").trim(); // keyword text for strand + retention matching
+  const focus = strandFor(opts.strand, matchTopic, rng);
 
   const fluency = TEMPLATES.filter((t) => t.tier === "fluency");
   const review = TEMPLATES.filter((t) => t.tier === "review");
-  const retention = retentionTemplatesFor(opts.topic, opts.prevTopic, focus);
+  const retention = retentionTemplatesFor(matchTopic, opts.prevTopic, focus);
   const concepts = retention.filter((t) => t.concept);
 
   const used = new Set<string>();

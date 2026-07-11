@@ -19,10 +19,13 @@ export interface LessonData {
   subtitle: string;
   essentialIdeas: string;
   assignmentLink: string;
-  date: string;       // ISO date string
+  date: string;       // ISO date string (start of the Date property)
+  dateEnd: string;    // ISO date string (end of a Date range; "" for single dates)
   dueDate: string;    // ISO date string
   topic: string;
   module: string;
+  moduleTopic: string; // the unit/module topic name (better than the raw Topic for warm-ups)
+  standard: string;    // first CCSS code found on the page (e.g. "6.G.A.1"); "" if none
   // Optional agenda fields — add these columns in Notion to fill them; empty if absent.
   agenda: string;        // text, one activity per line
   supplies: string;      // text list, or checked Supply: ... checkbox properties
@@ -51,7 +54,8 @@ interface NotionProperty {
   rich_text?: RichTextItem[];
   url?: string | null;
   select?: { name: string } | null;
-  date?: { start: string } | null;
+  multi_select?: { name: string }[];
+  date?: { start: string; end?: string | null } | null;
   checkbox?: boolean;
   relation?: { id: string }[];
   formula?: {
@@ -80,6 +84,7 @@ function extractText(prop: NotionProperty | undefined): string {
   if (prop.type === "rich_text") return prop.rich_text?.map((t) => t.plain_text).join("") ?? "";
   if (prop.type === "url") return prop.url ?? "";
   if (prop.type === "select") return prop.select?.name ?? "";
+  if (prop.type === "multi_select") return prop.multi_select?.map((s) => s.name).join(", ") ?? "";
   if (prop.type === "date") return prop.date?.start ?? "";
   if (prop.type === "formula") {
     if (prop.formula?.type === "string") return prop.formula.string ?? "";
@@ -251,6 +256,25 @@ const TOOL_CHECKBOX_NAMES = [
   "Timer",
 ];
 
+// End of a Date range (weekly-scheduled lessons); "" for single dates.
+function extractDateEnd(prop: NotionProperty | undefined): string {
+  if (prop?.type === "date") return prop.date?.end ?? "";
+  return "";
+}
+
+// Scan every property for the first CCSS code (e.g. "6.G.A.1", "6.EE.A.2c"), so
+// we get a reliable standard regardless of which property it lives in.
+const CCSS_RE = /\b[3-8]\.(?:NS|RP|EE|G|SP|NBT|NF|OA|MD)\.[A-Za-z0-9.]+/;
+function extractAnyCcss(properties: Record<string, NotionProperty>): string {
+  for (const key of Object.keys(properties)) {
+    let text = "";
+    try { text = extractText(properties[key]); } catch { text = ""; }
+    const m = text.match(CCSS_RE);
+    if (m) return m[0];
+  }
+  return "";
+}
+
 async function mapPage(page: NotionPage, token: string, cache: Map<string, Promise<NotionPage>>): Promise<LessonData> {
   const p = page.properties;
   const supplyText = extractText(p["Supplies"]);
@@ -273,9 +297,12 @@ async function mapPage(page: NotionPage, token: string, cache: Map<string, Promi
     essentialIdeas: extractText(p["Essential Ideas"]),
     assignmentLink: await resolveFirstLink(p, ["Assignment Link", "Assignment", "Assignment URL"], token, cache),
     date: extractText(p["Date"]),
+    dateEnd: extractDateEnd(p["Date"]),
     dueDate: extractText(p["Due Date"]),
     topic: extractFirstText(p, ["Topic", "Topic #", "Topic Code"]),
     module: extractText(p["Module #"]),
+    moduleTopic: extractFirstText(p, ["Module Topic", "Module topic", "Unit Topic", "Topic Name", "Lesson Topic"]),
+    standard: extractAnyCcss(p),
     agenda: extractText(p["Agenda"]),
     supplies: uniq([...splitList(supplyText), ...checkedSupplies]).join("\n"),
     tools: uniq([...splitList(toolText), ...checkedTools]).join("\n"),
