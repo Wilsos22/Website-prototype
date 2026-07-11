@@ -8,7 +8,8 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test:mastery": "tsc src/lib/mastery.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2020 --skipLibCheck && node scripts/mastery-golden.mjs",
-    "test:grouping": "tsc src/lib/grouping.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2021 --skipLibCheck && node scripts/grouping-golden.mjs"
+    "test:grouping": "tsc src/lib/grouping.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2021 --skipLibCheck && node scripts/grouping-golden.mjs",
+    "test:warmup": "tsc src/lib/warmupEngine.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2021 --skipLibCheck && node scripts/warmup-golden.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
