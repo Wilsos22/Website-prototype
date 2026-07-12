@@ -38,6 +38,7 @@ const TOOL_ROUTES: Record<string, string> = {
   "balance beam": "/balance-beam",
   "box method": "/area-model", "distributive area method": "/distributive-area", "distributive area": "/distributive-area",
   "area explorer": "/area-explorer", "area of shapes": "/area-explorer",
+  "ratio explainer": "/ratio-explainer", "ratios explainer": "/ratio-explainer",
 };
 function lines(text?: string) {
   return (text || "").split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
@@ -97,6 +98,8 @@ const DEFAULT_TOOLS: { label: string; href: string }[] = [
   { label: "Number Line", href: "/number-line-plus" },
   { label: "Percent Bar", href: "/percent-bar" },
 ];
+const WARMUP_IDENTITY = process.env.NEXT_PUBLIC_WARMUP_IDENTITY_ENABLED === "true";
+const WARMUP_IDENTITY_PLACEHOLDER = "BDM_AUTH_USER_ID";
 
 function fmtDate(iso: string) {
   if (!iso) return "";
@@ -116,6 +119,8 @@ export default function LessonPage() {
   const [answered, setAnswered] = useState<string[]>([]);
   const [answerText, setAnswerText] = useState("");
   const [sent, setSent] = useState(false);
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
+  const [pollError, setPollError] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -123,6 +128,11 @@ export default function LessonPage() {
       const s = localStorage.getItem("bdm-student-session"); if (s) setSess(JSON.parse(s));
     } catch { /* ignore */ }
   }, []);
+
+  useEffect(() => {
+    if (!WARMUP_IDENTITY || !supabase) return;
+    void supabase.auth.getSession().then(({ data }) => setAuthUserId(data.session?.user.id ?? null));
+  }, [supabase]);
 
   useEffect(() => {
     if (!sess || !supabase) return;
@@ -146,7 +156,27 @@ export default function LessonPage() {
 
   async function submitPoll(ans: string) {
     if (!supabase || !activePoll || !sess || !ans.trim()) return;
-    await supabase.from("poll_answers").insert({ poll_id: activePoll.id, student_id: sess.studentId, display_name: sess.name, answer: ans.trim() });
+    setPollError(null);
+    if (WARMUP_IDENTITY) {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) {
+        setPollError("Rejoin the class before sending your answer.");
+        return;
+      }
+      const response = await fetch("/api/student/poll-answer", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ pollId: activePoll.id, answer: ans.trim() }),
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({})) as { error?: string };
+        setPollError(result.error || "Your answer could not be saved.");
+        return;
+      }
+    } else {
+      await supabase.from("poll_answers").insert({ poll_id: activePoll.id, student_id: sess.studentId, display_name: sess.name, answer: ans.trim() });
+    }
     setAnswered((a) => [...a, activePoll.id]); setSent(true); setAnswerText("");
     setTimeout(() => setActivePoll(null), 1300);
   }
@@ -169,6 +199,11 @@ export default function LessonPage() {
   const conceptItems = lesson ? buildConceptItems(lesson) : [];
   const activityItems = lesson ? buildActivityItems(lesson, agendaItems) : [];
   const exitHref = lesson?.exitTicketLink || "/exit-ticket";
+  const warmupHref = lesson?.warmUpLink && authUserId
+    ? lesson.warmUpLink
+      .replaceAll(WARMUP_IDENTITY_PLACEHOLDER, encodeURIComponent(authUserId))
+      .replaceAll(encodeURIComponent(WARMUP_IDENTITY_PLACEHOLDER), encodeURIComponent(authUserId))
+    : lesson?.warmUpLink || "";
 
   return (
     <main className="ls-page">
@@ -242,6 +277,7 @@ export default function LessonPage() {
         .ls-poll-in { flex:1; border:2px solid color-mix(in srgb, var(--bdb-teal) 30%, white); border-radius:12px; padding:13px 15px; font-size:1.1rem; font-weight:600; box-sizing:border-box; }
         .ls-poll-send { background:var(--bdb-teal); color:#fff; border:none; border-radius:12px; padding:0 22px; font-weight:700; cursor:pointer; }
         .ls-poll-sent { font-size:1.6rem; font-weight:700; color:var(--bdb-green); }
+        .ls-poll-error { color:var(--bdb-coral); font-weight:700; margin-top:12px; }
         @media (max-width:840px) {
           .ls-hero, .ls-concept-layout, .ls-activity-grid { grid-template-columns:1fr; }
           .ls-meta { grid-template-columns:1fr 1fr; }
@@ -267,8 +303,8 @@ export default function LessonPage() {
 
             {lesson && (
               <div className="ls-actions">
-                {lesson.warmUpLink ? (
-                  <a className="ls-action primary" href={lesson.warmUpLink} target="_blank" rel="noopener noreferrer">
+                {warmupHref && (!WARMUP_IDENTITY || !warmupHref.includes(WARMUP_IDENTITY_PLACEHOLDER)) ? (
+                  <a className="ls-action primary" href={warmupHref} target="_blank" rel="noopener noreferrer">
                     <b>Start the warm-up<span>Open today's first task.</span></b>
                     <span className="ls-action-word">Open</span>
                   </a>
@@ -437,6 +473,7 @@ export default function LessonPage() {
                     <button className="ls-poll-send" onClick={() => submitPoll(answerText)}>Send</button>
                   </div>
                 )}
+                {pollError && <div className="ls-poll-error">{pollError}</div>}
               </>
             )}
           </div>
