@@ -31,6 +31,9 @@ type DiscussionContent = {
   keyVocabulary?: string[];
 };
 
+const WARMUP_IDENTITY = process.env.NEXT_PUBLIC_WARMUP_IDENTITY_ENABLED === "true";
+const WARMUP_IDENTITY_PLACEHOLDER = "BDM_AUTH_USER_ID";
+
 const DISCUSSION_CONTENT: Record<DiscussionPhaseId, DiscussionContent> = {
   think: {
     title: "🧠 Thinking Time",
@@ -99,6 +102,24 @@ export default function LiveFlowPage() {
   const [pollAnswer, setPollAnswer] = useState("");
   const [fistRating, setFistRating] = useState(3);
   const [submittedPollIds, setSubmittedPollIds] = useState<string[]>([]);
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!WARMUP_IDENTITY || !supabase) return;
+    let stopped = false;
+    const loadAuthUser = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!stopped) setAuthUserId(data.session?.user.id ?? null);
+    };
+    void loadAuthUser();
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!stopped) setAuthUserId(session?.user.id ?? null);
+    });
+    return () => {
+      stopped = true;
+      listener.subscription.unsubscribe();
+    };
+  }, [supabase]);
 
   useEffect(() => {
     const sessionId = getStoredStudentSessionId();
@@ -243,7 +264,15 @@ export default function LiveFlowPage() {
   const keyVocabulary = (phase?.keyVocabulary ? phase.keyVocabulary : discussion?.keyVocabulary ?? [])
     .map((word) => word.trim())
     .filter(Boolean);
-  const stateLink = flow?.state?.link ?? "";
+  const rawStateLink = flow?.state?.link ?? "";
+  const stateLink = rawStateLink && authUserId
+    ? rawStateLink
+      .replaceAll(WARMUP_IDENTITY_PLACEHOLDER, encodeURIComponent(authUserId))
+      .replaceAll(encodeURIComponent(WARMUP_IDENTITY_PLACEHOLDER), encodeURIComponent(authUserId))
+    : rawStateLink;
+  const safeStateLink = WARMUP_IDENTITY && stateLink.includes(WARMUP_IDENTITY_PLACEHOLDER)
+    ? ""
+    : stateLink;
   const paperTask = flow?.state?.paperTask ?? "";
   const resourceLabel = flow?.state?.id === "warmup"
     ? "Open warm-up"
@@ -360,9 +389,9 @@ export default function LiveFlowPage() {
                 <div className="lf-status">{status}</div>
               </div>
             )}
-            {!activePoll && (stateLink || paperTask) && (
+            {!activePoll && (safeStateLink || paperTask) && (
               <section className="lf-task" aria-label="Current task">
-                {stateLink && <a className="lf-task-link" href={stateLink} target="_blank" rel="noopener noreferrer">{resourceLabel}</a>}
+                {safeStateLink && <a className="lf-task-link" href={safeStateLink} target="_blank" rel="noopener noreferrer">{resourceLabel}</a>}
                 {paperTask && <p className="lf-paper"><strong>On paper:</strong> {paperTask}</p>}
               </section>
             )}
