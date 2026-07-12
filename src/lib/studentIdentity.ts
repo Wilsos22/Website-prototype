@@ -135,10 +135,10 @@ async function claimGoogleRosterRow(user: User): Promise<StudentRow> {
 }
 
 export async function requireVerifiedStudent(request: Request): Promise<VerifiedStudent> {
+  const token = bearerToken(request);
   const db = getSupabaseAdmin();
   if (!db) throw new StudentIdentityError("Student sign-in is not configured.", 503, "identity_not_configured");
 
-  const token = bearerToken(request);
   const { data: authData, error: authError } = await db.auth.getUser(token);
   if (authError || !authData.user) {
     throw new StudentIdentityError("Your sign-in expired. Sign in again.", 401, "invalid_access_token");

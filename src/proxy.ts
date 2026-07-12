@@ -14,6 +14,7 @@ const PROTECTED_PREFIXES = [
   "/api/checkpoints",
   "/api/outreach",
   "/api/submissions",
+  "/api/teacher",
 ];
 
 function isProtectedPath(pathname: string) {
@@ -37,37 +38,60 @@ function readBasicAuth(header: string | null) {
   }
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const password = process.env.TEACHER_PASSWORD;
   const { pathname, search } = request.nextUrl;
 
-  if (!password || !isProtectedPath(pathname)) {
+  if (!isProtectedPath(pathname)) {
     return NextResponse.next();
   }
 
-  // 1. Device cookie (set once by /teacher-login, lasts ~6 months).
+  if (!password) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Teacher access is not configured." }, { status: 503 });
+    }
+    const login = new URL("/teacher-login", request.url);
+    login.searchParams.set("next", `${pathname}${search}`);
+    login.searchParams.set("error", "configuration");
+    return NextResponse.redirect(login);
+  }
+
+  if (pathname.startsWith("/api/teacher/") && !["GET", "HEAD", "OPTIONS"].includes(request.method)) {
+    const origin = request.headers.get("origin");
+    if (origin) {
+      try {
+        if (new URL(origin).host !== request.nextUrl.host) {
+          return NextResponse.json({ error: "Cross-site teacher request blocked." }, { status: 403 });
+        }
+      } catch {
+        return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
+      }
+    }
+  }
+
   const expected = await teacherToken(password);
   if (request.cookies.get(TEACHER_COOKIE)?.value === expected) {
     return NextResponse.next();
   }
 
-  // 2. Vercel cron authenticates with CRON_SECRET.
   const cronSecret = process.env.CRON_SECRET;
   if (cronSecret && request.headers.get("authorization") === `Bearer ${cronSecret}`) {
     return NextResponse.next();
   }
 
-  // 3. Proactive basic auth (curl/scripts) still works — and upgrades to the cookie.
   const auth = readBasicAuth(request.headers.get("authorization"));
   if (auth && auth.password === password && auth.username === (process.env.TEACHER_USERNAME || "teacher")) {
-    const res = NextResponse.next();
-    res.cookies.set(TEACHER_COOKIE, expected, {
-      path: "/", maxAge: TEACHER_COOKIE_MAX_AGE, httpOnly: true, secure: true, sameSite: "lax",
+    const response = NextResponse.next();
+    response.cookies.set(TEACHER_COOKIE, expected, {
+      path: "/",
+      maxAge: TEACHER_COOKIE_MAX_AGE,
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
     });
-    return res;
+    return response;
   }
 
-  // 4. Unauthenticated: APIs get a JSON 401 (no browser popup); pages go to the login screen.
   if (pathname.startsWith("/api/")) {
     return NextResponse.json({ error: "Teacher login required." }, { status: 401 });
   }
@@ -93,5 +117,8 @@ export const config = {
     "/api/outreach",
     "/api/submissions/:path*",
     "/api/submissions",
+    "/api/teacher/:path*",
+    "/api/teacher",
   ],
 };
+

@@ -78,6 +78,24 @@ Do not run `supabase/student-data-security.sql` until all of these are true:
 - Review Supabase security advisors after every schema or policy change.
 - Review Vercel runtime errors and authentication failures after each pilot.
 
+## Protected teacher API foundation
+
+The security branch provides cookie-gated, server-only routes for:
+
+- roster and period management;
+- sessions, class-state updates, joins, polls, and poll answers;
+- challenges and leaderboards;
+- practice assignments and results;
+- checkpoint answer keys and results;
+- exit tickets and responses;
+- lesson presets.
+
+The project runs Next.js 16, so the request gate must live at `src/proxy.ts`.
+The deprecated root `middleware.ts` file did not execute in local authorization
+tests. The proxy now fails closed when `TEACHER_PASSWORD` is absent, rejects
+unauthenticated API requests, redirects teacher pages to login, and blocks
+cross-site teacher mutations.
+
 ## District boundary
 
 These controls make the application technically defensible, but they do not
