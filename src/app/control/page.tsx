@@ -27,6 +27,11 @@ import {
   type LiveToolRoute,
 } from "@/lib/liveClassFlow";
 import {
+  joinLiveFlowTransport,
+  type LiveFlowTransportChannel,
+  type LiveFlowTransportCommand,
+} from "@/lib/liveFlowTransport";
+import {
   listLessonPresets,
   getLessonPreset,
   saveLessonPreset,
@@ -420,6 +425,9 @@ export default function ControlPage() {
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const musicRef = useRef<HTMLAudioElement | null>(null);
+  const flowTransportRef = useRef<LiveFlowTransportChannel | null>(null);
+  const flowTransportHandlerRef = useRef<(command: LiveFlowTransportCommand) => void>(() => undefined);
+  const seenFlowTransportIdsRef = useRef<Set<string>>(new Set());
 
   // ── Load saved bank minutes + lineup + uploaded sounds ──────────────────
   useEffect(() => {
@@ -1211,6 +1219,47 @@ export default function ControlPage() {
     if (currentIndex + 1 < lineup.length) loadIndex(currentIndex + 1);
     else { setRunning(false); setFinished(false); setCurrentIndex(-1); }
   }
+
+  flowTransportHandlerRef.current = (command) => {
+    if (command === "back") {
+      if (currentIndex > 0) loadIndex(currentIndex - 1);
+      return;
+    }
+    if (command === "toggle") {
+      if (running) toggleRun();
+      else runSequence();
+      return;
+    }
+    if (command === "reset") {
+      reset();
+      return;
+    }
+    next();
+  };
+
+  useEffect(() => {
+    const sessionId = teacherSession?.id;
+    if (!sessionId) return;
+    const channel = joinLiveFlowTransport(sessionId, (message) => {
+      if (message.type === "ack") return;
+      if (message.type === "ping") {
+        flowTransportRef.current?.send({ type: "ack", id: message.id, sentAt: new Date().toISOString() });
+        return;
+      }
+      const seen = seenFlowTransportIdsRef.current;
+      if (!seen.has(message.id)) {
+        seen.add(message.id);
+        if (seen.size > 80) seen.delete(seen.values().next().value as string);
+        flowTransportHandlerRef.current(message.command);
+      }
+      flowTransportRef.current?.send({ type: "ack", id: message.id, sentAt: new Date().toISOString() });
+    });
+    flowTransportRef.current = channel;
+    return () => {
+      if (flowTransportRef.current === channel) flowTransportRef.current = null;
+      channel.close();
+    };
+  }, [teacherSession?.id]);
   function editMinutes(id: string, minutes: number) {
     const clamped = Math.max(1, Math.min(120, Math.round(minutes) || 1));
     persistBank(bank.map((s) => (s.id === id ? { ...s, minutes: clamped } : s)));
