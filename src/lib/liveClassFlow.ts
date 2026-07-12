@@ -104,6 +104,11 @@ export interface DiscussionPhaseSnapshot {
 export interface LiveClassFlowSnapshot {
   version: 1;
   updatedAt: string;
+  sequence?: {
+    current: number;
+    total: number;
+    nextLabel: string | null;
+  } | null;
   state: {
     id: string;
     label: string;

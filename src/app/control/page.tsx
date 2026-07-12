@@ -939,6 +939,17 @@ export default function ControlPage() {
         }
       : null;
     const tool = publishedTool?.stateId === activeToolState ? publishedTool.tool : null;
+    const nextLineupItem = lineup[currentIndex + 1];
+    const nextLineupState = nextLineupItem
+      ? bank.find((item) => item.id === nextLineupItem.stateId)
+      : null;
+    const sequence = activeState
+      ? {
+          current: currentIndex + 1,
+          total: lineup.length,
+          nextLabel: nextLineupState?.label ?? null,
+        }
+      : null;
     const timer = poll?.stage === "results"
       ? null
       : phase?.timed && phase.totalSeconds !== null && phase.secondsLeft !== null
@@ -957,8 +968,8 @@ export default function ControlPage() {
           }
         : null;
 
-    return JSON.stringify({ version: 1, state, phase, timer, poll, tool });
-  }, [activeInteractiveState, activeState, activeToolState, controlPoll, discussionFlow, finished, publishedTool, running, secondsLeft, showDiscussion]);
+    return JSON.stringify({ version: 1, sequence, state, phase, timer, poll, tool });
+  }, [activeInteractiveState, activeState, activeToolState, bank, controlPoll, currentIndex, discussionFlow, finished, lineup, publishedTool, running, secondsLeft, showDiscussion]);
 
   // Keep student Chromebooks in sync with the existing /control state machine.
   // The write is skipped unless the teacher explicitly selected Live Class Flow.
