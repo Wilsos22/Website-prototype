@@ -154,7 +154,23 @@ async function resolveLink(prop: NotionProperty | undefined, token: string, cach
       continue;
     }
 
-    for (const relatedProp of Object.values(relatedPage.properties)) {
+    const preferredRelatedProperties = [
+      "Form Link",
+      "Student Link",
+      "Published Link",
+      "Assignment Link",
+      "Exit Ticket Link",
+      "URL",
+    ];
+
+    for (const propertyName of preferredRelatedProperties) {
+      const url = extractUrl(relatedPage.properties[propertyName]);
+      if (url) return url;
+    }
+
+    const preferredNames = new Set(preferredRelatedProperties);
+    for (const [propertyName, relatedProp] of Object.entries(relatedPage.properties)) {
+      if (preferredNames.has(propertyName)) continue;
       const url = extractUrl(relatedProp);
       if (url) return url;
     }
