@@ -114,6 +114,8 @@ export interface LiveClassFlowSnapshot {
     label: string;
     description: string;
     color: string;
+    link?: string | null;
+    paperTask?: string | null;
   } | null;
   phase: DiscussionPhaseSnapshot | null;
   timer: {

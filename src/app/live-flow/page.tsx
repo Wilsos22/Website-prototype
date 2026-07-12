@@ -243,6 +243,13 @@ export default function LiveFlowPage() {
   const keyVocabulary = (phase?.keyVocabulary ? phase.keyVocabulary : discussion?.keyVocabulary ?? [])
     .map((word) => word.trim())
     .filter(Boolean);
+  const stateLink = flow?.state?.link ?? "";
+  const paperTask = flow?.state?.paperTask ?? "";
+  const resourceLabel = flow?.state?.id === "warmup"
+    ? "Open warm-up"
+    : flow?.state?.id === "exit"
+      ? "Open exit ticket"
+      : "Open task";
   const showDiscussionSupports = !activePoll && (sentenceStems.length > 0 || keyVocabulary.length > 0);
 
   return (
@@ -262,6 +269,9 @@ export default function LiveFlowPage() {
         .lf-time { color:#fff; font-size:clamp(4.6rem,15vw,10rem); font-variant-numeric:tabular-nums; font-weight:900; line-height:0.9; letter-spacing:0; }
         .lf-status { color:var(--lf-accent); font-size:0.78rem; font-weight:900; letter-spacing:0.13em; text-transform:uppercase; }
         .lf-directions { width:min(100%,720px); display:grid; gap:10px; margin:0; padding:0; list-style:none; }
+        .lf-task { width:min(100%,760px); display:grid; justify-items:center; gap:12px; }
+        .lf-task-link { display:inline-flex; min-height:54px; align-items:center; justify-content:center; border:1px solid color-mix(in srgb, var(--lf-accent) 70%, white); border-radius:12px; background:var(--lf-accent); color:#fff; padding:0 24px; text-decoration:none; font-size:1rem; font-weight:950; letter-spacing:0.04em; }
+        .lf-paper { margin:0; border-left:4px solid var(--lf-accent); background:#151a27; color:#e8ecf5; padding:12px 16px; font-size:clamp(0.95rem,2vw,1.2rem); font-weight:800; line-height:1.35; text-align:left; }
         .lf-direction { border-left:5px solid var(--lf-accent); background:#151a27; color:#f4f6fb; padding:clamp(13px,2vw,18px) clamp(17px,3vw,26px); text-align:left; font-size:clamp(1.05rem,2.5vw,1.45rem); font-weight:800; line-height:1.35; }
         .lf-supports { width:min(100%,1000px); display:grid; grid-template-columns:minmax(0,1.35fr) minmax(230px,0.75fr); gap:14px; text-align:left; }
         .lf-support-panel { min-width:0; display:grid; align-content:start; gap:13px; border:1px solid #29324a; border-top:5px solid var(--lf-accent); border-radius:12px; background:#151a27; padding:clamp(16px,2.5vw,24px); }
@@ -349,6 +359,12 @@ export default function LiveFlowPage() {
                 <div className="lf-time">{formatTime(timer.secondsLeft)}</div>
                 <div className="lf-status">{status}</div>
               </div>
+            )}
+            {!activePoll && (stateLink || paperTask) && (
+              <section className="lf-task" aria-label="Current task">
+                {stateLink && <a className="lf-task-link" href={stateLink} target="_blank" rel="noopener noreferrer">{resourceLabel}</a>}
+                {paperTask && <p className="lf-paper"><strong>On paper:</strong> {paperTask}</p>}
+              </section>
             )}
             {activePoll ? activePoll.stage === "responding" ? (
               <section className="lf-poll">

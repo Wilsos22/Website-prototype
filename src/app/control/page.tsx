@@ -43,12 +43,14 @@ import { launchChallenge, endChallenge, fetchLeaderboard, type ChallengeRow, typ
 import { launchExitTicket, type ExitKind } from "@/lib/exitTickets";
 import { SBAC_CHECKPOINTS, getCheckpoint } from "@/lib/sbacCheckpoints";
 import { launchCheckpoint } from "@/lib/checkpoints";
+import type { LessonStepData } from "@/lib/notionLessons";
 
 import { DEFAULT_STATES, BANK_GROUPS, type ClassState } from "@/lib/classStates";
 
 interface LineupItem {
   uid: string;
   stateId: string;
+  step?: LessonStepData;
 }
 
 interface TeacherSessionRow {
@@ -115,7 +117,7 @@ interface PublishedTool {
 
 interface ControlPoll {
   id: string;
-  stateId: InteractiveStateId;
+  lineupUid: string;
   kind: LivePollKind;
   question: string;
   choices: string[] | null;
@@ -319,7 +321,7 @@ async function idbDel(key: string): Promise<void> {
 // The published lesson lists its tools as free text (e.g. "Number Line"). Map
 // those names to bank state ids so the teacher can load and run the day's
 // lesson as one sequence instead of rebuilding it by hand.
-type TodayLesson = { title?: string; tools?: string | null };
+type TodayLesson = { title?: string; tools?: string | null; lessonSteps?: LessonStepData[] };
 
 const LESSON_TOOL_ALIASES: Record<string, string> = {
   whiteboard: "tool-whiteboard",
@@ -379,6 +381,24 @@ function matchLessonToolStateId(name: string): string | null {
       && (normalizeToolName(s.label).includes(norm) || norm.includes(normalizeToolName(s.label))),
   );
   return loose ? loose.id : null;
+}
+
+function stepDisplayTitle(title: string): string {
+  return title.replace(/^\s*\d+\.\s*/, "").trim();
+}
+
+function resolveLineupState(item: LineupItem | undefined, bank: ClassState[]): ClassState | undefined {
+  if (!item) return undefined;
+  const base = bank.find((state) => state.id === item.stateId);
+  if (!base) return undefined;
+  const step = item.step;
+  if (!step) return base;
+  return {
+    ...base,
+    label: stepDisplayTitle(step.title) || base.label,
+    minutes: step.duration > 0 ? step.duration : base.minutes,
+    desc: step.studentDirections || base.desc,
+  };
 }
 
 export default function ControlPage() {
@@ -446,7 +466,7 @@ export default function ControlPage() {
       if (rawLine) {
         const savedLineup = JSON.parse(rawLine) as LineupItem[];
         setLineup(savedLineup);
-        const firstState = savedLineup[0] ? loadedBank.find((state) => state.id === savedLineup[0].stateId) : undefined;
+        const firstState = resolveLineupState(savedLineup[0], loadedBank);
         if (firstState) {
           setCurrentIndex(0);
           secRef.current = firstState.minutes * 60;
@@ -615,14 +635,16 @@ export default function ControlPage() {
     return () => { if (tickRef.current) clearInterval(tickRef.current); };
   }, [running, playCue, stopMusic]);
 
+  const activeItem = currentIndex >= 0 ? lineup[currentIndex] : undefined;
+
   // ── Auto-advance to the next lineup item when time's up ─────────────────
   useEffect(() => {
-    if (!finished || !autoAdvance || controlPoll) return;
+    if (!finished || !autoAdvance || controlPoll || activeItem?.step?.advance === "Manual") return;
     const ni = currentIndex + 1;
     if (ni >= lineup.length) return;
     const t = setTimeout(() => {
       const item = lineup[ni];
-      const st = item ? bank.find((s) => s.id === item.stateId) : undefined;
+      const st = resolveLineupState(item, bank);
       if (!st) return;
       stopMusic();
       setCurrentIndex(ni);
@@ -633,16 +655,15 @@ export default function ControlPage() {
       startMusicFor(st.id);
     }, 2600);
     return () => clearTimeout(t);
-  }, [finished, autoAdvance, bank, controlPoll, currentIndex, lineup, startMusicFor, stopMusic]);
+  }, [activeItem?.step?.advance, finished, autoAdvance, bank, controlPoll, currentIndex, lineup, startMusicFor, stopMusic]);
 
-  const activeItem = currentIndex >= 0 ? lineup[currentIndex] : undefined;
   const filteredPresets = presets.filter((p) => {
     const t = presetSearch.trim().toLowerCase();
     return !t || p.code.toLowerCase().includes(t) || p.title.toLowerCase().includes(t);
   });
-  const activeState = activeItem ? bank.find((s) => s.id === activeItem.stateId) : undefined;
+  const activeState = resolveLineupState(activeItem, bank);
   const totalMin = lineup.reduce((sum, it) => {
-    const st = bank.find((s) => s.id === it.stateId);
+    const st = resolveLineupState(it, bank);
     return sum + (st?.minutes ?? 0);
   }, 0);
   const activeInteractiveState: InteractiveStateId | null = activeState?.id === "question" || activeState?.id === "poll"
@@ -651,13 +672,14 @@ export default function ControlPage() {
   const activeToolState: ToolStateId | null = isToolStateId(activeState?.id) ? activeState.id : null;
 
   useEffect(() => {
-    if (activeInteractiveState === "question") {
-      setPollKind("short-answer");
-    } else if (activeInteractiveState === "poll") {
-      setPollKind("fist-to-five");
-      setPollQuestion((current) => current || "How well do you understand this right now?");
-    }
-  }, [activeInteractiveState]);
+    if (!activeInteractiveState) return;
+    const step = activeItem?.step;
+    const defaultKind: LivePollKind = activeInteractiveState === "poll" ? "fist-to-five" : "short-answer";
+    setPollKind(step?.pollKind || defaultKind);
+    setPollQuestion(step?.question || (activeInteractiveState === "poll" ? "How well do you understand this right now?" : ""));
+    setPollChoices(step?.choices?.length ? [...step.choices, "", "", ""].slice(0, 4) : ["", "", "", ""]);
+    setPollError(null);
+  }, [activeInteractiveState, activeItem?.uid]);
 
   const closeActivePoll = useCallback(() => {
     if (!controlPoll || controlPoll.stage === "results") return;
@@ -668,11 +690,11 @@ export default function ControlPage() {
   }, [controlPoll, supabase]);
 
   useEffect(() => {
-    if (!controlPoll || controlPoll.stateId === activeInteractiveState) return;
+    if (!controlPoll || controlPoll.lineupUid === activeItem?.uid) return;
     closeActivePoll();
     setControlPoll(null);
     setPollAnswers([]);
-  }, [activeInteractiveState, closeActivePoll, controlPoll]);
+  }, [activeItem?.uid, closeActivePoll, controlPoll]);
 
   useEffect(() => {
     if (publishedTool?.stateId !== activeToolState) {
@@ -787,7 +809,7 @@ export default function ControlPage() {
 
     setControlPoll({
       id: (data as { id: string }).id,
-      stateId: activeInteractiveState,
+      lineupUid: activeItem?.uid ?? activeInteractiveState,
       kind: pollKind,
       question,
       choices,
@@ -934,10 +956,12 @@ export default function ControlPage() {
           label: activeState.label,
           description: activeState.desc,
           color: activeState.color,
+          link: activeItem?.step?.link || null,
+          paperTask: activeItem?.step?.paperTask || null,
         }
       : null;
     const phase = activeState?.id === "discussion" && showDiscussion ? discussionFlow : null;
-    const poll = controlPoll?.stateId === activeInteractiveState
+    const poll = controlPoll && controlPoll.lineupUid === activeItem?.uid
       ? {
           id: controlPoll.id,
           kind: controlPoll.kind,
@@ -948,9 +972,7 @@ export default function ControlPage() {
       : null;
     const tool = publishedTool?.stateId === activeToolState ? publishedTool.tool : null;
     const nextLineupItem = lineup[currentIndex + 1];
-    const nextLineupState = nextLineupItem
-      ? bank.find((item) => item.id === nextLineupItem.stateId)
-      : null;
+    const nextLineupState = resolveLineupState(nextLineupItem, bank);
     const sequence = activeState
       ? {
           current: currentIndex + 1,
@@ -1038,7 +1060,7 @@ export default function ControlPage() {
   function loadIndex(i: number) {
     const item = lineup[i];
     if (!item) return;
-    const st = bank.find((s) => s.id === item.stateId);
+    const st = resolveLineupState(item, bank);
     if (!st) return;
     setCurrentIndex(i);
     secRef.current = st.minutes * 60;
@@ -1115,27 +1137,49 @@ export default function ControlPage() {
       window.setTimeout(() => setTodayMsg(null), 6000);
       return;
     }
-    const mapped: string[] = [];
+    const fallbackMapped: string[] = [];
     const unmatched: string[] = [];
-    for (const name of parseLessonList(lesson.tools)) {
-      const id = matchLessonToolStateId(name);
-      if (id) { if (!mapped.includes(id)) mapped.push(id); }
-      else unmatched.push(name);
+    const stepLineup: LineupItem[] = [];
+    for (const step of [...(lesson.lessonSteps ?? [])].sort((a, b) => a.order - b.order)) {
+      let stateId = step.stateId;
+      if (!bank.some((state) => state.id === stateId)) {
+        stateId = matchLessonToolStateId(step.tool) ?? "";
+      }
+      if (!stateId || !bank.some((state) => state.id === stateId)) {
+        unmatched.push(`${step.title || "Untitled step"} (${step.stateId || step.tool || "no state"})`);
+        continue;
+      }
+      stepLineup.push({ uid: uid(), stateId, step: { ...step, stateId } });
+    }
+    if (stepLineup.length === 0) {
+      for (const name of parseLessonList(lesson.tools)) {
+        const id = matchLessonToolStateId(name);
+        if (id) { if (!fallbackMapped.includes(id)) fallbackMapped.push(id); }
+        else unmatched.push(name);
+      }
     }
     if (lineup.length > 0 && !window.confirm(`Replace today's lineup with “${lesson.title || "today's lesson"}”?`)) {
       setTodayMsg(null);
       return;
     }
-    const newLineup = ["warmup", ...mapped, "exit"].map((stateId) => ({ uid: uid(), stateId }));
+    const newLineup = stepLineup.length > 0
+      ? stepLineup
+      : ["warmup", ...fallbackMapped, "exit"].map((stateId) => ({ uid: uid(), stateId }));
     persistLineup(newLineup);
-    const first = bank.find((s) => s.id === newLineup[0].stateId);
+    const first = resolveLineupState(newLineup[0], bank);
     setCurrentIndex(0);
     if (first) { secRef.current = first.minutes * 60; setSecondsLeft(first.minutes * 60); }
     setRunning(false);
     setFinished(false);
     stopMusic();
     setShowLessons(false);
-    const parts = [`Loaded “${lesson.title || "today's lesson"}”`, `${mapped.length} tool${mapped.length === 1 ? "" : "s"} added`];
+    const loadedMinutes = newLineup.reduce((sum, item) => sum + (resolveLineupState(item, bank)?.minutes ?? 0), 0);
+    const parts = [
+      `Loaded “${lesson.title || "today's lesson"}”`,
+      stepLineup.length > 0
+        ? `${stepLineup.length} lesson steps · ${loadedMinutes} minutes`
+        : `${fallbackMapped.length} tool${fallbackMapped.length === 1 ? "" : "s"} added`,
+    ];
     if (unmatched.length) parts.push(`couldn't match: ${unmatched.join(", ")}`);
     setTodayMsg(parts.join(" · "));
     window.setTimeout(() => setTodayMsg(null), 8000);
@@ -1175,7 +1219,7 @@ export default function ControlPage() {
     if (lineup.length === 0) return;
     const nextIndex = currentIndex >= 0 ? currentIndex : 0;
     const item = lineup[nextIndex];
-    const state = item ? bank.find((bankState) => bankState.id === item.stateId) : undefined;
+    const state = resolveLineupState(item, bank);
     if (!state) return;
     setAutoAdvance(true);
     setCurrentIndex(nextIndex);
@@ -1305,7 +1349,7 @@ export default function ControlPage() {
   const denom = activeState ? activeState.minutes * 60 : 1;
   const pct = activeState ? Math.max(0, Math.min(100, (secondsLeft / denom) * 100)) : 0;
   const hasNext = currentIndex + 1 < lineup.length;
-  const nextState = hasNext ? bank.find((s) => s.id === lineup[currentIndex + 1].stateId) : undefined;
+  const nextState = hasNext ? resolveLineupState(lineup[currentIndex + 1], bank) : undefined;
   const liveFlowConnected = teacherSession?.status === "open" && teacherSession.broadcast === LIVE_FLOW_MODE;
   const liveFlowStatus = !supabase
     ? "Live sync unavailable"
@@ -1852,7 +1896,7 @@ export default function ControlPage() {
           <span className="cx-lineup-title">Today</span>
           {lineup.length === 0 && <span className="cx-empty-line">empty — add states from the bank ↓</span>}
           {lineup.map((it, i) => {
-            const st = bank.find((s) => s.id === it.stateId);
+            const st = resolveLineupState(it, bank);
             if (!st) return null;
             return (
               <div key={it.uid} className={`cx-litem${i === currentIndex ? " cur" : ""}`} onClick={() => loadIndex(i)}>

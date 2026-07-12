@@ -42,6 +42,28 @@ export interface LessonData {
   // Pre-planned reteach groups: one line per group, "misconception tag :: prepared move".
   // The Right-now view matches live clusters to these and shows YOUR plan first.
   misconceptionPlans: string;
+  lessonSteps: LessonStepData[];
+}
+
+// Student-safe fields from the related Math 6 Lesson Steps records. Teacher
+// notes, answer keys, and AI context are intentionally excluded because the
+// lesson endpoints are also consumed by student-facing pages.
+export interface LessonStepData {
+  id: string;
+  title: string;
+  order: number;
+  duration: number;
+  startMinute: number;
+  stateId: string;
+  studentDirections: string;
+  paperTask: string;
+  question: string;
+  pollKind: "short-answer" | "multiple-choice" | "fist-to-five" | "";
+  choices: string[];
+  tool: string;
+  link: string;
+  advance: "Automatic" | "Manual" | "";
+  required: boolean;
 }
 
 interface RichTextItem {
@@ -50,6 +72,7 @@ interface RichTextItem {
 
 interface NotionProperty {
   type: string;
+  number?: number | null;
   title?: RichTextItem[];
   rich_text?: RichTextItem[];
   url?: string | null;
@@ -97,6 +120,15 @@ function extractText(prop: NotionProperty | undefined): string {
     if (prop.rollup?.type === "date") return prop.rollup.date?.start ?? "";
   }
   return "";
+}
+
+function extractNumber(prop: NotionProperty | undefined): number {
+  if (!prop) return 0;
+  if (prop.type === "number") return prop.number ?? 0;
+  if (prop.type === "formula" && prop.formula?.type === "number") return prop.formula.number ?? 0;
+  if (prop.type === "rollup" && prop.rollup?.type === "number") return prop.rollup.number ?? 0;
+  const parsed = Number(extractText(prop));
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function firstUrlFromText(text: string): string {
@@ -190,6 +222,49 @@ async function resolveFirstLink(
     if (link) return link;
   }
   return "";
+}
+
+function mapLessonStep(page: NotionPage): LessonStepData {
+  const p = page.properties;
+  const pollKind = extractText(p["Poll Kind"]);
+  return {
+    id: page.id,
+    title: extractText(p["Step"]),
+    order: extractNumber(p["Order"]),
+    duration: extractNumber(p["Duration"]),
+    startMinute: extractNumber(p["Start Minute"]),
+    stateId: extractText(p["State ID"]).trim(),
+    studentDirections: extractText(p["Student Directions"]),
+    paperTask: extractText(p["Paper Task"]),
+    question: extractText(p["Question"]),
+    pollKind: pollKind === "short-answer" || pollKind === "multiple-choice" || pollKind === "fist-to-five" ? pollKind : "",
+    choices: extractText(p["Choices"]).split(/[\n,]+/).map((choice) => choice.trim()).filter(Boolean),
+    tool: extractText(p["Tool"]),
+    link: extractUrl(p["Link"]),
+    advance: extractText(p["Advance"]) === "Automatic" ? "Automatic" : extractText(p["Advance"]) === "Manual" ? "Manual" : "",
+    required: p["Required"]?.type === "checkbox" ? Boolean(p["Required"].checkbox) : false,
+  };
+}
+
+async function resolveLessonSteps(
+  prop: NotionProperty | undefined,
+  token: string,
+  cache: Map<string, Promise<NotionPage>>,
+): Promise<LessonStepData[]> {
+  if (prop?.type !== "relation") return [];
+  const pages = await Promise.all((prop.relation ?? []).map(async (relation) => {
+    try {
+      return await fetchRelatedPage(relation.id, token, cache);
+    } catch (err) {
+      console.warn(err instanceof Error ? err.message : err);
+      return null;
+    }
+  }));
+  return pages
+    .filter((page): page is NotionPage => Boolean(page))
+    .map(mapLessonStep)
+    .filter((step) => step.stateId && step.duration > 0)
+    .sort((a, b) => a.order - b.order);
 }
 
 function extractFirstText(properties: Record<string, NotionProperty>, names: string[]): string {
@@ -305,6 +380,15 @@ async function mapPage(page: NotionPage, token: string, cache: Map<string, Promi
   ]);
   const hasSupplyCheckboxes = hasPrefixedCheckboxProperties(p, SUPPLY_PREFIXES) || hasNamedCheckboxProperties(p, SUPPLY_CHECKBOX_NAMES);
   const hasToolCheckboxes = hasPrefixedCheckboxProperties(p, TOOL_PREFIXES) || hasNamedCheckboxProperties(p, TOOL_CHECKBOX_NAMES);
+  const [warmUpLink, exitTicketLink, rawLessonSteps] = await Promise.all([
+    resolveFirstLink(p, ["Warm Up Link", "Warm-Up Link", "Warm up links 1", "Warm-Up", "Warm Up"], token, cache),
+    resolveFirstLink(p, ["Exit Ticket Link", "Exit-Ticket Link", "Exit Ticket", "Exit Ticket URL"], token, cache),
+    resolveLessonSteps(p["Lesson Steps"], token, cache),
+  ]);
+  const lessonSteps = rawLessonSteps.map((step) => ({
+    ...step,
+    link: step.link || (step.stateId === "warmup" ? warmUpLink : step.stateId === "exit" ? exitTicketLink : ""),
+  }));
 
   return {
     id: page.id,
@@ -324,13 +408,14 @@ async function mapPage(page: NotionPage, token: string, cache: Map<string, Promi
     tools: uniq([...splitList(toolText), ...checkedTools]).join("\n"),
     suppliesConfigured: Boolean(supplyText.trim()) || hasSupplyCheckboxes,
     toolsConfigured: Boolean(toolText.trim()) || hasToolCheckboxes,
-    warmUpLink: await resolveFirstLink(p, ["Warm Up Link", "Warm-Up Link", "Warm up links 1", "Warm-Up", "Warm Up"], token, cache),
-    exitTicketLink: await resolveFirstLink(p, ["Exit Ticket Link", "Exit-Ticket Link", "Exit Ticket", "Exit Ticket URL"], token, cache),
+    warmUpLink,
+    exitTicketLink,
     learningIntention: extractText(p["Learning Intention"]),
     successCriteria: extractText(p["Success Criteria"]),
     discussionPrompt: extractText(p["Discussion Prompt"]),
     practiceProblems: extractText(p["Practice Problems"]),
     misconceptionPlans: extractText(p["Misconception Plans"]),
+    lessonSteps,
   };
 }
 
