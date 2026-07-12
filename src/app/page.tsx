@@ -9,6 +9,8 @@ import { useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
 import { clearClassModeExitMarker, markStudentTab } from "@/lib/liveClassFlow";
 
+const WARMUP_IDENTITY = process.env.NEXT_PUBLIC_WARMUP_IDENTITY_ENABLED === "true";
+
 export default function StudentLanding() {
   const router = useRouter();
   const supabase = getSupabase();
@@ -17,26 +19,59 @@ export default function StudentLanding() {
   const [joinSess, setJoinSess] = useState<{ id: string; periodId: string } | null>(null);
   const [roster, setRoster] = useState<{ id: string; full_name: string }[]>([]);
   const [joinErr, setJoinErr] = useState<string | null>(null);
+  const [warmupIdentityReady, setWarmupIdentityReady] = useState(!WARMUP_IDENTITY);
 
   useEffect(() => {
     try { const n = localStorage.getItem("bdm-student-name"); if (n) setName(n.trim().split(/\s+/)[0]); } catch { /* ignore */ }
   }, []);
+
+  useEffect(() => {
+    if (!WARMUP_IDENTITY || !supabase) return;
+    let stopped = false;
+    const prepare = async () => {
+      const { data: existing } = await supabase.auth.getSession();
+      if (existing.session) {
+        if (!stopped) setWarmupIdentityReady(true);
+        return;
+      }
+      const { error } = await supabase.auth.signInAnonymously();
+      if (stopped) return;
+      if (error) setJoinErr(`Warm-up identity is not available: ${error.message}`);
+      else setWarmupIdentityReady(true);
+    };
+    void prepare();
+    return () => { stopped = true; };
+  }, [supabase]);
 
   async function submitCode() {
     setJoinErr(null);
     const c = code.trim().toUpperCase();
     if (c.length < 2) return;
     if (!supabase) { setJoinErr("Live sessions aren't set up yet."); return; }
+    if (WARMUP_IDENTITY && !warmupIdentityReady) {
+      setJoinErr("Big Dog is still preparing the verified warm-up. Try again in a moment.");
+      return;
+    }
     const { data: sess } = await supabase.from("sessions").select("id,period_id").eq("join_code", c).eq("status", "open").limit(1).maybeSingle();
     if (!sess) { setJoinErr("That code isn't open right now — check with your teacher."); return; }
     const s = sess as { id: string; period_id: string };
+    if (WARMUP_IDENTITY) {
+      try {
+        clearClassModeExitMarker();
+        localStorage.removeItem("bdm-student-name");
+        localStorage.setItem("bdm-student-session", JSON.stringify({ sessionId: s.id, studentId: "", name: "" }));
+        markStudentTab();
+      } catch { /* ignore */ }
+      router.push("/lesson");
+      return;
+    }
     const { data: studs } = await supabase.from("students").select("id,full_name").eq("period_id", s.period_id).order("full_name");
     setJoinSess({ id: s.id, periodId: s.period_id });
     setRoster((studs as { id: string; full_name: string }[]) || []);
   }
 
   async function pickName(s: { id: string; full_name: string }) {
-    if (supabase && joinSess) {
+    if (supabase && joinSess && !WARMUP_IDENTITY) {
       await supabase.from("session_joins").insert({ session_id: joinSess.id, student_id: s.id, display_name: s.full_name });
     }
     try {
