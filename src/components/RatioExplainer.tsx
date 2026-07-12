@@ -10,7 +10,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-const DUR = 23; // Figma timelineCohort durationMs / 1000
+const DUR = 25; // Figma timelineCohort durationMs / 1000
 const STAGE_W = 1920;
 const STAGE_H = 1080;
 const pct = (s: number) => +((s / DUR) * 100).toFixed(3);
@@ -62,9 +62,9 @@ const BONES = [
 const KEYFRAMES = [
   fadeKF("rxTitle", 0.3, 1.5),
   moveKF("rxTitleMove", 0.3, 1.5, -40, EASE_OUT),
-  fadeKF("rxSub", 2.2, 3.2, [18.0, 19.0]),
-  fadeKF("rxClose", 19.2, 20.2),
-  moveKF("rxCloseMove", 19.2, 20.2, 24, EASE_OUT),
+  fadeKF("rxSub", 2.2, 3.2, [20.8, 21.8]),
+  fadeKF("rxClose", 22.0, 23.0),
+  moveKF("rxCloseMove", 22.0, 23.0, 24, EASE_OUT),
   ...BALLS.flatMap((b, i) => [
     fadeKF(`rxBall${i}`, b.t0, b.t1),
     moveKF(`rxBall${i}Move`, b.t0, b.t1, -70, EASE_BACK),
@@ -78,7 +78,10 @@ const KEYFRAMES = [
   fadeKF("rxWords", 13.4, 14.4),
   popKF("rxWordsPop", 13.4, 14.4),
   fadeKF("rxArrows", 14.8, 15.6),
-  fadeKF("rxNota", 16.4, 17.4),
+  fadeKF("rxWaysLabel", 16.2, 17.0),
+  fadeKF("rxChip0", 17.2, 18.0),
+  fadeKF("rxChip1", 18.4, 19.2),
+  fadeKF("rxChip2", 19.6, 20.4),
 ].join("\n");
 
 // Arrow geometry: shaft stops short of the target so the head caps it cleanly.
@@ -186,7 +189,21 @@ export default function RatioExplainer() {
         .rx-bone-label { left: 800px; width: 1120px; top: 560px; text-align: center; font-size: 54px; font-weight: 700; color: var(--bdb-teal); animation-name: rxBoneLabel; }
         .rx-words { top: 655px; font-size: 130px; font-weight: 800; transform-origin: 960px 90px; animation-name: rxWords, rxWordsPop; }
         .rx-arrows { left: 0; top: 0; animation-name: rxArrows; }
-        .rx-nota { top: 855px; font-size: 80px; font-weight: 800; animation-name: rxNota; }
+        .rx-ways-label { top: 832px; font-size: 40px; font-weight: 600; color: var(--bdb-ink-soft); animation-name: rxWaysLabel; }
+        .rx-ways {
+          left: 0; right: 0; top: 892px;
+          display: flex; justify-content: center; align-items: center; gap: 48px;
+        }
+        .rx-chip {
+          background: var(--bdb-card); border: 1px solid var(--bdb-line);
+          border-radius: var(--bdb-r-lg); box-shadow: var(--bdb-shadow-sm);
+          padding: 14px 40px; font-size: 60px; font-weight: 800;
+        }
+        .rx-chip-0 { animation-name: rxChip0; }
+        .rx-chip-1 { animation-name: rxChip1; }
+        .rx-chip-2 { animation-name: rxChip2; }
+        .rx-frac { display: inline-flex; flex-direction: column; align-items: center; gap: 7px; font-size: 42px; line-height: 1; }
+        .rx-frac-bar { width: 58px; height: 6px; border-radius: 3px; background: var(--bdb-ink); }
         .rx-coral { color: var(--bdb-coral); }
         .rx-teal { color: var(--bdb-teal); }
         .rx-soft { color: var(--bdb-ink-soft); }
@@ -247,8 +264,21 @@ export default function RatioExplainer() {
             </g>
           </svg>
 
-          <div className="rx-anim rx-center rx-nota">
-            <span className="rx-coral">3</span> <span className="rx-soft">:</span> <span className="rx-teal">2</span>
+          <div className="rx-anim rx-center rx-ways-label">3 ways to write it</div>
+          <div className="rx-ways">
+            <div className="rx-anim rx-chip rx-chip-0">
+              <span className="rx-coral">3</span> to <span className="rx-teal">2</span>
+            </div>
+            <div className="rx-anim rx-chip rx-chip-1">
+              <span className="rx-coral">3</span> <span className="rx-soft">:</span> <span className="rx-teal">2</span>
+            </div>
+            <div className="rx-anim rx-chip rx-chip-2">
+              <span className="rx-frac">
+                <span className="rx-coral">3</span>
+                <span className="rx-frac-bar" />
+                <span className="rx-teal">2</span>
+              </span>
+            </div>
           </div>
         </div>
       </div>
