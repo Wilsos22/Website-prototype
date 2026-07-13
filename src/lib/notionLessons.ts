@@ -174,7 +174,12 @@ async function fetchRelatedPage(pageId: string, token: string, cache: Map<string
   return cached;
 }
 
-async function resolveLink(prop: NotionProperty | undefined, token: string, cache: Map<string, Promise<NotionPage>>): Promise<string> {
+async function resolveLink(
+  prop: NotionProperty | undefined,
+  token: string,
+  cache: Map<string, Promise<NotionPage>>,
+  relatedPropertyNames: string[] = [],
+): Promise<string> {
   const directUrl = extractUrl(prop);
   if (directUrl) return directUrl;
 
@@ -187,6 +192,11 @@ async function resolveLink(prop: NotionProperty | undefined, token: string, cach
     } catch (err) {
       console.warn(err instanceof Error ? err.message : err);
       continue;
+    }
+
+    for (const name of relatedPropertyNames) {
+      const url = extractUrl(relatedPage.properties[name]);
+      if (url) return url;
     }
 
     for (const relatedProp of Object.values(relatedPage.properties)) {
@@ -203,9 +213,10 @@ async function resolveFirstLink(
   names: string[],
   token: string,
   cache: Map<string, Promise<NotionPage>>,
+  relatedPropertyNames: string[] = [],
 ): Promise<string> {
   for (const name of names) {
-    const link = await resolveLink(properties[name], token, cache);
+    const link = await resolveLink(properties[name], token, cache, relatedPropertyNames);
     if (link) return link;
   }
   return "";
@@ -377,7 +388,13 @@ async function mapPage(page: NotionPage, token: string, cache: Map<string, Promi
     tools: uniq([...splitList(toolText), ...checkedTools]).join("\n"),
     suppliesConfigured: Boolean(supplyText.trim()) || hasSupplyCheckboxes,
     toolsConfigured: Boolean(toolText.trim()) || hasToolCheckboxes,
-    warmUpLink: await resolveFirstLink(p, ["Warm Up Link", "Warm-Up Link", "Warm up links 1", "Warm-Up", "Warm Up"], token, cache),
+    warmUpLink: await resolveFirstLink(
+      p,
+      ["Warm Up Link", "Warm-Up Link", "Warm up links 1", "Warm-Up", "Warm Up"],
+      token,
+      cache,
+      ["Form Link"],
+    ),
     exitTicketLink: await resolveFirstLink(p, ["Exit Ticket Link", "Exit-Ticket Link", "Exit Ticket", "Exit Ticket URL"], token, cache),
     learningIntention: extractText(p["Learning Intention"]),
     successCriteria: extractText(p["Success Criteria"]),
