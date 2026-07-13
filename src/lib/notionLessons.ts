@@ -10,11 +10,33 @@ const DATA_SOURCE_IDS = [
 ];
 const NOTION_API = "https://api.notion.com/v1";
 const NOTION_VERSION = "2025-09-03";
-const NOTION_TOKEN= "secret";
+
+export interface LessonStepData {
+  id: string;
+  title: string;
+  order: number;
+  startMinute: number;
+  duration: number;
+  stateId: string;
+  studentDirections: string;
+  teacherNotes: string;
+  paperTask: string;
+  tool: string;
+  question: string;
+  pollKind: "short-answer" | "multiple-choice" | "fist-to-five" | "";
+  choices: string[];
+  correctAnswer: string;
+  standard: string;
+  aiContext: string;
+  advance: string;
+  required: boolean;
+  linkUrl: string;
+}
 
 
 export interface LessonData {
   id: string;
+  lessonCode: string;
   title: string;
   subtitle: string;
   essentialIdeas: string;
@@ -42,6 +64,11 @@ export interface LessonData {
   // Pre-planned reteach groups: one line per group, "misconception tag :: prepared move".
   // The Right-now view matches live clusters to these and shows YOUR plan first.
   misconceptionPlans: string;
+  liveQuestions: string;
+  midLessonCheckPrompt: string;
+  exitTicketPrompt: string;
+  exitTicketAnswer: string;
+  steps: LessonStepData[];
 }
 
 interface RichTextItem {
@@ -57,6 +84,7 @@ interface NotionProperty {
   multi_select?: { name: string }[];
   date?: { start: string; end?: string | null } | null;
   checkbox?: boolean;
+  number?: number | null;
   relation?: { id: string }[];
   formula?: {
     type: string;
@@ -97,6 +125,13 @@ function extractText(prop: NotionProperty | undefined): string {
     if (prop.rollup?.type === "date") return prop.rollup.date?.start ?? "";
   }
   return "";
+}
+
+function extractNumber(prop: NotionProperty | undefined): number {
+  if (!prop) return 0;
+  if (prop.type === "number") return Number(prop.number ?? 0);
+  const value = Number(extractText(prop));
+  return Number.isFinite(value) ? value : 0;
 }
 
 function firstUrlFromText(text: string): string {
@@ -290,8 +325,42 @@ async function mapPage(page: NotionPage, token: string, cache: Map<string, Promi
   const hasSupplyCheckboxes = hasPrefixedCheckboxProperties(p, SUPPLY_PREFIXES) || hasNamedCheckboxProperties(p, SUPPLY_CHECKBOX_NAMES);
   const hasToolCheckboxes = hasPrefixedCheckboxProperties(p, TOOL_PREFIXES) || hasNamedCheckboxProperties(p, TOOL_CHECKBOX_NAMES);
 
+  const steps = await Promise.all((p["Lesson Steps"]?.relation ?? []).map(async ({ id }) => {
+    const related = await fetchRelatedPage(id, token, cache);
+    const step = related.properties;
+    const rawKind = extractText(step["Poll Kind"]);
+    const pollKind = rawKind === "short-answer" || rawKind === "multiple-choice" || rawKind === "fist-to-five"
+      ? rawKind
+      : "";
+    return {
+      id: related.id,
+      title: extractFirstText(step, ["Step title", "Name", "Step"]),
+      order: extractNumber(step["Order"]),
+      startMinute: extractNumber(step["Start Minute"]),
+      duration: extractNumber(step["Duration"]),
+      stateId: extractText(step["State ID"]),
+      studentDirections: extractText(step["Student Directions"]),
+      teacherNotes: extractText(step["Teacher Notes"]),
+      paperTask: extractText(step["Paper Task"]),
+      tool: extractText(step["Tool"]),
+      question: extractText(step["Question"]),
+      pollKind,
+      choices: splitList(extractText(step["Choices"])),
+      correctAnswer: extractText(step["Correct Answer"]),
+      standard: extractText(step["Standard"]),
+      aiContext: extractText(step["AI Context"]),
+      advance: extractText(step["Advance"]),
+      required: step["Required"]?.checkbox ?? false,
+      linkUrl: extractFirstText(step, ["Link", "Link URL"])
+        ? extractUrl(step["Link"]) || extractUrl(step["Link URL"])
+        : "",
+    } satisfies LessonStepData;
+  }));
+  steps.sort((a, b) => a.order - b.order || a.startMinute - b.startMinute || a.title.localeCompare(b.title));
+
   return {
     id: page.id,
+    lessonCode: extractText(p["Lesson Code"]),
     title: extractText(p["Lesson"]),
     subtitle: extractText(p["Subtitle"]),
     essentialIdeas: extractText(p["Essential Ideas"]),
@@ -315,6 +384,11 @@ async function mapPage(page: NotionPage, token: string, cache: Map<string, Promi
     discussionPrompt: extractText(p["Discussion Prompt"]),
     practiceProblems: extractText(p["Practice Problems"]),
     misconceptionPlans: extractText(p["Misconception Plans"]),
+    liveQuestions: extractText(p["Live Questions"]),
+    midLessonCheckPrompt: extractText(p["Mid-Lesson Check Prompt"]),
+    exitTicketPrompt: extractText(p["Exit Ticket Prompt"]),
+    exitTicketAnswer: extractText(p["Exit Ticket Answer"]),
+    steps,
   };
 }
 
@@ -378,4 +452,16 @@ export async function getAllPublishedLessons(): Promise<LessonData[]> {
     },
     sorts: [{ property: "Date", direction: "descending" }],
   });
+}
+
+export async function getLessonByCode(code: string): Promise<LessonData | null> {
+  const normalizedCode = code.trim();
+  if (!normalizedCode) return null;
+  const lessons = await queryLessons({
+    filter: {
+      property: "Lesson Code",
+      rich_text: { equals: normalizedCode },
+    },
+  });
+  return lessons[0] ?? null;
 }

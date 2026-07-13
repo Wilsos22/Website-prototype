@@ -1,17 +1,15 @@
 "use client";
 
-// Teacher Rosters — reads/writes periods + students directly from Supabase.
-// Proves the Supabase connection and lets you enter your real class rosters.
+// Teacher rosters are loaded through the protected server API.
 
 import { useEffect, useState, useCallback } from "react";
-import { getSupabase } from "@/lib/supabase";
+import { teacherApiRequest, teacherPost } from "@/lib/teacherApi";
 import SiteNav from "@/components/SiteNav";
 
 interface Period { id: string; name: string; sort_order: number; }
 interface Student { id: string; period_id: string; full_name: string; email: string | null; }
 
 export default function RosterPage() {
-  const supabase = getSupabase();
   const [periods, setPeriods] = useState<Period[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
@@ -22,49 +20,59 @@ export default function RosterPage() {
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!supabase) { setLoading(false); return; }
     setLoading(true); setError(null);
-    const [p, s] = await Promise.all([
-      supabase.from("periods").select("*").order("sort_order"),
-      supabase.from("students").select("*").order("full_name"),
-    ]);
-    if (p.error) setError(p.error.message);
-    else { setPeriods(p.data as Period[]); setStudents((s.data as Student[]) || []); }
+    try {
+      const result = await teacherApiRequest<{
+        periods: Period[];
+        students: Array<{ id: string; periodId: string; fullName: string; email: string | null }>;
+      }>("/api/teacher/roster");
+      setPeriods(result.periods);
+      setStudents(result.students.map((student) => ({
+        id: student.id,
+        period_id: student.periodId,
+        full_name: student.fullName,
+        email: student.email,
+      })));
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Roster could not be loaded.");
+    }
     setLoading(false);
-  }, [supabase]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 
   async function addPeriod() {
-    if (!supabase || !newPeriod.trim()) return;
-    const { error } = await supabase.from("periods").insert({ name: newPeriod.trim(), sort_order: periods.length + 1 });
-    if (error) { setError(error.message); return; }
+    if (!newPeriod.trim()) return;
+    try {
+      await teacherPost("/api/teacher/roster", { action: "create-period", name: newPeriod.trim(), sortOrder: periods.length + 1 });
+    } catch (actionError) { setError(actionError instanceof Error ? actionError.message : "Period could not be added."); return; }
     setNewPeriod(""); load();
   }
   async function addStudent(periodId: string) {
     const name = (nameInputs[periodId] || "").trim();
-    if (!supabase || !name) return;
-    const { error } = await supabase.from("students").insert({ period_id: periodId, full_name: name });
-    if (error) { setError(error.message); return; }
+    if (!name) return;
+    try {
+      await teacherPost("/api/teacher/roster", { action: "create-student", periodId, fullName: name });
+    } catch (actionError) { setError(actionError instanceof Error ? actionError.message : "Student could not be added."); return; }
     setNameInputs((m) => ({ ...m, [periodId]: "" })); load();
   }
   async function removeStudent(id: string) {
-    if (!supabase) return;
-    await supabase.from("students").delete().eq("id", id); load();
+    await teacherPost("/api/teacher/roster", { action: "delete-student", studentId: id, confirm: true });
+    load();
   }
   async function syncFromNotion() {
     if (syncing) return;
-    setSyncing(true); setSyncMsg("Reading the Notion roster…");
+    setSyncing(true); setSyncMsg("Reading the Notion roster...");
     try {
       const res = await fetch("/api/roster/sync", { method: "POST" });
       const d = await res.json();
-      if (d.error) setSyncMsg(`⚠ ${d.error}`);
+      if (d.error) setSyncMsg(`Warning: ${d.error}`);
       else {
-        const extra = d.onSiteNotInNotion?.length ? ` · on site but not in Notion: ${d.onSiteNotInNotion.join(", ")}` : "";
-        setSyncMsg(`✓ Synced ${d.notionRows} Notion rows — ${d.created} added, ${d.updated} updated, ${d.unchanged} unchanged${d.periodsCreated ? `, ${d.periodsCreated} new period(s)` : ""}${extra}`);
+        const extra = d.onSiteNotInNotion?.length ? `; on site but not in Notion: ${d.onSiteNotInNotion.join(", ")}` : "";
+        setSyncMsg(`Synced ${d.notionRows} Notion rows: ${d.created} added, ${d.updated} updated, ${d.unchanged} unchanged${d.periodsCreated ? `, ${d.periodsCreated} new period(s)` : ""}${extra}`);
         load();
       }
-    } catch { setSyncMsg("⚠ Sync failed — network error."); }
+    } catch { setSyncMsg("Sync failed: network error."); }
     finally { setSyncing(false); }
   }
 
@@ -96,16 +104,10 @@ export default function RosterPage() {
         <h1 className="rs-h1">Class rosters</h1>
         <p className="rs-sub">Your periods and students, saved in Supabase.</p>
 
-        {!supabase && (
-          <div className="rs-warn">
-            Supabase isn&apos;t connected yet. Add <code>NEXT_PUBLIC_SUPABASE_URL</code> and
-            <code> NEXT_PUBLIC_SUPABASE_ANON_KEY</code> in Vercel and redeploy, then refresh this page.
-          </div>
-        )}
-        {error && <div className="rs-err">⚠ {error}</div>}
-        {loading && supabase && <p className="rs-empty">Loading…</p>}
+        {error && <div className="rs-err">{error}</div>}
+        {loading && <p className="rs-empty">Loading...</p>}
 
-        {supabase && !loading && (
+        {!loading && (
           <>
             <div className="rs-card">
               <h2>Sync from Notion</h2>
@@ -115,7 +117,7 @@ export default function RosterPage() {
               </p>
               <div className="rs-row">
                 <button className="rs-btn" style={{ minHeight: 42 }} onClick={syncFromNotion} disabled={syncing}>
-                  {syncing ? "Syncing…" : "⟳ Sync from Notion"}
+                  {syncing ? "Syncing..." : "Sync from Notion"}
                 </button>
               </div>
               {syncMsg && <p style={{ margin: "12px 0 0", fontWeight: 700, color: "#4a4636", fontSize: "0.9rem" }}>{syncMsg}</p>}
@@ -130,13 +132,13 @@ export default function RosterPage() {
               </div>
             </div>
 
-            {periods.length === 0 && <p className="rs-empty">No periods yet — add your first one above.</p>}
+            {periods.length === 0 && <p className="rs-empty">No periods yet; add your first one above.</p>}
 
             {periods.map((p) => {
               const roster = students.filter((s) => s.period_id === p.id);
               return (
                 <div className="rs-card" key={p.id}>
-                  <h2>{p.name} <span style={{ color: "#b3aa97", fontWeight: 700, fontSize: "0.85rem" }}>· {roster.length} students</span></h2>
+                  <h2>{p.name} <span style={{ color: "#b3aa97", fontWeight: 700, fontSize: "0.85rem" }}>- {roster.length} students</span></h2>
                   <div className="rs-row">
                     <input className="rs-in" placeholder="Add a student name" value={nameInputs[p.id] || ""}
                       onChange={(e) => setNameInputs((m) => ({ ...m, [p.id]: e.target.value }))}

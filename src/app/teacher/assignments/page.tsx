@@ -6,7 +6,7 @@
 // at /assignment/<id>; every attempt is logged like the live-game data.
 
 import { useCallback, useEffect, useState } from "react";
-import { getSupabase } from "@/lib/supabase";
+import { teacherApiRequest } from "@/lib/teacherApi";
 import SiteNav from "@/components/SiteNav";
 import { SKILLS, getSkill } from "@/lib/challengeSkills";
 import {
@@ -22,8 +22,10 @@ import {
 
 interface Period { id: string; name: string; }
 
+const TEACHER_SERVER_CLIENT = {} as never;
+
 export default function TeacherAssignmentsPage() {
-  const supabase = getSupabase();
+  const supabase = TEACHER_SERVER_CLIENT;
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [periods, setPeriods] = useState<Period[]>([]);
   const [missing, setMissing] = useState(false);
@@ -55,10 +57,11 @@ export default function TeacherAssignmentsPage() {
   }, [supabase]);
 
   useEffect(() => {
-    if (!supabase) { setLoading(false); return; }
     void refresh();
-    supabase.from("periods").select("id,name").order("sort_order").then(({ data }) => setPeriods((data as Period[]) || []));
-  }, [supabase, refresh]);
+    teacherApiRequest<{ periods: Period[] }>("/api/teacher/roster")
+      .then((result) => setPeriods(result.periods))
+      .catch(() => setPeriods([]));
+  }, [refresh]);
 
   async function create() {
     if (!supabase) return;
@@ -162,7 +165,7 @@ export default function TeacherAssignmentsPage() {
                   const sk = getSkill(a.skill);
                   return (
                     <div key={a.id} className={`ta-row${a.status === "closed" ? " closed" : ""}`}>
-                      <span className="ta-row-emoji">{sk?.emoji || "📝"}</span>
+                      <span className="ta-row-emoji">{sk?.label.slice(0, 1) || "P"}</span>
                       <button className="ta-row-main" onClick={() => openResults(a)}>
                         <span className="ta-row-title">{a.title}</span>
                         <span className="ta-row-meta">{a.target_rounds} rounds · {periodName(a.period_id)}{a.due_label ? ` · ${a.due_label}` : ""}{a.status === "closed" ? " · closed" : ""}</span>
@@ -179,7 +182,7 @@ export default function TeacherAssignmentsPage() {
 
         {open && (
           <>
-            <button className="ta-back" onClick={() => setOpen(null)}>← All assignments</button>
+            <button className="ta-back" onClick={() => setOpen(null)}>All assignments</button>
             <div className="ta-card">
               <div className="ta-d-head">
                 <div>
@@ -201,7 +204,7 @@ export default function TeacherAssignmentsPage() {
               <>
                 <div className="ta-card">
                   <h3 className="ta-ch">Most-missed problems</h3>
-                  {misses.length === 0 ? <p className="ta-soft">No misses yet. 🎯</p> : (
+                  {misses.length === 0 ? <p className="ta-soft">No misses yet.</p> : (
                     <div className="ta-miss">
                       {misses.map((m) => (
                         <div className="ta-miss-row" key={m.prompt}>
@@ -221,14 +224,14 @@ export default function TeacherAssignmentsPage() {
                       const flag = acc < 60;
                       return (
                         <div className={`ta-st-row${flag ? " flag" : ""}`} key={s.key}>
-                          <span className="ta-st-name">{s.name}{s.done ? " ✓" : ""}</span>
+                          <span className="ta-st-name">{s.name}{s.done ? " - complete" : ""}</span>
                           <span className="ta-st-bar"><span className="ta-st-fill" style={{ width: `${acc}%`, background: flag ? "#f95335" : "#2f9e6f" }} /></span>
                           <span className="ta-st-acc">{s.correct}/{s.total}</span>
                         </div>
                       );
                     })}
                   </div>
-                  <p className="ta-soft" style={{ marginTop: 10 }}>✓ = reached the round target. Highlighted rows are below 60%.</p>
+                  <p className="ta-soft" style={{ marginTop: 10 }}>Complete means the student reached the round target. Highlighted rows are below 60%.</p>
                 </div>
               </>
             )}

@@ -2,11 +2,11 @@
 
 // "Right now" — the live grouping view. One card per misconception cluster:
 // who's in it, their archetype, and the differentiated next move for each
-// sub-group. Plus the non-submitter (logistics) card. One glance → one move.
+// sub-group. Plus the non-submitter (logistics) card. One glance gives one move.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import SiteNav from "@/components/SiteNav";
-import { getSupabase } from "@/lib/supabase";
+import { teacherApiRequest } from "@/lib/teacherApi";
 import { ARCHETYPE_LABEL, type Archetype } from "@/lib/grouping";
 
 interface Period { id: string; name: string }
@@ -34,7 +34,6 @@ const ARCH_COLOR: Record<Archetype, string> = {
 };
 
 export default function RightNowPage() {
-  const supabase = useMemo(() => getSupabase(), []);
   const [periods, setPeriods] = useState<Period[]>([]);
   const [periodId, setPeriodId] = useState("");
   const [clusters, setClusters] = useState<ClusterOut[]>([]);
@@ -57,20 +56,16 @@ export default function RightNowPage() {
   }, []);
 
   useEffect(() => {
-    if (!supabase) return;
     (async () => {
-      const [{ data: pData }, { data: sData }] = await Promise.all([
-        supabase.from("periods").select("id,name").order("sort_order"),
-        supabase.from("students").select("period_id"),
-      ]);
+      const result = await teacherApiRequest<{ periods: Period[]; students: Array<{ periodId: string }> }>("/api/teacher/roster");
       const counts = new Map<string, number>();
-      for (const s of (sData as { period_id: string }[]) || []) counts.set(s.period_id, (counts.get(s.period_id) || 0) + 1);
-      const ps = ((pData as Period[]) || []).map((p) => ({ ...p, name: `${p.name} · ${counts.get(p.id) || 0} students` }));
+      for (const student of result.students) counts.set(student.periodId, (counts.get(student.periodId) || 0) + 1);
+      const ps = result.periods.map((period) => ({ ...period, name: `${period.name} - ${counts.get(period.id) || 0} students` }));
       setPeriods(ps);
       const fullest = [...ps].sort((a, b) => (counts.get(b.id) || 0) - (counts.get(a.id) || 0))[0];
       if (fullest) setPeriodId(fullest.id);
     })();
-  }, [supabase]);
+  }, []);
 
   const load = useCallback(async (pid: string) => {
     if (!pid) return;
@@ -157,13 +152,13 @@ export default function RightNowPage() {
 
       <div className="rn-wrap">
         <h1 className="rn-h1">Growth</h1>
-        <div className="rn-sub">Your immediate next steps, right now — who to pull and what to do, grouped by the misconception their work keeps showing. A tag needs 2+ hits to count, and the ✓ badge means i-Ready agrees.</div>
+        <div className="rn-sub">Your immediate next steps, right now - who to pull and what to do, grouped by the misconception their work keeps showing. A tag needs 2+ hits to count, and the corroborated label means i-Ready agrees.</div>
 
         <div className="rn-controls">
           <select className="rn-select" value={periodId} onChange={(e) => setPeriodId(e.target.value)}>
             {periods.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          <button className="rn-btn" onClick={() => void load(periodId)} disabled={loading || !periodId}>↻ Refresh</button>
+          <button className="rn-btn" onClick={() => void load(periodId)} disabled={loading || !periodId}>Refresh</button>
         </div>
         <div className="rn-status">{loading ? "Reading the room…" : status}</div>
 
@@ -174,7 +169,7 @@ export default function RightNowPage() {
               <div className="rn-badges">
                 <span className="rn-badge n">{c.size} students</span>
                 {c.domain && <span className="rn-badge d">{c.domain}</span>}
-                {c.corroborated > 0 && <span className="rn-badge c">✓ i-Ready agrees for {c.corroborated} of {c.size}</span>}
+                {c.corroborated > 0 && <span className="rn-badge c">i-Ready agrees for {c.corroborated} of {c.size}</span>}
               </div>
               <div>
                 {c.students.map((s) => (
@@ -186,7 +181,7 @@ export default function RightNowPage() {
               </div>
               {plans.has(c.misconception.toLowerCase()) && (
                 <div className="rn-plan">
-                  <b>📋 Your plan{lessonTitle ? ` — ${lessonTitle}` : ""}</b>
+                  <b>Your plan{lessonTitle ? ` - ${lessonTitle}` : ""}</b>
                   <p>{plans.get(c.misconception.toLowerCase())}</p>
                 </div>
               )}
@@ -219,7 +214,7 @@ export default function RightNowPage() {
               <div className="rn-card rn-waiting" key={tag}>
                 <h2 className="rn-mis">“{tag}”</h2>
                 <div className="rn-badges"><span className="rn-badge d">planned{lessonTitle ? ` · ${lessonTitle}` : ""}</span><span className="rn-badge d">no students flagged yet</span></div>
-                <div className="rn-plan"><b>📋 Your plan, ready to go</b><p>{move}</p></div>
+                <div className="rn-plan"><b>Your plan, ready to go</b><p>{move}</p></div>
               </div>
             ))}
 

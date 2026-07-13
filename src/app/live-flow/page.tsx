@@ -3,14 +3,19 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
+import { SECURE_STUDENT_DATA, studentApiRequest } from "@/lib/studentApi";
 import {
   LIVE_FLOW_MODE,
+  STUDENT_SESSION_KEY,
   getStoredStudentSession,
   getStoredStudentSessionId,
   leaveClassMode,
   type DiscussionPhaseId,
   type LiveClassFlowSnapshot,
 } from "@/lib/liveClassFlow";
+
+const WARMUP_IDENTITY = process.env.NEXT_PUBLIC_WARMUP_IDENTITY_ENABLED === "true";
+const WARMUP_IDENTITY_PLACEHOLDER = "BDM_AUTH_USER_ID";
 
 type SessionRow = {
   status: string;
@@ -33,17 +38,17 @@ type DiscussionContent = {
 
 const DISCUSSION_CONTENT: Record<DiscussionPhaseId, DiscussionContent> = {
   think: {
-    title: "🧠 Thinking Time",
+    title: "Thinking Time",
     subtitle: "Silent — think on your own.",
     directions: ["Do not talk.", "Do not type.", "Think about your first move."],
   },
   marker: {
-    title: "✍️ Commit Your Thinking",
+    title: "Commit Your Thinking",
     subtitle: "Write your first answer.",
     directions: ["No group talk yet.", "Mistakes are allowed.", "Blank boards are not."],
   },
   table: {
-    title: "💬 Discuss with Your Table",
+    title: "Discuss with Your Table",
     subtitle: "Talk it through together.",
     sentenceStems: [
       "I started by…",
@@ -61,12 +66,12 @@ const DISCUSSION_CONTENT: Record<DiscussionPhaseId, DiscussionContent> = {
     ],
   },
   revise: {
-    title: "✏️ Revise Your Answer",
+    title: "Revise Your Answer",
     subtitle: "Update your thinking.",
     directions: ["Add, change, or correct something based on your discussion."],
   },
   share: {
-    title: "🎤 Share Out",
+    title: "Share Out",
     subtitle: "Listen and be ready to respond.",
     directions: [
       "Listen for strategy.",
@@ -99,6 +104,9 @@ export default function LiveFlowPage() {
   const [pollAnswer, setPollAnswer] = useState("");
   const [fistRating, setFistRating] = useState(3);
   const [submittedPollIds, setSubmittedPollIds] = useState<string[]>([]);
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
+  const [identityConfirmed, setIdentityConfirmed] = useState(false);
+  const [pollSubmitError, setPollSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     const sessionId = getStoredStudentSessionId();
@@ -132,6 +140,19 @@ export default function LiveFlowPage() {
       setLoading(false);
     };
     const readSession = async () => {
+      if (SECURE_STUDENT_DATA) {
+        try {
+          const result = await studentApiRequest<{ session: SessionRow }>(
+            `/api/student/session-state?sessionId=${encodeURIComponent(sessionId)}`,
+          );
+          applySession(result.session);
+        } catch (error) {
+          setEmptyMessage(error instanceof Error ? error.message : "Live Flow could not load.");
+          setFlow(null);
+          setLoading(false);
+        }
+        return;
+      }
       const { data, error } = await supabase
         .from("sessions")
         .select("status,broadcast,live_flow")
@@ -161,28 +182,85 @@ export default function LiveFlowPage() {
     };
 
     void readSession();
-    const poll = window.setInterval(readSession, 1000);
-    const channel = supabase
-      .channel(`live-flow-${sessionId}`)
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "sessions", filter: `id=eq.${sessionId}` },
-        (payload) => applySession(payload.new as SessionRow),
-      )
-      .subscribe();
+    const poll = window.setInterval(readSession, SECURE_STUDENT_DATA ? 2000 : 1000);
+    const channel = SECURE_STUDENT_DATA
+      ? null
+      : supabase
+        .channel(`live-flow-${sessionId}`)
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "sessions", filter: `id=eq.${sessionId}` },
+          (payload) => applySession(payload.new as SessionRow),
+        )
+        .subscribe();
 
     return () => {
       stopped = true;
       window.clearTimeout(connectionFallback);
       window.clearInterval(poll);
-      void supabase.removeChannel(channel);
+      if (channel) void supabase.removeChannel(channel);
     };
   }, [supabase]);
+
+  useEffect(() => {
+    if (!WARMUP_IDENTITY || !supabase) return;
+    let stopped = false;
+    const loadAuthUser = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!stopped) setAuthUserId(data.session?.user.id ?? null);
+    };
+    void loadAuthUser();
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!stopped) setAuthUserId(session?.user.id ?? null);
+    });
+    return () => {
+      stopped = true;
+      listener.subscription.unsubscribe();
+    };
+  }, [supabase]);
+
+  useEffect(() => {
+    if (!WARMUP_IDENTITY || !supabase || identityConfirmed) return;
+    const stored = getStoredStudentSession();
+    if (!stored?.sessionId) return;
+
+    let stopped = false;
+    const confirm = async () => {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token || stopped) return;
+      const response = await fetch("/api/student/confirm-session", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ sessionId: stored.sessionId }),
+      });
+      if (!response.ok || stopped) return;
+      const result = await response.json().catch(() => ({})) as {
+        session?: { sessionId: string; studentId: string; name: string };
+      };
+      if (!result.session) return;
+      try {
+        localStorage.setItem(STUDENT_SESSION_KEY, JSON.stringify(result.session));
+        localStorage.setItem("bdm-student-name", result.session.name);
+      } catch { /* ignore */ }
+      setIdentityConfirmed(true);
+    };
+    void confirm();
+    const interval = window.setInterval(confirm, 1800);
+    return () => {
+      stopped = true;
+      window.clearInterval(interval);
+    };
+  }, [identityConfirmed, supabase]);
 
   const activePoll = flow?.poll ?? null;
   const activePollId = activePoll?.id ?? null;
 
   useEffect(() => {
+    if (SECURE_STUDENT_DATA) {
+      setPollAnswers([]);
+      return;
+    }
     if (!supabase || !activePollId) {
       setPollAnswers([]);
       return;
@@ -207,17 +285,25 @@ export default function LiveFlowPage() {
   useEffect(() => {
     setPollAnswer("");
     setFistRating(3);
+    setPollSubmitError(null);
   }, [activePoll?.id]);
 
   async function submitPollAnswer(answer: string) {
     const student = getStoredStudentSession();
     if (!supabase || !activePoll || !student || !answer.trim() || submittedPollIds.includes(activePoll.id)) return;
-    await supabase.from("poll_answers").insert({
-      poll_id: activePoll.id,
-      ...(student.studentId ? { student_id: student.studentId } : {}),
-      display_name: student.name,
-      answer: answer.trim(),
-    });
+    if (SECURE_STUDENT_DATA) {
+      await studentApiRequest("/api/student/poll-answer", {
+        method: "POST",
+        body: JSON.stringify({ pollId: activePoll.id, answer: answer.trim() }),
+      });
+    } else {
+      await supabase.from("poll_answers").insert({
+        poll_id: activePoll.id,
+        ...(student.studentId ? { student_id: student.studentId } : {}),
+        display_name: student.name,
+        answer: answer.trim(),
+      });
+    }
     setSubmittedPollIds((current) => [...current, activePoll.id]);
     setPollAnswer("");
   }
@@ -244,6 +330,16 @@ export default function LiveFlowPage() {
     .map((word) => word.trim())
     .filter(Boolean);
   const showDiscussionSupports = !activePoll && (sentenceStems.length > 0 || keyVocabulary.length > 0);
+  const resource = flow?.resource ?? null;
+  const resourceNeedsIdentity = Boolean(resource?.url.includes(WARMUP_IDENTITY_PLACEHOLDER));
+  const resolvedResourceUrl = resource?.url && (!resourceNeedsIdentity || authUserId)
+    ? resource.url
+      .replaceAll(WARMUP_IDENTITY_PLACEHOLDER, encodeURIComponent(authUserId || ""))
+      .replaceAll(encodeURIComponent(WARMUP_IDENTITY_PLACEHOLDER), encodeURIComponent(authUserId || ""))
+    : null;
+  const embeddedResourceUrl = resolvedResourceUrl?.includes("docs.google.com/forms")
+    ? `${resolvedResourceUrl}${resolvedResourceUrl.includes("?") ? "&" : "?"}embedded=true`
+    : null;
 
   return (
     <main className="lf-page" style={{ "--lf-accent": accent } as CSSProperties}>
@@ -296,6 +392,9 @@ export default function LiveFlowPage() {
         .lf-switches { display:flex; flex-wrap:wrap; justify-content:center; gap:10px; }
         .lf-switch { display:inline-flex; align-items:center; justify-content:center; min-height:48px; border:1px solid #29324a; border-radius:10px; background:#151a27; color:#5eead4; padding:0 18px; text-decoration:none; font-size:0.9rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; }
         .lf-switch:hover, .lf-switch:focus-visible { border-color:#14b8a6; outline:none; }
+        .lf-resource { width:min(100%,900px); display:grid; gap:12px; justify-items:center; }
+        .lf-resource-frame { width:100%; height:min(62vh,720px); border:1px solid #29324a; border-radius:12px; background:#fff; }
+        .lf-resource-link { display:inline-flex; min-height:58px; align-items:center; justify-content:center; border:2px solid var(--lf-accent); border-radius:10px; background:var(--lf-accent); color:#061312; padding:0 24px; text-decoration:none; font-size:1.05rem; font-weight:900; }
         .lf-loading { color:#8a93ad; font-weight:800; }
         @media (max-width:760px) { .lf-supports { grid-template-columns:1fr; } }
         @media (max-width:600px) { .lf-page { padding:26px 18px; } }
@@ -350,6 +449,17 @@ export default function LiveFlowPage() {
                 <div className="lf-status">{status}</div>
               </div>
             )}
+            {!activePoll && resource && (
+              <section className="lf-resource" aria-label={resource.label}>
+                {resourceNeedsIdentity && !resolvedResourceUrl ? (
+                  <p className="lf-poll-help">Preparing your verified warm-up.</p>
+                ) : embeddedResourceUrl ? (
+                  <iframe className="lf-resource-frame" src={embeddedResourceUrl} title={resource.label} />
+                ) : (
+                  <a className="lf-resource-link" href={resolvedResourceUrl || resource.url} target="_blank" rel="noreferrer">{resource.label}</a>
+                )}
+              </section>
+            )}
             {activePoll ? activePoll.stage === "responding" ? (
               <section className="lf-poll">
                 <h1 className="lf-poll-question">{activePoll.question}</h1>
@@ -372,6 +482,7 @@ export default function LiveFlowPage() {
                       <div className="lf-fist-labels"><span>0 · Not yet</span><span>5 · Can explain</span></div>
                     </div>
                     {pollSubmitted ? <p className="lf-poll-sent">Check-in sent.</p> : <button className="lf-poll-send" onClick={() => submitPollAnswer(String(fistRating))}>Send check-in</button>}
+                    {pollSubmitError && <p className="lf-poll-help">{pollSubmitError}</p>}
                   </>
                 ) : activePoll.kind === "multiple-choice" ? (
                   <div className="lf-poll-choices">
@@ -379,11 +490,13 @@ export default function LiveFlowPage() {
                       <button className="lf-poll-choice" key={choice} disabled={pollSubmitted} onClick={() => submitPollAnswer(choice)}>{choice}</button>
                     ))}
                     {pollSubmitted && <p className="lf-poll-sent">Answer sent.</p>}
+                    {pollSubmitError && <p className="lf-poll-help">{pollSubmitError}</p>}
                   </div>
                 ) : (
                   <div className="lf-poll-entry">
                     <textarea className="lf-poll-text" value={pollAnswer} disabled={pollSubmitted} onChange={(event) => setPollAnswer(event.target.value)} placeholder="Type your answer" />
                     {pollSubmitted ? <p className="lf-poll-sent">Answer sent.</p> : <button className="lf-poll-send" onClick={() => submitPollAnswer(pollAnswer)}>Send answer</button>}
+                    {pollSubmitError && <p className="lf-poll-help">{pollSubmitError}</p>}
                   </div>
                 )}
               </section>

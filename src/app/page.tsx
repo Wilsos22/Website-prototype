@@ -8,6 +8,19 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
 import { clearClassModeExitMarker, markStudentTab } from "@/lib/liveClassFlow";
+import {
+  ensureAnonymousStudentSession,
+  getStudentAuthUserId,
+  personalizeWarmupLink,
+  SECURE_STUDENT_DATA,
+  StudentApiError,
+  studentApiRequest,
+} from "@/lib/studentApi";
+
+type ClaimedStudent = { id: string; name: string; email: string };
+
+const REQUIRE_GOOGLE_AUTH = process.env.NEXT_PUBLIC_REQUIRE_STUDENT_GOOGLE_AUTH === "true";
+const WARMUP_IDENTITY = process.env.NEXT_PUBLIC_WARMUP_IDENTITY_ENABLED === "true";
 
 export default function StudentLanding() {
   const router = useRouter();
@@ -17,16 +30,173 @@ export default function StudentLanding() {
   const [joinSess, setJoinSess] = useState<{ id: string; periodId: string } | null>(null);
   const [roster, setRoster] = useState<{ id: string; full_name: string }[]>([]);
   const [joinErr, setJoinErr] = useState<string | null>(null);
+  const [joining, setJoining] = useState(false);
+  const [pendingCode, setPendingCode] = useState<string | null>(null);
+  const [warmupHref, setWarmupHref] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(REQUIRE_GOOGLE_AUTH);
+  const [student, setStudent] = useState<ClaimedStudent | null>(null);
 
   useEffect(() => {
     try { const n = localStorage.getItem("bdm-student-name"); if (n) setName(n.trim().split(/\s+/)[0]); } catch { /* ignore */ }
+    if (SECURE_STUDENT_DATA) {
+      void (async () => {
+        try {
+          const pending = sessionStorage.getItem("bdm-pending-class-code");
+          if (pending) {
+            await ensureAnonymousStudentSession();
+            setCode(pending);
+            setPendingCode(pending);
+            await loadWarmupLink();
+          }
+        } catch (error) {
+          setJoinErr(error instanceof Error ? error.message : "Secure student sign-in is unavailable.");
+        }
+      })();
+    }
   }, []);
+
+  useEffect(() => {
+    if (!REQUIRE_GOOGLE_AUTH) return;
+    if (!supabase) {
+      setJoinErr("School sign-in is not configured yet.");
+      setAuthLoading(false);
+      return;
+    }
+    let stopped = false;
+    const loadStudent = async () => {
+      try {
+        const result = await studentApiRequest<{ student: ClaimedStudent }>("/api/student/claim", { method: "POST" });
+        if (!stopped) {
+          setStudent(result.student);
+          setName(result.student.name.trim().split(/\s+/)[0]);
+        }
+      } catch (error) {
+        if (!stopped && error instanceof StudentApiError && error.code !== "student_session_missing") {
+          setJoinErr(error.message);
+        }
+      } finally {
+        if (!stopped) setAuthLoading(false);
+      }
+    };
+    void loadStudent();
+    return () => { stopped = true; };
+  }, [supabase]);
+
+  async function loadWarmupLink() {
+    const authUserId = await getStudentAuthUserId();
+    const response = await fetch("/api/today", { cache: "no-store" });
+    const data = await response.json().catch(() => ({})) as { lesson?: { warmUpLink?: string | null } };
+    if (data.lesson?.warmUpLink) setWarmupHref(personalizeWarmupLink(data.lesson.warmUpLink, authUserId));
+  }
+
+  async function signInWithGoogle() {
+    setJoinErr(null);
+    if (!supabase) {
+      setJoinErr("School sign-in is not configured yet.");
+      return;
+    }
+    const options: { redirectTo: string; queryParams?: Record<string, string> } = {
+      redirectTo: `${window.location.origin}/auth/callback?next=/`,
+    };
+    const domain = process.env.NEXT_PUBLIC_STUDENT_EMAIL_DOMAIN?.trim();
+    if (domain) options.queryParams = { hd: domain };
+    const { error } = await supabase.auth.signInWithOAuth({ provider: "google", options });
+    if (error) setJoinErr(`School sign-in is not available: ${error.message}`);
+  }
+
+  async function signOut() {
+    if (supabase) await supabase.auth.signOut();
+    setStudent(null);
+    setName("");
+    setJoinSess(null);
+    setRoster([]);
+    setJoinErr(null);
+  }
+
+  function finishJoin(result: { session: { sessionId: string; studentId: string; name: string } }) {
+    clearClassModeExitMarker();
+    localStorage.setItem("bdm-student-name", result.session.name);
+    localStorage.setItem("bdm-student-session", JSON.stringify(result.session));
+    sessionStorage.removeItem("bdm-pending-class-code");
+    setPendingCode(null);
+    markStudentTab();
+    router.push("/lesson");
+  }
+
+  useEffect(() => {
+    if (!SECURE_STUDENT_DATA || !pendingCode) return;
+    let stopped = false;
+    let checking = false;
+    const check = async () => {
+      if (checking || stopped) return;
+      checking = true;
+      try {
+        const result = await studentApiRequest<{ session: { sessionId: string; studentId: string; name: string } }>(
+          "/api/student/join",
+          { method: "POST", body: JSON.stringify({ code: pendingCode }) },
+        );
+        if (!stopped) finishJoin(result);
+      } catch (error) {
+        if (error instanceof StudentApiError && error.code !== "warmup_verification_required") {
+          setJoinErr(error.message);
+          setPendingCode(null);
+        }
+      } finally {
+        checking = false;
+      }
+    };
+    void check();
+    const interval = window.setInterval(check, 3000);
+    window.addEventListener("focus", check);
+    return () => { stopped = true; window.clearInterval(interval); window.removeEventListener("focus", check); };
+    // finishJoin only uses stable browser APIs and the Next router.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingCode, router]);
 
   async function submitCode() {
     setJoinErr(null);
     const c = code.trim().toUpperCase();
     if (c.length < 2) return;
     if (!supabase) { setJoinErr("Live sessions aren't set up yet."); return; }
+    if (SECURE_STUDENT_DATA) {
+      setJoining(true);
+      try {
+        if (REQUIRE_GOOGLE_AUTH && !student) {
+          setJoinErr("Sign in with your school Google account first.");
+          return;
+        }
+        const codeResponse = await fetch("/api/student/session-code", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ code: c }),
+        });
+        const codeResult = await codeResponse.json().catch(() => ({})) as { open?: boolean; error?: string };
+        if (!codeResponse.ok || !codeResult.open) {
+          setJoinErr(codeResult.error || "That code is not open right now. Check with your teacher.");
+          return;
+        }
+        await ensureAnonymousStudentSession();
+        const result = await studentApiRequest<{
+          session: { sessionId: string; studentId: string; name: string };
+        }>("/api/student/join", {
+          method: "POST",
+          body: JSON.stringify({ code: c }),
+        });
+        finishJoin(result);
+      } catch (error) {
+        if (error instanceof StudentApiError && error.code === "warmup_verification_required") {
+          sessionStorage.setItem("bdm-pending-class-code", c);
+          setPendingCode(c);
+          await loadWarmupLink().catch(() => undefined);
+          setJoinErr("Complete today's Google warm-up. This page will join the class automatically after the verified response arrives.");
+        } else {
+          setJoinErr(error instanceof Error ? error.message : "The class could not be joined.");
+        }
+      } finally {
+        setJoining(false);
+      }
+      return;
+    }
     const { data: sess } = await supabase.from("sessions").select("id,period_id").eq("join_code", c).eq("status", "open").limit(1).maybeSingle();
     if (!sess) { setJoinErr("That code isn't open right now — check with your teacher."); return; }
     const s = sess as { id: string; period_id: string };
@@ -36,7 +206,7 @@ export default function StudentLanding() {
   }
 
   async function pickName(s: { id: string; full_name: string }) {
-    if (supabase && joinSess) {
+    if (supabase && joinSess && !WARMUP_IDENTITY) {
       await supabase.from("session_joins").insert({ session_id: joinSess.id, student_id: s.id, display_name: s.full_name });
     }
     try {
@@ -78,6 +248,16 @@ export default function StudentLanding() {
         .st-name { background:color-mix(in srgb, var(--bdb-teal) 14%, white); border:1px solid color-mix(in srgb, var(--bdb-teal) 35%, white);
           color:#0f5e5f; border-radius:999px; padding:10px 16px; font-weight:600; cursor:pointer; font-size:0.95rem; }
         .st-name:hover { border-color:var(--bdb-teal); }
+        .st-auth { display:grid; gap:10px; margin-bottom:16px; }
+        .st-auth-btn { width:100%; border:1px solid var(--bdb-line); background:#fff; color:var(--bdb-ink); border-radius:12px;
+          min-height:48px; padding:11px 16px; font:inherit; font-weight:750; cursor:pointer; }
+        .st-auth-btn:hover { border-color:var(--bdb-teal); }
+        .st-auth-who { display:flex; align-items:center; justify-content:space-between; gap:12px; border:1px solid var(--bdb-line);
+          border-radius:12px; padding:10px 12px; background:color-mix(in srgb, var(--bdb-teal) 8%, white); }
+        .st-auth-who p { margin:0; min-width:0; }
+        .st-auth-name { font-weight:800; color:var(--bdb-ink); }
+        .st-auth-email { color:var(--bdb-ink-soft); font-size:0.78rem; overflow:hidden; text-overflow:ellipsis; }
+        .st-signout { border:0; background:transparent; color:var(--bdb-ink-soft); text-decoration:underline; cursor:pointer; font:inherit; font-size:0.8rem; }
 
         .st-explore { display:flex; align-items:center; justify-content:center; gap:8px; text-decoration:none;
           border:1px solid var(--bdb-line); border-radius:var(--bdb-r); background:var(--bdb-card); color:var(--bdb-ink-soft);
@@ -98,8 +278,26 @@ export default function StudentLanding() {
 
       <div className="st-cards">
         <div className="st-join">
-          {!joinSess ? (
+          {REQUIRE_GOOGLE_AUTH && authLoading ? (
+            <p className="st-join-sub">Checking your school sign-in.</p>
+          ) : REQUIRE_GOOGLE_AUTH && !student ? (
+            <div className="st-auth">
+              <h2 className="st-join-h">Sign in to join your class</h2>
+              <p className="st-join-sub">Use the school Google account already connected to your Chromebook.</p>
+              <button className="st-auth-btn" onClick={signInWithGoogle}>Continue with school Google</button>
+              {joinErr && <div className="st-joinerr">{joinErr}</div>}
+            </div>
+          ) : SECURE_STUDENT_DATA || !joinSess ? (
             <>
+              {REQUIRE_GOOGLE_AUTH && student && (
+                <div className="st-auth-who">
+                  <p>
+                    <span className="st-auth-name">{student.name}</span><br />
+                    <span className="st-auth-email">{student.email}</span>
+                  </p>
+                  <button className="st-signout" onClick={signOut}>Not you?</button>
+                </div>
+              )}
               <h2 className="st-join-h">Join your class</h2>
               <p className="st-join-sub">Your teacher will give you a code.</p>
               <div className="st-codebox">
@@ -112,9 +310,14 @@ export default function StudentLanding() {
                   onChange={(e) => setCode(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") submitCode(); }}
                 />
-                <button className="st-code-btn" onClick={submitCode}>Join</button>
+                <button className="st-code-btn" onClick={submitCode} disabled={joining}>{joining ? "Checking" : "Join"}</button>
               </div>
               {joinErr && <div className="st-joinerr">{joinErr}</div>}
+              {pendingCode && warmupHref && (
+                <a className="st-explore" href={warmupHref} target="_blank" rel="noopener noreferrer">
+                  Open today&apos;s verified warm-up
+                </a>
+              )}
             </>
           ) : (
             <>
@@ -129,12 +332,12 @@ export default function StudentLanding() {
         </div>
 
         <a className="st-explore" href="/explore">
-          <span>Just looking around? <b>Explore the math tools →</b></span>
+          <span>Just looking around? <b>Explore the math tools</b></span>
         </a>
       </div>
 
       <div className="st-foot">
-        <a className="st-teacher" href="/teacher">Teacher →</a>
+        <a className="st-teacher" href="/teacher">Teacher</a>
       </div>
     </main>
   );

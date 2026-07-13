@@ -5,20 +5,10 @@
 // and what's tripping them up (most-missed problems) — the formative read.
 
 import { useCallback, useEffect, useState } from "react";
-import { getSupabase } from "@/lib/supabase";
+import { teacherApiRequest } from "@/lib/teacherApi";
 import SiteNav from "@/components/SiteNav";
 import { getSkill } from "@/lib/challengeSkills";
-import { isMissingTable, type ChallengeRow } from "@/lib/challenges";
-
-interface Attempt {
-  student_id: string | null;
-  display_name: string | null;
-  prompt: string;
-  correct_answer: string;
-  answer: string | null;
-  is_correct: boolean;
-  points: number;
-}
+import { type ChallengeRow, type LeaderRow } from "@/lib/challenges";
 interface StudentAgg { key: string; name: string; correct: number; total: number; points: number; }
 interface MissAgg { prompt: string; correct_answer: string; wrong: number; total: number; }
 
@@ -29,7 +19,6 @@ function fmtWhen(iso: string): string {
 }
 
 export default function TeacherChallengesPage() {
-  const supabase = getSupabase();
   const [challenges, setChallenges] = useState<ChallengeRow[]>([]);
   const [periodNames, setPeriodNames] = useState<Record<string, string>>({});
   const [sessionPeriod, setSessionPeriod] = useState<Record<string, string>>({});
@@ -42,58 +31,32 @@ export default function TeacherChallengesPage() {
   const [detailLoading, setDetailLoading] = useState(false);
 
   useEffect(() => {
-    if (!supabase) { setLoading(false); return; }
     (async () => {
-      const { data, error } = await supabase
-        .from("challenges")
-        .select("*")
-        .order("started_at", { ascending: false })
-        .limit(40);
-      if (error) { setMissing(isMissingTable(error)); setLoading(false); return; }
-      const rows = (data as ChallengeRow[]) || [];
-      setChallenges(rows);
-      // resolve period names for context
-      const sessIds = Array.from(new Set(rows.map((r) => r.session_id)));
-      if (sessIds.length) {
-        const { data: sess } = await supabase.from("sessions").select("id,period_id").in("id", sessIds);
-        const sp: Record<string, string> = {};
-        const pIds = new Set<string>();
-        ((sess as { id: string; period_id: string }[]) || []).forEach((s) => { sp[s.id] = s.period_id; pIds.add(s.period_id); });
-        setSessionPeriod(sp);
-        if (pIds.size) {
-          const { data: pers } = await supabase.from("periods").select("id,name").in("id", Array.from(pIds));
-          const pn: Record<string, string> = {};
-          ((pers as { id: string; name: string }[]) || []).forEach((p) => { pn[p.id] = p.name; });
-          setPeriodNames(pn);
-        }
+      try {
+        const result = await teacherApiRequest<{
+          challenges: ChallengeRow[];
+          sessions: Array<{ id: string; period_id: string }>;
+          periods: Array<{ id: string; name: string }>;
+        }>("/api/teacher/challenge");
+        setChallenges(result.challenges);
+        setSessionPeriod(Object.fromEntries(result.sessions.map((session) => [session.id, session.period_id])));
+        setPeriodNames(Object.fromEntries(result.periods.map((period) => [period.id, period.name])));
+      } catch {
+        setMissing(true);
       }
       setLoading(false);
     })();
-  }, [supabase]);
+  }, []);
 
   const openChallenge = useCallback(async (ch: ChallengeRow) => {
-    if (!supabase) return;
     setOpen(ch); setDetailLoading(true); setStudents([]); setMisses([]);
-    const { data } = await supabase
-      .from("challenge_attempts")
-      .select("student_id,display_name,prompt,correct_answer,answer,is_correct,points")
-      .eq("challenge_id", ch.id);
-    const rows = (data as Attempt[]) || [];
-    const sMap = new Map<string, StudentAgg>();
-    const mMap = new Map<string, MissAgg>();
-    for (const r of rows) {
-      const key = r.student_id || r.display_name || "anon";
-      const s = sMap.get(key) || { key, name: r.display_name || "Student", correct: 0, total: 0, points: 0 };
-      s.total += 1; s.points += r.points || 0; if (r.is_correct) s.correct += 1;
-      sMap.set(key, s);
-      const m = mMap.get(r.prompt) || { prompt: r.prompt, correct_answer: r.correct_answer, wrong: 0, total: 0 };
-      m.total += 1; if (!r.is_correct) m.wrong += 1;
-      mMap.set(r.prompt, m);
-    }
-    setStudents(Array.from(sMap.values()).sort((a, b) => b.points - a.points));
-    setMisses(Array.from(mMap.values()).filter((m) => m.wrong > 0).sort((a, b) => b.wrong - a.wrong).slice(0, 12));
+    const result = await teacherApiRequest<{ leaderboard: LeaderRow[]; misses: MissAgg[] }>(
+      `/api/teacher/challenge?challengeId=${encodeURIComponent(ch.id)}`,
+    );
+    setStudents(result.leaderboard);
+    setMisses(result.misses);
     setDetailLoading(false);
-  }, [supabase]);
+  }, []);
 
   const classAccuracy = students.length
     ? Math.round((students.reduce((s, x) => s + x.correct, 0) / Math.max(1, students.reduce((s, x) => s + x.total, 0))) * 100)
@@ -107,10 +70,9 @@ export default function TeacherChallengesPage() {
         <h1 className="tc-h1">Challenge results</h1>
         <p className="tc-sub">Formative data from every game your classes have played.</p>
 
-        {!supabase && <div className="tc-warn">Supabase isn&apos;t connected yet — add your keys in Vercel and redeploy.</div>}
         {missing && <div className="tc-warn">Run <b>supabase/challenges.sql</b> in the Supabase SQL editor to start collecting game data.</div>}
         {loading && <p className="tc-soft">Loading…</p>}
-        {!loading && supabase && !missing && challenges.length === 0 && (
+        {!loading && !missing && challenges.length === 0 && (
           <div className="tc-card"><p className="tc-soft">No challenges yet. Launch one from the <a href="/session">Session</a> page.</p></div>
         )}
 
@@ -121,12 +83,12 @@ export default function TeacherChallengesPage() {
               const period = periodNames[sessionPeriod[ch.session_id] || ""] || "";
               return (
                 <button key={ch.id} className="tc-row" onClick={() => openChallenge(ch)}>
-                  <span className="tc-row-emoji">{skill?.emoji || "🎮"}</span>
+                  <span className="tc-row-emoji">{skill?.label.slice(0, 1) || "G"}</span>
                   <span className="tc-row-main">
                     <span className="tc-row-title">{ch.title}</span>
                     <span className="tc-row-meta">{fmtWhen(ch.started_at)}{period ? ` · ${period}` : ""}</span>
                   </span>
-                  <span className="tc-row-go">View →</span>
+                  <span className="tc-row-go">View</span>
                 </button>
               );
             })}
@@ -135,7 +97,7 @@ export default function TeacherChallengesPage() {
 
         {open && (
           <>
-            <button className="tc-back" onClick={() => setOpen(null)}>← All results</button>
+            <button className="tc-back" onClick={() => setOpen(null)}>All results</button>
             <div className="tc-card">
               <div className="tc-d-head">
                 <div>
@@ -157,7 +119,7 @@ export default function TeacherChallengesPage() {
                 <div className="tc-card">
                   <h3 className="tc-ch">Most-missed problems</h3>
                   {misses.length === 0 ? (
-                    <p className="tc-soft">Everyone nailed it — no misses. 🎯</p>
+                    <p className="tc-soft">Everyone got it; no misses.</p>
                   ) : (
                     <div className="tc-miss">
                       {misses.map((m) => (

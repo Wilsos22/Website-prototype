@@ -9,6 +9,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
+import { SECURE_STUDENT_DATA, studentApiRequest } from "@/lib/studentApi";
 import {
   getStoredStudentSessionId,
   getStoredTeacherSessionId,
@@ -23,7 +24,7 @@ export default function AbbieStudentBubble() {
   const dismissRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!supabase) return;
+    if (!supabase && !SECURE_STUDENT_DATA) return;
     // A teacher device shouldn't get the student bubble (unless this tab
     // explicitly joined as a student, for side-by-side testing).
     if (getStoredTeacherSessionId() && !isStudentTab()) return;
@@ -44,6 +45,18 @@ export default function AbbieStudentBubble() {
     };
 
     const read = async () => {
+      if (SECURE_STUDENT_DATA) {
+        try {
+          const result = await studentApiRequest<{ session: { abbie: AbbieBroadcast | null } | null }>(
+            `/api/student/session-state?sessionId=${encodeURIComponent(sessionId)}`,
+          );
+          apply(result.session?.abbie ?? null);
+        } catch {
+          // A transient error should not interrupt the student's task.
+        }
+        return;
+      }
+      if (!supabase) return;
       const { data, error } = await supabase
         .from("sessions")
         .select("abbie")
@@ -56,7 +69,7 @@ export default function AbbieStudentBubble() {
 
     void read();
     const interval = window.setInterval(read, 1500);
-    const channel = supabase
+    const channel = SECURE_STUDENT_DATA || !supabase ? null : supabase
       .channel(`abbie-${sessionId}`)
       .on(
         "postgres_changes",
@@ -69,7 +82,7 @@ export default function AbbieStudentBubble() {
       stopped = true;
       window.clearInterval(interval);
       if (dismissRef.current) window.clearTimeout(dismissRef.current);
-      void supabase.removeChannel(channel);
+      if (channel && supabase) void supabase.removeChannel(channel);
     };
   }, [supabase]);
 

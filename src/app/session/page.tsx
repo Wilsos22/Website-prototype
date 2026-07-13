@@ -4,7 +4,7 @@
 // in real time (polls every 3s). Backed by Supabase (sessions + session_joins).
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getSupabase } from "@/lib/supabase";
+import { teacherApiRequest, teacherPost } from "@/lib/teacherApi";
 import SiteNav from "@/components/SiteNav";
 import {
   LIVE_FLOW_MODE,
@@ -25,6 +25,8 @@ interface Period { id: string; name: string; }
 interface Join { id: string; display_name: string | null; joined_at: string; }
 interface Answer { id: string; display_name: string | null; answer: string | null; }
 
+const TEACHER_SERVER_CLIENT = {} as never;
+
 const DURATIONS = [
   { label: "2 min", value: 120 },
   { label: "3 min", value: 180 },
@@ -39,7 +41,7 @@ function makeCode() {
 }
 
 export default function SessionPage() {
-  const supabase = getSupabase();
+  const supabase = TEACHER_SERVER_CLIENT;
   const [periods, setPeriods] = useState<Period[]>([]);
   const [periodId, setPeriodId] = useState("");
   const [session, setSession] = useState<{ id: string; code: string; periodName: string } | null>(null);
@@ -67,51 +69,42 @@ export default function SessionPage() {
   const activeSkill = SKILLS.find((s) => s.key === chSkill) || SKILLS[0];
 
   useEffect(() => {
-    if (!supabase) return;
-    supabase.from("periods").select("id,name").order("sort_order").then(({ data }) => {
-      const ps = (data as Period[]) || [];
+    teacherApiRequest<{ periods: Period[] }>("/api/teacher/roster").then(({ periods: ps }) => {
       setPeriods(ps); if (ps[0]) setPeriodId(ps[0].id);
-    });
-  }, [supabase]);
+    }).catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Periods could not be loaded."));
+  }, []);
 
   // Restore an already-open session if the teacher navigated away (e.g. to the
   // Control panel) and came back — otherwise the page looks empty and a second
   // "Start session" click spawns a duplicate with a new code, which is what made
   // it keep asking to start/join a new session.
   useEffect(() => {
-    if (!supabase) return;
     const stored = getStoredTeacherSession();
     if (!stored) return;
     let cancelled = false;
     (async () => {
-      const { data, error } = await supabase
-        .from("sessions")
-        .select("id,status,period_id,broadcast")
-        .eq("id", stored.sessionId)
-        .maybeSingle();
+      const [sessionResult, rosterResult] = await Promise.all([
+        teacherApiRequest<{ session: { id: string; status: string; period_id: string; broadcast: string | null } }>(`/api/teacher/session?sessionId=${encodeURIComponent(stored.sessionId)}`),
+        teacherApiRequest<{ students: Array<{ periodId: string }> }>("/api/teacher/roster"),
+      ]).catch(() => [{ session: null }, { students: [] }] as const);
       if (cancelled) return;
-      const s = data as { id: string; status: string; period_id: string; broadcast: string | null } | null;
-      if (error || !s || s.status !== "open") {
+      const s = sessionResult.session;
+      if (!s || s.status !== "open") {
         clearStoredTeacherSession(stored.sessionId);
         return;
       }
-      const { count } = await supabase
-        .from("students")
-        .select("id", { count: "exact", head: true })
-        .eq("period_id", s.period_id);
       if (cancelled) return;
-      setRosterCount(count || 0);
+      setRosterCount(rosterResult.students.filter((student) => student.periodId === s.period_id).length);
       setBroadcast(s.broadcast ?? null);
       setSession({ id: s.id, code: stored.code, periodName: stored.periodName });
     })();
     return () => { cancelled = true; };
-  }, [supabase]);
+  }, []);
 
   const pollJoins = useCallback(async (sessionId: string) => {
-    if (!supabase) return;
-    const { data } = await supabase.from("session_joins").select("id,display_name,joined_at").eq("session_id", sessionId).order("joined_at");
-    setJoins((data as Join[]) || []);
-  }, [supabase]);
+    const result = await teacherApiRequest<{ joins: Join[] }>(`/api/teacher/session?sessionId=${encodeURIComponent(sessionId)}`);
+    setJoins(result.joins);
+  }, []);
 
   useEffect(() => {
     if (!session) return;
@@ -124,54 +117,55 @@ export default function SessionPage() {
   // available even after a page reload — otherwise an orphaned open poll has no
   // off-switch and blocks every student who joins.
   useEffect(() => {
-    if (!supabase || !session) return;
+    if (!session) return;
     let cancelled = false;
     (async () => {
-      const { data } = await supabase.from("polls")
-        .select("id,question,choices")
-        .eq("session_id", session.id).eq("status", "open")
-        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      const result = await teacherApiRequest<{ polls: Array<{ id: string; question: string; choices: string[] | null; status: string }> }>(
+        `/api/teacher/session?sessionId=${encodeURIComponent(session.id)}`,
+      );
       if (cancelled) return;
-      const p = data as { id: string; question: string; choices: string[] | null } | null;
+      const p = result.polls.find((candidate) => candidate.status === "open") ?? null;
       if (p) setPoll({ id: p.id, question: p.question, choices: p.choices && p.choices.length ? p.choices : null });
     })();
     return () => { cancelled = true; };
-  }, [supabase, session]);
+  }, [session]);
 
   async function start() {
-    if (!supabase || !periodId) return;
+    if (!periodId) return;
     setError(null);
     const code = makeCode();
     // Start held on the lesson page so joined students are locked in from the
     // moment they join (not free to wander) until you pick a tool or release them.
-    const { data, error } = await supabase.from("sessions").insert({ period_id: periodId, join_code: code, status: "open", broadcast: "/lesson" }).select("id").single();
-    if (error) { setError(error.message); return; }
+    let data: { id: string };
+    try {
+      const result = await teacherPost<{ session: { id: string } }>("/api/teacher/session", { action: "start", periodId, joinCode: code });
+      data = result.session;
+    } catch (actionError) { setError(actionError instanceof Error ? actionError.message : "Session could not be started."); return; }
     const periodName = periods.find((p) => p.id === periodId)?.name || "";
-    const { count } = await supabase.from("students").select("id", { count: "exact", head: true }).eq("period_id", periodId);
-    setRosterCount(count || 0);
+    const roster = await teacherApiRequest<{ students: Array<{ periodId: string }> }>("/api/teacher/roster");
+    setRosterCount(roster.students.filter((student) => student.periodId === periodId).length);
     const sessionId = (data as { id: string }).id;
     saveTeacherSession(sessionId, code, periodName);
     setSession({ id: sessionId, code, periodName });
     setJoins([]); setBroadcast("/lesson");
   }
   async function end() {
-    if (!supabase || !session) return;
+    if (!session) return;
     // Close any polls still open for this session so they can't linger and block
     // students who later join (an orphaned open poll otherwise has no off-switch).
-    await supabase.from("polls").update({ status: "closed" }).eq("session_id", session.id).eq("status", "open");
-    await supabase.from("sessions").update({ status: "closed", ended_at: new Date().toISOString(), broadcast: null }).eq("id", session.id);
+    await teacherPost("/api/teacher/session", { action: "close", sessionId: session.id });
     clearStoredTeacherSession(session.id);
     setSession(null); setJoins([]); setPoll(null); setAnswers([]); setBroadcast(null);
     setChallenge(null); setBoard([]);
   }
   async function setBroadcastTo(value: string | null) {
-    if (!supabase || !session) return;
-    await supabase.from("sessions").update({ broadcast: value }).eq("id", session.id);
+    if (!session) return;
+    await teacherPost("/api/teacher/session", { action: "update", sessionId: session.id, broadcast: value });
     setBroadcast(value);
   }
 
   async function startChallenge() {
-    if (!supabase || !session) return;
+    if (!session) return;
     setError(null); setChSetup(false);
     const skill = SKILLS.find((s) => s.key === chSkill) || SKILLS[0];
     const title = `${skill.label} · ${skill.levels[chLevel - 1] || `Level ${chLevel}`}`;
@@ -185,7 +179,7 @@ export default function SessionPage() {
     await setBroadcastTo("/challenge");
   }
   async function stopChallenge() {
-    if (!supabase || !challenge) return;
+    if (!challenge) return;
     await endChallenge(supabase, challenge.id);
     setChallenge(null);
     await setBroadcastTo("/lesson");
@@ -211,49 +205,37 @@ export default function SessionPage() {
   ];
 
   async function pushPoll() {
-    if (!supabase || !session || !question.trim()) return;
+    if (!session || !question.trim()) return;
     setError(null);
     const ch = mc ? choices.map((c) => c.trim()).filter(Boolean) : null;
-    const payload = {
-      session_id: session.id,
-      question: question.trim(),
-      choices: ch,
-      kind: ch && ch.length ? "multiple-choice" : "short-answer",
-      status: "open",
-    };
-    let { data, error } = await supabase.from("polls").insert(payload).select("id").single();
-    // Existing poll tables do not yet have kind. Keep their original short
-    // answer / multiple-choice behavior working until the migration is run.
-    if (error) {
-      const fallback = await supabase.from("polls").insert({
-        session_id: session.id,
+    try {
+      const result = await teacherPost<{ poll: { id: string } }>("/api/teacher/poll", {
+        action: "create",
+        sessionId: session.id,
         question: question.trim(),
         choices: ch,
-        status: "open",
-      }).select("id").single();
-      data = fallback.data;
-      error = fallback.error;
-    }
-    if (error) { setError(error.message); return; }
-    setPoll({ id: (data as { id: string }).id, question: question.trim(), choices: ch && ch.length ? ch : null });
+        kind: ch && ch.length ? "multiple-choice" : "short-answer",
+      });
+      setPoll({ id: result.poll.id, question: question.trim(), choices: ch && ch.length ? ch : null });
+    } catch (actionError) { setError(actionError instanceof Error ? actionError.message : "Question could not be sent."); return; }
     setAnswers([]);
   }
   async function closePoll() {
-    if (!supabase || !poll) return;
-    await supabase.from("polls").update({ status: "closed" }).eq("id", poll.id);
+    if (!poll) return;
+    await teacherPost("/api/teacher/poll", { action: "close", pollId: poll.id });
     setPoll(null); setAnswers([]); setQuestion(""); setMc(false); setChoices(["", "", "", ""]);
   }
 
   useEffect(() => {
-    if (!poll || !supabase) return;
+    if (!poll) return;
     const fetchA = async () => {
-      const { data } = await supabase.from("poll_answers").select("id,display_name,answer").eq("poll_id", poll.id).order("created_at");
-      setAnswers((data as Answer[]) || []);
+      const result = await teacherApiRequest<{ answers: Answer[] }>(`/api/teacher/poll?pollId=${encodeURIComponent(poll.id)}`);
+      setAnswers(result.answers);
     };
     fetchA();
     ansRef.current = setInterval(fetchA, 3000);
     return () => { if (ansRef.current) clearInterval(ansRef.current); };
-  }, [poll, supabase]);
+  }, [poll]);
 
   return (
     <main className="se-page">
@@ -318,7 +300,7 @@ export default function SessionPage() {
         <h1 className="se-h1">Join with a code</h1>
 
         {!supabase && <div className="se-warn">Supabase isn&apos;t connected yet — add your keys in Vercel and redeploy.</div>}
-        {error && <div className="se-err">⚠ {error}</div>}
+        {error && <div className="se-err">{error}</div>}
 
         {supabase && !session && (
           <div className="se-card">
@@ -327,7 +309,7 @@ export default function SessionPage() {
                 {periods.length === 0 && <option value="">No periods — add rosters first</option>}
                 {periods.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
-              <button className="se-start" onClick={start} disabled={!periodId}>Start session →</button>
+              <button className="se-start" onClick={start} disabled={!periodId}>Start session</button>
             </div>
             <p className="se-empty" style={{ marginTop: 12 }}>Pick a class period and start a session. Students enter the code on their home screen.</p>
           </div>
@@ -361,10 +343,10 @@ export default function SessionPage() {
             </div>
 
             <div className="se-card" id="challenge" style={{ scrollMarginTop: 80 }}>
-              <h3 className="se-qh">🎮 Challenge — live game</h3>
+              <h3 className="se-qh">Challenge - live game</h3>
               {chSetup && (
                 <div className="se-warn" style={{ marginBottom: 12 }}>
-                  One-time setup: open Supabase → SQL Editor and run <b>supabase/challenges.sql</b>, then try again.
+                  One-time setup: open the Supabase SQL Editor and run <b>supabase/challenges.sql</b>, then try again.
                 </div>
               )}
               {!challenge ? (
@@ -398,7 +380,7 @@ export default function SessionPage() {
                   </div>
 
                   <button className="se-start" style={{ marginTop: 16 }} onClick={startChallenge} disabled={!joins.length}>
-                    Launch challenge →
+                    Launch challenge
                   </button>
                   {!joins.length && <p className="se-empty" style={{ marginTop: 8 }}>Students need to join first.</p>}
                 </>
@@ -415,7 +397,7 @@ export default function SessionPage() {
                     <div className="se-lb">
                       {board.slice(0, 10).map((r, i) => (
                         <div className="se-lb-row" key={r.key}>
-                          <span className="se-lb-rank">{["🥇", "🥈", "🥉"][i] || `${i + 1}`}</span>
+                          <span className="se-lb-rank">{i + 1}</span>
                           <span className="se-lb-name">{r.name}</span>
                           <span className="se-lb-acc">{r.total ? Math.round((r.correct / r.total) * 100) : 0}%</span>
                           <span className="se-lb-pts">{r.points}</span>
@@ -440,7 +422,7 @@ export default function SessionPage() {
                     ))}
                   </div>
                 )}
-                <button className="se-start" onClick={pushPoll} disabled={!question.trim()}>Push to class →</button>
+                <button className="se-start" onClick={pushPoll} disabled={!question.trim()}>Push to class</button>
               </div>
             ) : (
               <div className="se-card">

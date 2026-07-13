@@ -6,8 +6,10 @@
 
 const NOTION_API = "https://api.notion.com/v1";
 const NOTION_VERSION = "2025-09-03";
+const DEFAULT_ROSTER_DS_ID = "83e163c8-ce0a-4667-98ce-b9fd03d5717e";
 
 export interface RosterRow {
+  pageId: string;
   name: string;
   email: string | null;
   period: string;
@@ -22,7 +24,7 @@ interface NotionProp {
   number?: number | null;
   formula?: { type: string; string?: string | null; number?: number | null };
 }
-interface NotionPage { properties: Record<string, NotionProp> }
+interface NotionPage { id: string; properties: Record<string, NotionProp> }
 
 function text(p: NotionProp | undefined): string {
   if (!p) return "";
@@ -47,14 +49,16 @@ export async function fetchNotionRoster(): Promise<RosterRow[]> {
   const token = process.env.NOTION_TOKEN;
   const dbId = process.env.NOTION_ROSTER_DB_ID;
   if (!token) throw new Error("NOTION_TOKEN is not set.");
-  if (!dbId) throw new Error("NOTION_ROSTER_DB_ID is not set — add the roster database id in Vercel.");
 
   // Resolve the database's data sources (2025-09 API), then query each with pagination.
-  const dbRes = await fetch(`${NOTION_API}/databases/${dbId}`, { headers: headers(token), cache: "no-store" });
-  if (!dbRes.ok) throw new Error(`Notion database lookup failed (${dbRes.status}) — is the roster DB shared with the integration?`);
-  const db = (await dbRes.json()) as { data_sources?: { id: string }[] };
-  const sourceIds = (db.data_sources || []).map((d) => d.id);
-  if (!sourceIds.length) throw new Error("Roster database has no data sources.");
+  let sourceIds = [process.env.NOTION_ROSTER_DS_ID || DEFAULT_ROSTER_DS_ID];
+  if (dbId) {
+    const dbRes = await fetch(`${NOTION_API}/databases/${dbId}`, { headers: headers(token), cache: "no-store" });
+    if (!dbRes.ok) throw new Error(`Notion database lookup failed (${dbRes.status}) — is the roster DB shared with the integration?`);
+    const db = (await dbRes.json()) as { data_sources?: { id: string }[] };
+    sourceIds = (db.data_sources || []).map((d) => d.id);
+    if (!sourceIds.length) throw new Error("Roster database has no data sources.");
+  }
 
   const rows: RosterRow[] = [];
   for (const sid of sourceIds) {
@@ -75,7 +79,7 @@ export async function fetchNotionRoster(): Promise<RosterRow[]> {
         if (!name) continue;
         const email = (text(p["Email"]) || text(p["Student Email"]) || "").toLowerCase() || null;
         const period = text(p["Class/Period"]) || text(p["Period"]) || text(p["Class"]) || "Unassigned";
-        rows.push({ name, email, period });
+        rows.push({ pageId: page.id, name, email, period });
       }
       cursor = data.has_more ? data.next_cursor || undefined : undefined;
     } while (cursor);

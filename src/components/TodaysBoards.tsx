@@ -6,6 +6,7 @@
 
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
+import { SECURE_STUDENT_DATA, studentApiRequest } from "@/lib/studentApi";
 
 export default function TodaysBoards({ date }: { date: string | null }) {
   const [urls, setUrls] = useState<string[]>([]);
@@ -15,6 +16,17 @@ export default function TodaysBoards({ date }: { date: string | null }) {
     if (!supabase || !date) return;
     let stop = false;
     const load = async () => {
+      if (SECURE_STUDENT_DATA) {
+        try {
+          const result = await studentApiRequest<{ urls: string[] }>(
+            `/api/student/boards?date=${encodeURIComponent(date)}`,
+          );
+          if (!stop) setUrls(result.urls);
+        } catch {
+          if (!stop) setUrls([]);
+        }
+        return;
+      }
       const { data, error } = await supabase.storage
         .from("boards")
         .list(date, { sortBy: { column: "created_at", order: "asc" } });
@@ -25,7 +37,7 @@ export default function TodaysBoards({ date }: { date: string | null }) {
       if (!stop) setUrls(next);
     };
     void load();
-    const id = window.setInterval(load, 15000); // pick up new saves during class
+    const id = window.setInterval(load, SECURE_STUDENT_DATA ? 60000 : 15000);
     return () => { stop = true; window.clearInterval(id); };
   }, [date]);
 

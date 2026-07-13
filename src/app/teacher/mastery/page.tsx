@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import SiteNav from "@/components/SiteNav";
-import { getSupabase } from "@/lib/supabase";
+import { teacherApiRequest } from "@/lib/teacherApi";
 import { DOMAINS, type Domain } from "@/lib/mastery";
 
 interface Period { id: string; name: string }
@@ -87,7 +87,7 @@ function GrowthChart({ points, color }: { points: HistoryPoint[]; color: string 
         ))}
       </svg>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: "#4a443a", marginTop: 2 }}>
-        {Math.round(first)} → {Math.round(last)}
+        {Math.round(first)} to {Math.round(last)}
         <span style={{ color: delta >= 0 ? "#1e8449" : "#c0392b", marginLeft: 6 }}>
           {delta >= 0 ? "▲" : "▼"} {delta >= 0 ? "+" : ""}{delta} since {MONTHS[weeks[0].at.getMonth()]}
         </span>
@@ -97,7 +97,6 @@ function GrowthChart({ points, color }: { points: HistoryPoint[]; color: string 
 }
 
 export default function MasteryBoard() {
-  const supabase = useMemo(() => getSupabase(), []);
   const [periods, setPeriods] = useState<Period[]>([]);
   const [periodId, setPeriodId] = useState("");
   const [rows, setRows] = useState<StudentRow[]>([]);
@@ -108,28 +107,24 @@ export default function MasteryBoard() {
   const [showLegend, setShowLegend] = useState(false);
 
   useEffect(() => {
-    if (!supabase) return;
     (async () => {
-      const [{ data: pData }, { data: sData }] = await Promise.all([
-        supabase.from("periods").select("id,name").order("sort_order"),
-        supabase.from("students").select("period_id"),
-      ]);
+      const result = await teacherApiRequest<{ periods: Period[]; students: Array<{ periodId: string }> }>("/api/teacher/roster");
       // Count students per period so duplicate names (e.g. a real "Period 2" and
       // the mock one) are tellable apart in the dropdown.
       const counts = new Map<string, number>();
-      for (const s of (sData as { period_id: string }[]) || []) {
-        counts.set(s.period_id, (counts.get(s.period_id) || 0) + 1);
+      for (const student of result.students) {
+        counts.set(student.periodId, (counts.get(student.periodId) || 0) + 1);
       }
-      const ps = ((pData as Period[]) || []).map((p) => ({
-        ...p,
-        name: `${p.name} · ${counts.get(p.id) || 0} students`,
+      const ps = result.periods.map((period) => ({
+        ...period,
+        name: `${period.name} - ${counts.get(period.id) || 0} students`,
       }));
       setPeriods(ps);
       // Default to the fullest period, not just the first one.
       const fullest = [...ps].sort((a, b) => (counts.get(b.id) || 0) - (counts.get(a.id) || 0))[0];
       if (fullest) setPeriodId(fullest.id);
     })();
-  }, [supabase]);
+  }, []);
 
   const load = useCallback(async (pid: string) => {
     if (!pid) return;
@@ -212,14 +207,14 @@ export default function MasteryBoard() {
       `}</style>
 
       <div className="mb-wrap">
-        <h1 className="mb-h1">🐾 Mastery board</h1>
+        <h1 className="mb-h1">Mastery board</h1>
         <div className="mb-sub">Recency-weighted mastery per i-Ready domain — checkpoints move the bar, practice days nudge it, warm-ups keep it honest.</div>
 
         <div className="mb-controls">
           <select className="mb-select" value={periodId} onChange={(e) => setPeriodId(e.target.value)}>
             {periods.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          <button className="mb-btn pri" onClick={() => void recompute()} disabled={loading || !periodId}>↻ Recompute</button>
+          <button className="mb-btn pri" onClick={() => void recompute()} disabled={loading || !periodId}>Recompute</button>
           <button className="mb-btn" onClick={() => void load(periodId)} disabled={loading || !periodId}>Refresh</button>
           <button className="mb-info" title="What does the number mean?" onClick={() => setShowLegend((v) => !v)}>ⓘ</button>
         </div>
@@ -240,7 +235,7 @@ export default function MasteryBoard() {
             </div>
             Two things it is <b>not</b>: it's not volume — the <b>“n items”</b> chip shows how much work the
             number is based on (a 55 on 4 items is a guess; a 55 on 40 items is a pattern) — and it's not the
-            mastery claim. The bar is the <b>pulse</b>; the per-standard <b>stage</b> (Approaching → Mastered →
+            mastery claim. The bar is the <b>pulse</b>; the per-standard <b>stage</b> (Approaching to Mastered to
             Complete) is the verdict, and only produced checkpoint work can reach the top.
           </div>
         )}
@@ -253,7 +248,7 @@ export default function MasteryBoard() {
 
         {rows.length === 0 && !loading ? (
           <div className="mb-empty">
-            No mastery rows yet for this period. Hit <b>↻ Recompute</b> to build them from the warm-up + checkpoint logs
+            No mastery rows yet for this period. Select <b>Recompute</b> to build them from the warm-up and checkpoint logs
             (make sure <code>supabase/proficiency.sql</code> and <code>supabase/evidence.sql</code> have been run).
           </div>
         ) : (
@@ -283,7 +278,7 @@ export default function MasteryBoard() {
       {detail && (
         <div className="mb-modal" onClick={() => setDetail(null)}>
           <div className="mb-sheet" onClick={(e) => e.stopPropagation()}>
-            <button className="mb-close" onClick={() => setDetail(null)}>✕ close</button>
+            <button className="mb-close" onClick={() => setDetail(null)}>Close</button>
             <h2 style={{ fontFamily: "Georgia, serif", margin: "0 0 4px", color: "#2b2620" }}>{detail.name}</h2>
             <div style={{ fontSize: 12.5, color: "#7a7264", marginBottom: 12 }}>{detail.evidence ?? 0} pieces of evidence behind these numbers</div>
             {DOMAINS.map((d) => {

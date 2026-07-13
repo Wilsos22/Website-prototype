@@ -1,5 +1,5 @@
 -- Big Dog Math — Gradebook schema (Phase 0)
--- Run this in your Supabase project: SQL Editor → New query → paste → Run.
+-- Run this in your Supabase project: open a new SQL Editor query, paste, and run.
 -- Safe to re-run: it only creates tables if they don't already exist.
 
 -- ── Class periods (e.g., "Period 1", "Period 2") ─────────────────────────────
@@ -17,6 +17,8 @@ create table if not exists students (
   full_name   text not null,
   email       text unique,          -- school Google email, auto-filled on sign-in
                                      -- (null is fine for hand-entered/test students)
+  auth_user_id uuid unique references auth.users(id) on delete set null,
+  auth_claimed_at timestamptz,
   created_at  timestamptz not null default now()
 );
 create index if not exists students_period_idx on students(period_id);

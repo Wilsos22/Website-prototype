@@ -8,6 +8,7 @@
 import { useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
+import { SECURE_STUDENT_DATA, studentApiRequest } from "@/lib/studentApi";
 import {
   LIVE_FLOW_MODE,
   LIVE_FLOW_ROUTE,
@@ -43,6 +44,12 @@ const CLASS_MODE_TARGETS = new Set([
   "/checkpoint",
 ]);
 
+type StudentSessionState = {
+  broadcast: string | null;
+  status: string;
+  live_flow: { tool?: { route?: string } | null } | null;
+};
+
 function isTeacherRoute(pathname: string) {
   return TEACHER_ROUTE_PREFIXES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
 }
@@ -69,7 +76,7 @@ export default function ClassSync() {
   pathRef.current = pathname;
 
   useEffect(() => {
-    if (!supabase) return;
+    if (!supabase && !SECURE_STUDENT_DATA) return;
     if (isTeacherPreview()) return;
     if (shouldLeaveClassMode()) {
       leaveClassMode();
@@ -90,18 +97,29 @@ export default function ClassSync() {
       const currentPath = pathRef.current || "";
       if (isStudentSwitchRoute(currentPath)) return;
       if (isTeacherRoute(currentPath)) return;
-      const liveFlowQuery = await supabase
-        .from("sessions")
-        .select("broadcast,status,live_flow")
-        .eq("id", sessionId)
-        .maybeSingle();
-      // Keep the existing class-mode routing working until the optional
-      // live_flow column has been added to this project's Supabase database.
-      const fallbackQuery = liveFlowQuery.error
-        ? await supabase.from("sessions").select("broadcast,status").eq("id", sessionId).maybeSingle()
-        : null;
-      const data = liveFlowQuery.data ?? fallbackQuery?.data;
-      const error = liveFlowQuery.error && fallbackQuery?.error ? fallbackQuery.error : null;
+      let data: StudentSessionState | null = null;
+      let error: unknown = null;
+      if (SECURE_STUDENT_DATA) {
+        try {
+          const result = await studentApiRequest<{ session: StudentSessionState | null }>(
+            `/api/student/session-state?sessionId=${encodeURIComponent(sessionId)}`,
+          );
+          data = result.session;
+        } catch (requestError) {
+          error = requestError;
+        }
+      } else if (supabase) {
+        const liveFlowQuery = await supabase
+          .from("sessions")
+          .select("broadcast,status,live_flow")
+          .eq("id", sessionId)
+          .maybeSingle();
+        const fallbackQuery = liveFlowQuery.error
+          ? await supabase.from("sessions").select("broadcast,status").eq("id", sessionId).maybeSingle()
+          : null;
+        data = (liveFlowQuery.data ?? fallbackQuery?.data) as StudentSessionState | null;
+        error = liveFlowQuery.error && fallbackQuery?.error ? fallbackQuery.error : null;
+      }
       if (stop) return;
       if (error || !data) {
         // Transient read error or a momentary empty result — keep the student in
@@ -109,11 +127,7 @@ export default function ClassSync() {
         // (that was what made students get asked to re-join mid-class).
         return;
       }
-      const d = data as {
-        broadcast: string | null;
-        status: string;
-        live_flow: { tool?: { route?: string } | null } | null;
-      };
+      const d = data;
       if (d.status === "closed") {
         leaveClassMode();
         return;
@@ -130,7 +144,7 @@ export default function ClassSync() {
       } else if (d.broadcast && CLASS_MODE_TARGETS.has(d.broadcast)) {
         target = d.broadcast; // explicit destination (lesson or a tool)
       } else {
-        target = "/lesson"; // joined but no destination yet → hold on the lesson
+        target = "/lesson"; // joined but no destination yet, so hold on the lesson
       }
       if (target && currentPath !== target) {
         router.push(target);
