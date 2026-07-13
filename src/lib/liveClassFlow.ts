@@ -8,6 +8,7 @@ export const CLASS_MODE_EXIT_KEY = "bdm-class-mode-exited";
 
 export type DiscussionPhaseId = "think" | "marker" | "table" | "revise" | "share";
 export type LivePollKind = "short-answer" | "multiple-choice" | "fist-to-five";
+export type TeacherRemoteAction = "next" | "previous" | "toggle-timer" | "add-30" | "subtract-30" | "reset-timer";
 export type LiveToolRoute =
   | "/whiteboard"
   | "/number-line-plus"
@@ -124,7 +125,23 @@ export interface LiveClassFlowSnapshot {
     choices: string[] | null;
     stage: "responding" | "results";
   } | null;
+  resource: {
+    label: string;
+    url: string;
+  } | null;
+  presentation: {
+    title: string;
+    body: string;
+    mode: "board" | "directions" | "resource" | "poll" | "tool";
+    notionStepId: string | null;
+  } | null;
   tool: LiveToolConfig | null;
+}
+
+export interface TeacherRemoteCommand {
+  nonce: string;
+  action: TeacherRemoteAction;
+  issuedAt: string;
 }
 
 // A single thing Abbie says, broadcast to joined student screens. `nonce` is

@@ -17,6 +17,8 @@ create table if not exists students (
   full_name   text not null,
   email       text unique,          -- school Google email, auto-filled on sign-in
                                      -- (null is fine for hand-entered/test students)
+  auth_user_id uuid unique references auth.users(id) on delete set null,
+  auth_claimed_at timestamptz,
   created_at  timestamptz not null default now()
 );
 create index if not exists students_period_idx on students(period_id);

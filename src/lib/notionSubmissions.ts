@@ -1,7 +1,6 @@
 // Writes a day's in-app tool work into the Notion "Student Submissions" database
-// (server-only, NOTION_TOKEN). Student is a plain text field there, so no
-// student-page mapping is needed. Data source id defaults below; override with
-// NOTION_SUBMISSIONS_DS_ID. Share the Student Submissions DB with the integration.
+// (server-only, NOTION_TOKEN). Rows also relate back to the student's roster
+// page so each profile can surface its own class evidence and trends.
 
 const NOTION_API = "https://api.notion.com/v1";
 const NOTION_VERSION = "2025-09-03";
@@ -46,10 +45,19 @@ export async function fetchTodaysSubmissionTitles(dateIso: string): Promise<Set<
 export interface SubmissionInput {
   title: string;
   student: string;
+  studentPageId?: string | null;
   period: string | null;   // "P1".."P7" or null
   response: string;
   misconception: boolean;
   dateIso: string;
+  evidenceType?: "Live Question" | "Fist to Five" | "Exit Ticket" | "Tool" | "Warm-Up" | "Other";
+  lessonCode?: string;
+  sessionId?: string;
+  prompt?: string;
+  responseValue?: string;
+  correct?: boolean | null;
+  standard?: string;
+  responseKey?: string;
 }
 
 export async function createSubmissionRow(i: SubmissionInput): Promise<void> {
@@ -64,8 +72,18 @@ export async function createSubmissionRow(i: SubmissionInput): Promise<void> {
     "Response": { rich_text: rt(i.response) },
     "Misconception Flag": { select: { name: i.misconception ? "Other" : "None" } },
     "Date": { date: { start: i.dateIso } },
+    "Synced At": { date: { start: new Date().toISOString() } },
   };
   if (i.period) properties["Period"] = { select: { name: i.period } };
+  if (i.studentPageId) properties["Student Record"] = { relation: [{ id: i.studentPageId }] };
+  if (i.evidenceType) properties["Evidence Type"] = { select: { name: i.evidenceType } };
+  if (i.lessonCode) properties["Lesson Code"] = { rich_text: rt(i.lessonCode) };
+  if (i.sessionId) properties["Session ID"] = { rich_text: rt(i.sessionId) };
+  if (i.prompt) properties["Prompt"] = { rich_text: rt(i.prompt) };
+  if (i.responseValue) properties["Response Value"] = { rich_text: rt(i.responseValue) };
+  if (i.correct != null) properties["Correct"] = { checkbox: i.correct };
+  if (i.standard) properties["Standard"] = { rich_text: rt(i.standard) };
+  if (i.responseKey) properties["Response Key"] = { rich_text: rt(i.responseKey) };
 
   const res = await fetch(`${NOTION_API}/pages`, {
     method: "POST", headers: headers(token),

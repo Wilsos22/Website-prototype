@@ -203,6 +203,8 @@ export default function InkBoard({
   const problemRef = useRef<string | null>(null);
   useEffect(() => { problemRef.current = problemText; }, [problemText]);
 
+  const displayedProblem = problemText?.trim() ? problemText : problem;
+
   useEffect(() => {
     resize();
     window.addEventListener("resize", resize);
@@ -386,7 +388,7 @@ export default function InkBoard({
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none", userSelect: "none" }}
         />
       )}
-      {problemText && problemText.trim() && (
+      {displayedProblem && displayedProblem.trim() && (
         <div
           style={{
             position: "absolute", inset: 0, padding: "clamp(18px,3.5vw,44px)",
@@ -394,7 +396,7 @@ export default function InkBoard({
             pointerEvents: "none", userSelect: "none",
           }}
         >
-          {problemText.split("\n").map((line) => line.trim()).filter(Boolean).map((line, i) => (
+          {displayedProblem.split("\n").map((line) => line.trim()).filter(Boolean).map((line, i) => (
             <div
               key={i}
               style={{

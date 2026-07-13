@@ -25,6 +25,7 @@ import {
   type LivePollKind,
   type LiveToolConfig,
   type LiveToolRoute,
+  type TeacherRemoteCommand,
 } from "@/lib/liveClassFlow";
 import {
   listLessonPresets,
@@ -44,12 +45,26 @@ import { DEFAULT_STATES, BANK_GROUPS, type ClassState } from "@/lib/classStates"
 interface LineupItem {
   uid: string;
   stateId: string;
+  minutes?: number;
+  title?: string;
+  studentDirections?: string;
+  question?: string;
+  pollKind?: LivePollKind | "";
+  choices?: string[];
+  correctAnswer?: string;
+  standard?: string;
+  notionStepId?: string;
+  notionLessonId?: string;
+  lessonCode?: string;
+  linkUrl?: string;
+  paperTask?: string;
 }
 
 interface TeacherSessionRow {
   id: string;
   status: string;
   broadcast: string | null;
+  remote_command: TeacherRemoteCommand | null;
 }
 
 type InteractiveStateId = "question" | "poll";
@@ -121,6 +136,18 @@ interface ControlPollAnswer {
   id: string;
   display_name: string | null;
   answer: string | null;
+}
+
+interface PollLaunchConfig {
+  stateId: InteractiveStateId;
+  kind: LivePollKind;
+  question: string;
+  choices?: string[];
+  correctAnswer?: string;
+  standard?: string;
+  notionStepId?: string;
+  notionLessonId?: string;
+  lessonCode?: string;
 }
 
 // DEFAULT_STATES + BANK_GROUPS now live in @/lib/classStates (shared with the
@@ -314,7 +341,33 @@ async function idbDel(key: string): Promise<void> {
 // The published lesson lists its tools as free text (e.g. "Number Line"). Map
 // those names to bank state ids so the teacher can load and run the day's
 // lesson as one sequence instead of rebuilding it by hand.
-type TodayLesson = { title?: string; tools?: string | null };
+interface TodayLessonStep {
+  id: string;
+  title: string;
+  duration: number;
+  stateId: string;
+  studentDirections: string;
+  tool: string;
+  question: string;
+  pollKind: LivePollKind | "";
+  choices: string[];
+  correctAnswer: string;
+  standard: string;
+  linkUrl: string;
+  paperTask: string;
+}
+
+type TodayLesson = {
+  id: string;
+  title?: string;
+  lessonCode?: string;
+  tools?: string | null;
+  learningIntention?: string;
+  successCriteria?: string;
+  warmUpLink?: string;
+  exitTicketLink?: string;
+  steps?: TodayLessonStep[];
+};
 
 const LESSON_TOOL_ALIASES: Record<string, string> = {
   whiteboard: "tool-whiteboard",
@@ -363,6 +416,13 @@ function parseLessonList(raw: string | undefined | null): string[] {
   return raw.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean);
 }
 
+function minutesForLineupItem(item: LineupItem | undefined, bank: ClassState[]): number {
+  if (!item) return 0;
+  return item.minutes && item.minutes > 0
+    ? item.minutes
+    : bank.find((state) => state.id === item.stateId)?.minutes ?? 0;
+}
+
 function matchLessonToolStateId(name: string): string | null {
   const norm = normalizeToolName(name);
   if (!norm) return null;
@@ -397,6 +457,7 @@ export default function ControlPage() {
   const [saveTitle, setSaveTitle] = useState("");
   const [lessonMsg, setLessonMsg] = useState<string | null>(null);
   const [todayMsg, setTodayMsg] = useState<string | null>(null);
+  const [notionLessonCode, setNotionLessonCode] = useState("");
   const [showDiscussion, setShowDiscussion] = useState(false);
   const [autoAdvance, setAutoAdvance] = useState(true);
   const [soundUrls, setSoundUrls] = useState<Record<string, string>>({});
@@ -420,6 +481,9 @@ export default function ControlPage() {
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const musicRef = useRef<HTMLAudioElement | null>(null);
+  const autoOpenedStepRef = useRef<Set<string>>(new Set());
+  const openingStepRef = useRef<string | null>(null);
+  const lastRemoteCommandRef = useRef<string | null>(null);
 
   // ── Load saved bank minutes + lineup + uploaded sounds ──────────────────
   useEffect(() => {
@@ -470,6 +534,7 @@ export default function ControlPage() {
         current?.id === next?.id
         && current?.status === next?.status
         && current?.broadcast === next?.broadcast
+        && current?.remote_command?.nonce === next?.remote_command?.nonce
           ? current
           : next
       ));
@@ -480,7 +545,7 @@ export default function ControlPage() {
       if (storedSessionId) {
         const { data } = await supabase
           .from("sessions")
-          .select("id,status,broadcast")
+          .select("id,status,broadcast,remote_command")
           .eq("id", storedSessionId)
           .maybeSingle();
         if (stopped) return;
@@ -493,7 +558,7 @@ export default function ControlPage() {
 
       const { data } = await supabase
         .from("sessions")
-        .select("id,status,broadcast")
+        .select("id,status,broadcast,remote_command")
         .eq("status", "open")
         .eq("broadcast", LIVE_FLOW_MODE)
         .order("started_at", { ascending: false })
@@ -618,7 +683,8 @@ export default function ControlPage() {
       if (!st) return;
       stopMusic();
       setCurrentIndex(ni);
-      secRef.current = st.minutes * 60;
+      const minutes = minutesForLineupItem(item, bank);
+      secRef.current = minutes * 60;
       setSecondsLeft(secRef.current);
       setFinished(false);
       setRunning(true);
@@ -633,10 +699,8 @@ export default function ControlPage() {
     return !t || p.code.toLowerCase().includes(t) || p.title.toLowerCase().includes(t);
   });
   const activeState = activeItem ? bank.find((s) => s.id === activeItem.stateId) : undefined;
-  const totalMin = lineup.reduce((sum, it) => {
-    const st = bank.find((s) => s.id === it.stateId);
-    return sum + (st?.minutes ?? 0);
-  }, 0);
+  const activeMinutes = minutesForLineupItem(activeItem, bank);
+  const totalMin = lineup.reduce((sum, item) => sum + minutesForLineupItem(item, bank), 0);
   const activeInteractiveState: InteractiveStateId | null = activeState?.id === "question" || activeState?.id === "poll"
     ? activeState.id
     : null;
@@ -655,7 +719,10 @@ export default function ControlPage() {
     if (!controlPoll || controlPoll.stage === "results") return;
     setControlPoll((current) => current ? { ...current, stage: "results" } : null);
     if (supabase) {
-      void supabase.from("polls").update({ status: "closed" }).eq("id", controlPoll.id);
+      void (async () => {
+        await supabase.from("polls").update({ status: "closed" }).eq("id", controlPoll.id);
+        await fetch("/api/submissions", { method: "POST" }).catch(() => null);
+      })();
     }
   }, [controlPoll, supabase]);
 
@@ -731,26 +798,29 @@ export default function ControlPage() {
     }
   }, [closeActivePoll, controlPoll?.stage, finished]);
 
-  async function openControlPoll() {
-    if (!supabase || !teacherSession || !activeInteractiveState) {
+  async function openControlPoll(config?: PollLaunchConfig): Promise<boolean> {
+    const stateId = config?.stateId ?? activeInteractiveState;
+    if (!supabase || !teacherSession || !stateId) {
       setPollError("Start a session first, then open this question or poll.");
-      return;
+      return false;
     }
-    const question = pollKind === "fist-to-five"
-      ? pollQuestion.trim() || "How well do you understand this right now?"
-      : pollQuestion.trim();
-    const choices = pollKind === "multiple-choice"
-      ? pollChoices.map((choice) => choice.trim()).filter(Boolean)
-      : pollKind === "fist-to-five"
+    const kind = config?.kind ?? pollKind;
+    const configuredQuestion = config?.question.trim() ?? "";
+    const question = kind === "fist-to-five"
+      ? configuredQuestion || pollQuestion.trim() || "How well do you understand this right now?"
+      : configuredQuestion || pollQuestion.trim();
+    const choices = kind === "multiple-choice"
+      ? (config?.choices ?? pollChoices).map((choice) => choice.trim()).filter(Boolean)
+      : kind === "fist-to-five"
         ? ["0", "1", "2", "3", "4", "5"]
         : null;
     if (!question) {
       setPollError("Add the question students should answer.");
-      return;
+      return false;
     }
-    if (pollKind === "multiple-choice" && (!choices || choices.length < 2)) {
+    if (kind === "multiple-choice" && (!choices || choices.length < 2)) {
       setPollError("Add at least two answer choices.");
-      return;
+      return false;
     }
 
     setPollError(null);
@@ -758,8 +828,13 @@ export default function ControlPage() {
       session_id: teacherSession.id,
       question,
       choices,
-      kind: pollKind,
+      kind,
       status: "open",
+      lesson_code: config?.lessonCode || activeItem?.lessonCode || null,
+      notion_lesson_id: config?.notionLessonId || activeItem?.notionLessonId || null,
+      notion_step_id: config?.notionStepId || activeItem?.notionStepId || null,
+      standard_id: config?.standard || activeItem?.standard || null,
+      correct_answer: config?.correctAnswer || activeItem?.correctAnswer || null,
     };
     let { data, error } = await supabase.from("polls").insert(payload).select("id").single();
     if (error) {
@@ -774,13 +849,13 @@ export default function ControlPage() {
     }
     if (error || !data) {
       setPollError(error?.message || "The poll could not be opened.");
-      return;
+      return false;
     }
 
     setControlPoll({
       id: (data as { id: string }).id,
-      stateId: activeInteractiveState,
-      kind: pollKind,
+      stateId,
+      kind,
       question,
       choices,
       stage: "responding",
@@ -788,10 +863,33 @@ export default function ControlPage() {
     setPollAnswers([]);
     setFinished(false);
     if (secondsLeft <= 0 && activeState) {
-      secRef.current = activeState.minutes * 60;
+      secRef.current = activeMinutes * 60;
       setSecondsLeft(secRef.current);
     }
+    return true;
   }
+
+  useEffect(() => {
+    if (!activeItem?.question || !activeInteractiveState || controlPoll || autoOpenedStepRef.current.has(activeItem.uid)) return;
+    if (!teacherSession || openingStepRef.current === activeItem.uid) return;
+    openingStepRef.current = activeItem.uid;
+    void openControlPoll({
+      stateId: activeInteractiveState,
+      kind: activeItem.pollKind || (activeInteractiveState === "poll" ? "fist-to-five" : "short-answer"),
+      question: activeItem.question,
+      choices: activeItem.choices,
+      correctAnswer: activeItem.correctAnswer,
+      standard: activeItem.standard,
+      notionStepId: activeItem.notionStepId,
+      notionLessonId: activeItem.notionLessonId,
+      lessonCode: activeItem.lessonCode,
+    }).then((opened) => {
+      if (opened) autoOpenedStepRef.current.add(activeItem.uid);
+      openingStepRef.current = null;
+    });
+    // openControlPoll intentionally reads the latest teacher/session state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeInteractiveState, activeItem, controlPoll, teacherSession]);
 
   function prepareAnotherPoll() {
     setControlPoll(null);
@@ -923,8 +1021,8 @@ export default function ControlPage() {
     const state = activeState
       ? {
           id: activeState.id,
-          label: activeState.label,
-          description: activeState.desc,
+          label: activeItem?.title || activeState.label,
+          description: activeItem?.studentDirections || activeState.desc,
           color: activeState.color,
         }
       : null;
@@ -939,6 +1037,25 @@ export default function ControlPage() {
         }
       : null;
     const tool = publishedTool?.stateId === activeToolState ? publishedTool.tool : null;
+    const resource = activeItem?.linkUrl
+      ? { label: activeState?.id === "exit" ? "Open Exit Ticket" : "Open Lesson Resource", url: activeItem.linkUrl }
+      : null;
+    const presentation = activeState
+      ? {
+          title: activeItem?.title || activeState.label,
+          body: activeItem?.paperTask || activeItem?.question || activeItem?.studentDirections || activeState.desc,
+          mode: resource
+            ? "resource" as const
+            : poll
+              ? "poll" as const
+              : tool
+                ? "tool" as const
+                : activeState.id === "i-do" || activeState.id === "manip" || activeState.id === "we-do"
+                  ? "board" as const
+                  : "directions" as const,
+          notionStepId: activeItem?.notionStepId || null,
+        }
+      : null;
     const timer = poll?.stage === "results"
       ? null
       : phase?.timed && phase.totalSeconds !== null && phase.secondsLeft !== null
@@ -950,15 +1067,15 @@ export default function ControlPage() {
         }
       : activeState
         ? {
-            totalSeconds: activeState.minutes * 60,
+            totalSeconds: activeMinutes * 60,
             secondsLeft,
             running,
             finished,
           }
         : null;
 
-    return JSON.stringify({ version: 1, state, phase, timer, poll, tool });
-  }, [activeInteractiveState, activeState, activeToolState, controlPoll, discussionFlow, finished, publishedTool, running, secondsLeft, showDiscussion]);
+    return JSON.stringify({ version: 1, state, phase, timer, poll, resource, presentation, tool });
+  }, [activeInteractiveState, activeItem, activeMinutes, activeState, activeToolState, controlPoll, discussionFlow, finished, publishedTool, running, secondsLeft, showDiscussion]);
 
   // Keep student Chromebooks in sync with the existing /control state machine.
   // The write is skipped unless the teacher explicitly selected Live Class Flow.
@@ -1022,8 +1139,9 @@ export default function ControlPage() {
     const st = bank.find((s) => s.id === item.stateId);
     if (!st) return;
     setCurrentIndex(i);
-    secRef.current = st.minutes * 60;
-    setSecondsLeft(st.minutes * 60);
+    const minutes = minutesForLineupItem(item, bank);
+    secRef.current = minutes * 60;
+    setSecondsLeft(minutes * 60);
     setRunning(false);
     setFinished(false);
     stopMusic();
@@ -1065,7 +1183,7 @@ export default function ControlPage() {
       minutes,
     });
     if (!res.ok) { setLessonMsg(res.error || "Couldn't save."); return; }
-    setLessonMsg("Saved ✓");
+    setLessonMsg("Saved");
     setSaveCode("");
     setSaveTitle("");
     refreshPresets();
@@ -1076,26 +1194,9 @@ export default function ControlPage() {
     refreshPresets();
   }
 
-  // Pull today's published Notion lesson and build a runnable lineup from it:
-  // Warm-Up → the lesson's tools (in order) → Exit Ticket. The teacher can then
-  // reorder, add, or run the sequence as usual.
-  async function loadTodayLesson() {
-    setTodayMsg("Loading today's lesson from Notion…");
-    let lesson: TodayLesson | null = null;
-    try {
-      const res = await fetch("/api/today", { cache: "no-store" });
-      const data = (await res.json()) as { lesson?: TodayLesson | null };
-      lesson = data?.lesson ?? null;
-    } catch {
-      setTodayMsg("Couldn't reach Notion — check the connection and try again.");
-      window.setTimeout(() => setTodayMsg(null), 6000);
-      return;
-    }
-    if (!lesson) {
-      setTodayMsg("No lesson is published in Notion for today.");
-      window.setTimeout(() => setTodayMsg(null), 6000);
-      return;
-    }
+  // Lesson Steps are the source of truth; the older tools-only path remains as
+  // a fallback for pages that have not been converted yet.
+  function applyNotionLesson(lesson: TodayLesson): boolean {
     const mapped: string[] = [];
     const unmatched: string[] = [];
     for (const name of parseLessonList(lesson.tools)) {
@@ -1103,23 +1204,99 @@ export default function ControlPage() {
       if (id) { if (!mapped.includes(id)) mapped.push(id); }
       else unmatched.push(name);
     }
-    if (lineup.length > 0 && !window.confirm(`Replace today's lineup with “${lesson.title || "today's lesson"}”?`)) {
+    if (lineup.length > 0 && !window.confirm(`Replace the current lineup with “${lesson.title || "this lesson"}”?`)) {
       setTodayMsg(null);
-      return;
+      return false;
     }
-    const newLineup = ["warmup", ...mapped, "exit"].map((stateId) => ({ uid: uid(), stateId }));
+    const lessonSteps = (lesson.steps || []).filter((step) => step.stateId && bank.some((state) => state.id === step.stateId));
+    const newLineup: LineupItem[] = lessonSteps.length
+      ? lessonSteps.map((step) => ({
+          uid: uid(),
+          stateId: step.stateId,
+          minutes: Math.max(1, step.duration || 1),
+          title: step.title,
+          studentDirections: step.studentDirections,
+          question: step.question,
+          pollKind: step.pollKind,
+          choices: step.choices,
+          correctAnswer: step.correctAnswer,
+          standard: step.standard,
+          notionStepId: step.id,
+          notionLessonId: lesson.id,
+          lessonCode: lesson.lessonCode,
+          linkUrl: step.linkUrl
+            || (step.stateId === "warmup" ? lesson.warmUpLink : "")
+            || (step.stateId === "exit" ? lesson.exitTicketLink : "")
+            || "",
+          paperTask: step.paperTask,
+        }))
+      : ["warmup", ...mapped, "exit"].map((stateId) => ({ uid: uid(), stateId }));
+    autoOpenedStepRef.current.clear();
+    setControlPoll(null);
+    setPollAnswers([]);
     persistLineup(newLineup);
-    const first = bank.find((s) => s.id === newLineup[0].stateId);
+    const first = newLineup[0];
     setCurrentIndex(0);
-    if (first) { secRef.current = first.minutes * 60; setSecondsLeft(first.minutes * 60); }
+    if (first) {
+      const minutes = minutesForLineupItem(first, bank);
+      secRef.current = minutes * 60;
+      setSecondsLeft(minutes * 60);
+    }
     setRunning(false);
     setFinished(false);
     stopMusic();
     setShowLessons(false);
-    const parts = [`Loaded “${lesson.title || "today's lesson"}”`, `${mapped.length} tool${mapped.length === 1 ? "" : "s"} added`];
+    const parts = [
+      `Loaded “${lesson.title || "today's lesson"}”`,
+      lessonSteps.length ? `${lessonSteps.length} timed steps added` : `${mapped.length} tool${mapped.length === 1 ? "" : "s"} added`,
+    ];
     if (unmatched.length) parts.push(`couldn't match: ${unmatched.join(", ")}`);
     setTodayMsg(parts.join(" · "));
     window.setTimeout(() => setTodayMsg(null), 8000);
+    return true;
+  }
+
+  // Pull today's published Notion lesson and build the full timestamped lineup.
+  async function loadTodayLesson() {
+    setTodayMsg("Loading today's lesson from Notion…");
+    try {
+      const res = await fetch("/api/today", { cache: "no-store" });
+      const data = (await res.json()) as { lesson?: TodayLesson | null; error?: string };
+      if (!res.ok || data.error) throw new Error(data.error || "Couldn't load today's lesson.");
+      if (!data.lesson) {
+        setTodayMsg("No lesson is published in Notion for today.");
+        window.setTimeout(() => setTodayMsg(null), 6000);
+        return;
+      }
+      applyNotionLesson(data.lesson);
+    } catch (error) {
+      setTodayMsg(error instanceof Error ? error.message : "Couldn't reach Notion — check the connection and try again.");
+      window.setTimeout(() => setTodayMsg(null), 6000);
+    }
+  }
+
+  async function loadNotionLessonByCode() {
+    const code = notionLessonCode.trim();
+    if (!code) {
+      setLessonMsg("Enter a Notion lesson code first.");
+      return;
+    }
+    setLessonMsg(`Loading ${code} from Notion…`);
+    try {
+      const res = await fetch(`/api/teacher/lesson?code=${encodeURIComponent(code)}`, { cache: "no-store" });
+      const data = (await res.json()) as { lesson?: TodayLesson | null; error?: string };
+      if (!res.ok || data.error) throw new Error(data.error || "Couldn't load the lesson.");
+      if (!data.lesson) {
+        setLessonMsg(`No Notion lesson uses the code ${code}.`);
+        return;
+      }
+      if (applyNotionLesson(data.lesson)) {
+        setLessonMsg(`Loaded ${data.lesson.lessonCode || code} from Notion.`);
+        setNotionLessonCode("");
+      }
+    } catch (error) {
+      setLessonMsg(error instanceof Error ? error.message : "Couldn't reach Notion.");
+    }
   }
 
   // When launched from the Sequence Builder with ?run=1, auto-start the lineup
@@ -1146,7 +1323,7 @@ export default function ControlPage() {
   // ── Timer controls ──────────────────────────────────────────────────────
   function toggleRun() {
     if (!activeState) return;
-    if (secondsLeft <= 0) { secRef.current = activeState.minutes * 60; setSecondsLeft(secRef.current); setFinished(false); }
+    if (secondsLeft <= 0) { secRef.current = activeMinutes * 60; setSecondsLeft(secRef.current); setFinished(false); }
     const willRun = !running;
     setRunning(willRun);
     if (willRun) startMusicFor(activeState.id);
@@ -1160,7 +1337,7 @@ export default function ControlPage() {
     if (!state) return;
     setAutoAdvance(true);
     setCurrentIndex(nextIndex);
-    secRef.current = secondsLeft > 0 && currentIndex === nextIndex ? secondsLeft : state.minutes * 60;
+    secRef.current = secondsLeft > 0 && currentIndex === nextIndex ? secondsLeft : minutesForLineupItem(item, bank) * 60;
     setSecondsLeft(secRef.current);
     setFinished(false);
     setRunning(true);
@@ -1169,7 +1346,7 @@ export default function ControlPage() {
   }
   function reset() {
     if (!activeState) return;
-    secRef.current = activeState.minutes * 60;
+    secRef.current = activeMinutes * 60;
     setSecondsLeft(secRef.current);
     setRunning(false);
     setFinished(false);
@@ -1200,6 +1377,27 @@ export default function ControlPage() {
     if (currentIndex + 1 < lineup.length) loadIndex(currentIndex + 1);
     else { setRunning(false); setFinished(false); setCurrentIndex(-1); }
   }
+  function previous() {
+    if (currentIndex <= 0) return;
+    if (controlPoll?.stage === "responding") closeActivePoll();
+    setControlPoll(null);
+    setPollAnswers([]);
+    loadIndex(currentIndex - 1);
+  }
+
+  useEffect(() => {
+    const command = teacherSession?.remote_command;
+    if (!command || command.nonce === lastRemoteCommandRef.current) return;
+    lastRemoteCommandRef.current = command.nonce;
+    if (command.action === "next") next();
+    else if (command.action === "previous") previous();
+    else if (command.action === "toggle-timer") toggleRun();
+    else if (command.action === "add-30") adjust(30);
+    else if (command.action === "subtract-30") adjust(-30);
+    else if (command.action === "reset-timer") reset();
+    // These controls intentionally operate on the current state-machine snapshot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teacherSession?.remote_command?.nonce]);
   function editMinutes(id: string, minutes: number) {
     const clamped = Math.max(1, Math.min(120, Math.round(minutes) || 1));
     persistBank(bank.map((s) => (s.id === id ? { ...s, minutes: clamped } : s)));
@@ -1232,7 +1430,12 @@ export default function ControlPage() {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.code === "Space" && activeState && !editing && !showSounds) { e.preventDefault(); toggleRun(); }
+      const target = e.target as HTMLElement | null;
+      const isTyping = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.tagName === "SELECT" || target?.isContentEditable;
+      if (isTyping || !activeState || editing || showSounds) return;
+      if (e.code === "Space") { e.preventDefault(); toggleRun(); }
+      else if (e.code === "ArrowRight" || e.code === "PageDown") { e.preventDefault(); next(); }
+      else if (e.code === "ArrowLeft" || e.code === "PageUp") { e.preventDefault(); previous(); }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -1242,10 +1445,11 @@ export default function ControlPage() {
   const accent = activeState?.color ?? "#4e6ef2";
   const inFinal10 = running && secondsLeft <= 10 && secondsLeft > 0;
   const overBudget = totalMin > PERIOD_MIN;
-  const denom = activeState ? activeState.minutes * 60 : 1;
+  const denom = activeState ? activeMinutes * 60 : 1;
   const pct = activeState ? Math.max(0, Math.min(100, (secondsLeft / denom) * 100)) : 0;
   const hasNext = currentIndex + 1 < lineup.length;
   const nextState = hasNext ? bank.find((s) => s.id === lineup[currentIndex + 1].stateId) : undefined;
+  const nextLabel = hasNext ? lineup[currentIndex + 1]?.title || nextState?.label : undefined;
   const liveFlowConnected = teacherSession?.status === "open" && teacherSession.broadcast === LIVE_FLOW_MODE;
   const liveFlowStatus = !supabase
     ? "Live sync unavailable"
@@ -1264,7 +1468,7 @@ export default function ControlPage() {
     <div key={state.id} className="cx-chip" onClick={() => !editing && addToLineup(state.id)} style={editing ? { cursor: "default" } : undefined}>
       <span className="dot" style={{ background: state.color }} />
       {state.label}
-      {soundUrls[`music:${state.id}`] && <span className="cx-music-tag">♪</span>}
+      {soundUrls[`music:${state.id}`] && <span className="cx-music-tag">audio</span>}
       {editing ? (
         <input className="cx-min-in" type="number" min={1} max={120} value={state.minutes}
           onClick={(e) => e.stopPropagation()} onChange={(e) => editMinutes(state.id, Number(e.target.value))} />
@@ -1410,18 +1614,20 @@ export default function ControlPage() {
           <p className="cx-mark">Big Dog Math — Classroom</p>
           <p className="cx-live-status">{liveFlowStatus}</p>
           <div className="cx-tbtns">
-            <a className="cx-sbtn cx-home" href="/teacher">🏠 Home</a>
-            <a className="cx-sbtn" href="/session">📡 Session</a>
-            <a className="cx-sbtn" href="/session#challenge">🎮 Games</a>
-            <a className="cx-sbtn" href="/roster">👥 Rosters</a>
+            <a className="cx-sbtn cx-home" href="/teacher">Home</a>
+            <a className="cx-sbtn" href="/session">Session</a>
+            <a className="cx-sbtn" href="/session#challenge">Games</a>
+            <a className="cx-sbtn" href="/roster">Rosters</a>
+            <a className="cx-sbtn" href="/teacher/present" target="_blank" rel="noreferrer">Classroom stage</a>
+            <a className="cx-sbtn" href="/teacher/remote" target="_blank" rel="noreferrer">Remote</a>
             <span className="cx-divider" />
-            <button className="cx-sbtn" style={{ borderColor: "#14b8a6", color: "#5eead4" }} onClick={loadTodayLesson}>📅 Today&apos;s lesson</button>
-            <button className="cx-sbtn" onClick={() => { setShowLessons(true); setLessonMsg(null); }}>📚 Lessons</button>
-            <button className="cx-sbtn" onClick={() => setShowSpinner(true)}>🎰 Spinner</button>
-            <button className="cx-sbtn" style={autoAdvance ? { borderColor: accent, color: "#fff" } : undefined} onClick={() => setAutoAdvance((v) => !v)}>Auto {autoAdvance ? "✓" : "off"}</button>
-            <button className="cx-sbtn" onClick={() => setShowSounds((v) => !v)}>🎵 Sounds</button>
-            <button className="cx-sbtn" onClick={() => setEditing((v) => !v)}>{editing ? "✓ Done" : "Edit times"}</button>
-            <button className="cx-sbtn" onClick={toggleFullscreen}>⛶ Full</button>
+            <button className="cx-sbtn" style={{ borderColor: "#14b8a6", color: "#5eead4" }} onClick={loadTodayLesson}>Today&apos;s lesson</button>
+            <button className="cx-sbtn" onClick={() => { setShowLessons(true); setLessonMsg(null); }}>Lessons</button>
+            <button className="cx-sbtn" onClick={() => setShowSpinner(true)}>Spinner</button>
+            <button className="cx-sbtn" style={autoAdvance ? { borderColor: accent, color: "#fff" } : undefined} onClick={() => setAutoAdvance((v) => !v)}>Auto {autoAdvance ? "on" : "off"}</button>
+            <button className="cx-sbtn" onClick={() => setShowSounds((v) => !v)}>Sounds</button>
+            <button className="cx-sbtn" onClick={() => setEditing((v) => !v)}>{editing ? "Done" : "Edit times"}</button>
+            <button className="cx-sbtn" onClick={toggleFullscreen}>Full screen</button>
           </div>
         </header>
 
@@ -1450,15 +1656,15 @@ export default function ControlPage() {
           {activeState ? (
             <>
               <div className="cx-pos">Step {currentIndex + 1} of {lineup.length}</div>
-              <div className="cx-state">{activeState.label}</div>
-              <div className="cx-desc">{activeState.desc}</div>
+              <div className="cx-state">{activeItem?.title || activeState.label}</div>
+              <div className="cx-desc">{activeItem?.studentDirections || activeState.desc}</div>
               <div className="cx-clock">{inFinal10 ? secondsLeft : fmt(secondsLeft)}</div>
               <div className="cx-progress">
                 <div className="cx-progress-fill" style={{ width: `${pct}%`, background: finished ? "#f95335" : inFinal10 ? "#fbbf24" : accent }} />
               </div>
               <div className={`cx-note ${finished ? "cx-fin" : warnFlash ? "cx-warn" : ""}`}>
                 {finished
-                  ? (autoAdvance && hasNext ? "⏰ Time's up — moving on…" : hasNext ? "⏰ Time's up — tap Next ▶" : "✓ Lesson complete!")
+                  ? (autoAdvance && hasNext ? "Time's up — moving on…" : hasNext ? "Time's up — tap Next" : "Lesson complete!")
                   : warnFlash ? "30 seconds!" : ""}
               </div>
               {activeInteractiveState && (
@@ -1513,7 +1719,7 @@ export default function ControlPage() {
                       )}
                       {pollError && <div className="cx-poll-error">{pollError}</div>}
                       <div className="cx-actions" style={{ justifyContent: "flex-start" }}>
-                        <button className="cx-btn pri" onClick={openControlPoll}>Open to students</button>
+                        <button className="cx-btn pri" onClick={() => { void openControlPoll(); }}>Open to students</button>
                       </div>
                     </>
                   ) : controlPoll.stage === "responding" ? (
@@ -1720,9 +1926,9 @@ export default function ControlPage() {
                       {activeToolState === "tool-game"
                         ? "The live game is running — leaderboard is below."
                         : activeToolState === "tool-exit-ticket"
-                          ? "Exit ticket sent — responses are saving. Review them under 📝 Practice → Exit tickets."
+                          ? "Exit ticket sent — responses are saving. Review them under Practice, then Exit tickets."
                           : activeToolState === "tool-checkpoint"
-                            ? "Checkpoint sent — auto-graded answers are saving. Review under ✅ Checkpoints."
+                            ? "Checkpoint sent — auto-graded answers are saving. Review under Checkpoints."
                             : "Student screens are on this configured tool."}
                     </div>
                   )}
@@ -1746,11 +1952,11 @@ export default function ControlPage() {
                   <div className="cx-actions" style={{ justifyContent: "flex-start" }}>
                     <button className="cx-btn pri" onClick={publishToolSetup}>
                       {activeToolState === "tool-game"
-                        ? (publishedTool?.stateId === activeToolState ? "Relaunch game" : "🎮 Launch game")
+                        ? (publishedTool?.stateId === activeToolState ? "Relaunch game" : "Launch game")
                         : activeToolState === "tool-exit-ticket"
-                          ? (publishedTool?.stateId === activeToolState ? "Re-send exit ticket" : "📝 Send exit ticket")
+                          ? (publishedTool?.stateId === activeToolState ? "Re-send exit ticket" : "Send exit ticket")
                           : activeToolState === "tool-checkpoint"
-                            ? (publishedTool?.stateId === activeToolState ? "Re-send checkpoint" : "✅ Send checkpoint")
+                            ? (publishedTool?.stateId === activeToolState ? "Re-send checkpoint" : "Send checkpoint")
                             : (publishedTool?.stateId === activeToolState ? "Update student screens" : "Send tool setup to students")}
                     </button>
                   </div>
@@ -1758,6 +1964,7 @@ export default function ControlPage() {
               )}
               <div className="cx-actions">
                 <button className="cx-btn pri" onClick={running ? toggleRun : runSequence}>{running ? "⏸ Pause" : "▶ Start"}</button>
+                <button className="cx-btn" onClick={previous} disabled={currentIndex <= 0}>Back</button>
                 <button className="cx-btn next" onClick={next} disabled={controlPoll?.stage !== "responding" && currentIndex + 1 >= lineup.length}>{controlPoll?.stage === "responding" ? "Show results" : "Advance ▶"}</button>
                 <button className="cx-btn" onClick={stopSequence}>■ Stop</button>
                 <span className="cx-actions-sep" />
@@ -1766,14 +1973,14 @@ export default function ControlPage() {
                 <button className="cx-btn" onClick={() => adjust(-60)} disabled={secondsLeft < 60}>−1 min</button>
                 <button className="cx-btn" onClick={() => adjust(30)}>+30s</button>
                 {finished && activeState.id === "warmup" && (
-                  <button className="cx-btn" style={{ background: "#f59e0b", borderColor: "#f59e0b" }} onClick={() => setShowSpinner(true)}>🎰 Pick readers</button>
+                  <button className="cx-btn" style={{ background: "#f59e0b", borderColor: "#f59e0b" }} onClick={() => setShowSpinner(true)}>Pick readers</button>
                 )}
                 {activeState.id === "discussion" && (
                   <button className="cx-btn" style={{ background: "#06b6d4", borderColor: "#06b6d4" }} onClick={() => setShowDiscussion(true)}>▶ Run discussion</button>
                 )}
               </div>
               {hasNext
-                ? <div className="cx-upnext">Up next: <strong>{nextState?.label}</strong></div>
+                ? <div className="cx-upnext">Up next: <strong>{nextLabel}</strong></div>
                 : <div className="cx-upnext">Last step of the lesson</div>}
             </>
           ) : (
@@ -1797,15 +2004,15 @@ export default function ControlPage() {
             return (
               <div key={it.uid} className={`cx-litem${i === currentIndex ? " cur" : ""}`} onClick={() => loadIndex(i)}>
                 <span className="dot" style={{ background: st.color }} />
-                <span className="lbl">{st.label}</span>
-                <span className="mins">{st.minutes}m</span>
+                <span className="lbl">{it.title || st.label}</span>
+                <span className="mins">{minutesForLineupItem(it, bank)}m</span>
                 <button className="cx-ibtn" onClick={(e) => { e.stopPropagation(); moveItem(it.uid, -1); }} title="Move left">‹</button>
                 <button className="cx-ibtn" onClick={(e) => { e.stopPropagation(); moveItem(it.uid, 1); }} title="Move right">›</button>
                 <button className="cx-ibtn" onClick={(e) => { e.stopPropagation(); removeFromLineup(it.uid); }} title="Remove">×</button>
               </div>
             );
           })}
-          <span className="cx-budget">{totalMin} / {PERIOD_MIN} min{overBudget ? " ⚠ over" : ""}</span>
+          <span className="cx-budget">{totalMin} / {PERIOD_MIN} min{overBudget ? " over" : ""}</span>
         </section>
 
         {/* Sound setup */}
@@ -1822,7 +2029,7 @@ export default function ControlPage() {
                     <input type="file" accept="audio/*" style={{ display: "none" }}
                       onChange={(e) => uploadSound(key, e.target.files?.[0])} />
                   </label>
-                  {has && <span className="cx-sset">✓ loaded</span>}
+                  {has && <span className="cx-sset">loaded</span>}
                   {has && <button className="cx-sclear" onClick={() => clearSound(key)}>Remove</button>}
                   {!has && <span className="cx-hint">no file — uses built-in beep</span>}
                 </div>
@@ -1844,7 +2051,7 @@ export default function ControlPage() {
                     <input type="file" accept="audio/*" style={{ display: "none" }}
                       onChange={(e) => uploadSound(storageKey, e.target.files?.[0])} />
                   </label>
-                  {has && <span className="cx-sset">♪ loaded</span>}
+                  {has && <span className="cx-sset">loaded</span>}
                   {has && <button className="cx-sclear" onClick={() => clearSound(storageKey)}>Remove</button>}
                   {!has && <span className="cx-hint">no music</span>}
                 </div>
@@ -1886,10 +2093,26 @@ export default function ControlPage() {
         {showLessons && (
           <div className="cx-overlay cx-lessons">
             <div className="cx-lessons-head">
-              <h2 className="cx-lessons-title">📚 Lesson Library</h2>
-              <button className="cx-sbtn" onClick={() => setShowLessons(false)}>✕ Close</button>
+              <h2 className="cx-lessons-title">Lesson Library</h2>
+              <button className="cx-sbtn" onClick={() => setShowLessons(false)}>Close</button>
             </div>
             <div className="cx-lessons-body">
+              <div className="cx-lessons-save">
+                <p className="cx-lessons-sub">Load any Notion lesson by code</p>
+                <div className="cx-lessons-saverow">
+                  <input
+                    className="cx-lessons-in"
+                    placeholder="Lesson code (e.g. M2.T1.L1-D1)"
+                    value={notionLessonCode}
+                    onChange={(event) => setNotionLessonCode(event.target.value)}
+                    onKeyDown={(event) => { if (event.key === "Enter") void loadNotionLessonByCode(); }}
+                  />
+                  <button className="cx-btn pri" onClick={() => { void loadNotionLessonByCode(); }}>Load from Notion</button>
+                </div>
+                <p className="cx-hint">This can load a draft pilot without changing its date or publishing it to students.</p>
+                {lessonMsg && <p className="cx-lessons-msg">{lessonMsg}</p>}
+              </div>
+
               <div className="cx-lessons-save">
                 <p className="cx-lessons-sub">Save the current sequence as a lesson</p>
                 <div className="cx-lessons-saverow">
@@ -1897,7 +2120,6 @@ export default function ControlPage() {
                   <input className="cx-lessons-in" placeholder="Title (optional)" value={saveTitle} onChange={(e) => setSaveTitle(e.target.value)} />
                   <button className="cx-btn pri" onClick={saveCurrentLesson}>Save</button>
                 </div>
-                {lessonMsg && <p className="cx-lessons-msg">{lessonMsg}</p>}
               </div>
 
               <input className="cx-lessons-search" placeholder="Search by code or title…" value={presetSearch} onChange={(e) => setPresetSearch(e.target.value)} />
