@@ -202,7 +202,7 @@ export default function AssignmentPlayerPage() {
       <style>{styles}</style>
       <header className="as-top">
         <a className="as-brand" href="/explore"><img className="as-logo" src="/big-dog-mark.png" alt="" /><span className="as-brand-name">bigdogmath</span></a>
-        <a className="as-back" href="/explore">← Explore</a>
+        <a className="as-back" href="/explore">Back to Explore</a>
       </header>
 
       {view === "loading" && <div className="as-mid"><p className="as-soft">Loading…</p></div>}
@@ -250,7 +250,7 @@ export default function AssignmentPlayerPage() {
             {problem.sub && <div className="as-psub">{problem.sub}</div>}
 
             {feedback ? (
-              <div className={`as-fb ${feedback.correct ? "ok" : "no"}`}>{feedback.correct ? `✓ +${feedback.points}` : `✗  ${problem.answer}`}</div>
+              <div className={`as-fb ${feedback.correct ? "ok" : "no"}`}>{feedback.correct ? `Correct +${feedback.points}` : `Incorrect. ${problem.answer}`}</div>
             ) : problem.answerType === "number" ? (
               <>
                 <div className="as-entry">{entry || <span className="as-entry-ph">?</span>}</div>
@@ -258,7 +258,7 @@ export default function AssignmentPlayerPage() {
                   {["1","2","3","4","5","6","7","8","9"].map((k) => <button key={k} className="as-key" onClick={() => pressKey(k)}>{k}</button>)}
                   {problem.allowNegative ? <button className="as-key as-key-fn" onClick={() => pressKey("neg")}>±</button> : <span />}
                   <button className="as-key" onClick={() => pressKey("0")}>0</button>
-                  <button className="as-key as-key-fn" onClick={() => pressKey("back")}>⌫</button>
+                  <button className="as-key as-key-fn" onClick={() => pressKey("back")}>Backspace</button>
                 </div>
                 <button className="as-submit" onClick={() => grade(entry)} disabled={!entry}>Submit</button>
               </>

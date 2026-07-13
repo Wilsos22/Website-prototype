@@ -88,7 +88,7 @@ export default function TeacherChallengesPage() {
                     <span className="tc-row-title">{ch.title}</span>
                     <span className="tc-row-meta">{fmtWhen(ch.started_at)}{period ? ` · ${period}` : ""}</span>
                   </span>
-                  <span className="tc-row-go">View →</span>
+                  <span className="tc-row-go">View</span>
                 </button>
               );
             })}
@@ -97,7 +97,7 @@ export default function TeacherChallengesPage() {
 
         {open && (
           <>
-            <button className="tc-back" onClick={() => setOpen(null)}>← All results</button>
+            <button className="tc-back" onClick={() => setOpen(null)}>All results</button>
             <div className="tc-card">
               <div className="tc-d-head">
                 <div>

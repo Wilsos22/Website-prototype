@@ -6,7 +6,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import InkBoard from "@/components/InkBoard";
-import { getSupabase } from "@/lib/supabase";
 import { joinInkRoom, type InkChannel } from "@/lib/inkSync";
 import { BOARD_TEMPLATES } from "@/lib/boardTemplates";
 
@@ -47,8 +46,7 @@ export default function IpadPage() {
     window.setTimeout(() => setToast((t) => (t === message ? null : t)), 4500);
   }
 
-  // Export downloads a copy AND publishes the board to today's lesson (for absent
-  // students). Publishing needs Supabase + a public "boards" storage bucket.
+  // Export downloads a copy and publishes it through the protected teacher API.
   async function handleExport(dataUrl: string) {
     const date = classroomDate();
     const a = document.createElement("a");
@@ -56,14 +54,15 @@ export default function IpadPage() {
     a.download = `big-dog-board-${date}.png`;
     a.click();
 
-    const supabase = getSupabase();
-    if (!supabase) { flashToast("Exported. (Saving to the lesson works once deployed.)"); return; }
     try {
       const blob = await (await fetch(dataUrl)).blob();
-      const path = `${date}/${Date.now()}.png`;
-      const { error } = await supabase.storage.from("boards").upload(path, blob, { contentType: "image/png" });
-      if (error) flashToast(`Exported — couldn't save to lesson: ${error.message}`);
-      else flashToast("Saved to today's lesson ✓");
+      const form = new FormData();
+      form.set("date", date);
+      form.set("file", new File([blob], `big-dog-board-${date}.png`, { type: "image/png" }));
+      const response = await fetch("/api/teacher/board", { method: "POST", body: form });
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) flashToast(`Exported - couldn't save to lesson: ${result.error || "Upload failed."}`);
+      else flashToast("Saved to today's lesson");
     } catch {
       flashToast("Exported. (Couldn't reach the lesson to save.)");
     }

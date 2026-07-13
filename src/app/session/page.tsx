@@ -300,7 +300,7 @@ export default function SessionPage() {
         <h1 className="se-h1">Join with a code</h1>
 
         {!supabase && <div className="se-warn">Supabase isn&apos;t connected yet — add your keys in Vercel and redeploy.</div>}
-        {error && <div className="se-err">⚠ {error}</div>}
+        {error && <div className="se-err">{error}</div>}
 
         {supabase && !session && (
           <div className="se-card">
@@ -309,7 +309,7 @@ export default function SessionPage() {
                 {periods.length === 0 && <option value="">No periods — add rosters first</option>}
                 {periods.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
-              <button className="se-start" onClick={start} disabled={!periodId}>Start session →</button>
+              <button className="se-start" onClick={start} disabled={!periodId}>Start session</button>
             </div>
             <p className="se-empty" style={{ marginTop: 12 }}>Pick a class period and start a session. Students enter the code on their home screen.</p>
           </div>
@@ -346,7 +346,7 @@ export default function SessionPage() {
               <h3 className="se-qh">Challenge - live game</h3>
               {chSetup && (
                 <div className="se-warn" style={{ marginBottom: 12 }}>
-                  One-time setup: open Supabase → SQL Editor and run <b>supabase/challenges.sql</b>, then try again.
+                  One-time setup: open the Supabase SQL Editor and run <b>supabase/challenges.sql</b>, then try again.
                 </div>
               )}
               {!challenge ? (
@@ -380,7 +380,7 @@ export default function SessionPage() {
                   </div>
 
                   <button className="se-start" style={{ marginTop: 16 }} onClick={startChallenge} disabled={!joins.length}>
-                    Launch challenge →
+                    Launch challenge
                   </button>
                   {!joins.length && <p className="se-empty" style={{ marginTop: 8 }}>Students need to join first.</p>}
                 </>
@@ -422,7 +422,7 @@ export default function SessionPage() {
                     ))}
                   </div>
                 )}
-                <button className="se-start" onClick={pushPoll} disabled={!question.trim()}>Push to class →</button>
+                <button className="se-start" onClick={pushPoll} disabled={!question.trim()}>Push to class</button>
               </div>
             ) : (
               <div className="se-card">

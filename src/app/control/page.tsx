@@ -1,13 +1,13 @@
 "use client";
 
 // Teacher Classroom Control Panel — front-of-room display.
-// • Bank (bottom) → pull states into the day's LINEUP (sequence) with a running
+// Bank (bottom): pull states into the day's LINEUP (sequence) with a running
 //   total vs. a 55-minute period.
-// • Each state loads an adjustable countdown. At 0 it flashes and WAITS for you
+// Each state loads an adjustable countdown. At 0 it flashes and WAITS for you
 //   to tap Next.
-// • Ending sequence: 30-second alert, giant on-screen 10→1 countdown with ticks,
+// Ending sequence: 30-second alert, giant on-screen 10-to-1 countdown with ticks,
 //   flash at zero.
-// • Upload your own sounds (warm-up music + cue sounds). They're remembered on
+// Upload your own sounds (warm-up music + cue sounds). They're remembered on
 //   this computer (stored in the browser). No upload = simple built-in beep.
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
@@ -339,7 +339,7 @@ async function idbDel(key: string): Promise<void> {
   });
 }
 
-// ── Today's Notion lesson → Control lineup ──────────────────────────────────
+  // Today's Notion lesson to Control lineup.
 // The published lesson lists its tools as free text (e.g. "Number Line"). Map
 // those names to bank state ids so the teacher can load and run the day's
 // lesson as one sequence instead of rebuilding it by hand.
@@ -817,18 +817,18 @@ export default function ControlPage() {
         sessionId: teacherSession.id,
         question,
         choices,
-        kind: pollKind,
+        kind,
       });
       pollId = result.poll.id;
     } catch (actionError) {
       setPollError(actionError instanceof Error ? actionError.message : "The poll could not be opened.");
-      return;
+      return false;
     }
 
     setControlPoll({
       id: pollId,
-      stateId: activeInteractiveState,
-      kind: pollKind,
+      stateId,
+      kind,
       question,
       choices,
       stage: "responding",
@@ -1603,10 +1603,10 @@ export default function ControlPage() {
             <button className="cx-sbtn" style={{ borderColor: "#14b8a6", color: "#5eead4" }} onClick={loadTodayLesson}>Today&apos;s lesson</button>
             <button className="cx-sbtn" onClick={() => { setShowLessons(true); setLessonMsg(null); }}>Lessons</button>
             <button className="cx-sbtn" onClick={() => setShowSpinner(true)}>Spinner</button>
-            <button className="cx-sbtn" style={autoAdvance ? { borderColor: accent, color: "#fff" } : undefined} onClick={() => setAutoAdvance((v) => !v)}>Auto {autoAdvance ? "✓" : "off"}</button>
+            <button className="cx-sbtn" style={autoAdvance ? { borderColor: accent, color: "#fff" } : undefined} onClick={() => setAutoAdvance((v) => !v)}>Auto {autoAdvance ? "on" : "off"}</button>
             <button className="cx-sbtn" onClick={() => setShowSounds((v) => !v)}>Sounds</button>
-            <button className="cx-sbtn" onClick={() => setEditing((v) => !v)}>{editing ? "✓ Done" : "Edit times"}</button>
-            <button className="cx-sbtn" onClick={toggleFullscreen}>⛶ Full</button>
+            <button className="cx-sbtn" onClick={() => setEditing((v) => !v)}>{editing ? "Done" : "Edit times"}</button>
+            <button className="cx-sbtn" onClick={toggleFullscreen}>Full screen</button>
           </div>
         </header>
 
@@ -1942,12 +1942,12 @@ export default function ControlPage() {
                 </section>
               )}
               <div className="cx-actions">
-                <button className="cx-btn pri" onClick={running ? toggleRun : runSequence}>{running ? "⏸ Pause" : "▶ Start"}</button>
+                <button className="cx-btn pri" onClick={running ? toggleRun : runSequence}>{running ? "Pause" : "Start"}</button>
                 <button className="cx-btn" onClick={previous} disabled={currentIndex <= 0}>Back</button>
-                <button className="cx-btn next" onClick={next} disabled={controlPoll?.stage !== "responding" && currentIndex + 1 >= lineup.length}>{controlPoll?.stage === "responding" ? "Show results" : "Advance ▶"}</button>
-                <button className="cx-btn" onClick={stopSequence}>■ Stop</button>
+                <button className="cx-btn next" onClick={next} disabled={controlPoll?.stage !== "responding" && currentIndex + 1 >= lineup.length}>{controlPoll?.stage === "responding" ? "Show results" : "Advance"}</button>
+                <button className="cx-btn" onClick={stopSequence}>Stop</button>
                 <span className="cx-actions-sep" />
-                <button className="cx-btn" onClick={reset}>↻ Reset state</button>
+                <button className="cx-btn" onClick={reset}>Reset state</button>
                 <button className="cx-btn" onClick={() => adjust(60)}>+1 min</button>
                 <button className="cx-btn" onClick={() => adjust(-60)} disabled={secondsLeft < 60}>−1 min</button>
                 <button className="cx-btn" onClick={() => adjust(30)}>+30s</button>
@@ -1955,7 +1955,7 @@ export default function ControlPage() {
                   <button className="cx-btn" style={{ background: "#f59e0b", borderColor: "#f59e0b" }} onClick={() => setShowSpinner(true)}>Pick readers</button>
                 )}
                 {activeState.id === "discussion" && (
-                  <button className="cx-btn" style={{ background: "#06b6d4", borderColor: "#06b6d4" }} onClick={() => setShowDiscussion(true)}>▶ Run discussion</button>
+                  <button className="cx-btn" style={{ background: "#06b6d4", borderColor: "#06b6d4" }} onClick={() => setShowDiscussion(true)}>Run discussion</button>
                 )}
               </div>
               {hasNext
@@ -1968,7 +1968,7 @@ export default function ControlPage() {
                 Build today&apos;s lineup: tap states in the bank below to add them, then run the sequence.
                 Hit “Sounds” to upload your warm-up music and cue sounds.
               </p>
-              {lineup.length > 0 && <button className="cx-btn pri" onClick={runSequence}>▶ Start sequence</button>}
+              {lineup.length > 0 && <button className="cx-btn pri" onClick={runSequence}>Start sequence</button>}
             </div>
           )}
         </main>
@@ -1976,7 +1976,7 @@ export default function ControlPage() {
         {/* Lineup */}
         <section className="cx-lineup">
           <span className="cx-lineup-title">Today</span>
-          {lineup.length === 0 && <span className="cx-empty-line">empty — add states from the bank ↓</span>}
+          {lineup.length === 0 && <span className="cx-empty-line">empty - add states from the bank below</span>}
           {lineup.map((it, i) => {
             const st = bank.find((s) => s.id === it.stateId);
             if (!st) return null;
@@ -2073,7 +2073,7 @@ export default function ControlPage() {
           <div className="cx-overlay cx-lessons">
             <div className="cx-lessons-head">
               <h2 className="cx-lessons-title">Lesson Library</h2>
-              <button className="cx-sbtn" onClick={() => setShowLessons(false)}>✕ Close</button>
+              <button className="cx-sbtn" onClick={() => setShowLessons(false)}>Close</button>
             </div>
             <div className="cx-lessons-body">
               <div className="cx-lessons-save">
@@ -2117,7 +2117,7 @@ export default function ControlPage() {
                           <span className="cx-lesson-stats">{p.lineup.length} steps · {total} min</span>
                         </div>
                         <div className="cx-lesson-actions">
-                          <button className="cx-btn next" onClick={() => loadPreset(p)}>Load →</button>
+                          <button className="cx-btn next" onClick={() => loadPreset(p)}>Load</button>
                           <button className="cx-sclear" onClick={() => removePreset(p.id)}>Delete</button>
                         </div>
                       </div>

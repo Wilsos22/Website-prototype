@@ -1,10 +1,10 @@
 // Manipulative-tool evidence emitter — the tools call reportToolResult() once
 // per completed problem, and the day's work flows into the proficiency spine:
 //   · ONE aggregate row per (student × tool × day), upserted as they work —
-//     score 0–5 accuracy + the day's most-frequent misconception tag → moves
+//     score 0-5 accuracy plus the day's most-frequent misconception tag moves
 //     the domain mastery bar at warm-up weight and feeds archetype grouping.
-//   · A per-problem row when the tool maps to a seeded standard (GEMS →
-//     6.EE.A.1, Combine Like Terms → 6.EE.A.3) → feeds the per-standard stage
+//   - A per-problem row when the tool maps to a seeded standard (GEMS to
+//     6.EE.A.1, Combine Like Terms to 6.EE.A.3) feeds the per-standard stage
 //     gates (excluded from the bars, so no double-counting).
 // Only fires when this device has JOINED A LIVE SESSION (localStorage
 // bdm-student-session) — free play doesn't write evidence. Fire-and-forget:

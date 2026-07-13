@@ -182,7 +182,7 @@ export default function TeacherAssignmentsPage() {
 
         {open && (
           <>
-            <button className="ta-back" onClick={() => setOpen(null)}>← All assignments</button>
+            <button className="ta-back" onClick={() => setOpen(null)}>All assignments</button>
             <div className="ta-card">
               <div className="ta-d-head">
                 <div>
@@ -224,14 +224,14 @@ export default function TeacherAssignmentsPage() {
                       const flag = acc < 60;
                       return (
                         <div className={`ta-st-row${flag ? " flag" : ""}`} key={s.key}>
-                          <span className="ta-st-name">{s.name}{s.done ? " ✓" : ""}</span>
+                          <span className="ta-st-name">{s.name}{s.done ? " - complete" : ""}</span>
                           <span className="ta-st-bar"><span className="ta-st-fill" style={{ width: `${acc}%`, background: flag ? "#f95335" : "#2f9e6f" }} /></span>
                           <span className="ta-st-acc">{s.correct}/{s.total}</span>
                         </div>
                       );
                     })}
                   </div>
-                  <p className="ta-soft" style={{ marginTop: 10 }}>✓ = reached the round target. Highlighted rows are below 60%.</p>
+                  <p className="ta-soft" style={{ marginTop: 10 }}>Complete means the student reached the round target. Highlighted rows are below 60%.</p>
                 </div>
               </>
             )}

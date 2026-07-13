@@ -144,7 +144,7 @@ export default function ClassSync() {
       } else if (d.broadcast && CLASS_MODE_TARGETS.has(d.broadcast)) {
         target = d.broadcast; // explicit destination (lesson or a tool)
       } else {
-        target = "/lesson"; // joined but no destination yet → hold on the lesson
+        target = "/lesson"; // joined but no destination yet, so hold on the lesson
       }
       if (target && currentPath !== target) {
         router.push(target);

@@ -2,7 +2,7 @@
 
 // "Right now" — the live grouping view. One card per misconception cluster:
 // who's in it, their archetype, and the differentiated next move for each
-// sub-group. Plus the non-submitter (logistics) card. One glance → one move.
+// sub-group. Plus the non-submitter (logistics) card. One glance gives one move.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import SiteNav from "@/components/SiteNav";
@@ -152,13 +152,13 @@ export default function RightNowPage() {
 
       <div className="rn-wrap">
         <h1 className="rn-h1">Growth</h1>
-        <div className="rn-sub">Your immediate next steps, right now — who to pull and what to do, grouped by the misconception their work keeps showing. A tag needs 2+ hits to count, and the ✓ badge means i-Ready agrees.</div>
+        <div className="rn-sub">Your immediate next steps, right now - who to pull and what to do, grouped by the misconception their work keeps showing. A tag needs 2+ hits to count, and the corroborated label means i-Ready agrees.</div>
 
         <div className="rn-controls">
           <select className="rn-select" value={periodId} onChange={(e) => setPeriodId(e.target.value)}>
             {periods.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          <button className="rn-btn" onClick={() => void load(periodId)} disabled={loading || !periodId}>↻ Refresh</button>
+          <button className="rn-btn" onClick={() => void load(periodId)} disabled={loading || !periodId}>Refresh</button>
         </div>
         <div className="rn-status">{loading ? "Reading the room…" : status}</div>
 
@@ -169,7 +169,7 @@ export default function RightNowPage() {
               <div className="rn-badges">
                 <span className="rn-badge n">{c.size} students</span>
                 {c.domain && <span className="rn-badge d">{c.domain}</span>}
-                {c.corroborated > 0 && <span className="rn-badge c">✓ i-Ready agrees for {c.corroborated} of {c.size}</span>}
+                {c.corroborated > 0 && <span className="rn-badge c">i-Ready agrees for {c.corroborated} of {c.size}</span>}
               </div>
               <div>
                 {c.students.map((s) => (

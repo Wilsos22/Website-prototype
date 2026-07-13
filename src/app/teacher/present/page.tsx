@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type CSSProperties } from "react";
 import InkBoard from "@/components/InkBoard";
-import { getSupabase } from "@/lib/supabase";
+import { teacherApiRequest } from "@/lib/teacherApi";
 import { LIVE_FLOW_MODE, type LiveClassFlowSnapshot } from "@/lib/liveClassFlow";
 
 interface StageSession {
@@ -31,26 +31,16 @@ function toolUrl(flow: LiveClassFlowSnapshot) {
 }
 
 export default function ClassroomStagePage() {
-  const supabase = getSupabase();
   const [session, setSession] = useState<StageSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [pollAnswers, setPollAnswers] = useState<PollAnswer[]>([]);
 
   useEffect(() => {
-    if (!supabase) {
-      setLoading(false);
-      return;
-    }
     let stopped = false;
     const load = async () => {
-      const { data } = await supabase
-        .from("sessions")
-        .select("id,status,broadcast,live_flow")
-        .eq("status", "open")
-        .eq("broadcast", LIVE_FLOW_MODE)
-        .order("started_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const result = await teacherApiRequest<{ sessions: StageSession[] }>("/api/teacher/session")
+        .catch(() => ({ sessions: [] }));
+      const data = result.sessions.find((candidate) => candidate.status === "open" && candidate.broadcast === LIVE_FLOW_MODE) ?? null;
       if (!stopped) {
         setSession((data as StageSession | null) ?? null);
         setLoading(false);
@@ -62,20 +52,22 @@ export default function ClassroomStagePage() {
       stopped = true;
       window.clearInterval(interval);
     };
-  }, [supabase]);
+  }, []);
 
   const flow = session?.live_flow ?? null;
   const pollId = flow?.poll?.id ?? null;
 
   useEffect(() => {
-    if (!supabase || !pollId) {
+    if (!pollId) {
       setPollAnswers([]);
       return;
     }
     let stopped = false;
     const load = async () => {
-      const { data } = await supabase.from("poll_answers").select("id,answer").eq("poll_id", pollId).order("created_at");
-      if (!stopped) setPollAnswers((data as PollAnswer[]) || []);
+      const result = await teacherApiRequest<{ answers: PollAnswer[] }>(
+        `/api/teacher/poll?pollId=${encodeURIComponent(pollId)}`,
+      ).catch(() => ({ answers: [] }));
+      if (!stopped) setPollAnswers(result.answers);
     };
     void load();
     const interval = window.setInterval(load, 1000);
@@ -83,7 +75,7 @@ export default function ClassroomStagePage() {
       stopped = true;
       window.clearInterval(interval);
     };
-  }, [pollId, supabase]);
+  }, [pollId]);
 
   const state = flow?.state ?? null;
   const timer = flow?.timer ?? null;

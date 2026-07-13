@@ -53,6 +53,17 @@ alter table public.security_audit_events enable row level security;
 revoke all on table public.security_audit_events from anon, authenticated;
 grant select, insert on table public.security_audit_events to service_role;
 
+-- Worked-board snapshots may contain classroom writing. Keep the bucket private
+-- and route uploads/downloads through authenticated server APIs.
+update storage.buckets
+set public = false,
+    file_size_limit = 10485760,
+    allowed_mime_types = array['image/png']::text[]
+where id = 'boards';
+
+drop policy if exists "boards read" on storage.objects;
+drop policy if exists "boards upload" on storage.objects;
+
 -- Remove every prototype policy before installing explicit read policies.
 do $$
 declare

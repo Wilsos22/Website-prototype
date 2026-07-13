@@ -1,5 +1,5 @@
 -- Big Dog Math — Gradebook schema (Phase 0)
--- Run this in your Supabase project: SQL Editor → New query → paste → Run.
+-- Run this in your Supabase project: open a new SQL Editor query, paste, and run.
 -- Safe to re-run: it only creates tables if they don't already exist.
 
 -- ── Class periods (e.g., "Period 1", "Period 2") ─────────────────────────────

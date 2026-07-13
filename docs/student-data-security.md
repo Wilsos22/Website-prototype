@@ -32,6 +32,7 @@ They become usable only after the server has linked that token to a roster row.
 | Checkpoint result | Own result only | Class results through protected API | None |
 | Exit-ticket response | Own response only | Class results through protected API | None |
 | Challenge or practice attempt | Own attempt only | Aggregate and class results | None |
+| Worked-board snapshots | Short-lived signed links | Protected upload and review | None |
 | i-Ready, mastery, recommendations | No direct browser access | Protected server API only | None |
 | Standards and public lesson reference data | Read-only | Read-only | Read-only when intentionally published |
 
@@ -97,6 +98,8 @@ The security branch provides cookie-gated, server-only routes for:
 - checkpoint answer keys and results;
 - exit tickets and responses;
 - lesson presets.
+- classroom stage, remote control, i-Ready synchronization, and worked-board
+  snapshot storage.
 
 The project runs Next.js 16, so the request gate must live at `src/proxy.ts`.
 The deprecated root `middleware.ts` file did not execute in local authorization
@@ -129,6 +132,12 @@ Required Vercel variables for the secure deployment are
 `NEXT_PUBLIC_SECURE_STUDENT_DATA=true`, and the existing
 `EVIDENCE_INGEST_KEY`. The warm-up generator endpoint is teacher/cron-gated in
 secure mode, so its caller must send `Authorization: Bearer <CRON_SECRET>`.
+
+Student identity supports two verified modes. Keep
+`NEXT_PUBLIC_REQUIRE_STUDENT_GOOGLE_AUTH=false` to use the already-tested Google
+Form warm-up binding. Set it to `true` only after the district Google OAuth
+pilot passes; then also set `NEXT_PUBLIC_STUDENT_EMAIL_DOMAIN` to the school
+domain. Both modes still derive the roster row on the server.
 
 ## District boundary
 

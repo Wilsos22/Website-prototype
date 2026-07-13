@@ -33,6 +33,8 @@ export default function StudentLanding() {
   const [joining, setJoining] = useState(false);
   const [pendingCode, setPendingCode] = useState<string | null>(null);
   const [warmupHref, setWarmupHref] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(REQUIRE_GOOGLE_AUTH);
+  const [student, setStudent] = useState<ClaimedStudent | null>(null);
 
   useEffect(() => {
     try { const n = localStorage.getItem("bdm-student-name"); if (n) setName(n.trim().split(/\s+/)[0]); } catch { /* ignore */ }
@@ -53,11 +55,62 @@ export default function StudentLanding() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!REQUIRE_GOOGLE_AUTH) return;
+    if (!supabase) {
+      setJoinErr("School sign-in is not configured yet.");
+      setAuthLoading(false);
+      return;
+    }
+    let stopped = false;
+    const loadStudent = async () => {
+      try {
+        const result = await studentApiRequest<{ student: ClaimedStudent }>("/api/student/claim", { method: "POST" });
+        if (!stopped) {
+          setStudent(result.student);
+          setName(result.student.name.trim().split(/\s+/)[0]);
+        }
+      } catch (error) {
+        if (!stopped && error instanceof StudentApiError && error.code !== "student_session_missing") {
+          setJoinErr(error.message);
+        }
+      } finally {
+        if (!stopped) setAuthLoading(false);
+      }
+    };
+    void loadStudent();
+    return () => { stopped = true; };
+  }, [supabase]);
+
   async function loadWarmupLink() {
     const authUserId = await getStudentAuthUserId();
     const response = await fetch("/api/today", { cache: "no-store" });
     const data = await response.json().catch(() => ({})) as { lesson?: { warmUpLink?: string | null } };
     if (data.lesson?.warmUpLink) setWarmupHref(personalizeWarmupLink(data.lesson.warmUpLink, authUserId));
+  }
+
+  async function signInWithGoogle() {
+    setJoinErr(null);
+    if (!supabase) {
+      setJoinErr("School sign-in is not configured yet.");
+      return;
+    }
+    const options: { redirectTo: string; queryParams?: Record<string, string> } = {
+      redirectTo: `${window.location.origin}/auth/callback?next=/`,
+    };
+    const domain = process.env.NEXT_PUBLIC_STUDENT_EMAIL_DOMAIN?.trim();
+    if (domain) options.queryParams = { hd: domain };
+    const { error } = await supabase.auth.signInWithOAuth({ provider: "google", options });
+    if (error) setJoinErr(`School sign-in is not available: ${error.message}`);
+  }
+
+  async function signOut() {
+    if (supabase) await supabase.auth.signOut();
+    setStudent(null);
+    setName("");
+    setJoinSess(null);
+    setRoster([]);
+    setJoinErr(null);
   }
 
   function finishJoin(result: { session: { sessionId: string; studentId: string; name: string } }) {
@@ -108,6 +161,10 @@ export default function StudentLanding() {
     if (SECURE_STUDENT_DATA) {
       setJoining(true);
       try {
+        if (REQUIRE_GOOGLE_AUTH && !student) {
+          setJoinErr("Sign in with your school Google account first.");
+          return;
+        }
         const codeResponse = await fetch("/api/student/session-code", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -221,7 +278,16 @@ export default function StudentLanding() {
 
       <div className="st-cards">
         <div className="st-join">
-          {SECURE_STUDENT_DATA || !joinSess ? (
+          {REQUIRE_GOOGLE_AUTH && authLoading ? (
+            <p className="st-join-sub">Checking your school sign-in.</p>
+          ) : REQUIRE_GOOGLE_AUTH && !student ? (
+            <div className="st-auth">
+              <h2 className="st-join-h">Sign in to join your class</h2>
+              <p className="st-join-sub">Use the school Google account already connected to your Chromebook.</p>
+              <button className="st-auth-btn" onClick={signInWithGoogle}>Continue with school Google</button>
+              {joinErr && <div className="st-joinerr">{joinErr}</div>}
+            </div>
+          ) : SECURE_STUDENT_DATA || !joinSess ? (
             <>
               {REQUIRE_GOOGLE_AUTH && student && (
                 <div className="st-auth-who">

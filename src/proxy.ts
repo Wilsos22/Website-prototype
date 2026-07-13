@@ -6,6 +6,8 @@ const PROTECTED_PREFIXES = [
   "/control",
   "/session",
   "/roster",
+  "/ipad",
+  "/board",
   "/start-question",
   "/api/form-responses",
   "/api/mastery",
@@ -15,6 +17,8 @@ const PROTECTED_PREFIXES = [
   "/api/outreach",
   "/api/submissions",
   "/api/teacher",
+  "/api/control-remote",
+  "/api/iready",
   "/api/warmup-summaries",
 ];
 
@@ -61,7 +65,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(login);
   }
 
-  if (pathname.startsWith("/api/teacher/") && !["GET", "HEAD", "OPTIONS"].includes(request.method)) {
+  if (pathname.startsWith("/api/") && !["GET", "HEAD", "OPTIONS"].includes(request.method)) {
     const origin = request.headers.get("origin");
     if (origin) {
       try {
@@ -111,6 +115,8 @@ export const config = {
     "/control/:path*",
     "/session/:path*",
     "/roster/:path*",
+    "/ipad/:path*",
+    "/board/:path*",
     "/start-question/:path*",
     "/api/form-responses/:path*",
     "/api/mastery/:path*",
@@ -124,6 +130,10 @@ export const config = {
     "/api/submissions",
     "/api/teacher/:path*",
     "/api/teacher",
+    "/api/control-remote/:path*",
+    "/api/control-remote",
+    "/api/iready/:path*",
+    "/api/iready",
     "/api/warmup-summaries/:path*",
     "/api/warmup-summaries",
     "/api/session/:path*",

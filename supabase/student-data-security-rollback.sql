@@ -82,4 +82,16 @@ begin
 end $$;
 
 revoke all on table public.security_audit_events from anon, authenticated;
+
+update storage.buckets
+set public = true,
+    file_size_limit = null,
+    allowed_mime_types = null
+where id = 'boards';
+
+drop policy if exists "boards read" on storage.objects;
+drop policy if exists "boards upload" on storage.objects;
+create policy "boards read" on storage.objects for select to anon using (bucket_id = 'boards');
+create policy "boards upload" on storage.objects for insert to anon with check (bucket_id = 'boards');
+
 notify pgrst, 'reload schema';

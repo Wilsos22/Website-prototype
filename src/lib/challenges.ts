@@ -39,7 +39,7 @@ export interface LeaderRow {
 }
 
 // Correct answers earn a base score plus a bonus for speed. Answer within the
-// first moment → ~+100; the bonus fades to 0 across the window. Wrong → 0.
+// first moment earns about +100; the bonus fades to 0 across the window. Wrong earns 0.
 export const SPEED_WINDOW_MS = 12000;
 export const BASE_POINTS = 100;
 export const MAX_SPEED_BONUS = 100;

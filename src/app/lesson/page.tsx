@@ -124,6 +124,7 @@ export default function LessonPage() {
   const [answerText, setAnswerText] = useState("");
   const [sent, setSent] = useState(false);
   const [authUserId, setAuthUserId] = useState<string | null>(null);
+  const [pollError, setPollError] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -182,13 +183,20 @@ export default function LessonPage() {
 
   async function submitPoll(ans: string) {
     if (!supabase || !activePoll || !sess || !ans.trim()) return;
-    if (SECURE_STUDENT_DATA) {
-      await studentApiRequest("/api/student/poll-answer", {
-        method: "POST",
-        body: JSON.stringify({ pollId: activePoll.id, answer: ans.trim() }),
-      });
-    } else {
-      await supabase.from("poll_answers").insert({ poll_id: activePoll.id, student_id: sess.studentId, display_name: sess.name, answer: ans.trim() });
+    setPollError(null);
+    try {
+      if (SECURE_STUDENT_DATA) {
+        await studentApiRequest("/api/student/poll-answer", {
+          method: "POST",
+          body: JSON.stringify({ pollId: activePoll.id, answer: ans.trim() }),
+        });
+      } else {
+        const { error } = await supabase.from("poll_answers").insert({ poll_id: activePoll.id, student_id: sess.studentId, display_name: sess.name, answer: ans.trim() });
+        if (error) throw error;
+      }
+    } catch (error) {
+      setPollError(error instanceof Error ? error.message : "Your answer could not be sent. Try again.");
+      return;
     }
     setAnswered((a) => [...a, activePoll.id]); setSent(true); setAnswerText("");
     setTimeout(() => setActivePoll(null), 1300);
