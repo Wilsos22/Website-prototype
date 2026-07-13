@@ -59,6 +59,7 @@ interface LineupItem {
   lessonCode?: string;
   linkUrl?: string;
   paperTask?: string;
+  teacherNotes?: string;
 }
 
 interface TeacherSessionRow {
@@ -88,6 +89,7 @@ const TOOL_STATE_INFO = {
   "tool-ladder": { route: "/ladder-method", label: "Ladder Method" },
   "tool-proportions": { route: "/proportions", label: "Proportions" },
   "tool-group-bars": { route: "/group-bars", label: "Group Bars" },
+  "tool-ratio-builder": { route: "/ratio-builder", label: "Ratio Builder" },
   "tool-coordinate-grid": { route: "/coordinate-grid", label: "Coordinate Grid" },
   "tool-term-identifier": { route: "/term-identifier", label: "Identify Terms" },
   "tool-multiplication": { route: "/multiplication-fluency", label: "Multiplication Facts" },
@@ -280,6 +282,8 @@ function buildLiveToolConfig(stateId: ToolStateId, values: ToolSetupValues): Liv
       return { ...base, route: "/proportions", config: {} };
     case "tool-group-bars":
       return { ...base, route: "/group-bars", config: {} };
+    case "tool-ratio-builder":
+      return { ...base, route: "/ratio-builder", config: {} };
     case "tool-coordinate-grid":
       return { ...base, route: "/coordinate-grid", config: {} };
     case "tool-term-identifier":
@@ -358,6 +362,7 @@ interface TodayLessonStep {
   standard: string;
   linkUrl: string;
   paperTask: string;
+  teacherNotes: string;
 }
 
 type TodayLesson = {
@@ -400,6 +405,9 @@ const LESSON_TOOL_ALIASES: Record<string, string> = {
   proportion: "tool-proportions",
   ratios: "tool-proportions",
   groupbars: "tool-group-bars",
+  ratiobuilder: "tool-ratio-builder",
+  ratiotiles: "tool-ratio-builder",
+  ratiomodel: "tool-ratio-builder",
   coordinategrid: "tool-coordinate-grid",
   coordinateplane: "tool-coordinate-grid",
   graphing: "tool-coordinate-grid",
@@ -731,6 +739,19 @@ export default function ControlPage() {
     }
   }, [activeToolState, publishedTool?.stateId]);
 
+  // The ratio pilot's representational step is intentionally zero-setup: when
+  // the sequence reaches it, publish the local-only builder to Chromebooks and
+  // the classroom stage without requiring a second teacher action.
+  useEffect(() => {
+    if (activeToolState !== "tool-ratio-builder" || publishedTool?.stateId === activeToolState) return;
+    const prompt = activeItem?.studentDirections
+      || "Build 3 blue parts for every 2 yellow parts. Then compare blue to yellow and blue to the whole.";
+    setPublishedTool({
+      stateId: activeToolState,
+      tool: buildLiveToolConfig(activeToolState, { ...toolSetup, prompt }),
+    });
+  }, [activeItem?.studentDirections, activeToolState, publishedTool?.stateId, toolSetup]);
+
   // When the lineup moves off the Live Game state, close out the running
   // challenge round so it doesn't linger open for the session.
   useEffect(() => {
@@ -996,7 +1017,9 @@ export default function ControlPage() {
       ? {
           id: activeState.id,
           label: activeItem?.title || activeState.label,
-          description: activeItem?.studentDirections || activeState.desc,
+          description: activeState.id === "discussion" && activeItem?.teacherNotes
+            ? activeItem.teacherNotes
+            : activeItem?.studentDirections || activeState.desc,
           color: activeState.color,
         }
       : null;
@@ -1017,7 +1040,9 @@ export default function ControlPage() {
     const presentation = activeState
       ? {
           title: activeItem?.title || activeState.label,
-          body: activeItem?.paperTask || activeItem?.question || activeItem?.studentDirections || activeState.desc,
+          body: activeState.id === "discussion" && activeItem?.teacherNotes
+            ? activeItem.teacherNotes
+            : activeItem?.paperTask || activeItem?.question || activeItem?.studentDirections || activeState.desc,
           mode: resource
             ? "resource" as const
             : poll
@@ -1192,26 +1217,70 @@ export default function ControlPage() {
     }
     const lessonSteps = (lesson.steps || []).filter((step) => step.stateId && bank.some((state) => state.id === step.stateId));
     const newLineup: LineupItem[] = lessonSteps.length
-      ? lessonSteps.map((step) => ({
-          uid: uid(),
-          stateId: step.stateId,
-          minutes: Math.max(1, step.duration || 1),
-          title: step.title,
-          studentDirections: step.studentDirections,
-          question: step.question,
-          pollKind: step.pollKind,
-          choices: step.choices,
-          correctAnswer: step.correctAnswer,
-          standard: step.standard,
-          notionStepId: step.id,
-          notionLessonId: lesson.id,
-          lessonCode: lesson.lessonCode,
-          linkUrl: step.linkUrl
-            || (step.stateId === "warmup" ? lesson.warmUpLink : "")
-            || (step.stateId === "exit" ? lesson.exitTicketLink : "")
-            || "",
-          paperTask: step.paperTask,
-        }))
+      ? lessonSteps.flatMap((step) => {
+          const base: LineupItem = {
+            uid: uid(),
+            stateId: step.stateId,
+            minutes: Math.max(1, step.duration || 1),
+            title: step.title,
+            studentDirections: step.stateId === "poll"
+              ? [
+                  lesson.learningIntention ? `Learning intention: ${lesson.learningIntention}` : "",
+                  lesson.successCriteria ? `Success criteria: ${lesson.successCriteria}` : "",
+                  step.studentDirections,
+                ].filter(Boolean).join("\n")
+              : step.studentDirections,
+            question: step.question,
+            pollKind: step.pollKind,
+            choices: step.choices,
+            correctAnswer: step.correctAnswer,
+            standard: step.standard,
+            notionStepId: step.id,
+            notionLessonId: lesson.id,
+            lessonCode: lesson.lessonCode,
+            linkUrl: step.linkUrl
+              || (step.stateId === "warmup" ? lesson.warmUpLink : "")
+              || (step.stateId === "exit" ? lesson.exitTicketLink : "")
+              || "",
+            paperTask: step.paperTask,
+            teacherNotes: step.teacherNotes,
+          };
+
+          const isRatioPilotCra = lesson.lessonCode?.startsWith("M2.T1.L1")
+            && step.stateId === "manip"
+            && step.duration >= 12;
+          if (!isRatioPilotCra) return [base];
+
+          return [
+            {
+              ...base,
+              uid: uid(),
+              stateId: "manip",
+              minutes: 5,
+              title: "Concrete - Build the ratio",
+              studentDirections: "Use physical counters to build 3 blue parts for every 2 yellow parts. Point to blue-to-yellow, yellow-to-blue, blue-to-whole, and yellow-to-whole.",
+              paperTask: "Keep the counters visible. Name both quantities before writing any numbers.",
+            },
+            {
+              ...base,
+              uid: uid(),
+              stateId: "tool-ratio-builder",
+              minutes: 5,
+              title: "Representational - Build and label",
+              studentDirections: "Drag 3 blue parts and 2 yellow parts onto the work mat. Record blue-to-yellow and blue-to-whole.",
+              paperTask: "",
+            },
+            {
+              ...base,
+              uid: uid(),
+              stateId: "we-do",
+              minutes: 5,
+              title: "Abstract - Write and classify",
+              studentDirections: "Use a physical whiteboard. Write each comparison in words, colon notation, and labeled fractional form. Classify each ratio.",
+              paperTask: "Write blue to yellow as 3 to 2, 3:2, and 3/2 with labels. Then write blue to the whole as 3 to 5, 3:5, and 3/5 with labels.",
+            },
+          ];
+        })
       : ["warmup", ...mapped, "exit"].map((stateId) => ({ uid: uid(), stateId }));
     autoOpenedStepRef.current.clear();
     setControlPoll(null);
@@ -1230,7 +1299,7 @@ export default function ControlPage() {
     setShowLessons(false);
     const parts = [
       `Loaded “${lesson.title || "today's lesson"}”`,
-      lessonSteps.length ? `${lessonSteps.length} timed steps added` : `${mapped.length} tool${mapped.length === 1 ? "" : "s"} added`,
+      lessonSteps.length ? `${newLineup.length} timed steps added` : `${mapped.length} tool${mapped.length === 1 ? "" : "s"} added`,
     ];
     if (unmatched.length) parts.push(`couldn't match: ${unmatched.join(", ")}`);
     setTodayMsg(parts.join(" · "));

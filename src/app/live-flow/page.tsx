@@ -82,6 +82,28 @@ const DISCUSSION_CONTENT: Record<DiscussionPhaseId, DiscussionContent> = {
   },
 };
 
+const RATIO_FLOW_PREVIEW: LiveClassFlowSnapshot = {
+  version: 1,
+  updatedAt: new Date().toISOString(),
+  state: {
+    id: "tool-ratio-builder",
+    label: "Main Activity: Representational",
+    description: "Build the ratio, name both quantities, and compare part-to-part with part-to-whole.",
+    color: "#4d8df6",
+  },
+  phase: null,
+  timer: { totalSeconds: 300, secondsLeft: 247, running: true, finished: false },
+  poll: null,
+  resource: null,
+  presentation: {
+    title: "Build 3 blue parts for every 2 yellow parts",
+    body: "Model blue to yellow as 3 to 2.\nThen compare blue to the whole.\nBe ready to explain why the second ratio is 3 to 5, not 3 to 2.",
+    mode: "directions",
+    notionStepId: null,
+  },
+  tool: null,
+};
+
 function formatTime(totalSeconds: number) {
   const seconds = Math.max(0, totalSeconds);
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
@@ -91,6 +113,13 @@ function missingLiveFlowColumn(message: string) {
   return message.includes("live_flow")
     || message.toLowerCase().includes("schema cache")
     || message.toLowerCase().includes("column");
+}
+
+function splitPresentationBody(value: string | undefined): string[] {
+  return (value || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
 }
 
 export default function LiveFlowPage() {
@@ -109,6 +138,12 @@ export default function LiveFlowPage() {
   const [pollSubmitError, setPollSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("preview") === "ratio") {
+      setFlow(RATIO_FLOW_PREVIEW);
+      setHolding(true);
+      setLoading(false);
+      return;
+    }
     const sessionId = getStoredStudentSessionId();
     if (!supabase || !sessionId) {
       setEmptyMessage(!supabase ? "Live sync is not set up." : "Join the class first.");
@@ -315,7 +350,7 @@ export default function LiveFlowPage() {
 
   const phase = flow?.phase ?? null;
   const discussion = phase ? DISCUSSION_CONTENT[phase.id] : null;
-  const title = discussion?.title ?? flow?.state?.label ?? "Waiting for the teacher.";
+  const title = discussion?.title ?? flow?.presentation?.title ?? flow?.state?.label ?? "Waiting for the teacher.";
   const subtitle = discussion?.subtitle ?? flow?.state?.description ?? "";
   const phaseMedia = phase?.media ?? null;
   const timer = flow?.timer ?? null;
@@ -340,6 +375,12 @@ export default function LiveFlowPage() {
   const embeddedResourceUrl = resolvedResourceUrl?.includes("docs.google.com/forms")
     ? `${resolvedResourceUrl}${resolvedResourceUrl.includes("?") ? "&" : "?"}embedded=true`
     : null;
+  const presentationLines = splitPresentationBody(flow?.presentation?.body);
+  const showPresentationDirections = !activePoll
+    && !resource
+    && !phaseMedia
+    && !discussion?.directions
+    && presentationLines.length > 0;
 
   return (
     <main className="lf-page" style={{ "--lf-accent": accent } as CSSProperties}>
@@ -396,8 +437,46 @@ export default function LiveFlowPage() {
         .lf-resource-frame { width:100%; height:min(62vh,720px); border:1px solid #29324a; border-radius:12px; background:#fff; }
         .lf-resource-link { display:inline-flex; min-height:58px; align-items:center; justify-content:center; border:2px solid var(--lf-accent); border-radius:10px; background:var(--lf-accent); color:#061312; padding:0 24px; text-decoration:none; font-size:1.05rem; font-weight:900; }
         .lf-loading { color:#8a93ad; font-weight:800; }
+        .lf-poll-context { margin:0; max-width:68ch; border-left:5px solid var(--lf-accent); background:#fff; color:var(--bdb-ink-soft); padding:12px 16px; text-align:left; white-space:pre-wrap; font-size:clamp(0.9rem,1.9vw,1.12rem); line-height:1.4; font-weight:720; }
+        .lf-page { place-items:start center; overflow:auto; background:var(--bdb-ground); color:var(--bdb-ink); font-family:var(--bdb-font); padding:96px 24px 42px; }
+        .lf-shell { width:min(100%,1100px); justify-items:stretch; gap:18px; text-align:left; }
+        .lf-brand { position:fixed; top:23px; left:26px; z-index:5; margin:0; color:var(--bdb-brown); }
+        .lf-exit { top:auto; right:18px; bottom:16px; border-color:var(--bdb-line); background:rgba(255,255,255,0.94); color:var(--bdb-ink-soft); box-shadow:var(--bdb-shadow-sm); }
+        .lf-title { max-width:21ch; color:var(--bdb-ink); font-size:clamp(2.35rem,6vw,5.4rem); line-height:0.98; letter-spacing:-0.045em; }
+        .lf-subtitle { max-width:62ch; color:var(--bdb-ink-soft); font-size:clamp(1rem,2.1vw,1.35rem); line-height:1.45; }
+        .lf-timer { position:fixed; top:14px; right:24px; z-index:4; grid-template-columns:auto auto; align-items:center; justify-items:end; gap:11px; border:1px solid var(--bdb-line); border-radius:var(--bdb-r-pill); background:rgba(255,255,255,0.96); padding:8px 13px; box-shadow:var(--bdb-shadow-sm); }
+        .lf-time { color:var(--bdb-ink); font-size:clamp(1.8rem,4vw,3.15rem); line-height:0.9; letter-spacing:-0.04em; }
+        .lf-status { color:var(--lf-accent); font-size:0.65rem; }
+        .lf-directions { width:min(100%,900px); grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:12px; }
+        .lf-direction { min-height:86px; display:flex; align-items:center; box-sizing:border-box; border:1px solid var(--bdb-line); border-left:7px solid var(--lf-accent); border-radius:var(--bdb-r); background:var(--bdb-card); color:var(--bdb-ink); box-shadow:var(--bdb-shadow-sm); }
+        .lf-supports { width:100%; }
+        .lf-support-panel { border-color:var(--bdb-line); background:var(--bdb-card); box-shadow:var(--bdb-shadow-sm); }
+        .lf-stem, .lf-vocab { background:var(--bdb-ground-2); color:var(--bdb-ink); }
+        .lf-vocab { border-color:var(--bdb-line); }
+        .lf-poll { width:100%; min-height:62vh; align-content:center; justify-items:center; border:1px solid var(--bdb-line); border-radius:var(--bdb-r-lg); background:var(--bdb-card); padding:clamp(26px,5vw,68px); box-sizing:border-box; box-shadow:var(--bdb-shadow); text-align:center; }
+        .lf-poll-question { max-width:24ch; color:var(--bdb-ink); font-size:clamp(2rem,5.4vw,5.1rem); line-height:1.05; letter-spacing:-0.035em; }
+        .lf-poll-help { color:var(--bdb-ink-soft); }
+        .lf-poll-choice, .lf-poll-send, .lf-poll-text { border-color:var(--bdb-line); background:var(--bdb-ground-2); color:var(--bdb-ink); }
+        .lf-poll-send { border-color:var(--lf-accent); background:var(--lf-accent); color:#fff; }
+        .lf-fist-value { color:var(--bdb-ink); }
+        .lf-fist-labels { color:var(--bdb-ink-faint); }
+        .lf-poll-sent { color:#18764c; }
+        .lf-result { color:var(--bdb-ink); }
+        .lf-result-bar { background:var(--bdb-ground-2); }
+        .lf-resource { width:100%; }
+        .lf-resource-frame { height:min(72vh,760px); border-color:var(--bdb-line); box-shadow:var(--bdb-shadow); }
+        .lf-wait { color:var(--bdb-ink); }
+        .lf-ready { color:var(--bdb-ink-soft); }
+        .lf-switch { border-color:var(--bdb-line); background:var(--bdb-card); color:var(--bdb-teal); }
+        .lf-loading { color:var(--bdb-ink-soft); }
         @media (max-width:760px) { .lf-supports { grid-template-columns:1fr; } }
-        @media (max-width:600px) { .lf-page { padding:26px 18px; } }
+        @media (max-width:600px) {
+          .lf-page { padding:90px 14px 70px; }
+          .lf-brand { left:16px; }
+          .lf-timer { right:14px; }
+          .lf-directions { grid-template-columns:1fr; }
+          .lf-poll { min-height:68vh; padding:24px 16px; }
+        }
       `}</style>
 
       <button className="lf-exit" type="button" onClick={exitLiveFlow}>Exit Live Flow</button>
@@ -405,7 +484,7 @@ export default function LiveFlowPage() {
       <section className="lf-shell" aria-live="polite">
         <p className="lf-brand">Big Dog Math</p>
         {loading ? (
-          <p className="lf-loading">Connecting to class…</p>
+          <p className="lf-loading">Connecting to class...</p>
         ) : !flow?.state ? (
           holding ? (
             <>
@@ -462,6 +541,7 @@ export default function LiveFlowPage() {
             )}
             {activePoll ? activePoll.stage === "responding" ? (
               <section className="lf-poll">
+                {flow?.state?.description ? <p className="lf-poll-context">{flow.state.description}</p> : null}
                 <h1 className="lf-poll-question">{activePoll.question}</h1>
                 {activePoll.kind === "fist-to-five" ? (
                   <>
@@ -526,6 +606,13 @@ export default function LiveFlowPage() {
             {!activePoll && discussion?.directions && (
               <ul className="lf-directions">
                 {discussion.directions.map((direction) => <li className="lf-direction" key={direction}>{direction}</li>)}
+              </ul>
+            )}
+            {showPresentationDirections && (
+              <ul className="lf-directions" aria-label="Lesson directions">
+                {presentationLines.map((direction, index) => (
+                  <li className="lf-direction" key={`${direction}-${index}`}>{direction}</li>
+                ))}
               </ul>
             )}
             {showDiscussionSupports && (

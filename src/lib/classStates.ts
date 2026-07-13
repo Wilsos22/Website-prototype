@@ -33,6 +33,7 @@ export const DEFAULT_STATES: ClassState[] = [
   { id: "tool-ladder", label: "Ladder Method", minutes: 6, color: "#674a40", desc: "Divide down the ladder to find GCF and LCM." },
   { id: "tool-proportions", label: "Proportions", minutes: 6, color: "#50a3a4", desc: "Find the scale factor and the missing value." },
   { id: "tool-group-bars", label: "Group Bars", minutes: 5, color: "#2f9e6f", desc: "Build equal groups — fractions, decimals, percents." },
+  { id: "tool-ratio-builder", label: "Ratio Builder", minutes: 5, color: "#4d8df6", desc: "Build and label a part-to-part and part-to-whole ratio model." },
   { id: "tool-coordinate-grid", label: "Coordinate Grid", minutes: 6, color: "#4d8df6", desc: "Plot and identify points on the plane." },
   { id: "tool-term-identifier", label: "Identify Terms", minutes: 5, color: "#50a3a4", desc: "Sort coefficient, variable, operation, and constant." },
   { id: "tool-multiplication", label: "Multiplication Facts", minutes: 6, color: "#4d8df6", desc: "Fast multiplication facts practice." },
@@ -70,6 +71,6 @@ export const BANK_GROUPS = [
     id: "manipulatives",
     label: "Manipulatives",
     hint: "Student screens switch to digital math tools",
-    stateIds: ["tool-whiteboard", "tool-number-line", "tool-percent-bar", "tool-fraction-bars", "tool-algebra-tiles", "tool-area-model", "tool-distributive-area", "tool-area-explorer", "tool-group-bars", "tool-coordinate-grid", "tool-multiplication", "manip"],
+    stateIds: ["tool-whiteboard", "tool-number-line", "tool-percent-bar", "tool-fraction-bars", "tool-algebra-tiles", "tool-area-model", "tool-distributive-area", "tool-area-explorer", "tool-group-bars", "tool-ratio-builder", "tool-coordinate-grid", "tool-multiplication", "manip"],
   },
 ] as const;

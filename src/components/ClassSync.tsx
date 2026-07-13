@@ -37,6 +37,7 @@ const CLASS_MODE_TARGETS = new Set([
   "/combine-like-terms",
   "/ladder-method",
   "/group-bars",
+  "/ratio-builder",
   "/proportions",
   "/coordinate-grid",
   "/term-identifier",

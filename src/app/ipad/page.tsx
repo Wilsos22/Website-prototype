@@ -4,10 +4,11 @@
 // (and can later be pushed to students). Pair by room: /ipad and /board both
 // default to room "main", so opening both just works.
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import InkBoard from "@/components/InkBoard";
 import { joinInkRoom, type InkChannel } from "@/lib/inkSync";
 import { BOARD_TEMPLATES } from "@/lib/boardTemplates";
+import type { TeacherRemoteAction } from "@/lib/liveClassFlow";
 
 function classroomDate(): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -40,6 +41,10 @@ export default function IpadPage() {
   const [scratchClear, setScratchClear] = useState(0);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const ctrlRef = useRef<InkChannel | null>(null);
+  const explicitRoomRef = useRef(false);
+  const [remoteSession, setRemoteSession] = useState<{ id: string; joinCode: string | null } | null>(null);
+  const [remoteStatus, setRemoteStatus] = useState("Connecting to Live Class Flow");
+  const [remoteBusy, setRemoteBusy] = useState<TeacherRemoteAction | null>(null);
 
   function flashToast(message: string) {
     setToast(message);
@@ -71,9 +76,54 @@ export default function IpadPage() {
   useEffect(() => {
     try {
       const r = new URLSearchParams(window.location.search).get("room");
-      if (r) setRoom(r.trim());
+      if (r) {
+        explicitRoomRef.current = true;
+        setRoom(r.trim());
+      }
     } catch { /* ignore */ }
   }, []);
+
+  const refreshRemote = useCallback(async () => {
+    try {
+      const response = await fetch("/api/control-remote", { cache: "no-store" });
+      const data = await response.json() as { session?: { id: string; joinCode: string | null } | null; error?: string };
+      if (!response.ok || data.error || !data.session) {
+        setRemoteSession(null);
+        setRemoteStatus(data.error || "Open Live Class Flow on the classroom computer");
+        return;
+      }
+      setRemoteSession(data.session);
+      setRemoteStatus(data.session.joinCode ? `Live class ${data.session.joinCode}` : "Live Class Flow connected");
+      if (!explicitRoomRef.current) setRoom(data.session.id);
+    } catch {
+      setRemoteSession(null);
+      setRemoteStatus("Classroom controls are unavailable");
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshRemote();
+    const interval = window.setInterval(refreshRemote, 2500);
+    return () => window.clearInterval(interval);
+  }, [refreshRemote]);
+
+  const sendRemote = useCallback(async (action: TeacherRemoteAction) => {
+    if (!remoteSession || remoteBusy) return;
+    setRemoteBusy(action);
+    try {
+      const response = await fetch("/api/control-remote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await response.json().catch(() => ({})) as { error?: string };
+      setRemoteStatus(response.ok ? "Classroom updated" : data.error || "Command failed");
+    } catch {
+      setRemoteStatus("Command failed");
+    } finally {
+      window.setTimeout(() => setRemoteBusy(null), 850);
+    }
+  }, [remoteBusy, remoteSession]);
 
   // Control channel: open/close the scratch overlay on the board.
   useEffect(() => {
@@ -110,7 +160,7 @@ export default function IpadPage() {
     <main className="ip-page">
       <style>{`
         .ip-page { position:fixed; inset:0; display:flex; flex-direction:column; background:var(--bdb-ground); font-family:var(--bdb-font); }
-        .ip-bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 14px; background:var(--bdb-card); border-bottom:1px solid var(--bdb-line); }
+        .ip-bar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:9px 12px; background:var(--bdb-card); border-bottom:1px solid var(--bdb-line); }
         .ip-group { display:flex; align-items:center; gap:6px; }
         .ip-room { font-weight:800; color:var(--bdb-ink); font-size:0.92rem; margin-right:2px; }
         .ip-sub { color:var(--bdb-ink-faint); font-size:0.72rem; font-weight:700; }
@@ -119,6 +169,11 @@ export default function IpadPage() {
         .ip-btn { min-height:42px; padding:0 14px; border-radius:10px; border:1px solid var(--bdb-line); background:var(--bdb-card); color:var(--bdb-ink); font-weight:700; font-size:0.9rem; cursor:pointer; touch-action:manipulation; }
         .ip-btn.on { background:var(--bdb-ink); color:#fff; border-color:var(--bdb-ink); }
         .ip-btn.warn { color:var(--bdb-coral); border-color:color-mix(in srgb, var(--bdb-coral) 40%, var(--bdb-line)); }
+        .ip-btn.stage { min-width:88px; border-color:#32394a; background:#171d2a; color:#fff; }
+        .ip-btn.stage.next { border-color:var(--bdb-teal); background:#0d2a27; color:#9af5e6; }
+        .ip-btn.stage.timer { border-color:#c89c35; background:#2a2315; color:#fcd67d; }
+        .ip-remote-status { max-width:190px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:${remoteSession ? "var(--bdb-green)" : "var(--bdb-ink-faint)"}; font-size:0.7rem; font-weight:850; }
+        .ip-view-link { color:var(--bdb-teal); font-size:0.72rem; font-weight:850; text-decoration:none; }
         .ip-divider { width:1px; align-self:stretch; background:var(--bdb-line); margin:2px 4px; }
         .ip-problem { display:flex; gap:10px; align-items:center; padding:8px 14px; background:var(--bdb-card); border-bottom:1px solid var(--bdb-line); }
         .ip-problem-in { flex:1; resize:vertical; min-height:42px; border:1px solid var(--bdb-line); border-radius:10px; padding:10px 12px; font-family:var(--bdb-font); font-size:0.95rem; color:var(--bdb-ink); }
@@ -134,6 +189,13 @@ export default function IpadPage() {
       <div className="ip-bar">
         <span className="ip-room">iPad</span>
         <span className="ip-sub">room {room}</span>
+        <span className="ip-remote-status">{remoteStatus}</span>
+        <span className="ip-divider" />
+
+        <button className="ip-btn stage" disabled={!remoteSession || Boolean(remoteBusy)} onClick={() => sendRemote("previous")}>Back</button>
+        <button className="ip-btn stage timer" disabled={!remoteSession || Boolean(remoteBusy)} onClick={() => sendRemote("toggle-timer")}>{remoteBusy === "toggle-timer" ? "Sending" : "Start or pause"}</button>
+        <button className="ip-btn stage next" disabled={!remoteSession || Boolean(remoteBusy)} onClick={() => sendRemote("next")}>Next</button>
+        <button className="ip-btn stage" disabled={!remoteSession || Boolean(remoteBusy)} onClick={() => sendRemote("add-30")}>Add 30 sec</button>
         <span className="ip-divider" />
 
         <div className="ip-group" role="group" aria-label="Colors">
@@ -167,6 +229,8 @@ export default function IpadPage() {
         <button className="ip-btn warn" onClick={() => setClearSignal((n) => n + 1)}>Clear</button>
 
         <span className="ip-spacer" />
+        <a className="ip-view-link" href="/teacher/present" target="_blank" rel="noreferrer">Panel 1</a>
+        <a className="ip-view-link" href={`/board?room=${encodeURIComponent(room)}`} target="_blank" rel="noreferrer">Panel 2</a>
         <button className="ip-btn" onClick={() => setExportSignal((n) => n + 1)}>Export</button>
         <button className="ip-btn" onClick={toggleFullscreen}>Full screen</button>
         <input ref={fileRef} type="file" accept="image/*" onChange={onPickFile} style={{ display: "none" }} />

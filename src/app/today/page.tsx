@@ -1,10 +1,11 @@
 "use client";
 
-// Student daily page — pulls today's published lesson from Notion and shows it on Chromebooks / main display.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import RatioBuilder from "@/components/RatioBuilder";
 
 interface LessonData {
   id: string;
+  lessonCode: string;
   title: string;
   subtitle: string;
   essentialIdeas: string;
@@ -13,27 +14,101 @@ interface LessonData {
   dueDate: string;
   topic: string;
   module: string;
+  moduleTopic: string;
+  standard: string;
   warmUpLink: string;
   exitTicketLink: string;
+  explainerVideo: string;
+  learningIntention: string;
+  successCriteria: string;
 }
+
+const RATIO_PREVIEW: LessonData = {
+  id: "ratio-preview",
+  lessonCode: "M2.T1.L1-D1",
+  title: "Building the Meaning of a Ratio",
+  subtitle: "It is all relative",
+  essentialIdeas: "A ratio compares two quantities using division. Ratios may compare part-to-part or part-to-whole. The order of the quantities matters.",
+  assignmentLink: "#assignment",
+  date: "2026-07-13",
+  dueDate: "2026-07-13",
+  topic: "M2.T1",
+  module: "Module 2",
+  moduleTopic: "Ratio Reasoning",
+  standard: "6.RP.1",
+  warmUpLink: "#warmup",
+  exitTicketLink: "#exit-ticket",
+  explainerVideo: "",
+  learningIntention: "We are learning to compare two quantities and build the meaning of a ratio.",
+  successCriteria: "I can distinguish additive and multiplicative comparisons.\nI can build and draw a ratio relationship.\nI can write a ratio in words, with a colon, and in fractional form with labels.\nI can classify a ratio as part-to-part or part-to-whole.",
+};
+
+const RATIO_VOCABULARY = [
+  "ratio",
+  "part-to-part",
+  "part-to-whole",
+  "additive",
+  "multiplicative",
+];
 
 function formatDate(iso: string): string {
   if (!iso) return "";
-  const [y, m, d] = iso.split("-").map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString("en-US", {
+  const [year, month, day] = iso.slice(0, 10).split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
     day: "numeric",
   });
 }
 
-function formatShortDate(iso: string): string {
-  if (!iso) return "";
-  const [y, m, d] = iso.split("-").map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
+function splitIdeas(value: string): string[] {
+  return value
+    .split(/\r?\n|(?<=[.!?])\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function splitCriteria(value: string): string[] {
+  const lines = value
+    .split(/\r?\n|(?=I can\s)/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return lines.length ? lines : [value].filter(Boolean);
+}
+
+function isUsableLink(link: string): boolean {
+  return Boolean(link && link !== "#");
+}
+
+function ActionLink({
+  href,
+  label,
+  detail,
+  tone,
+  tall = false,
+}: {
+  href: string;
+  label: string;
+  detail: string;
+  tone: string;
+  tall?: boolean;
+}) {
+  const className = `today-action${tall ? " is-tall" : ""}`;
+  const style = { "--action-color": tone } as CSSProperties;
+  if (!isUsableLink(href)) {
+    return (
+      <div className={`${className} is-disabled`} style={style} aria-disabled="true">
+        <strong>{label}</strong>
+        <span>{detail}</span>
+      </div>
+    );
+  }
+  return (
+    <a className={className} style={style} href={href} target={href.startsWith("http") ? "_blank" : undefined} rel={href.startsWith("http") ? "noreferrer" : undefined}>
+      <strong>{label}</strong>
+      <span>{detail}</span>
+    </a>
+  );
 }
 
 export default function TodayPage() {
@@ -41,452 +116,181 @@ export default function TodayPage() {
   const [date, setDate] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [videoPaused, setVideoPaused] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
     async function load() {
+      const preview = new URLSearchParams(window.location.search).get("preview") === "1";
+      if (preview) {
+        setLesson(RATIO_PREVIEW);
+        setDate(RATIO_PREVIEW.date);
+        setLoading(false);
+        return;
+      }
       try {
-        const res = await fetch("/api/today", { cache: "no-store" });
-        const data = await res.json() as { lesson: LessonData | null; date: string; error?: string };
-
-        if (data.error) {
-          setError(data.error);
-        } else {
+        const response = await fetch("/api/today", { cache: "no-store" });
+        const data = await response.json() as { lesson: LessonData | null; date: string; error?: string };
+        if (!response.ok || data.error) setError(data.error || "Today's lesson could not be loaded.");
+        else {
           setLesson(data.lesson);
           setDate(data.date);
         }
       } catch {
-        setError("Couldn't load today's lesson.");
+        setError("Today's lesson could not be loaded.");
       } finally {
         setLoading(false);
       }
     }
-
-    load();
+    void load();
   }, []);
 
+  function toggleVideo() {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) {
+      void video.play();
+      setVideoPaused(false);
+    } else {
+      video.pause();
+      setVideoPaused(true);
+    }
+  }
+
+  const ideas = lesson ? splitIdeas(lesson.essentialIdeas) : [];
+  const criteria = lesson ? splitCriteria(lesson.successCriteria) : [];
+  const ratioLesson = Boolean(lesson && /ratio/i.test(`${lesson.lessonCode} ${lesson.title} ${lesson.subtitle}`));
+  const videoSource = lesson?.explainerVideo || (ratioLesson ? "/lesson-videos/ratios-bigdogmath.mp4" : "");
+
   return (
-    <>
+    <main className="today-root">
       <style>{`
-        .today-root {
-          min-height: 100vh;
-          background: #0b0d14;
-          color: #fff;
-          font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-          display: grid;
-          grid-template-rows: auto 1fr auto;
+        .today-root { min-height:100vh; display:grid; grid-template-rows:auto 1fr; background:var(--bdb-ground); color:var(--bdb-ink); font-family:var(--bdb-font); }
+        .today-topbar { min-height:68px; display:grid; grid-template-columns:auto auto 1fr; align-items:center; gap:30px; border-bottom:1px solid var(--bdb-line); padding:0 clamp(20px,2.5vw,34px); background:rgba(255,255,255,0.86); }
+        .today-brand { margin:0; color:var(--bdb-brown); font-size:0.76rem; font-weight:900; letter-spacing:0.14em; text-transform:uppercase; }
+        .today-nav-label { color:var(--bdb-teal); font-size:0.72rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
+        .today-date { justify-self:end; color:var(--bdb-ink-soft); font-size:0.78rem; font-weight:800; text-transform:uppercase; }
+        .today-shell { width:min(100%,1440px); margin:0 auto; display:grid; grid-template-columns:minmax(0,1.78fr) minmax(340px,0.92fr); gap:26px; padding:12px 32px 28px; }
+        .today-primary { min-width:0; display:grid; align-content:start; gap:10px; }
+        .today-heading { min-height:66px; display:flex; align-items:center; justify-content:space-between; gap:16px; border-radius:var(--bdb-r); background:rgba(255,255,255,0.88); padding:8px 20px; }
+        .today-kicker { margin:0 0 3px; color:var(--bdb-teal); font-size:0.66rem; font-weight:900; letter-spacing:0.12em; text-transform:uppercase; }
+        .today-title { margin:0; font-size:clamp(1.75rem,3vw,2.35rem); line-height:1; letter-spacing:-0.035em; }
+        .today-preview { color:var(--bdb-ink-soft); font-size:0.72rem; font-weight:750; white-space:nowrap; }
+        .today-video-wrap { position:relative; width:min(76%,650px); margin:0 auto; aspect-ratio:16 / 9; overflow:visible; border-radius:0; background:transparent; box-shadow:none; }
+        .today-video { width:100%; height:100%; display:block; object-fit:cover; background:var(--bdb-ground-2); }
+        .today-video-control { position:absolute; right:-90px; bottom:8px; min-height:38px; border:0; border-radius:var(--bdb-r-pill); background:rgba(255,255,255,0.94); color:var(--bdb-ink); padding:0 18px; font:inherit; font-size:0.7rem; font-weight:900; text-transform:uppercase; cursor:pointer; box-shadow:var(--bdb-shadow-sm); }
+        .today-video-missing { height:100%; display:grid; place-items:center; padding:30px; color:var(--bdb-ink-soft); font-weight:800; text-align:center; }
+        .today-lesson-info { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(230px,0.72fr); gap:18px; border:1px solid var(--bdb-line); border-radius:var(--bdb-r); background:rgba(255,255,255,0.86); padding:16px 18px; }
+        .today-info-card { min-width:0; padding:0; }
+        .today-info-card h2 { margin:0 0 12px; color:var(--bdb-ink-faint); font-size:0.68rem; letter-spacing:0.1em; text-transform:uppercase; }
+        .today-bullets { margin:0; display:grid; gap:7px; padding-left:19px; color:var(--bdb-ink-soft); font-size:0.94rem; line-height:1.42; font-weight:650; }
+        .today-mini-model { min-width:0; border:1px solid var(--bdb-line); border-radius:var(--bdb-r); background:var(--bdb-ground-2); padding:12px 14px; }
+        .today-sidebar { min-width:0; display:grid; align-content:start; gap:0; border:1px solid var(--bdb-line); border-radius:var(--bdb-r); background:rgba(255,255,255,0.86); padding:10px 18px; }
+        .today-support { border-bottom:1px solid var(--bdb-line); padding:8px 0 11px; }
+        .today-support-label { margin:0 0 7px; color:var(--bdb-ink-faint); font-size:0.66rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
+        .today-support-copy { margin:0; color:var(--bdb-ink); font-size:1rem; line-height:1.35; font-weight:800; }
+        .today-criteria { margin:0; display:grid; gap:5px; padding-left:17px; color:var(--bdb-ink-soft); font-size:0.78rem; line-height:1.28; font-weight:680; }
+        .today-vocab { display:flex; flex-wrap:wrap; gap:6px; }
+        .today-vocab span { border-radius:var(--bdb-r-pill); background:var(--bdb-ground-2); color:var(--bdb-brown); padding:6px 9px; font-size:0.7rem; font-weight:850; }
+        .today-actions { display:grid; gap:7px; padding-top:9px; }
+        .today-action { min-height:47px; display:grid; align-content:center; gap:2px; border:1px solid color-mix(in srgb,var(--action-color) 72%,#6f675c); border-radius:12px; background:var(--action-color); color:#fff; padding:8px 14px; box-shadow:none; }
+        .today-action.is-tall { min-height:74px; }
+        .today-action strong { font-size:1rem; line-height:1.1; }
+        .today-action span { color:rgba(255,255,255,0.82); font-size:0.72rem; font-weight:750; }
+        .today-action.is-disabled { opacity:0.5; filter:saturate(0.55); }
+        .today-state { grid-column:1 / -1; min-height:58vh; display:grid; place-items:center; text-align:center; padding:30px; }
+        .today-state div { max-width:540px; }
+        .today-state h1 { margin:0 0 10px; font-size:clamp(1.8rem,4vw,3rem); }
+        .today-state p { margin:0; color:var(--bdb-ink-soft); line-height:1.5; }
+        .today-error { margin-top:14px; border:1px solid color-mix(in srgb,var(--bdb-coral) 38%,var(--bdb-line)); border-radius:12px; background:#fff5f1; color:#9c3422; padding:12px 14px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:0.8rem; text-align:left; }
+        @media (max-width:920px) {
+          .today-shell { grid-template-columns:1fr; }
+          .today-sidebar { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+          .today-support { border:1px solid var(--bdb-line); border-radius:var(--bdb-r); padding:14px; }
+          .today-actions { grid-column:1 / -1; grid-template-columns:repeat(2,minmax(0,1fr)); padding-top:0; }
+          .today-action.is-tall { min-height:74px; }
         }
-
-        /* Top bar */
-        .today-topbar {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 18px 32px;
-          border-bottom: 1px solid #1f2332;
-        }
-        .today-wordmark {
-          font-size: 0.8rem;
-          font-weight: 900;
-          letter-spacing: 0.14em;
-          text-transform: uppercase;
-          color: #4e6ef2;
-          margin: 0;
-        }
-        .today-date-display {
-          font-size: 0.9rem;
-          font-weight: 700;
-          color: #5a6280;
-          letter-spacing: 0.04em;
-        }
-        .today-nav-link {
-          font-size: 0.82rem;
-          font-weight: 800;
-          letter-spacing: 0.06em;
-          text-transform: uppercase;
-          color: #3a4460;
-          border: 1px solid #1f2332;
-          border-radius: 6px;
-          padding: 6px 14px;
-          text-decoration: none;
-          transition: border-color 150ms ease, color 150ms ease;
-        }
-        .today-nav-link:hover {
-          border-color: #4e6ef2;
-          color: #8ba0f8;
-        }
-
-        /* Main content */
-        .today-main {
-          display: grid;
-          align-content: start;
-          gap: 28px;
-          padding: 40px 32px;
-          max-width: 900px;
-          margin: 0 auto;
-          width: 100%;
-        }
-
-        /* Lesson hero */
-        .today-lesson-tag {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          background: rgba(78, 110, 242, 0.15);
-          border: 1px solid rgba(78, 110, 242, 0.3);
-          border-radius: 6px;
-          padding: 5px 12px;
-          font-size: 0.78rem;
-          font-weight: 900;
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
-          color: #8ba0f8;
-          width: fit-content;
-        }
-        .today-title {
-          margin: 0;
-          font-size: clamp(2rem, 6vw, 3.6rem);
-          font-weight: 900;
-          line-height: 1.05;
-          color: #fff;
-        }
-        .today-subtitle {
-          margin: 8px 0 0;
-          font-size: clamp(1rem, 2.5vw, 1.35rem);
-          font-weight: 600;
-          color: #5a6280;
-          line-height: 1.4;
-        }
-
-        /* Cards */
-        .today-cards {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-          gap: 16px;
-        }
-        .today-card {
-          background: #121520;
-          border: 1px solid #1f2332;
-          border-radius: 12px;
-          padding: 22px 24px;
-          display: grid;
-          gap: 10px;
-        }
-        .today-card-label {
-          font-size: 0.75rem;
-          font-weight: 900;
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
-          color: #3a4460;
-          margin: 0;
-        }
-        .today-card-content {
-          font-size: 1.02rem;
-          font-weight: 600;
-          color: #c8cedd;
-          line-height: 1.6;
-          margin: 0;
-          white-space: pre-wrap;
-        }
-        .today-card.highlight {
-          border-color: rgba(78, 110, 242, 0.35);
-          background: rgba(78, 110, 242, 0.06);
-        }
-        .today-card.highlight .today-card-label {
-          color: #6880d8;
-        }
-        .today-card.highlight .today-card-content {
-          color: #d8e0ff;
-          font-size: 1.1rem;
-        }
-
-        /* Assignment button */
-        .today-assignment-btn {
-          display: inline-flex;
-          align-items: center;
-          gap: 10px;
-          background: #4e6ef2;
-          border: none;
-          border-radius: 10px;
-          color: #fff;
-          cursor: pointer;
-          font-size: 1rem;
-          font-weight: 900;
-          padding: 14px 22px;
-          text-decoration: none;
-          transition: background 140ms ease, transform 140ms ease;
-          width: fit-content;
-        }
-        .today-assignment-btn:hover {
-          background: #3b5be6;
-          transform: translateY(-1px);
-        }
-        .today-assignment-btn.is-warmup {
-          background: #f97316;
-        }
-        .today-assignment-btn.is-warmup:hover {
-          background: #ea580c;
-        }
-        .today-assignment-btn.is-exit {
-          background: #10b981;
-        }
-        .today-assignment-btn.is-exit:hover {
-          background: #059669;
-        }
-        .today-due {
-          font-size: 0.9rem;
-          font-weight: 700;
-          color: #5a6280;
-          margin-top: 4px;
-        }
-
-        /* Join section */
-        .today-join-section {
-          background: #121520;
-          border: 1px solid #1f2332;
-          border-radius: 12px;
-          padding: 22px 24px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 16px;
-          flex-wrap: wrap;
-        }
-        .today-join-label {
-          font-size: 0.75rem;
-          font-weight: 900;
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
-          color: #3a4460;
-          margin: 0 0 6px;
-        }
-        .today-join-link {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          background: transparent;
-          border: 1px solid #1f2332;
-          border-radius: 8px;
-          color: #8ba0f8;
-          font-size: 0.9rem;
-          font-weight: 800;
-          padding: 10px 16px;
-          text-decoration: none;
-          transition: border-color 140ms ease;
-          letter-spacing: 0.04em;
-        }
-        .today-join-link:hover {
-          border-color: #4e6ef2;
-        }
-
-        /* Empty / error states */
-        .today-empty {
-          display: grid;
-          place-items: center;
-          min-height: 50vh;
-          gap: 16px;
-          text-align: center;
-          color: #3a4460;
-        }
-        .today-empty-icon {
-          font-size: 3.5rem;
-          opacity: 0.5;
-        }
-        .today-empty-title {
-          font-size: 1.4rem;
-          font-weight: 900;
-          color: #3a4460;
-          margin: 0;
-        }
-        .today-empty-sub {
-          color: #2a3050;
-          font-size: 0.95rem;
-          max-width: 360px;
-          margin: 0;
-        }
-        .today-error-note {
-          background: rgba(192, 57, 43, 0.1);
-          border: 1px solid rgba(192, 57, 43, 0.3);
-          border-radius: 8px;
-          padding: 14px 18px;
-          font-size: 0.88rem;
-          color: #e88;
-          font-family: "SFMono-Regular", Consolas, monospace;
-          max-width: 600px;
-        }
-
-        /* Footer */
-        .today-footer {
-          padding: 14px 32px;
-          border-top: 1px solid #1f2332;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-        }
-        .today-footer-text {
-          font-size: 0.8rem;
-          color: #2a3050;
-          font-weight: 700;
-        }
-
-        @media (max-width: 640px) {
-          .today-topbar, .today-main, .today-footer { padding-left: 18px; padding-right: 18px; }
-          .today-main { padding-top: 28px; }
+        @media (max-width:620px) {
+          .today-topbar { grid-template-columns:1fr auto; }
+          .today-nav-label { display:none; }
+          .today-shell { padding:14px; }
+          .today-heading { display:grid; }
+          .today-preview { display:none; }
+          .today-lesson-info, .today-sidebar, .today-actions { grid-template-columns:1fr; }
+          .today-video-wrap { width:100%; aspect-ratio:16 / 10; overflow:hidden; }
+          .today-video-control { right:10px; }
         }
       `}</style>
 
-      <div className="today-root">
-        {/* Top bar */}
-        <header className="today-topbar">
-          <p className="today-wordmark">Big Dog Math</p>
-          <span className="today-date-display">
-            {date ? formatDate(date) : "Loading…"}
-          </span>
-          <a className="today-nav-link" href="/lessons">Past Days →</a>
-        </header>
+      <header className="today-topbar">
+        <p className="today-brand">Big Dog Math</p>
+        <span className="today-nav-label">Today&apos;s lesson</span>
+        <span className="today-date">{date ? formatDate(date) : "Today's lesson"}</span>
+      </header>
 
-        {/* Main */}
-        <div className="today-main">
-          {loading && (
-            <div className="today-empty">
-              <div className="today-empty-icon">📘</div>
-              <p className="today-empty-title">Loading…</p>
-            </div>
-          )}
-
-          {!loading && error && (
-            <div className="today-empty">
-              <div className="today-empty-icon">⚠️</div>
-              <p className="today-empty-title">Couldn't load lesson</p>
-              <div className="today-error-note">{error}</div>
-              {error.includes("NOTION_TOKEN") && (
-                <p className="today-empty-sub">
-                  Add a <strong>NOTION_TOKEN</strong> environment variable in your Vercel project settings, then redeploy.
-                </p>
-              )}
-            </div>
-          )}
-
-          {!loading && !error && !lesson && (
-            <div className="today-empty">
-              <div className="today-empty-icon">📭</div>
-              <p className="today-empty-title">No lesson published today</p>
-              <p className="today-empty-sub">
-                Set a lesson's <em>Publish Workflow</em> to <strong>Published</strong> and its <em>Date</em> to today in Notion.
-              </p>
-            </div>
-          )}
-
-          {!loading && !error && lesson && (
-            <>
-              {/* Tag */}
-              {lesson.module && (
-                <div className="today-lesson-tag">
-                  📘 {lesson.module}
-                </div>
-              )}
-
-              {/* Title block */}
+      {loading ? (
+        <section className="today-state"><div><h1>Loading today&apos;s lesson</h1><p>Connecting to the published Math 6 lesson.</p></div></section>
+      ) : error ? (
+        <section className="today-state"><div><h1>Today&apos;s lesson is not ready</h1><p>Try again after the lesson is published and dated for today.</p><div className="today-error">{error}</div></div></section>
+      ) : !lesson ? (
+        <section className="today-state"><div><h1>No lesson is published today</h1><p>Publish the lesson in Math 6 Lessons and set its date to today.</p></div></section>
+      ) : (
+        <div className="today-shell">
+          <section className="today-primary">
+            <div className="today-heading">
               <div>
-                <h1 className="today-title">{lesson.title || "Today's Lesson"}</h1>
-                {lesson.subtitle && (
-                  <p className="today-subtitle">{lesson.subtitle}</p>
-                )}
+                <p className="today-kicker">{lesson.lessonCode || lesson.standard || lesson.topic}</p>
+                <h1 className="today-title">{ratioLesson ? "Ratios are everywhere." : lesson.title}</h1>
               </div>
+              <span className="today-preview">Preview now · replay at home</span>
+            </div>
 
-              {/* Cards */}
-              <div className="today-cards">
-                {lesson.essentialIdeas && (
-                  <div className="today-card highlight" style={{ gridColumn: "1 / -1" }}>
-                    <p className="today-card-label">Essential Ideas</p>
-                    <p className="today-card-content">{lesson.essentialIdeas}</p>
-                  </div>
-                )}
+            <div className="today-video-wrap">
+              {videoSource ? (
+                <>
+                  <video ref={videoRef} className="today-video" src={videoSource} autoPlay muted loop playsInline preload="metadata" />
+                  <button className="today-video-control" onClick={toggleVideo}>{videoPaused ? "Play loop" : "Pause loop"}</button>
+                </>
+              ) : <div className="today-video-missing">A silent visual explainer can be added to this lesson in Notion.</div>}
+            </div>
 
-                <div className="today-card">
-                  <p className="today-card-label">Warm-Up</p>
-                  {lesson.warmUpLink ? (
-                    <a
-                      className="today-assignment-btn is-warmup"
-                      href={lesson.warmUpLink}
-                      rel="noopener noreferrer"
-                      target="_blank"
-                    >
-                      Start Warm-Up ↗
-                    </a>
-                  ) : (
-                    <p className="today-card-content">No warm-up link has been added yet.</p>
-                  )}
-                </div>
+            <div className="today-lesson-info">
+              <article className="today-info-card">
+                <h2>What to notice</h2>
+                <ul className="today-bullets">
+                  {(ideas.length ? ideas : [lesson.subtitle]).filter(Boolean).map((idea) => <li key={idea}>{idea}</li>)}
+                </ul>
+              </article>
+              {ratioLesson && <aside className="today-mini-model"><RatioBuilder compact kicker="Try the model" prompt="Drag blocks to build a ratio." /></aside>}
+            </div>
+          </section>
 
-                {!lesson.assignmentLink && (
-                  <div className="today-card">
-                    <p className="today-card-label">Assignment</p>
-                    <p className="today-card-content">No assignment link has been added yet.</p>
-                  </div>
-                )}
-
-                {lesson.assignmentLink && (
-                  <div className="today-card">
-                    <p className="today-card-label">Assignment</p>
-                    <a
-                      className="today-assignment-btn"
-                      href={lesson.assignmentLink}
-                      rel="noopener noreferrer"
-                      target="_blank"
-                    >
-                      Open Assignment ↗
-                    </a>
-                    {lesson.dueDate && (
-                      <p className="today-due">Due {formatShortDate(lesson.dueDate)}</p>
-                    )}
-                  </div>
-                )}
-
-                {lesson.exitTicketLink && (
-                  <div className="today-card">
-                    <p className="today-card-label">Exit Ticket</p>
-                    <a
-                      className="today-assignment-btn is-exit"
-                      href={lesson.exitTicketLink}
-                      rel="noopener noreferrer"
-                      target="_blank"
-                    >
-                      Open Exit Ticket ↗
-                    </a>
-                  </div>
-                )}
-
-                {lesson.topic && (
-                  <div className="today-card">
-                    <p className="today-card-label">Topic</p>
-                    <p className="today-card-content">{lesson.topic}</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Join session */}
-              <div className="today-join-section">
-                <div>
-                  <p className="today-join-label">Polls & Questions</p>
-                  <p style={{ margin: 0, color: "#5a6280", fontSize: "0.9rem", fontWeight: 600 }}>
-                    Enter the code your teacher shows on the board
-                  </p>
-                </div>
-                <a className="today-join-link" href="/join">
-                  Join Session →
-                </a>
-              </div>
-            </>
-          )}
+          <aside className="today-sidebar">
+            <section className="today-support">
+              <p className="today-support-label">Learning intention</p>
+              <p className="today-support-copy">{lesson.learningIntention || lesson.essentialIdeas}</p>
+            </section>
+            <section className="today-support">
+              <p className="today-support-label">What success looks like</p>
+              <ul className="today-criteria">
+                {(criteria.length ? criteria : ideas.slice(0, 3)).map((criterion) => <li key={criterion}>{criterion}</li>)}
+              </ul>
+            </section>
+            {ratioLesson && (
+              <section className="today-support">
+                <p className="today-support-label">Vocabulary</p>
+                <div className="today-vocab">{RATIO_VOCABULARY.map((word) => <span key={word}>{word}</span>)}</div>
+              </section>
+            )}
+            <div className="today-actions">
+              <ActionLink href={lesson.warmUpLink} label="Warm-Up" detail="Open the verified Google Form" tone="#e66b32" tall />
+              <ActionLink href="/join" label="Join class" detail="Enter the code shown by your teacher" tone="#211f1b" />
+              <ActionLink href={lesson.assignmentLink} label="Paper assignment" detail="Open the printable Carnegie-based practice" tone="#50a3a4" />
+              <ActionLink href={lesson.exitTicketLink} label="Exit ticket" detail="Open when your teacher says to begin" tone="#2f9e6f" />
+            </div>
+          </aside>
         </div>
-
-        {/* Footer */}
-        <footer className="today-footer">
-          <span className="today-footer-text">Big Dog Math — {date ? formatDate(date) : ""}</span>
-          <a className="today-nav-link" href="/">Dashboard</a>
-        </footer>
-      </div>
-    </>
+      )}
+    </main>
   );
 }

@@ -56,6 +56,7 @@ export interface LessonData {
   toolsConfigured: boolean;
   warmUpLink: string;    // url to today's warm-up
   exitTicketLink: string; // url to the exit ticket
+  explainerVideo: string; // optional silent visual used on the student lesson home page
   // Lesson-flow fields for the auto-built sequence. Empty if the Notion column is absent.
   learningIntention: string;
   successCriteria: string;
@@ -396,6 +397,7 @@ async function mapPage(page: NotionPage, token: string, cache: Map<string, Promi
       ["Form Link"],
     ),
     exitTicketLink: await resolveFirstLink(p, ["Exit Ticket Link", "Exit-Ticket Link", "Exit Ticket", "Exit Ticket URL"], token, cache),
+    explainerVideo: await resolveFirstLink(p, ["Explainer Video", "Explainer Video Link", "Explainer"], token, cache),
     learningIntention: extractText(p["Learning Intention"]),
     successCriteria: extractText(p["Success Criteria"]),
     discussionPrompt: extractText(p["Discussion Prompt"]),

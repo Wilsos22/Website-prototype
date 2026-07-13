@@ -11,10 +11,29 @@ export default function BoardPage() {
   const [room, setRoom] = useState("main");
   const [scratchOpen, setScratchOpen] = useState(false);
   useEffect(() => {
+    let explicitRoom = false;
     try {
       const r = new URLSearchParams(window.location.search).get("room");
-      if (r) setRoom(r.trim());
+      if (r) {
+        explicitRoom = true;
+        setRoom(r.trim());
+      }
     } catch { /* ignore */ }
+    if (explicitRoom) return;
+    let stopped = false;
+    const findLiveRoom = async () => {
+      try {
+        const response = await fetch("/api/control-remote", { cache: "no-store" });
+        const data = await response.json() as { session?: { id?: string } | null };
+        if (!stopped && response.ok && data.session?.id) setRoom(data.session.id);
+      } catch { /* keep the main-room fallback */ }
+    };
+    void findLiveRoom();
+    const interval = window.setInterval(findLiveRoom, 3000);
+    return () => {
+      stopped = true;
+      window.clearInterval(interval);
+    };
   }, []);
 
   // Mirror the iPad's scratch overlay open/close.

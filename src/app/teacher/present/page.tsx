@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type CSSProperties } from "react";
 import InkBoard from "@/components/InkBoard";
+import RatioBuilder from "@/components/RatioBuilder";
 import { teacherApiRequest } from "@/lib/teacherApi";
 import { LIVE_FLOW_MODE, type LiveClassFlowSnapshot } from "@/lib/liveClassFlow";
 
@@ -30,12 +31,44 @@ function toolUrl(flow: LiveClassFlowSnapshot) {
   return `${tool.route}?${params.toString()}`;
 }
 
+const RATIO_STAGE_PREVIEW: StageSession = {
+  id: "ratio-preview-room",
+  status: "open",
+  broadcast: LIVE_FLOW_MODE,
+  live_flow: {
+    version: 1,
+    updatedAt: new Date().toISOString(),
+    state: {
+      id: "manip",
+      label: "Main Activity - Concrete",
+      description: "Students build on paper while the teacher models the same relationship.",
+      color: "#50a3a4",
+    },
+    phase: null,
+    timer: { totalSeconds: 300, secondsLeft: 247, running: true, finished: false },
+    poll: null,
+    resource: null,
+    presentation: {
+      title: "Main Activity - Concrete",
+      body: "Build 3 blue parts for every 2 yellow parts.\nDraw and label the model. Then write one part-to-part ratio and one part-to-whole ratio.",
+      mode: "board",
+      notionStepId: null,
+    },
+    tool: null,
+  },
+};
+
 export default function ClassroomStagePage() {
   const [session, setSession] = useState<StageSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [pollAnswers, setPollAnswers] = useState<PollAnswer[]>([]);
 
   useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("preview") === "ratio") {
+      setSession(RATIO_STAGE_PREVIEW);
+      setLoading(false);
+      return;
+    }
     let stopped = false;
     const load = async () => {
       const result = await teacherApiRequest<{ sessions: StageSession[] }>("/api/teacher/session")
@@ -87,11 +120,19 @@ export default function ClassroomStagePage() {
     ? `${resource.url}${resource.url.includes("?") ? "&" : "?"}embedded=true`
     : null;
   const liveToolUrl = flow ? toolUrl(flow) : null;
+  const ratioBoard = Boolean(
+    presentation?.mode === "board"
+    && /ratio|blue parts|blue to yellow/i.test(`${presentation.title} ${presentation.body}`),
+  );
+  const ratioBoardLines = (presentation?.body || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
 
   return (
     <main className="stage-page" style={{ "--stage-accent": accent } as CSSProperties}>
       <style>{`
-        .stage-page { position:fixed; inset:0; box-sizing:border-box; display:grid; grid-template-rows:auto minmax(0,1fr) auto; background:#15120d; color:#201e1a; font-family:Inter,ui-sans-serif,system-ui,sans-serif; padding:14px; overflow:hidden; }
+        .stage-page { position:fixed; inset:0; box-sizing:border-box; display:grid; grid-template-rows:auto minmax(0,1fr) auto; background:#15120d; color:#201e1a; font-family:var(--bdb-font); padding:14px; overflow:hidden; }
         .stage-frame { display:contents; }
         .stage-top { display:grid; grid-template-columns:1fr auto; align-items:center; gap:24px; min-height:78px; border:1px solid #3b3327; border-bottom:none; border-radius:18px 18px 0 0; background:#211c14; color:#fff; padding:10px 18px 10px 24px; }
         .stage-step { min-width:0; }
@@ -112,6 +153,16 @@ export default function ClassroomStagePage() {
         .stage-poll { position:absolute; inset:0; display:grid; align-content:center; justify-items:center; gap:26px; padding:clamp(24px,5vw,70px); background:#fbf7ef; text-align:center; }
         .stage-question { margin:0; max-width:24ch; color:#201e1a; font-size:clamp(2rem,5.3vw,5rem); line-height:1.08; letter-spacing:-0.025em; }
         .stage-response-count { margin:0; color:#766d5f; font-size:clamp(1rem,2.2vw,1.5rem); font-weight:850; }
+        .stage-poll-context { margin:0; max-width:70ch; color:#5d5549; white-space:pre-wrap; font-size:clamp(0.95rem,1.7vw,1.25rem); line-height:1.35; font-weight:720; }
+        .stage-ratio-board { position:absolute; inset:0; display:grid; grid-template-rows:auto minmax(0,1fr); gap:16px; background:#fbf7ef; padding:26px 44px 34px; }
+        .stage-ratio-brief { display:grid; grid-template-columns:minmax(0,1.65fr) minmax(300px,0.68fr); gap:30px; align-items:start; }
+        .stage-ratio-copy { display:grid; gap:10px; align-content:start; }
+        .stage-ratio-copy .stage-kicker { color:var(--stage-accent); }
+        .stage-ratio-copy h2 { margin:0; max-width:21ch; color:#201e1a; font-size:clamp(2.1rem,4.4vw,4.7rem); line-height:1.03; letter-spacing:-0.035em; }
+        .stage-ratio-copy p { margin:0; max-width:50ch; color:#595145; font-size:clamp(1.05rem,2vw,1.7rem); line-height:1.4; font-weight:740; }
+        .stage-ratio-model { border:1px solid #d8cebb; border-radius:16px; background:#fff; padding:16px 18px; }
+        .stage-ratio-ink { position:relative; min-height:0; overflow:hidden; border:1px solid #d8cebb; border-radius:16px; background:#fff; }
+        .stage-ratio-ink-label { position:absolute; top:14px; left:20px; z-index:2; margin:0; color:#9a9182; font-size:0.72rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; pointer-events:none; }
         .stage-results { width:min(100%,900px); display:grid; gap:13px; }
         .stage-result { display:grid; grid-template-columns:minmax(80px,1fr) minmax(180px,4fr) 60px; align-items:center; gap:14px; font-size:clamp(1rem,2.2vw,1.45rem); font-weight:850; text-align:left; }
         .stage-bar { height:22px; border-radius:999px; background:#e4ddcf; overflow:hidden; }
@@ -142,6 +193,7 @@ export default function ClassroomStagePage() {
           ) : poll ? (
             <div className="stage-poll">
               <h2 className="stage-question">{poll.stage === "results" ? "Class Results" : poll.question}</h2>
+              {state.description ? <p className="stage-poll-context">{state.description}</p> : null}
               {poll.stage === "responding" || poll.kind === "short-answer" ? (
                 <p className="stage-response-count">{pollAnswers.length} response{pollAnswers.length === 1 ? "" : "s"} received</p>
               ) : (
@@ -163,6 +215,23 @@ export default function ClassroomStagePage() {
             </div>
           ) : liveToolUrl ? (
             <iframe className="stage-tool" src={liveToolUrl} title={flow.tool?.label || "Lesson tool"} />
+          ) : ratioBoard ? (
+            <div className="stage-ratio-board">
+              <section className="stage-ratio-brief">
+                <div className="stage-ratio-copy">
+                  <p className="stage-kicker">Build · Draw · Write</p>
+                  <h2>{ratioBoardLines[0] || presentation?.title || state.label}</h2>
+                  {ratioBoardLines.slice(1).map((line) => <p key={line}>{line}</p>)}
+                </div>
+                <aside className="stage-ratio-model">
+                  <RatioBuilder compact presentation kicker="Visual model" prompt="3 blue to 2 yellow" />
+                </aside>
+              </section>
+              <section className="stage-ratio-ink">
+                <p className="stage-ratio-ink-label">Teacher model · writing from iPad</p>
+                <InkBoard room={session.id} interactive={false} problem={null} />
+              </section>
+            </div>
           ) : presentation?.mode === "board" ? (
             <InkBoard room={session.id} interactive={false} problem={presentation.body} />
           ) : (
