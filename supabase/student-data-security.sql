@@ -5,6 +5,8 @@
 -- removes the permissive prototype policies and will block legacy browser
 -- writes that have not moved behind an authenticated API route.
 
+begin;
+
 alter table public.students
   add column if not exists auth_user_id uuid references auth.users(id) on delete set null,
   add column if not exists auth_claimed_at timestamptz,
@@ -438,3 +440,5 @@ grant select on public.exit_tickets to authenticated;
 -- mutation privileges remain server-only through the service-role client.
 
 notify pgrst, 'reload schema';
+
+commit;

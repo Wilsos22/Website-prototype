@@ -5,6 +5,8 @@
 -- only long enough to correct a failed cutover. It preserves identity columns,
 -- indexes, audit records, and student links so no evidence is destroyed.
 
+begin;
+
 do $$
 declare
   t text;
@@ -95,3 +97,5 @@ create policy "boards read" on storage.objects for select to anon using (bucket_
 create policy "boards upload" on storage.objects for insert to anon with check (bucket_id = 'boards');
 
 notify pgrst, 'reload schema';
+
+commit;
