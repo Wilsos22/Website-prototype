@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
+import { recordSecurityEvent } from "@/lib/securityAudit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,17 +53,39 @@ export async function POST(request: Request) {
   if (!rosterMatch) return Response.json({ matched: false }, { status: 404 });
 
   if (rosterMatch.auth_user_id && rosterMatch.auth_user_id !== authUserId) {
-    const { data: previousAuth } = await db.auth.admin.getUserById(rosterMatch.auth_user_id);
+    const { data: previousAuth, error: previousAuthError } = await db.auth.admin.getUserById(rosterMatch.auth_user_id);
+    if (previousAuthError) {
+      return Response.json({ error: "Existing student identity could not be verified." }, { status: 500 });
+    }
     if (previousAuth.user && !previousAuth.user.is_anonymous) {
       return Response.json({ error: "This roster account is protected by a permanent sign-in." }, { status: 409 });
     }
   }
 
-  const { error: updateError } = await db
+  const { data: updated, error: updateError } = await db
     .from("students")
     .update({ auth_user_id: authUserId, auth_claimed_at: new Date().toISOString() })
-    .eq("id", rosterMatch.id);
+    .eq("id", rosterMatch.id)
+    .or(`auth_user_id.is.null,auth_user_id.eq.${rosterMatch.auth_user_id ?? authUserId}`)
+    .select("id")
+    .maybeSingle();
   if (updateError) return Response.json({ error: "Roster identity linking failed." }, { status: 500 });
+  if (!updated) {
+    void recordSecurityEvent({
+      eventType: "warmup_identity_linked",
+      outcome: "conflict",
+      authUserId,
+      studentId: rosterMatch.id,
+    });
+    return Response.json({ error: "This roster account changed while it was being verified." }, { status: 409 });
+  }
+
+  void recordSecurityEvent({
+    eventType: "warmup_identity_linked",
+    outcome: "allowed",
+    authUserId,
+    studentId: rosterMatch.id,
+  });
 
   return Response.json({ matched: true });
 }

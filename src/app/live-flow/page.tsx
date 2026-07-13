@@ -3,6 +3,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
+import { SECURE_STUDENT_DATA, studentApiRequest } from "@/lib/studentApi";
 import {
   LIVE_FLOW_MODE,
   STUDENT_SESSION_KEY,
@@ -139,6 +140,19 @@ export default function LiveFlowPage() {
       setLoading(false);
     };
     const readSession = async () => {
+      if (SECURE_STUDENT_DATA) {
+        try {
+          const result = await studentApiRequest<{ session: SessionRow }>(
+            `/api/student/session-state?sessionId=${encodeURIComponent(sessionId)}`,
+          );
+          applySession(result.session);
+        } catch (error) {
+          setEmptyMessage(error instanceof Error ? error.message : "Live Flow could not load.");
+          setFlow(null);
+          setLoading(false);
+        }
+        return;
+      }
       const { data, error } = await supabase
         .from("sessions")
         .select("status,broadcast,live_flow")
@@ -168,21 +182,23 @@ export default function LiveFlowPage() {
     };
 
     void readSession();
-    const poll = window.setInterval(readSession, 1000);
-    const channel = supabase
-      .channel(`live-flow-${sessionId}`)
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "sessions", filter: `id=eq.${sessionId}` },
-        (payload) => applySession(payload.new as SessionRow),
-      )
-      .subscribe();
+    const poll = window.setInterval(readSession, SECURE_STUDENT_DATA ? 2000 : 1000);
+    const channel = SECURE_STUDENT_DATA
+      ? null
+      : supabase
+        .channel(`live-flow-${sessionId}`)
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "sessions", filter: `id=eq.${sessionId}` },
+          (payload) => applySession(payload.new as SessionRow),
+        )
+        .subscribe();
 
     return () => {
       stopped = true;
       window.clearTimeout(connectionFallback);
       window.clearInterval(poll);
-      void supabase.removeChannel(channel);
+      if (channel) void supabase.removeChannel(channel);
     };
   }, [supabase]);
 
@@ -241,6 +257,10 @@ export default function LiveFlowPage() {
   const activePollId = activePoll?.id ?? null;
 
   useEffect(() => {
+    if (SECURE_STUDENT_DATA) {
+      setPollAnswers([]);
+      return;
+    }
     if (!supabase || !activePollId) {
       setPollAnswers([]);
       return;
@@ -271,24 +291,11 @@ export default function LiveFlowPage() {
   async function submitPollAnswer(answer: string) {
     const student = getStoredStudentSession();
     if (!supabase || !activePoll || !student || !answer.trim() || submittedPollIds.includes(activePoll.id)) return;
-    setPollSubmitError(null);
-    if (WARMUP_IDENTITY) {
-      const { data } = await supabase.auth.getSession();
-      const token = data.session?.access_token;
-      if (!token) {
-        setPollSubmitError("Rejoin the class before sending your answer.");
-        return;
-      }
-      const response = await fetch("/api/student/poll-answer", {
+    if (SECURE_STUDENT_DATA) {
+      await studentApiRequest("/api/student/poll-answer", {
         method: "POST",
-        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
         body: JSON.stringify({ pollId: activePoll.id, answer: answer.trim() }),
       });
-      if (!response.ok) {
-        const result = await response.json().catch(() => ({})) as { error?: string };
-        setPollSubmitError(result.error || "Your answer could not be saved.");
-        return;
-      }
     } else {
       await supabase.from("poll_answers").insert({
         poll_id: activePoll.id,

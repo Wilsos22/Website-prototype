@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
 import { getStoredStudentSession, type StoredStudentSession } from "@/lib/liveClassFlow";
 import { getOpenExitTicket, submitExitResponse, type ExitTicket } from "@/lib/exitTickets";
+import { SECURE_STUDENT_DATA, studentApiRequest } from "@/lib/studentApi";
 
 type View = "loading" | "needjoin" | "waiting" | "answering" | "submitted";
 
@@ -31,7 +32,11 @@ export default function ExitTicketPage() {
     if (!supabase || !session) return;
     let stop = false;
     const tick = async () => {
-      const t = await getOpenExitTicket(supabase, session.sessionId);
+      const t = SECURE_STUDENT_DATA
+        ? (await studentApiRequest<{ exitTicket: ExitTicket | null }>(
+          `/api/student/exit-ticket?sessionId=${encodeURIComponent(session.sessionId)}`,
+        )).exitTicket
+        : await getOpenExitTicket(supabase, session.sessionId);
       if (stop) return;
       if (!t) {
         if (submittedIdRef.current) return; // stay on the thank-you screen
@@ -53,13 +58,20 @@ export default function ExitTicketPage() {
   const submit = useCallback(async (answer: string) => {
     if (!supabase || !session || !ticket || !answer.trim()) return;
     submittedIdRef.current = ticket.id;
-    await submitExitResponse(supabase, {
-      exitTicketId: ticket.id,
-      sessionId: session.sessionId,
-      studentId: session.studentId || null,
-      displayName: session.name || null,
-      response: answer.trim(),
-    });
+    if (SECURE_STUDENT_DATA) {
+      await studentApiRequest("/api/student/exit-ticket", {
+        method: "POST",
+        body: JSON.stringify({ exitTicketId: ticket.id, sessionId: session.sessionId, response: answer.trim() }),
+      });
+    } else {
+      await submitExitResponse(supabase, {
+        exitTicketId: ticket.id,
+        sessionId: session.sessionId,
+        studentId: session.studentId || null,
+        displayName: session.name || null,
+        response: answer.trim(),
+      });
+    }
     setView("submitted");
   }, [supabase, session, ticket]);
 
@@ -71,16 +83,16 @@ export default function ExitTicketPage() {
 
       {view === "needjoin" && (
         <div className="et-mid et-card">
-          <div className="et-emoji">🎟️</div>
+          <div className="et-mark">Exit ticket</div>
           <h1 className="et-h">Join your class first</h1>
           <p className="et-soft">Exit tickets are part of a live class. Enter your teacher&apos;s code to join.</p>
-          <a className="et-btn" href="/">Enter class code →</a>
+          <a className="et-btn" href="/">Enter class code</a>
         </div>
       )}
 
       {view === "waiting" && (
         <div className="et-mid et-card">
-          <div className="et-emoji et-bounce">🎟️</div>
+          <div className="et-mark">Exit ticket</div>
           <h1 className="et-h">Exit ticket</h1>
           <p className="et-soft">Waiting for your teacher to start the exit ticket…</p>
         </div>
@@ -94,8 +106,8 @@ export default function ExitTicketPage() {
 
             {ticket.kind === "short-answer" && (
               <>
-                <textarea className="et-text" value={text} placeholder="Type your answer…" onChange={(e) => setText(e.target.value)} autoFocus />
-                <button className="et-submit" onClick={() => submit(text)} disabled={!text.trim()}>Turn in →</button>
+                <textarea className="et-text" value={text} placeholder="Type your answer" onChange={(e) => setText(e.target.value)} autoFocus />
+                <button className="et-submit" onClick={() => submit(text)} disabled={!text.trim()}>Turn in</button>
               </>
             )}
 
@@ -123,7 +135,7 @@ export default function ExitTicketPage() {
 
       {view === "submitted" && (
         <div className="et-mid et-card">
-          <div className="et-emoji">✅</div>
+          <div className="et-mark">Saved</div>
           <h1 className="et-h">Turned in!</h1>
           <p className="et-soft">Thanks{session ? `, ${session.name.split(" ")[0]}` : ""} — have a great day.</p>
         </div>
@@ -138,7 +150,7 @@ const styles = `
   .et-mid { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; text-align:center; }
   .et-card { background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:var(--bdb-r-lg);
     box-shadow:var(--bdb-shadow); padding:30px 26px; max-width:460px; width:100%; }
-  .et-emoji { font-size:3rem; line-height:1; }
+  .et-mark { color:var(--bdb-teal); font-size:0.85rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; }
   .et-bounce { animation:etB 1.4s ease-in-out infinite; }
   @keyframes etB { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-7px);} }
   .et-h { font-size:clamp(1.5rem,5vw,2rem); font-weight:800; letter-spacing:-0.02em; margin:10px 0 6px; }

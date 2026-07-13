@@ -7,7 +7,7 @@
 // and (unless voice is muted) she says it out loud through her real voice.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getSupabase } from "@/lib/supabase";
+import { teacherPost } from "@/lib/teacherApi";
 import {
   fetchPendingAbbieQuestions,
   markAbbieQuestionAnswered,
@@ -52,7 +52,6 @@ const LS_VOICE = "bdm-abbie-voice-on";
 const LS_MEMORY = "bdm-abbie-memory";
 
 export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { stateLabel?: string; stateDesc?: string; sessionId?: string | null }) {
-  const supabase = getSupabase();
   const [open, setOpen] = useState(false);
   const [line, setLine] = useState<string | null>(null);
   const [thinking, setThinking] = useState(false);
@@ -96,14 +95,14 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
   // it works whatever mode students are in), then clear it a few seconds later
   // so a late-joining device doesn't resurface a stale line.
   const broadcast = useCallback((text: string) => {
-    if (!supabase || !sessionId) return;
+    if (!sessionId) return;
     const payload = { nonce: `${Date.now()}-${Math.round(Math.random() * 1e6)}`, text, at: new Date().toISOString() };
-    void supabase.from("sessions").update({ abbie: payload }).eq("id", sessionId);
+    void teacherPost("/api/teacher/session", { action: "update", sessionId, abbie: payload });
     if (broadcastClearRef.current) window.clearTimeout(broadcastClearRef.current);
     broadcastClearRef.current = window.setTimeout(() => {
-      void supabase.from("sessions").update({ abbie: null }).eq("id", sessionId);
+      void teacherPost("/api/teacher/session", { action: "update", sessionId, abbie: null });
     }, 15000);
-  }, [supabase, sessionId]);
+  }, [sessionId]);
 
   useEffect(() => {
     try {
@@ -125,7 +124,7 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
 
   // Poll the moderated "Ask Abbie" queue for this session's pending questions.
   useEffect(() => {
-    if (!supabase || !sessionId) { setQueue([]); return; }
+    if (!sessionId) { setQueue([]); return; }
     let stopped = false;
     const load = async () => {
       const rows = await fetchPendingAbbieQuestions(sessionId);
@@ -133,20 +132,11 @@ export default function AbbieConsole({ stateLabel, stateDesc, sessionId }: { sta
     };
     void load();
     const interval = window.setInterval(load, 2500);
-    const channel = supabase
-      .channel(`abbie-q-${sessionId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "abbie_questions", filter: `session_id=eq.${sessionId}` },
-        () => { void load(); },
-      )
-      .subscribe();
     return () => {
       stopped = true;
       window.clearInterval(interval);
-      void supabase.removeChannel(channel);
     };
-  }, [supabase, sessionId]);
+  }, [sessionId]);
 
   const setVoice = useCallback((on: boolean) => {
     setVoiceOn(on);

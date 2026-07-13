@@ -8,7 +8,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getSupabase } from "@/lib/supabase";
+import { teacherApiRequest } from "@/lib/teacherApi";
 import { listLessonPresets, type LessonPreset } from "@/lib/lessonPresets";
 
 interface LinkItem { href: string; label: string; letter: string; color: string; desc: string }
@@ -115,13 +115,12 @@ function LinkCard({ item }: { item: LinkItem }) {
 }
 
 export default function TeacherHome() {
-  const supabase = useMemo(() => getSupabase(), []);
   const [greeting, setGreeting] = useState("Welcome");
   const [query, setQuery] = useState("");
   const [presets, setPresets] = useState<LessonPreset[]>([]);
 
   const [today, setToday] = useState<{ loading: boolean; lesson: { title?: string; module?: string; topic?: string } | null; error?: string }>({ loading: true, lesson: null });
-  const [live, setLive] = useState<{ loading: boolean; connected: boolean; sessions: LiveSession[] }>({ loading: true, connected: Boolean(supabase), sessions: [] });
+  const [live, setLive] = useState<{ loading: boolean; connected: boolean; sessions: LiveSession[] }>({ loading: true, connected: true, sessions: [] });
   const [roster, setRoster] = useState<{ periods: number; students: number } | null>(null);
 
   useEffect(() => {
@@ -139,32 +138,27 @@ export default function TeacherHome() {
 
   // Live sessions running right now (polls every 5s so the band stays current).
   const loadLive = useCallback(async () => {
-    if (!supabase) { setLive({ loading: false, connected: false, sessions: [] }); return; }
     try {
-      const { data: sess } = await supabase
-        .from("sessions")
-        .select("id,join_code,started_at,periods(name)")
-        .eq("status", "open")
-        .order("started_at", { ascending: false });
-      const rows = (sess || []) as { id: string; join_code: string | null; periods: { name: string } | { name: string }[] | null }[];
-      const counts: Record<string, number> = {};
-      if (rows.length) {
-        const ids = rows.map((r) => r.id);
-        const { data: joins } = await supabase.from("session_joins").select("session_id").in("session_id", ids);
-        for (const j of (joins || []) as { session_id: string }[]) counts[j.session_id] = (counts[j.session_id] || 0) + 1;
-      }
+      const [sessionResult, rosterResult] = await Promise.all([
+        teacherApiRequest<{ sessions: Array<{ id: string; join_code: string | null; status: string; period_id: string }> }>("/api/teacher/session"),
+        teacherApiRequest<{ periods: Array<{ id: string; name: string }> }>("/api/teacher/roster"),
+      ]);
+      const rows = sessionResult.sessions.filter((session) => session.status === "open");
+      const periodNames = new Map(rosterResult.periods.map((period) => [period.id, period.name]));
+      const details = await Promise.all(rows.map((session) => teacherApiRequest<{ joins: unknown[] }>(
+        `/api/teacher/session?sessionId=${encodeURIComponent(session.id)}`,
+      )));
       setLive({
         loading: false,
         connected: true,
-        sessions: rows.map((r) => {
-          const p = Array.isArray(r.periods) ? r.periods[0] : r.periods;
-          return { id: r.id, code: r.join_code || "----", period: p?.name || "Class", joined: counts[r.id] || 0 };
+        sessions: rows.map((r, index) => {
+          return { id: r.id, code: r.join_code || "----", period: periodNames.get(r.period_id) || "Class", joined: details[index]?.joins.length || 0 };
         }),
       });
     } catch {
       setLive({ loading: false, connected: true, sessions: [] });
     }
-  }, [supabase]);
+  }, []);
 
   useEffect(() => {
     void loadLive();
@@ -174,15 +168,11 @@ export default function TeacherHome() {
 
   // Roster totals.
   useEffect(() => {
-    if (!supabase) return;
     (async () => {
-      const [{ count: pc }, { count: sc }] = await Promise.all([
-        supabase.from("periods").select("id", { count: "exact", head: true }),
-        supabase.from("students").select("id", { count: "exact", head: true }),
-      ]);
-      setRoster({ periods: pc || 0, students: sc || 0 });
+      const result = await teacherApiRequest<{ periods: unknown[]; students: unknown[] }>("/api/teacher/roster");
+      setRoster({ periods: result.periods.length, students: result.students.length });
     })().catch(() => { /* stat optional */ });
-  }, [supabase]);
+  }, []);
 
   const q = query.trim().toLowerCase();
   const toolGroups = useMemo(
@@ -363,7 +353,7 @@ export default function TeacherHome() {
                   <p className="bd-stat-meta">{roster.periods} class {roster.periods === 1 ? "period" : "periods"}</p>
                 </>
               ) : (
-                <p className="bd-stat-meta">{supabase ? "Loading roster totals." : "Connect Supabase to see roster totals."}</p>
+                <p className="bd-stat-meta">Loading roster totals.</p>
               )}
               <div className="bd-stat-actions">
                 <Link href="/roster" className="bd-btn">Edit rosters</Link>

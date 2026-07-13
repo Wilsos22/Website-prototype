@@ -16,7 +16,7 @@ import DiscussionProtocol from "@/components/DiscussionProtocol";
 import AbbieConsole from "@/components/AbbieConsole";
 import RedBullCounter from "@/components/RedBullCounter";
 import { requestAbbieLine } from "@/lib/abbieBus";
-import { getSupabase } from "@/lib/supabase";
+import { teacherApiRequest, teacherPost } from "@/lib/teacherApi";
 import {
   LIVE_FLOW_MODE,
   getStoredTeacherSessionId,
@@ -66,6 +66,8 @@ interface TeacherSessionRow {
   broadcast: string | null;
   remote_command: TeacherRemoteCommand | null;
 }
+
+const TEACHER_SERVER_CLIENT = {} as never;
 
 type InteractiveStateId = "question" | "poll";
 
@@ -437,7 +439,7 @@ function matchLessonToolStateId(name: string): string | null {
 }
 
 export default function ControlPage() {
-  const supabase = getSupabase();
+  const supabase = TEACHER_SERVER_CLIENT;
   const [bank, setBank] = useState<ClassState[]>(DEFAULT_STATES);
   const [lineup, setLineup] = useState<LineupItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(-1);
@@ -527,7 +529,6 @@ export default function ControlPage() {
   // The session page records the current teacher session locally. When that is
   // unavailable, use the open Live Class Flow session as a safe fallback.
   useEffect(() => {
-    if (!supabase) return;
     let stopped = false;
     const setCurrentTeacherSession = (next: TeacherSessionRow | null) => {
       setTeacherSession((current) => (
@@ -543,28 +544,21 @@ export default function ControlPage() {
     const findTeacherSession = async () => {
       const storedSessionId = getStoredTeacherSessionId();
       if (storedSessionId) {
-        const { data } = await supabase
-          .from("sessions")
-          .select("id,status,broadcast,remote_command")
-          .eq("id", storedSessionId)
-          .maybeSingle();
+        const result = await teacherApiRequest<{ session: TeacherSessionRow }>(
+          `/api/teacher/session?sessionId=${encodeURIComponent(storedSessionId)}`,
+        ).catch(() => ({ session: null }));
         if (stopped) return;
-        const storedSession = data as TeacherSessionRow | null;
+        const storedSession = result.session;
         if (storedSession?.status === "open") {
           setCurrentTeacherSession(storedSession);
           return;
         }
       }
 
-      const { data } = await supabase
-        .from("sessions")
-        .select("id,status,broadcast,remote_command")
-        .eq("status", "open")
-        .eq("broadcast", LIVE_FLOW_MODE)
-        .order("started_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (!stopped) setCurrentTeacherSession((data as TeacherSessionRow | null) ?? null);
+      const result = await teacherApiRequest<{ sessions: TeacherSessionRow[] }>("/api/teacher/session")
+        .catch(() => ({ sessions: [] }));
+      const liveSession = result.sessions.find((candidate) => candidate.status === "open" && candidate.broadcast === LIVE_FLOW_MODE) ?? null;
+      if (!stopped) setCurrentTeacherSession(liveSession);
     };
 
     void findTeacherSession();
@@ -579,13 +573,12 @@ export default function ControlPage() {
   // open session's code directly, so it works on the second-board device even
   // though that machine has no stored teacher session of its own.
   useEffect(() => {
-    if (!supabase) return;
     let stop = false;
     const tick = async () => {
-      const { data } = await supabase
-        .from("sessions").select("join_code").eq("status", "open")
-        .order("started_at", { ascending: false }).limit(1).maybeSingle();
-      if (!stop) setJoinCode((data as { join_code: string | null } | null)?.join_code || null);
+      const result = await teacherApiRequest<{ sessions: Array<{ status: string; join_code: string | null }> }>("/api/teacher/session")
+        .catch(() => ({ sessions: [] }));
+      const open = result.sessions.find((candidate) => candidate.status === "open");
+      if (!stop) setJoinCode(open?.join_code || null);
     };
     void tick();
     const t = window.setInterval(tick, 4000);
@@ -718,12 +711,7 @@ export default function ControlPage() {
   const closeActivePoll = useCallback(() => {
     if (!controlPoll || controlPoll.stage === "results") return;
     setControlPoll((current) => current ? { ...current, stage: "results" } : null);
-    if (supabase) {
-      void (async () => {
-        await supabase.from("polls").update({ status: "closed" }).eq("id", controlPoll.id);
-        await fetch("/api/submissions", { method: "POST" }).catch(() => null);
-      })();
-    }
+    void teacherPost("/api/teacher/poll", { action: "close", pollId: controlPoll.id });
   }, [controlPoll, supabase]);
 
   useEffect(() => {
@@ -774,15 +762,13 @@ export default function ControlPage() {
   }, [liveChallenge, supabase]);
 
   useEffect(() => {
-    if (!controlPoll || !supabase) return;
+    if (!controlPoll) return;
     let stopped = false;
     const loadAnswers = async () => {
-      const { data } = await supabase
-        .from("poll_answers")
-        .select("id,display_name,answer")
-        .eq("poll_id", controlPoll.id)
-        .order("created_at");
-      if (!stopped) setPollAnswers((data as ControlPollAnswer[]) || []);
+      const result = await teacherApiRequest<{ answers: ControlPollAnswer[] }>(
+        `/api/teacher/poll?pollId=${encodeURIComponent(controlPoll.id)}`,
+      ).catch(() => ({ answers: [] }));
+      if (!stopped) setPollAnswers(result.answers);
     };
     void loadAnswers();
     const interval = window.setInterval(loadAnswers, 1000);
@@ -824,38 +810,25 @@ export default function ControlPage() {
     }
 
     setPollError(null);
-    const payload = {
-      session_id: teacherSession.id,
-      question,
-      choices,
-      kind,
-      status: "open",
-      lesson_code: config?.lessonCode || activeItem?.lessonCode || null,
-      notion_lesson_id: config?.notionLessonId || activeItem?.notionLessonId || null,
-      notion_step_id: config?.notionStepId || activeItem?.notionStepId || null,
-      standard_id: config?.standard || activeItem?.standard || null,
-      correct_answer: config?.correctAnswer || activeItem?.correctAnswer || null,
-    };
-    let { data, error } = await supabase.from("polls").insert(payload).select("id").single();
-    if (error) {
-      const fallback = await supabase.from("polls").insert({
-        session_id: teacherSession.id,
+    let pollId: string;
+    try {
+      const result = await teacherPost<{ poll: { id: string } }>("/api/teacher/poll", {
+        action: "create",
+        sessionId: teacherSession.id,
         question,
         choices,
-        status: "open",
-      }).select("id").single();
-      data = fallback.data;
-      error = fallback.error;
-    }
-    if (error || !data) {
-      setPollError(error?.message || "The poll could not be opened.");
-      return false;
+        kind: pollKind,
+      });
+      pollId = result.poll.id;
+    } catch (actionError) {
+      setPollError(actionError instanceof Error ? actionError.message : "The poll could not be opened.");
+      return;
     }
 
     setControlPoll({
-      id: (data as { id: string }).id,
-      stateId,
-      kind,
+      id: pollId,
+      stateId: activeInteractiveState,
+      kind: pollKind,
       question,
       choices,
       stage: "responding",
@@ -1087,8 +1060,16 @@ export default function ControlPage() {
     };
     let cancelled = false;
     void (async () => {
-      const { error } = await supabase.from("sessions").update({ live_flow: snapshot }).eq("id", teacherSession.id);
-      if (!cancelled) setFlowSyncError(error?.message ?? null);
+      try {
+        await teacherPost("/api/teacher/session", {
+          action: "update",
+          sessionId: teacherSession.id,
+          liveFlow: snapshot,
+        });
+        if (!cancelled) setFlowSyncError(null);
+      } catch (syncError) {
+        if (!cancelled) setFlowSyncError(syncError instanceof Error ? syncError.message : "Live flow could not be synchronized.");
+      }
     })();
     return () => { cancelled = true; };
   }, [liveFlowSignature, supabase, teacherSession]);
@@ -1618,16 +1599,14 @@ export default function ControlPage() {
             <a className="cx-sbtn" href="/session">Session</a>
             <a className="cx-sbtn" href="/session#challenge">Games</a>
             <a className="cx-sbtn" href="/roster">Rosters</a>
-            <a className="cx-sbtn" href="/teacher/present" target="_blank" rel="noreferrer">Classroom stage</a>
-            <a className="cx-sbtn" href="/teacher/remote" target="_blank" rel="noreferrer">Remote</a>
             <span className="cx-divider" />
             <button className="cx-sbtn" style={{ borderColor: "#14b8a6", color: "#5eead4" }} onClick={loadTodayLesson}>Today&apos;s lesson</button>
             <button className="cx-sbtn" onClick={() => { setShowLessons(true); setLessonMsg(null); }}>Lessons</button>
             <button className="cx-sbtn" onClick={() => setShowSpinner(true)}>Spinner</button>
-            <button className="cx-sbtn" style={autoAdvance ? { borderColor: accent, color: "#fff" } : undefined} onClick={() => setAutoAdvance((v) => !v)}>Auto {autoAdvance ? "on" : "off"}</button>
+            <button className="cx-sbtn" style={autoAdvance ? { borderColor: accent, color: "#fff" } : undefined} onClick={() => setAutoAdvance((v) => !v)}>Auto {autoAdvance ? "✓" : "off"}</button>
             <button className="cx-sbtn" onClick={() => setShowSounds((v) => !v)}>Sounds</button>
-            <button className="cx-sbtn" onClick={() => setEditing((v) => !v)}>{editing ? "Done" : "Edit times"}</button>
-            <button className="cx-sbtn" onClick={toggleFullscreen}>Full screen</button>
+            <button className="cx-sbtn" onClick={() => setEditing((v) => !v)}>{editing ? "✓ Done" : "Edit times"}</button>
+            <button className="cx-sbtn" onClick={toggleFullscreen}>⛶ Full</button>
           </div>
         </header>
 
@@ -1926,7 +1905,7 @@ export default function ControlPage() {
                       {activeToolState === "tool-game"
                         ? "The live game is running — leaderboard is below."
                         : activeToolState === "tool-exit-ticket"
-                          ? "Exit ticket sent — responses are saving. Review them under Practice, then Exit tickets."
+                          ? "Exit ticket sent - responses are saving. Review them under Practice, then Exit tickets."
                           : activeToolState === "tool-checkpoint"
                             ? "Checkpoint sent — auto-graded answers are saving. Review under Checkpoints."
                             : "Student screens are on this configured tool."}
@@ -2094,7 +2073,7 @@ export default function ControlPage() {
           <div className="cx-overlay cx-lessons">
             <div className="cx-lessons-head">
               <h2 className="cx-lessons-title">Lesson Library</h2>
-              <button className="cx-sbtn" onClick={() => setShowLessons(false)}>Close</button>
+              <button className="cx-sbtn" onClick={() => setShowLessons(false)}>✕ Close</button>
             </div>
             <div className="cx-lessons-body">
               <div className="cx-lessons-save">

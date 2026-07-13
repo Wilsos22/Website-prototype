@@ -2,7 +2,7 @@
 // minutes). Stored in Supabase (table: lesson_presets) so the library follows
 // the teacher across devices. See supabase/lesson-presets.sql.
 
-import { getSupabase } from "@/lib/supabase";
+import { teacherApiRequest, teacherPost } from "@/lib/teacherApi";
 
 export interface PresetStep {
   stateId: string;
@@ -43,14 +43,12 @@ function rowToPreset(r: PresetRow): LessonPreset {
 }
 
 export async function listLessonPresets(search?: string): Promise<LessonPreset[]> {
-  const supabase = getSupabase();
   let saved: LessonPreset[] = [];
-  if (supabase) {
-    const { data, error } = await supabase
-      .from("lesson_presets")
-      .select("id,code,title,sequence,updated_at")
-      .order("code", { ascending: true });
-    if (!error && data) saved = (data as PresetRow[]).map(rowToPreset);
+  try {
+    const result = await teacherApiRequest<{ presets: PresetRow[] }>("/api/teacher/lesson-preset");
+    saved = result.presets.map(rowToPreset);
+  } catch {
+    saved = [];
   }
   let all = saved;
   const term = (search ?? "").trim().toLowerCase();
@@ -61,15 +59,14 @@ export async function listLessonPresets(search?: string): Promise<LessonPreset[]
 }
 
 export async function getLessonPreset(id: string): Promise<LessonPreset | null> {
-  const supabase = getSupabase();
-  if (!supabase) return null;
-  const { data, error } = await supabase
-    .from("lesson_presets")
-    .select("id,code,title,sequence,updated_at")
-    .eq("id", id)
-    .maybeSingle();
-  if (error || !data) return null;
-  return rowToPreset(data as PresetRow);
+  try {
+    const result = await teacherApiRequest<{ preset: PresetRow | null }>(
+      `/api/teacher/lesson-preset?id=${encodeURIComponent(id)}`,
+    );
+    return result.preset ? rowToPreset(result.preset) : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function saveLessonPreset(input: {
@@ -79,26 +76,25 @@ export async function saveLessonPreset(input: {
   lineup: PresetStep[];
   minutes: Record<string, number>;
 }): Promise<{ ok: boolean; id?: string; error?: string }> {
-  const supabase = getSupabase();
-  if (!supabase) return { ok: false, error: "Supabase isn't connected." };
-  const payload = {
-    code: input.code.trim(),
-    title: input.title.trim(),
-    sequence: { lineup: input.lineup, minutes: input.minutes } as LessonSequence,
-    updated_at: new Date().toISOString(),
-  };
-  const query = input.id
-    ? supabase.from("lesson_presets").update(payload).eq("id", input.id).select("id").maybeSingle()
-    : supabase.from("lesson_presets").insert(payload).select("id").maybeSingle();
-  const { data, error } = await query;
-  if (error) return { ok: false, error: error.message };
-  return { ok: true, id: (data as { id: string } | null)?.id };
+  try {
+    const result = await teacherPost<{ id?: string }>("/api/teacher/lesson-preset", {
+      action: "save",
+      id: input.id,
+      code: input.code.trim(),
+      title: input.title.trim(),
+      sequence: { lineup: input.lineup, minutes: input.minutes } as LessonSequence,
+    });
+    return { ok: true, id: result.id };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Lesson preset could not be saved." };
+  }
 }
 
 export async function deleteLessonPreset(id: string): Promise<{ ok: boolean; error?: string }> {
-  const supabase = getSupabase();
-  if (!supabase) return { ok: false, error: "Supabase isn't connected." };
-  const { error } = await supabase.from("lesson_presets").delete().eq("id", id);
-  if (error) return { ok: false, error: error.message };
-  return { ok: true };
+  try {
+    await teacherPost("/api/teacher/lesson-preset", { action: "delete", id, confirm: true });
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Lesson preset could not be deleted." };
+  }
 }

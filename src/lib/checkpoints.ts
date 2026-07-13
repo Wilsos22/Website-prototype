@@ -8,6 +8,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isMissingTable } from "@/lib/challenges";
 import type { CheckpointMiss } from "@/lib/sbacCheckpoints";
+import { isTeacherSurface, teacherApiRequest, teacherPost } from "@/lib/teacherApi";
 
 export interface CheckpointRun {
   id: string;
@@ -42,6 +43,25 @@ export async function launchCheckpoint(
     prompt: string; correctAnswer: string; misses: CheckpointMiss[];
   },
 ): Promise<{ run: CheckpointRun | null; error: string | null }> {
+  if (isTeacherSurface()) {
+    try {
+      const result = await teacherPost<{ run: CheckpointRun }>("/api/teacher/checkpoint", {
+        action: "launch",
+        sessionId: input.sessionId,
+        periodId: input.periodId,
+        lessonKey: input.lessonKey,
+        checkpointId: input.checkpointId,
+        itemIndex: input.itemIndex,
+        ccss: input.ccss,
+        prompt: input.prompt,
+        correctAnswer: input.correctAnswer,
+        misses: input.misses,
+      });
+      return { run: result.run, error: null };
+    } catch (error) {
+      return { run: null, error: error instanceof Error ? error.message : "Checkpoint could not be launched." };
+    }
+  }
   if (input.sessionId) {
     await supabase.from("checkpoint_runs").update({ status: "closed" }).eq("session_id", input.sessionId).eq("status", "open");
   }
@@ -66,6 +86,10 @@ export async function launchCheckpoint(
 }
 
 export async function closeCheckpoint(supabase: SupabaseClient, id: string): Promise<void> {
+  if (isTeacherSurface()) {
+    await teacherPost("/api/teacher/checkpoint", { action: "close", runId: id });
+    return;
+  }
   await supabase.from("checkpoint_runs").update({ status: "closed" }).eq("id", id);
 }
 
@@ -104,6 +128,14 @@ export async function listCheckpointRuns(
   supabase: SupabaseClient,
   limit = 40,
 ): Promise<{ runs: CheckpointRun[]; missing: boolean }> {
+  if (isTeacherSurface()) {
+    try {
+      const result = await teacherApiRequest<{ runs: CheckpointRun[]; missing: boolean }>("/api/teacher/checkpoint");
+      return result;
+    } catch {
+      return { runs: [], missing: false };
+    }
+  }
   const { data, error } = await supabase
     .from("checkpoint_runs")
     .select("*")
@@ -114,6 +146,16 @@ export async function listCheckpointRuns(
 }
 
 export async function getCheckpointResults(supabase: SupabaseClient, runId: string): Promise<CheckpointResultRow[]> {
+  if (isTeacherSurface()) {
+    try {
+      const result = await teacherApiRequest<{ results: CheckpointResultRow[] }>(
+        `/api/teacher/checkpoint?runId=${encodeURIComponent(runId)}`,
+      );
+      return result.results;
+    } catch {
+      return [];
+    }
+  }
   const { data } = await supabase
     .from("checkpoint_results")
     .select("id,student_id,display_name,answer,is_correct,misconception,created_at")

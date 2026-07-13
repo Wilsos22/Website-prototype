@@ -4,6 +4,8 @@
 // this is fine on the browser client. See supabase/abbie-questions.sql.
 
 import { getSupabase } from "@/lib/supabase";
+import { SECURE_STUDENT_DATA, studentApiRequest } from "@/lib/studentApi";
+import { isTeacherSurface, teacherApiRequest, teacherPost } from "@/lib/teacherApi";
 
 export interface AbbieQuestion {
   id: string;
@@ -27,6 +29,17 @@ export async function submitAbbieQuestion(
   student: { studentId?: string | null; name?: string | null },
   question: string,
 ): Promise<SubmitResult> {
+  if (SECURE_STUDENT_DATA) {
+    try {
+      await studentApiRequest("/api/student/abbie-question", {
+        method: "POST",
+        body: JSON.stringify({ sessionId, question }),
+      });
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, reason: error instanceof Error && error.message.includes("already") ? "already-pending" : "error" };
+    }
+  }
   const supabase = getSupabase();
   if (!supabase) return { ok: false, reason: "no-db" };
   if (!sessionId) return { ok: false, reason: "no-session" };
@@ -54,6 +67,16 @@ export async function submitAbbieQuestion(
 }
 
 export async function fetchPendingAbbieQuestions(sessionId: string): Promise<AbbieQuestion[]> {
+  if (isTeacherSurface()) {
+    try {
+      const result = await teacherApiRequest<{ questions: AbbieQuestion[] }>(
+        `/api/teacher/abbie-question?sessionId=${encodeURIComponent(sessionId)}`,
+      );
+      return result.questions;
+    } catch {
+      return [];
+    }
+  }
   const supabase = getSupabase();
   if (!supabase || !sessionId) return [];
   const { data, error } = await supabase
@@ -67,6 +90,10 @@ export async function fetchPendingAbbieQuestions(sessionId: string): Promise<Abb
 }
 
 export async function markAbbieQuestionAnswered(id: string, answer: string): Promise<void> {
+  if (isTeacherSurface()) {
+    await teacherPost("/api/teacher/abbie-question", { action: "answer", id, answer });
+    return;
+  }
   const supabase = getSupabase();
   if (!supabase) return;
   await supabase
@@ -76,6 +103,10 @@ export async function markAbbieQuestionAnswered(id: string, answer: string): Pro
 }
 
 export async function dismissAbbieQuestion(id: string): Promise<void> {
+  if (isTeacherSurface()) {
+    await teacherPost("/api/teacher/abbie-question", { action: "dismiss", id });
+    return;
+  }
   const supabase = getSupabase();
   if (!supabase) return;
   await supabase.from("abbie_questions").update({ status: "dismissed" }).eq("id", id);

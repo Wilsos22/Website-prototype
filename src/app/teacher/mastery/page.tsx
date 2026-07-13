@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import SiteNav from "@/components/SiteNav";
-import { getSupabase } from "@/lib/supabase";
+import { teacherApiRequest } from "@/lib/teacherApi";
 import { DOMAINS, type Domain } from "@/lib/mastery";
 
 interface Period { id: string; name: string }
@@ -97,7 +97,6 @@ function GrowthChart({ points, color }: { points: HistoryPoint[]; color: string 
 }
 
 export default function MasteryBoard() {
-  const supabase = useMemo(() => getSupabase(), []);
   const [periods, setPeriods] = useState<Period[]>([]);
   const [periodId, setPeriodId] = useState("");
   const [rows, setRows] = useState<StudentRow[]>([]);
@@ -108,28 +107,24 @@ export default function MasteryBoard() {
   const [showLegend, setShowLegend] = useState(false);
 
   useEffect(() => {
-    if (!supabase) return;
     (async () => {
-      const [{ data: pData }, { data: sData }] = await Promise.all([
-        supabase.from("periods").select("id,name").order("sort_order"),
-        supabase.from("students").select("period_id"),
-      ]);
+      const result = await teacherApiRequest<{ periods: Period[]; students: Array<{ periodId: string }> }>("/api/teacher/roster");
       // Count students per period so duplicate names (e.g. a real "Period 2" and
       // the mock one) are tellable apart in the dropdown.
       const counts = new Map<string, number>();
-      for (const s of (sData as { period_id: string }[]) || []) {
-        counts.set(s.period_id, (counts.get(s.period_id) || 0) + 1);
+      for (const student of result.students) {
+        counts.set(student.periodId, (counts.get(student.periodId) || 0) + 1);
       }
-      const ps = ((pData as Period[]) || []).map((p) => ({
-        ...p,
-        name: `${p.name} · ${counts.get(p.id) || 0} students`,
+      const ps = result.periods.map((period) => ({
+        ...period,
+        name: `${period.name} - ${counts.get(period.id) || 0} students`,
       }));
       setPeriods(ps);
       // Default to the fullest period, not just the first one.
       const fullest = [...ps].sort((a, b) => (counts.get(b.id) || 0) - (counts.get(a.id) || 0))[0];
       if (fullest) setPeriodId(fullest.id);
     })();
-  }, [supabase]);
+  }, []);
 
   const load = useCallback(async (pid: string) => {
     if (!pid) return;
@@ -212,7 +207,7 @@ export default function MasteryBoard() {
       `}</style>
 
       <div className="mb-wrap">
-        <h1 className="mb-h1">🐾 Mastery board</h1>
+        <h1 className="mb-h1">Mastery board</h1>
         <div className="mb-sub">Recency-weighted mastery per i-Ready domain — checkpoints move the bar, practice days nudge it, warm-ups keep it honest.</div>
 
         <div className="mb-controls">

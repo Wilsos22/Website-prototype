@@ -6,6 +6,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isMissingTable } from "@/lib/challenges";
+import { isTeacherSurface, teacherApiRequest, teacherPost } from "@/lib/teacherApi";
 
 export type ExitKind = "short-answer" | "multiple-choice" | "fist-to-five";
 
@@ -33,6 +34,22 @@ export async function launchExitTicket(
   supabase: SupabaseClient,
   input: { sessionId: string | null; periodId: string | null; lessonCode: string | null; prompt: string; kind: ExitKind; choices: string[] | null },
 ): Promise<{ ticket: ExitTicket | null; error: string | null }> {
+  if (isTeacherSurface()) {
+    try {
+      const result = await teacherPost<{ ticket: ExitTicket }>("/api/teacher/exit-ticket", {
+        action: "launch",
+        sessionId: input.sessionId,
+        periodId: input.periodId,
+        lessonCode: input.lessonCode,
+        prompt: input.prompt,
+        kind: input.kind,
+        choices: input.choices,
+      });
+      return { ticket: result.ticket, error: null };
+    } catch (error) {
+      return { ticket: null, error: error instanceof Error ? error.message : "Exit ticket could not be launched." };
+    }
+  }
   if (input.sessionId) {
     await supabase.from("exit_tickets").update({ status: "closed" }).eq("session_id", input.sessionId).eq("status", "open");
   }
@@ -54,6 +71,10 @@ export async function launchExitTicket(
 }
 
 export async function closeExitTicket(supabase: SupabaseClient, id: string): Promise<void> {
+  if (isTeacherSurface()) {
+    await teacherPost("/api/teacher/exit-ticket", { action: "close", ticketId: id });
+    return;
+  }
   await supabase.from("exit_tickets").update({ status: "closed" }).eq("id", id);
 }
 
@@ -95,6 +116,13 @@ export async function listRecentExitTickets(
   supabase: SupabaseClient,
   limit = 30,
 ): Promise<{ tickets: ExitTicket[]; missing: boolean }> {
+  if (isTeacherSurface()) {
+    try {
+      return await teacherApiRequest<{ tickets: ExitTicket[]; missing: boolean }>("/api/teacher/exit-ticket");
+    } catch {
+      return { tickets: [], missing: false };
+    }
+  }
   const { data, error } = await supabase
     .from("exit_tickets")
     .select("*")
@@ -108,6 +136,16 @@ export async function getExitResponses(
   supabase: SupabaseClient,
   ticketId: string,
 ): Promise<ExitResponseRow[]> {
+  if (isTeacherSurface()) {
+    try {
+      const result = await teacherApiRequest<{ responses: ExitResponseRow[] }>(
+        `/api/teacher/exit-ticket?ticketId=${encodeURIComponent(ticketId)}`,
+      );
+      return result.responses;
+    } catch {
+      return [];
+    }
+  }
   const { data } = await supabase
     .from("exit_ticket_responses")
     .select("id,student_id,display_name,response,created_at")

@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import SiteNav from "@/components/SiteNav";
-import { getSupabase } from "@/lib/supabase";
+import { teacherApiRequest } from "@/lib/teacherApi";
 import { ARCHETYPE_LABEL, type Archetype } from "@/lib/grouping";
 
 interface Period { id: string; name: string }
@@ -34,7 +34,6 @@ const ARCH_COLOR: Record<Archetype, string> = {
 };
 
 export default function RightNowPage() {
-  const supabase = useMemo(() => getSupabase(), []);
   const [periods, setPeriods] = useState<Period[]>([]);
   const [periodId, setPeriodId] = useState("");
   const [clusters, setClusters] = useState<ClusterOut[]>([]);
@@ -57,20 +56,16 @@ export default function RightNowPage() {
   }, []);
 
   useEffect(() => {
-    if (!supabase) return;
     (async () => {
-      const [{ data: pData }, { data: sData }] = await Promise.all([
-        supabase.from("periods").select("id,name").order("sort_order"),
-        supabase.from("students").select("period_id"),
-      ]);
+      const result = await teacherApiRequest<{ periods: Period[]; students: Array<{ periodId: string }> }>("/api/teacher/roster");
       const counts = new Map<string, number>();
-      for (const s of (sData as { period_id: string }[]) || []) counts.set(s.period_id, (counts.get(s.period_id) || 0) + 1);
-      const ps = ((pData as Period[]) || []).map((p) => ({ ...p, name: `${p.name} · ${counts.get(p.id) || 0} students` }));
+      for (const student of result.students) counts.set(student.periodId, (counts.get(student.periodId) || 0) + 1);
+      const ps = result.periods.map((period) => ({ ...period, name: `${period.name} - ${counts.get(period.id) || 0} students` }));
       setPeriods(ps);
       const fullest = [...ps].sort((a, b) => (counts.get(b.id) || 0) - (counts.get(a.id) || 0))[0];
       if (fullest) setPeriodId(fullest.id);
     })();
-  }, [supabase]);
+  }, []);
 
   const load = useCallback(async (pid: string) => {
     if (!pid) return;
@@ -186,7 +181,7 @@ export default function RightNowPage() {
               </div>
               {plans.has(c.misconception.toLowerCase()) && (
                 <div className="rn-plan">
-                  <b>📋 Your plan{lessonTitle ? ` — ${lessonTitle}` : ""}</b>
+                  <b>Your plan{lessonTitle ? ` - ${lessonTitle}` : ""}</b>
                   <p>{plans.get(c.misconception.toLowerCase())}</p>
                 </div>
               )}
@@ -219,7 +214,7 @@ export default function RightNowPage() {
               <div className="rn-card rn-waiting" key={tag}>
                 <h2 className="rn-mis">“{tag}”</h2>
                 <div className="rn-badges"><span className="rn-badge d">planned{lessonTitle ? ` · ${lessonTitle}` : ""}</span><span className="rn-badge d">no students flagged yet</span></div>
-                <div className="rn-plan"><b>📋 Your plan, ready to go</b><p>{move}</p></div>
+                <div className="rn-plan"><b>Your plan, ready to go</b><p>{move}</p></div>
               </div>
             ))}
 

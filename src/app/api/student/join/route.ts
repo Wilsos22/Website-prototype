@@ -1,3 +1,4 @@
+import { recordSecurityEvent } from "@/lib/securityAudit";
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
 import {
   requireVerifiedStudent,
@@ -5,17 +6,19 @@ import {
   studentIdentityResponse,
 } from "@/lib/studentIdentity";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(request: Request) {
   try {
     const student = await requireVerifiedStudent(request);
     const body = await request.json().catch(() => ({})) as { code?: unknown };
     const code = typeof body.code === "string" ? body.code.trim().toUpperCase() : "";
-    if (code.length < 2 || code.length > 8) {
-      throw new StudentIdentityError("Enter the class code from your teacher.", 400);
+    if (!/^[A-Z0-9]{2,8}$/.test(code)) {
+      throw new StudentIdentityError("Enter the class code from your teacher.", 400, "invalid_join_code");
     }
 
     const db = getSupabaseAdmin();
-    if (!db) throw new StudentIdentityError("Live sessions are not configured on the server.", 503);
+    if (!db) throw new StudentIdentityError("Live sessions are not configured.", 503, "sessions_not_configured");
 
     const { data: session, error: sessionError } = await db
       .from("sessions")
@@ -23,10 +26,18 @@ export async function POST(request: Request) {
       .eq("join_code", code)
       .eq("status", "open")
       .maybeSingle();
-    if (sessionError) throw new StudentIdentityError("The class session could not be checked.", 500);
-    if (!session) throw new StudentIdentityError("That code is not open right now. Check with your teacher.", 404);
+    if (sessionError) throw new StudentIdentityError("The class session could not be checked.", 500, "session_lookup_failed");
+    if (!session) throw new StudentIdentityError("That code is not open right now.", 404, "session_not_open");
     if (session.period_id !== student.periodId) {
-      throw new StudentIdentityError("That code belongs to a different class.", 403);
+      void recordSecurityEvent({
+        eventType: "student_join",
+        outcome: "denied",
+        authUserId: student.authUserId,
+        studentId: student.id,
+        sessionId: session.id,
+        details: { reason: "wrong_period" },
+      });
+      throw new StudentIdentityError("That code belongs to a different class.", 403, "wrong_period");
     }
 
     const { error: joinError } = await db.from("session_joins").upsert(
@@ -37,15 +48,26 @@ export async function POST(request: Request) {
       },
       { onConflict: "session_id,student_id" },
     );
-    if (joinError) throw new StudentIdentityError("The class session could not be joined.", 500);
+    if (joinError) throw new StudentIdentityError("The class session could not be joined.", 500, "join_save_failed");
 
-    return Response.json({
-      session: {
-        sessionId: session.id,
-        studentId: student.id,
-        name: student.fullName,
-      },
+    void recordSecurityEvent({
+      eventType: "student_join",
+      outcome: "allowed",
+      authUserId: student.authUserId,
+      studentId: student.id,
+      sessionId: session.id,
     });
+
+    return Response.json(
+      {
+        session: {
+          sessionId: session.id,
+          studentId: student.id,
+          name: student.fullName,
+        },
+      },
+      { headers: { "cache-control": "no-store" } },
+    );
   } catch (error) {
     return studentIdentityResponse(error);
   }
