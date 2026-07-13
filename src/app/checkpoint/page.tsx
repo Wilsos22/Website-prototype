@@ -10,6 +10,7 @@ import { getSupabase } from "@/lib/supabase";
 import { getStoredStudentSession, type StoredStudentSession } from "@/lib/liveClassFlow";
 import { gradeCheckpoint } from "@/lib/sbacCheckpoints";
 import { getOpenCheckpoint, submitCheckpointResult, type CheckpointRun } from "@/lib/checkpoints";
+import { SECURE_STUDENT_DATA, studentApiRequest } from "@/lib/studentApi";
 
 type View = "loading" | "needjoin" | "waiting" | "answering" | "submitted";
 
@@ -36,7 +37,11 @@ export default function CheckpointPage() {
     if (!supabase || !session) return;
     let stop = false;
     const tick = async () => {
-      const cp = await getOpenCheckpoint(supabase, session.sessionId);
+      const cp = SECURE_STUDENT_DATA
+        ? (await studentApiRequest<{ checkpoint: CheckpointRun | null }>(
+          `/api/student/checkpoint?sessionId=${encodeURIComponent(session.sessionId)}`,
+        )).checkpoint
+        : await getOpenCheckpoint(supabase, session.sessionId);
       if (stop) return;
       if (!cp) {
         if (submittedRef.current) return;
@@ -56,6 +61,15 @@ export default function CheckpointPage() {
   const submit = useCallback(async () => {
     if (!supabase || !session || !run || !text.trim()) return;
     submittedRef.current = run.id;
+    if (SECURE_STUDENT_DATA) {
+      await studentApiRequest("/api/student/checkpoint", {
+        method: "POST",
+        body: JSON.stringify({ runId: run.id, sessionId: session.sessionId, answer: text.trim() }),
+      });
+      setResult({ correct: true, answer: "" });
+      setView("submitted");
+      return;
+    }
     const isCorrect = gradeCheckpoint(text, run.correct_answer);
     let misconception: string | null = null;
     if (!isCorrect && Array.isArray(run.misses)) {
@@ -84,16 +98,16 @@ export default function CheckpointPage() {
 
       {view === "needjoin" && (
         <div className="cp-mid cp-card">
-          <div className="cp-emoji">✅</div>
+          <div className="cp-mark">Checkpoint</div>
           <h1 className="cp-h">Join your class first</h1>
           <p className="cp-soft">Checkpoints are part of a live class. Enter your teacher&apos;s code to join.</p>
-          <a className="cp-btn" href="/">Enter class code →</a>
+          <a className="cp-btn" href="/">Enter class code</a>
         </div>
       )}
 
       {view === "waiting" && (
         <div className="cp-mid cp-card">
-          <div className="cp-emoji cp-bounce">✅</div>
+          <div className="cp-mark">Checkpoint</div>
           <h1 className="cp-h">Checkpoint</h1>
           <p className="cp-soft">Waiting for your teacher to start the checkpoint…</p>
         </div>
@@ -104,17 +118,17 @@ export default function CheckpointPage() {
           <div className="cp-card cp-q">
             <div className="cp-tag">Checkpoint{run.ccss ? ` · ${run.ccss}` : ""}</div>
             <h1 className="cp-prompt">{run.prompt}</h1>
-            <input className="cp-input" value={text} placeholder="Type your answer…" autoFocus
+            <input className="cp-input" value={text} placeholder="Type your answer" autoFocus
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") void submit(); }} />
-            <button className="cp-submit" onClick={() => void submit()} disabled={!text.trim()}>Turn in →</button>
+            <button className="cp-submit" onClick={() => void submit()} disabled={!text.trim()}>Turn in</button>
           </div>
         </div>
       )}
 
       {view === "submitted" && (
         <div className="cp-mid cp-card">
-          <div className="cp-emoji">{result?.correct ? "🎉" : "✅"}</div>
+          <div className="cp-mark">Saved</div>
           <h1 className="cp-h">Turned in!</h1>
           <p className="cp-soft">Thanks{session ? `, ${session.name.split(" ")[0]}` : ""} — your answer was recorded.</p>
         </div>
@@ -129,7 +143,7 @@ const styles = `
   .cp-mid { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; text-align:center; }
   .cp-card { background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:var(--bdb-r-lg);
     box-shadow:var(--bdb-shadow); padding:30px 26px; max-width:480px; width:100%; }
-  .cp-emoji { font-size:3rem; line-height:1; }
+  .cp-mark { color:var(--bdb-teal); font-size:0.85rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; }
   .cp-bounce { animation:cpB 1.4s ease-in-out infinite; }
   @keyframes cpB { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-7px);} }
   .cp-h { font-size:clamp(1.5rem,5vw,2rem); font-weight:800; letter-spacing:-0.02em; margin:10px 0 6px; }

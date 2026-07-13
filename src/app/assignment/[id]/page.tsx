@@ -12,10 +12,12 @@ import { getSupabase } from "@/lib/supabase";
 import { getSkill, checkAnswer, type Problem } from "@/lib/challengeSkills";
 import {
   getAssignment,
+  getSecureAssignmentContext,
   countStudentAttempts,
   recordAssignmentAttempt,
   type Assignment,
 } from "@/lib/assignments";
+import { SECURE_STUDENT_DATA } from "@/lib/studentApi";
 
 type View = "loading" | "notfound" | "identify" | "playing" | "done";
 interface Period { id: string; name: string; }
@@ -62,6 +64,24 @@ export default function AssignmentPlayerPage() {
   useEffect(() => {
     if (!supabase || !assignmentId) { setView("notfound"); return; }
     (async () => {
+      if (SECURE_STUDENT_DATA) {
+        const context = await getSecureAssignmentContext(assignmentId);
+        if (!context?.assignment) { setView("notfound"); return; }
+        setAssignment(context.assignment);
+        setName(context.student.fullName);
+        setStudentId(context.student.id);
+        doneRef.current = context.attemptCount;
+        setDoneCount(context.attemptCount);
+        setCorrect(0);
+        setPoints(0);
+        if (context.attemptCount >= context.assignment.target_rounds) {
+          setView("done");
+        } else {
+          setView("playing");
+          newProblem(context.assignment);
+        }
+        return;
+      }
       const a = await getAssignment(supabase, assignmentId);
       if (!a) { setView("notfound"); return; }
       setAssignment(a);
@@ -189,7 +209,7 @@ export default function AssignmentPlayerPage() {
 
       {view === "notfound" && (
         <div className="as-mid as-card">
-          <div className="as-emoji">🔎</div>
+          <div className="as-emoji">?</div>
           <h1 className="as-h">Assignment not found</h1>
           <p className="as-soft">It may have been closed. Check with your teacher.</p>
           <a className="as-btn" href="/explore">Back to Explore</a>
@@ -254,7 +274,7 @@ export default function AssignmentPlayerPage() {
       {view === "done" && assignment && (
         <div className="as-mid">
           <div className="as-card as-results">
-            <div className="as-emoji">{accuracy >= 80 ? "🏆" : "✅"}</div>
+            <div className="as-emoji">{accuracy >= 80 ? "Great work" : "Complete"}</div>
             <h1 className="as-h">Assignment complete!</h1>
             <p className="as-soft">{skill?.emoji} {assignment.title}</p>
             <div className="as-stats">

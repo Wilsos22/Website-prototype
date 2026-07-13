@@ -15,20 +15,54 @@ export async function GET(request: Request) {
   const sessionId = url.searchParams.get("sessionId") || "";
 
   if (challengeId) {
-    const [{ data: challenge, error }, leaderboard] = await Promise.all([
+    const [{ data: challenge, error }, leaderboard, attemptsResult] = await Promise.all([
       db.from("challenges").select("*").eq("id", challengeId).maybeSingle(),
       fetchLeaderboard(db, challengeId),
+      db.from("challenge_attempts")
+        .select("prompt,correct_answer,is_correct")
+        .eq("challenge_id", challengeId),
     ]);
     if (error) return Response.json({ error: error.message }, { status: 500 });
     if (!challenge) return Response.json({ error: "Challenge not found." }, { status: 404 });
-    return Response.json({ challenge, leaderboard }, { headers: { "cache-control": "no-store" } });
+    if (attemptsResult.error) return Response.json({ error: attemptsResult.error.message }, { status: 500 });
+    const missMap = new Map<string, { prompt: string; correct_answer: string; wrong: number; total: number }>();
+    for (const attempt of attemptsResult.data ?? []) {
+      const current = missMap.get(attempt.prompt) ?? {
+        prompt: attempt.prompt,
+        correct_answer: attempt.correct_answer,
+        wrong: 0,
+        total: 0,
+      };
+      current.total += 1;
+      if (!attempt.is_correct) current.wrong += 1;
+      missMap.set(attempt.prompt, current);
+    }
+    const misses = Array.from(missMap.values())
+      .filter((item) => item.wrong > 0)
+      .sort((a, b) => b.wrong - a.wrong)
+      .slice(0, 12);
+    return Response.json({ challenge, leaderboard, misses }, { headers: { "cache-control": "no-store" } });
   }
 
   let query = db.from("challenges").select("*").order("started_at", { ascending: false }).limit(60);
   if (sessionId) query = query.eq("session_id", sessionId);
   const { data, error } = await query;
   if (error) return Response.json({ error: error.message }, { status: 500 });
-  return Response.json({ challenges: data ?? [] }, { headers: { "cache-control": "no-store" } });
+  const challenges = data ?? [];
+  const sessionIds = Array.from(new Set(challenges.map((challenge) => challenge.session_id)));
+  const sessionsResult = sessionIds.length
+    ? await db.from("sessions").select("id,period_id").in("id", sessionIds)
+    : { data: [], error: null };
+  if (sessionsResult.error) return Response.json({ error: sessionsResult.error.message }, { status: 500 });
+  const periodIds = Array.from(new Set((sessionsResult.data ?? []).map((session) => session.period_id)));
+  const periodsResult = periodIds.length
+    ? await db.from("periods").select("id,name").in("id", periodIds)
+    : { data: [], error: null };
+  if (periodsResult.error) return Response.json({ error: periodsResult.error.message }, { status: 500 });
+  return Response.json(
+    { challenges, sessions: sessionsResult.data ?? [], periods: periodsResult.data ?? [] },
+    { headers: { "cache-control": "no-store" } },
+  );
 }
 
 export async function POST(request: Request) {

@@ -54,6 +54,9 @@ Do not run `supabase/student-data-security.sql` until all of these are true:
    evidence, checkpoint, exit ticket, and teacher review.
 7. A rollback SQL file and a current database backup are available.
 
+The emergency rollback is `supabase/student-data-security-rollback.sql`. It
+restores legacy browser access without deleting identity links or evidence.
+
 ## Required RLS assertions
 
 - An unauthenticated request returns zero student, answer, score, and session
@@ -77,6 +80,11 @@ Do not run `supabase/student-data-security.sql` until all of these are true:
   review. Establish the final retention period with district policy.
 - Review Supabase security advisors after every schema or policy change.
 - Review Vercel runtime errors and authentication failures after each pilot.
+- Anonymous sign-ins are created only after a valid open class code is checked.
+  Supabase applies an IP-based anonymous-auth limit, and a school may place many
+  Chromebooks behind one public IP. Before the 35-student pilot, verify the Auth
+  rate limit is above the expected simultaneous joins. Add CAPTCHA or Turnstile
+  before a broader public launch if district filtering permits it.
 
 ## Protected teacher API foundation
 
@@ -95,6 +103,32 @@ The deprecated root `middleware.ts` file did not execute in local authorization
 tests. The proxy now fails closed when `TEACHER_PASSWORD` is absent, rejects
 unauthenticated API requests, redirects teacher pages to login, and blocks
 cross-site teacher mutations.
+
+## Ordered production rollout
+
+Use this sequence so the live classroom never runs half on the prototype model
+and half on the secure model:
+
+1. Back up the production database and keep the rollback SQL ready.
+2. Deploy this application code with `NEXT_PUBLIC_SECURE_STUDENT_DATA=false`.
+   Confirm the current lesson, teacher login, roster, session, and control panel.
+3. Apply `supabase/student-data-security.sql` during a no-class maintenance
+   window. Immediately run Supabase security and performance advisors.
+4. Set `NEXT_PUBLIC_SECURE_STUDENT_DATA=true` for Preview first and redeploy.
+5. Run the fictional two-student authorization test, then the 40-client load
+   test. Check that Student A never sees Student B and no answer key is returned.
+6. Promote the verified deployment to Production and run one small pilot class.
+7. Keep the prior deployment and rollback SQL available through the pilot. If a
+   required flow fails, set the flag false, redeploy the prior application, and
+   run the rollback SQL. Do not leave the flag false against the strict RLS
+   schema because the legacy browser writes will fail.
+
+Required Vercel variables for the secure deployment are
+`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+`SUPABASE_SERVICE_ROLE_KEY`, `TEACHER_PASSWORD`,
+`NEXT_PUBLIC_SECURE_STUDENT_DATA=true`, and the existing
+`EVIDENCE_INGEST_KEY`. The warm-up generator endpoint is teacher/cron-gated in
+secure mode, so its caller must send `Authorization: Bearer <CRON_SECRET>`.
 
 ## District boundary
 

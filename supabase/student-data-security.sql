@@ -57,6 +57,7 @@ grant select, insert on table public.security_audit_events to service_role;
 do $$
 declare
   t text;
+  p record;
 begin
   foreach t in array array[
     'periods',
@@ -80,16 +81,59 @@ begin
     'exit_ticket_responses',
     'lesson_presets',
     'abbie_questions',
-    'nb_scores'
+    'nb_scores',
+    'iready_scores',
+    'mastery',
+    'mastery_history',
+    'recommendations',
+    'mastery_config',
+    'standards',
+    'standard_prereqs',
+    'misconceptions'
   ]
   loop
     if to_regclass(format('public.%I', t)) is not null then
       execute format('alter table public.%I enable row level security', t);
-      execute format('drop policy if exists prototype_all on public.%I', t);
+      for p in
+        select policyname
+        from pg_policies
+        where schemaname = 'public' and tablename = t
+      loop
+        execute format('drop policy if exists %I on public.%I', p.policyname, t);
+      end loop;
       execute format('revoke all on table public.%I from anon, authenticated', t);
     end if;
   end loop;
 end $$;
+
+-- Curriculum reference data is intentionally public read-only. Removing all
+-- mutation grants keeps browser clients from changing standards or tags.
+create policy public_read_standards
+  on public.standards for select to anon, authenticated using (true);
+grant select on public.standards to anon, authenticated;
+
+create policy public_read_standard_prereqs
+  on public.standard_prereqs for select to anon, authenticated using (true);
+grant select on public.standard_prereqs to anon, authenticated;
+
+create policy public_read_misconceptions
+  on public.misconceptions for select to anon, authenticated using (true);
+grant select on public.misconceptions to anon, authenticated;
+
+-- Number Blaster keeps a public pseudonymous scoreboard, but its browser role
+-- may only read and submit tightly bounded score rows.
+create policy nb_scores_select
+  on public.nb_scores for select to anon, authenticated using (true);
+create policy nb_scores_insert
+  on public.nb_scores for insert to anon, authenticated
+  with check (
+    char_length(class_code) between 1 and 24
+    and char_length(initials) between 1 and 3
+    and score between 0 and 100000000
+    and level between 1 and 999
+    and mode in ('classic', 'build')
+  );
+grant select, insert on public.nb_scores to anon, authenticated;
 
 -- A student may see only the roster row bound to the current Supabase user.
 drop policy if exists student_select_own_profile on public.students;

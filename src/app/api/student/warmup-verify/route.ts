@@ -47,7 +47,7 @@ export async function POST(request: Request) {
   const { data: rosterMatch, error: rosterError } = await db
     .from("students")
     .select("id,email,auth_user_id")
-    .eq("email_normalized", email)
+    .ilike("email", email)
     .maybeSingle();
   if (rosterError) return Response.json({ error: "Roster lookup failed." }, { status: 500 });
   if (!rosterMatch) return Response.json({ matched: false }, { status: 404 });

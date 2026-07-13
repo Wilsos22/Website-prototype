@@ -2,6 +2,8 @@
 // Tables live in supabase/challenges.sql (run once in the Supabase SQL editor).
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { SECURE_STUDENT_DATA, studentApiRequest } from "@/lib/studentApi";
+import { isTeacherSurface, teacherApiRequest, teacherPost } from "@/lib/teacherApi";
 
 export interface ChallengeRow {
   id: string;
@@ -60,6 +62,16 @@ export async function getLatestChallenge(
   supabase: SupabaseClient,
   sessionId: string,
 ): Promise<{ challenge: ChallengeRow | null; missing: boolean }> {
+  if (SECURE_STUDENT_DATA) {
+    try {
+      const result = await studentApiRequest<{ challenge: ChallengeRow | null }>(
+        `/api/student/challenge-attempt?sessionId=${encodeURIComponent(sessionId)}`,
+      );
+      return { challenge: result.challenge, missing: false };
+    } catch {
+      return { challenge: null, missing: false };
+    }
+  }
   const { data, error } = await supabase
     .from("challenges")
     .select("*")
@@ -75,6 +87,21 @@ export async function launchChallenge(
   supabase: SupabaseClient,
   input: { sessionId: string; skill: string; title: string; level: number; durationSeconds: number },
 ): Promise<{ challenge: ChallengeRow | null; error: string | null }> {
+  if (isTeacherSurface()) {
+    try {
+      const result = await teacherPost<{ challenge: ChallengeRow }>("/api/teacher/challenge", {
+        action: "launch",
+        sessionId: input.sessionId,
+        skill: input.skill,
+        title: input.title,
+        level: input.level,
+        durationSeconds: input.durationSeconds,
+      });
+      return { challenge: result.challenge, error: null };
+    } catch (error) {
+      return { challenge: null, error: error instanceof Error ? error.message : "Challenge could not be launched." };
+    }
+  }
   // Close any still-open challenge for this session first.
   await supabase
     .from("challenges")
@@ -100,6 +127,10 @@ export async function launchChallenge(
 }
 
 export async function endChallenge(supabase: SupabaseClient, challengeId: string): Promise<void> {
+  if (isTeacherSurface()) {
+    await teacherPost("/api/teacher/challenge", { action: "close", challengeId });
+    return;
+  }
   await supabase
     .from("challenges")
     .update({ status: "closed", ended_at: new Date().toISOString() })
@@ -107,6 +138,20 @@ export async function endChallenge(supabase: SupabaseClient, challengeId: string
 }
 
 export async function recordAttempt(supabase: SupabaseClient, input: AttemptInput): Promise<void> {
+  if (SECURE_STUDENT_DATA) {
+    await studentApiRequest("/api/student/challenge-attempt", {
+      method: "POST",
+      body: JSON.stringify({
+        challengeId: input.challenge_id,
+        sessionId: input.session_id,
+        prompt: input.prompt,
+        correctAnswer: input.correct_answer,
+        answer: input.answer,
+        timeMs: input.time_ms,
+      }),
+    });
+    return;
+  }
   await supabase.from("challenge_attempts").insert(input);
 }
 
@@ -114,6 +159,29 @@ export async function fetchLeaderboard(
   supabase: SupabaseClient,
   challengeId: string,
 ): Promise<LeaderRow[]> {
+  if (isTeacherSurface()) {
+    try {
+      const result = await teacherApiRequest<{ leaderboard: LeaderRow[] }>(
+        `/api/teacher/challenge?challengeId=${encodeURIComponent(challengeId)}`,
+      );
+      return result.leaderboard;
+    } catch {
+      return [];
+    }
+  }
+  if (SECURE_STUDENT_DATA) {
+    try {
+      const sessionId = typeof window === "undefined"
+        ? ""
+        : JSON.parse(localStorage.getItem("bdm-student-session") || "{}").sessionId || "";
+      const result = await studentApiRequest<{ leaderboard: LeaderRow[] }>(
+        `/api/student/challenge-attempt?sessionId=${encodeURIComponent(sessionId)}&challengeId=${encodeURIComponent(challengeId)}`,
+      );
+      return result.leaderboard;
+    } catch {
+      return [];
+    }
+  }
   const { data, error } = await supabase
     .from("challenge_attempts")
     .select("student_id,display_name,points,is_correct")

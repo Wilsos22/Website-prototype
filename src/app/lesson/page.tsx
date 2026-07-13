@@ -7,6 +7,11 @@ import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
 import SiteNav from "@/components/SiteNav";
 import TodaysBoards from "@/components/TodaysBoards";
+import {
+  ensureAnonymousStudentSession,
+  SECURE_STUDENT_DATA,
+  studentApiRequest,
+} from "@/lib/studentApi";
 
 interface LessonData {
   title: string;
@@ -97,6 +102,7 @@ const DEFAULT_TOOLS: { label: string; href: string }[] = [
   { label: "Number Line", href: "/number-line-plus" },
   { label: "Percent Bar", href: "/percent-bar" },
 ];
+const WARMUP_IDENTITY_PLACEHOLDER = "BDM_AUTH_USER_ID";
 
 function fmtDate(iso: string) {
   if (!iso) return "";
@@ -116,6 +122,7 @@ export default function LessonPage() {
   const [answered, setAnswered] = useState<string[]>([]);
   const [answerText, setAnswerText] = useState("");
   const [sent, setSent] = useState(false);
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -125,13 +132,41 @@ export default function LessonPage() {
   }, []);
 
   useEffect(() => {
+    if (!SECURE_STUDENT_DATA || !supabase) return;
+    let stopped = false;
+    const prepare = async () => {
+      try {
+        await ensureAnonymousStudentSession();
+        const { data } = await supabase.auth.getSession();
+        if (!stopped) setAuthUserId(data.session?.user.id ?? null);
+      } catch {
+        if (!stopped) setAuthUserId(null);
+      }
+    };
+    void prepare();
+    return () => { stopped = true; };
+  }, [supabase]);
+
+  useEffect(() => {
     if (!sess || !supabase) return;
     let stop = false;
     const tick = async () => {
-      const { data } = await supabase.from("polls").select("id,question,choices")
-        .eq("session_id", sess.sessionId).eq("status", "open").order("created_at", { ascending: false }).limit(1).maybeSingle();
+      let raw: { id: string; question: string; choices: string[] | null } | null = null;
+      if (SECURE_STUDENT_DATA) {
+        try {
+          const result = await studentApiRequest<{
+            poll: { id: string; question: string; choices: string[] | null } | null;
+          }>(`/api/student/session-state?sessionId=${encodeURIComponent(sess.sessionId)}`);
+          raw = result.poll;
+        } catch {
+          raw = null;
+        }
+      } else {
+        const { data } = await supabase.from("polls").select("id,question,choices")
+          .eq("session_id", sess.sessionId).eq("status", "open").order("created_at", { ascending: false }).limit(1).maybeSingle();
+        raw = data as { id: string; question: string; choices: string[] | null } | null;
+      }
       if (stop) return;
-      const raw = data as { id: string; question: string; choices: string[] | null } | null;
       // Ignore blank/malformed polls, and treat an empty choices array as open-
       // ended, so a bad row can't drop an unanswerable full-screen block on the class.
       const p = raw && raw.question && raw.question.trim()
@@ -146,7 +181,14 @@ export default function LessonPage() {
 
   async function submitPoll(ans: string) {
     if (!supabase || !activePoll || !sess || !ans.trim()) return;
-    await supabase.from("poll_answers").insert({ poll_id: activePoll.id, student_id: sess.studentId, display_name: sess.name, answer: ans.trim() });
+    if (SECURE_STUDENT_DATA) {
+      await studentApiRequest("/api/student/poll-answer", {
+        method: "POST",
+        body: JSON.stringify({ pollId: activePoll.id, answer: ans.trim() }),
+      });
+    } else {
+      await supabase.from("poll_answers").insert({ poll_id: activePoll.id, student_id: sess.studentId, display_name: sess.name, answer: ans.trim() });
+    }
     setAnswered((a) => [...a, activePoll.id]); setSent(true); setAnswerText("");
     setTimeout(() => setActivePoll(null), 1300);
   }
@@ -169,6 +211,11 @@ export default function LessonPage() {
   const conceptItems = lesson ? buildConceptItems(lesson) : [];
   const activityItems = lesson ? buildActivityItems(lesson, agendaItems) : [];
   const exitHref = lesson?.exitTicketLink || "/exit-ticket";
+  const warmupHref = lesson?.warmUpLink && authUserId
+    ? lesson.warmUpLink
+      .replaceAll(WARMUP_IDENTITY_PLACEHOLDER, encodeURIComponent(authUserId))
+      .replaceAll(encodeURIComponent(WARMUP_IDENTITY_PLACEHOLDER), encodeURIComponent(authUserId))
+    : lesson?.warmUpLink || "";
 
   return (
     <main className="ls-page">
@@ -267,8 +314,8 @@ export default function LessonPage() {
 
             {lesson && (
               <div className="ls-actions">
-                {lesson.warmUpLink ? (
-                  <a className="ls-action primary" href={lesson.warmUpLink} target="_blank" rel="noopener noreferrer">
+                {warmupHref ? (
+                  <a className="ls-action primary" href={warmupHref} target="_blank" rel="noopener noreferrer">
                     <b>Start the warm-up<span>Open today's first task.</span></b>
                     <span className="ls-action-word">Open</span>
                   </a>

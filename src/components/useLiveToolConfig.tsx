@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
+import { SECURE_STUDENT_DATA, studentApiRequest } from "@/lib/studentApi";
 import {
   LIVE_FLOW_MODE,
   getStoredStudentSessionId,
@@ -22,7 +23,7 @@ export function useLiveToolConfig(route: LiveToolRoute): LiveToolConfig | null {
 
   useEffect(() => {
     const sessionId = getStoredStudentSessionId();
-    if (!supabase || !sessionId) {
+    if ((!supabase && !SECURE_STUDENT_DATA) || !sessionId) {
       setTool(null);
       return;
     }
@@ -36,6 +37,18 @@ export function useLiveToolConfig(route: LiveToolRoute): LiveToolConfig | null {
       setTool(nextTool?.route === route ? nextTool : null);
     };
     const readSession = async () => {
+      if (SECURE_STUDENT_DATA) {
+        try {
+          const result = await studentApiRequest<{ session: SessionRow | null }>(
+            `/api/student/session-state?sessionId=${encodeURIComponent(sessionId)}`,
+          );
+          applySession(result.session);
+        } catch {
+          applySession(null);
+        }
+        return;
+      }
+      if (!supabase) return;
       const { data, error } = await supabase
         .from("sessions")
         .select("status,broadcast,live_flow")
@@ -55,7 +68,7 @@ export function useLiveToolConfig(route: LiveToolRoute): LiveToolConfig | null {
 
     void readSession();
     const interval = window.setInterval(readSession, 1000);
-    const channel = supabase
+    const channel = SECURE_STUDENT_DATA || !supabase ? null : supabase
       .channel(`live-tool-${route}-${sessionId}`)
       .on(
         "postgres_changes",
@@ -67,7 +80,7 @@ export function useLiveToolConfig(route: LiveToolRoute): LiveToolConfig | null {
     return () => {
       stopped = true;
       window.clearInterval(interval);
-      void supabase.removeChannel(channel);
+      if (channel && supabase) void supabase.removeChannel(channel);
     };
   }, [route, supabase]);
 

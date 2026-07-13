@@ -10,6 +10,7 @@
 // bdm-student-session) — free play doesn't write evidence. Fire-and-forget:
 // never blocks or breaks the tool.
 import { getSupabase } from "@/lib/supabase";
+import { SECURE_STUDENT_DATA, studentApiRequest } from "@/lib/studentApi";
 
 export type EvidenceTool = "equation-builder" | "gems" | "combine-like-terms" | "balance-beam" | "area-model" | "distributive-area" | "area-explorer";
 
@@ -47,6 +48,21 @@ export function reportToolResult(r: ToolResult): void {
     const session = readSession();
     const supabase = getSupabase();
     if (!session || !supabase) return;
+
+    if (SECURE_STUDENT_DATA) {
+      void studentApiRequest("/api/student/tool-evidence", {
+        method: "POST",
+        body: JSON.stringify({
+          sessionId: session.sessionId,
+          tool: r.tool,
+          correct: r.correct,
+          standardId: r.standardId,
+          misconception: r.misconception,
+          problemId: r.problemId,
+        }),
+      }).catch(() => undefined);
+      return;
+    }
 
     const date = new Date().toISOString().slice(0, 10);
     const tallyKey = `bdm-tooltally:${r.tool}:${session.studentId}:${date}`;

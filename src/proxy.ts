@@ -15,10 +15,15 @@ const PROTECTED_PREFIXES = [
   "/api/outreach",
   "/api/submissions",
   "/api/teacher",
+  "/api/warmup-summaries",
 ];
 
+const SECURE_ROLLOUT_PREFIXES = ["/api/session", "/api/warmup"];
+
 function isProtectedPath(pathname: string) {
-  return PROTECTED_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+  if (PROTECTED_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) return true;
+  return process.env.NEXT_PUBLIC_SECURE_STUDENT_DATA === "true"
+    && SECURE_ROLLOUT_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
 function readBasicAuth(header: string | null) {
@@ -119,6 +124,11 @@ export const config = {
     "/api/submissions",
     "/api/teacher/:path*",
     "/api/teacher",
+    "/api/warmup-summaries/:path*",
+    "/api/warmup-summaries",
+    "/api/session/:path*",
+    "/api/session",
+    "/api/warmup/:path*",
+    "/api/warmup",
   ],
 };
-

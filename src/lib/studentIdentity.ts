@@ -87,7 +87,7 @@ async function claimGoogleRosterRow(user: User): Promise<StudentRow> {
   const { data, error } = await db
     .from("students")
     .select("id,full_name,period_id,email,auth_user_id")
-    .eq("email_normalized", email)
+    .ilike("email", email)
     .maybeSingle();
   if (error) throw new StudentIdentityError("Student account lookup failed.", 500, "roster_lookup_failed");
   if (!data) throw new StudentIdentityError("This Google account is not on a class roster.", 403, "not_on_roster");
