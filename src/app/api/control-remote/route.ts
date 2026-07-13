@@ -1,17 +1,15 @@
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
-import { LIVE_FLOW_MODE, type TeacherRemoteAction, type TeacherRemoteCommand } from "@/lib/liveClassFlow";
+import {
+  LIVE_FLOW_MODE,
+  TEACHER_REMOTE_ACTIONS,
+  type TeacherRemoteAction,
+  type TeacherRemoteCommand,
+} from "@/lib/liveClassFlow";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const ACTIONS = new Set<TeacherRemoteAction>([
-  "next",
-  "previous",
-  "toggle-timer",
-  "add-30",
-  "subtract-30",
-  "reset-timer",
-]);
+const ACTIONS = new Set<string>(TEACHER_REMOTE_ACTIONS);
 
 async function activeSession() {
   const db = getSupabaseAdmin();

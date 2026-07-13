@@ -16,6 +16,7 @@ import DiscussionProtocol from "@/components/DiscussionProtocol";
 import AbbieConsole from "@/components/AbbieConsole";
 import RedBullCounter from "@/components/RedBullCounter";
 import { requestAbbieLine } from "@/lib/abbieBus";
+import { abbieDirectionForRemoteAction } from "@/lib/remoteDeck";
 import { teacherApiRequest, teacherPost } from "@/lib/teacherApi";
 import {
   LIVE_FLOW_MODE,
@@ -562,7 +563,7 @@ export default function ControlPage() {
     };
 
     void findTeacherSession();
-    const interval = window.setInterval(findTeacherSession, 1500);
+    const interval = window.setInterval(findTeacherSession, 750);
     return () => {
       stopped = true;
       window.clearInterval(interval);
@@ -1376,6 +1377,13 @@ export default function ControlPage() {
     else if (command.action === "add-30") adjust(30);
     else if (command.action === "subtract-30") adjust(-30);
     else if (command.action === "reset-timer") reset();
+    else if (command.action === "play-warning") playCue("warn30");
+    else if (command.action === "play-countdown") playCue("tick");
+    else if (command.action === "play-times-up") playCue("end");
+    else {
+      const direction = abbieDirectionForRemoteAction(command.action);
+      if (direction) requestAbbieLine(direction);
+    }
     // These controls intentionally operate on the current state-machine snapshot.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teacherSession?.remote_command?.nonce]);

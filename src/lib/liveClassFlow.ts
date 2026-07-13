@@ -8,7 +8,24 @@ export const CLASS_MODE_EXIT_KEY = "bdm-class-mode-exited";
 
 export type DiscussionPhaseId = "think" | "marker" | "table" | "revise" | "share";
 export type LivePollKind = "short-answer" | "multiple-choice" | "fist-to-five";
-export type TeacherRemoteAction = "next" | "previous" | "toggle-timer" | "add-30" | "subtract-30" | "reset-timer";
+export const TEACHER_REMOTE_ACTIONS = [
+  "next",
+  "previous",
+  "toggle-timer",
+  "add-30",
+  "subtract-30",
+  "reset-timer",
+  "play-warning",
+  "play-countdown",
+  "play-times-up",
+  "abbie-hype",
+  "abbie-goal",
+  "abbie-move",
+  "abbie-settle",
+  "abbie-roast",
+  "abbie-stuck",
+] as const;
+export type TeacherRemoteAction = (typeof TEACHER_REMOTE_ACTIONS)[number];
 export type LiveToolRoute =
   | "/whiteboard"
   | "/number-line-plus"
