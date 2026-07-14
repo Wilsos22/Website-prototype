@@ -61,6 +61,51 @@ function discussionRounds(text: string) {
     .filter(Boolean);
 }
 
+const INDEPENDENT_SECTION_LABELS = [
+  "Required Paper Work",
+  "Required Digital Work",
+  "Due",
+  "Turn in",
+  "Help path",
+  "Optional Support",
+  "Challenge",
+] as const;
+
+type IndependentSectionLabel = (typeof INDEPENDENT_SECTION_LABELS)[number];
+
+function independentSections(text: string) {
+  const content = text.replace(/\r/g, "").trim();
+  if (!content) return [];
+
+  const labelsByName = new Map(
+    INDEPENDENT_SECTION_LABELS.map((label) => [label.toLowerCase(), label]),
+  );
+  const labelPattern = /(Required Paper Work|Required Digital Work|Due|Turn in|Help path|Optional Support|Challenge)\s*:\s*/gi;
+  const matches = Array.from(content.matchAll(labelPattern));
+
+  if (!matches.length) {
+    return [{ label: "Required Paper Work" as IndependentSectionLabel, body: content }];
+  }
+
+  const sections = matches.map((match, index) => {
+    const start = (match.index ?? 0) + match[0].length;
+    const end = matches[index + 1]?.index ?? content.length;
+    return {
+      label: labelsByName.get(match[1].toLowerCase()) ?? "Required Paper Work",
+      body: content.slice(start, end).trim().replace(/\n+/g, " "),
+    };
+  }).filter((section) => section.body);
+
+  const preface = content.slice(0, matches[0].index ?? 0).trim();
+  if (preface) {
+    const requiredPaper = sections.find((section) => section.label === "Required Paper Work");
+    if (requiredPaper) requiredPaper.body = `${preface} ${requiredPaper.body}`;
+    else sections.unshift({ label: "Required Paper Work", body: preface });
+  }
+
+  return sections;
+}
+
 export default function ClassroomStagePage() {
   const [session, setSession] = useState<StageSession | null>(null);
   const [loading, setLoading] = useState(true);
@@ -151,6 +196,7 @@ export default function ClassroomStagePage() {
       ? phase.keyVocabulary
       : configuredDiscussionSupports.keyVocabulary;
   const rounds = discussionRounds(slideBody);
+  const paperSections = theme.id === "independent" ? independentSections(slideBody) : [];
   const style = {
     "--stage-accent": theme.accent,
     "--stage-base": theme.projectorBase,
@@ -168,7 +214,7 @@ export default function ClassroomStagePage() {
         .stage-topbar { z-index:4; width:100%; box-sizing:border-box; display:flex; align-items:center; justify-content:space-between; gap:18px; border:1px solid var(--stage-line); border-radius:16px; background:color-mix(in srgb,var(--stage-panel) 94%,transparent); padding:10px 14px 10px 18px; box-shadow:0 12px 28px rgba(0,0,0,0.2); }
         .stage-topbar-copy { min-width:0; }
         .stage-kicker { margin:0; color:var(--stage-accent); font-size:0.66rem; font-weight:900; letter-spacing:0.13em; text-transform:uppercase; }
-        .stage-title { margin:2px 0 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:clamp(0.92rem,1.65vw,1.25rem); line-height:1.05; font-weight:900; }
+        .stage-title { margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:clamp(0.92rem,1.65vw,1.25rem); line-height:1.05; font-weight:900; }
         .stage-timer { flex:none; min-width:108px; border-left:1px solid var(--stage-line); padding-left:14px; color:#fff; text-align:center; font-size:clamp(1.65rem,3vw,2.55rem); line-height:0.9; font-weight:900; font-variant-numeric:tabular-nums; letter-spacing:-0.04em; }
         .stage-timer.finished { color:#ffd6dc; }
         .stage-success { position:absolute; z-index:4; top:14px; right:14px; width:min(34vw,440px); border:1px solid var(--stage-line); border-top:4px solid var(--stage-accent); border-radius:16px; background:color-mix(in srgb,var(--stage-panel) 90%,transparent); padding:13px 16px; box-shadow:0 14px 34px rgba(0,0,0,0.22); backdrop-filter:blur(12px); }
@@ -178,8 +224,7 @@ export default function ClassroomStagePage() {
         .stage-empty, .stage-directions, .stage-poll, .stage-resource-link { position:absolute; inset:0; display:grid; place-items:center; padding:clamp(34px,6vw,88px); text-align:center; }
         .stage-empty h1 { margin:0; max-width:22ch; color:#fff; font-size:clamp(2.2rem,5.2vw,5.2rem); line-height:1.02; }
         .stage-empty p { margin:14px 0 0; color:var(--stage-muted); font-size:clamp(1rem,2vw,1.4rem); font-weight:700; }
-        .stage-directions-inner { width:min(100%,1200px); display:grid; gap:22px; justify-items:center; }
-        .stage-directions h2 { margin:0; max-width:19ch; color:#fff; font-size:clamp(2.8rem,7.4vw,7.4rem); line-height:0.98; letter-spacing:-0.04em; text-wrap:balance; }
+        .stage-directions-inner { width:min(100%,1200px); display:grid; gap:18px; justify-items:center; }
         .stage-directions p { margin:0; max-width:54ch; border-left:8px solid var(--stage-accent); background:color-mix(in srgb,var(--stage-base) 58%,transparent); padding:15px 20px; color:var(--stage-muted); text-align:left; white-space:pre-wrap; font-size:clamp(1.15rem,2.5vw,2rem); line-height:1.35; font-weight:760; }
         .stage-resource, .stage-tool { position:absolute; inset:0; width:100%; height:100%; border:0; background:#fff; }
         .stage-resource-link { padding-top:clamp(34px,6vw,88px); }
@@ -212,23 +257,70 @@ export default function ClassroomStagePage() {
         .stage-stems li { color:#fff; font-size:clamp(0.78rem,1.25vw,0.98rem); line-height:1.28; font-weight:760; }
         .stage-vocabulary { display:flex; flex-wrap:wrap; gap:7px; }
         .stage-word { border:1px solid var(--stage-line); border-radius:999px; background:color-mix(in srgb,var(--stage-base) 72%,transparent); padding:6px 9px; color:#fff; font-size:clamp(0.72rem,1.1vw,0.88rem); font-weight:850; }
+        .stage-independent { position:absolute; inset:0; display:grid; place-items:center; padding:clamp(22px,3.4vw,48px); }
+        .stage-independent-grid { width:min(100%,1240px); max-height:100%; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; align-content:center; }
+        .stage-independent-card { min-width:0; border:1px solid var(--stage-line); border-top:4px solid var(--stage-accent); border-radius:16px; background:color-mix(in srgb,var(--stage-panel) 90%,transparent); padding:14px 17px; box-shadow:0 14px 34px rgba(0,0,0,0.16); }
+        .stage-independent-card.required-paper-work,
+        .stage-independent-card.help-path,
+        .stage-independent-card.required-digital-work { grid-column:1 / -1; }
+        .stage-independent-label { margin:0 0 7px; color:var(--stage-accent); font-size:0.68rem; font-weight:950; letter-spacing:0.12em; text-transform:uppercase; }
+        .stage-independent-body { margin:0; color:#fff; font-size:clamp(0.98rem,1.55vw,1.3rem); line-height:1.3; font-weight:760; }
+        .stage-independent-card.required-paper-work .stage-independent-body { font-size:clamp(1.08rem,1.9vw,1.55rem); }
         .stage-work.board-open .stage-empty,
         .stage-work.board-open .stage-directions,
         .stage-work.board-open .stage-poll,
         .stage-work.board-open .stage-resource-link,
         .stage-work.board-open .stage-score-scene,
-        .stage-work.board-open .stage-discussion { right:42%; }
+        .stage-work.board-open .stage-discussion,
+        .stage-work.board-open .stage-independent { right:42%; }
         .stage-work.board-open .stage-resource,
         .stage-work.board-open .stage-tool { width:58%; }
         .stage-work.board-open .stage-success { right:calc(42% + 14px); width:min(27vw,360px); }
-        .stage-work.board-open .stage-directions h2 { font-size:clamp(2rem,4.8vw,4.8rem); }
         .stage-work.board-open .stage-directions p { font-size:clamp(1rem,1.8vw,1.45rem); }
         .stage-work.board-open .stage-score-scene { grid-template-columns:1fr; gap:18px; padding:24px; }
         .stage-work.board-open .stage-score-copy h2 { font-size:clamp(2rem,4vw,3.8rem); }
         .stage-work.board-open .stage-team strong { font-size:clamp(3.5rem,7vw,6rem); }
         .stage-work.board-open .stage-discussion { grid-template-columns:1fr; overflow:auto; }
+        .stage-work.board-open .stage-independent { overflow:auto; padding:18px; }
+        .stage-work.board-open .stage-independent-grid { grid-template-columns:1fr; align-content:start; }
+        .stage-work.board-open .stage-independent-card { grid-column:1; }
         .stage-board-panel { position:absolute; z-index:5; inset:0 0 0 auto; width:42%; overflow:hidden; border-left:5px solid var(--stage-accent); background:#fff; box-shadow:-18px 0 40px rgba(0,0,0,0.28); }
         @media (max-width:900px) { .stage-success { width:40vw; } .stage-score-scene, .stage-discussion { grid-template-columns:1fr; overflow:auto; } }
+        @media (max-height:650px) {
+          .stage-page { padding:10px; }
+          .stage-frame { gap:8px; }
+          .stage-topbar { border-radius:12px; padding:7px 12px; }
+          .stage-title { font-size:0.9rem; }
+          .stage-timer { min-width:94px; padding-left:12px; font-size:1.7rem; }
+          .stage-work { border-radius:18px; }
+          .stage-empty, .stage-directions, .stage-poll, .stage-resource-link { padding:20px; }
+          .stage-directions p { max-width:68ch; padding:11px 15px; font-size:clamp(1rem,1.75vw,1.3rem); line-height:1.28; }
+          .stage-score-scene { grid-template-columns:minmax(270px,0.8fr) minmax(0,1.2fr); gap:24px; padding:22px; }
+          .stage-scoreboard { gap:8px; padding:12px; }
+          .stage-scoreboard-label { padding-bottom:8px; }
+          .stage-team { gap:5px; padding:10px 8px; }
+          .stage-team strong { font-size:4.5rem; }
+          .stage-score-copy { gap:12px; }
+          .stage-score-copy h2 { font-size:2.7rem; }
+          .stage-score-copy p { padding:9px 0 9px 15px; font-size:1.05rem; line-height:1.28; }
+          .stage-discussion { gap:14px; padding:18px; }
+          .stage-discussion-main { gap:8px; }
+          .stage-discussion-main h2 { margin-bottom:2px; font-size:2.1rem; }
+          .stage-round { padding:8px 11px; font-size:0.9rem; line-height:1.24; }
+          .stage-supports { gap:8px; }
+          .stage-support-card { padding:10px 12px; }
+          .stage-support-title { margin-bottom:6px; }
+          .stage-stems { gap:4px; }
+          .stage-stems li { font-size:0.72rem; line-height:1.2; }
+          .stage-vocabulary { gap:5px; }
+          .stage-word { padding:4px 7px; font-size:0.68rem; }
+          .stage-independent { padding:16px; }
+          .stage-independent-grid { gap:8px; }
+          .stage-independent-card { border-radius:12px; padding:9px 12px; }
+          .stage-independent-label { margin-bottom:5px; font-size:0.6rem; }
+          .stage-independent-body,
+          .stage-independent-card.required-paper-work .stage-independent-body { font-size:0.94rem; line-height:1.22; }
+        }
       `}</style>
 
       <section className="stage-frame">
@@ -311,11 +403,24 @@ export default function ClassroomStagePage() {
                 </section>
               </aside>
             </section>
+          ) : theme.id === "independent" ? (
+            <section className="stage-independent" aria-label="Independent paper work directions">
+              <div className="stage-independent-grid">
+                {paperSections.map((section) => (
+                  <article
+                    className={`stage-independent-card ${section.label.toLowerCase().replaceAll(" ", "-")}`}
+                    key={section.label}
+                  >
+                    <p className="stage-independent-label">{section.label}</p>
+                    <p className="stage-independent-body">{section.body}</p>
+                  </article>
+                ))}
+              </div>
+            </section>
           ) : (
             <div className="stage-directions">
               <div className="stage-directions-inner">
                 {showLessonTargets && lesson?.learningIntention ? <p className="stage-learning">{lesson.learningIntention}</p> : null}
-                <h2>{presentation?.title || state.label}</h2>
                 <p>{slideBody}</p>
               </div>
             </div>
