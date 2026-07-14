@@ -10,6 +10,7 @@ import {
   getStoredStudentSession,
   getStoredStudentSessionId,
   leaveClassMode,
+  liveTimerSeconds,
   type DiscussionPhaseId,
   type LiveClassFlowSnapshot,
 } from "@/lib/liveClassFlow";
@@ -414,8 +415,10 @@ export default function LiveFlowPage() {
   const accent = flow?.state?.color ?? "#14b8a6";
   const activeTimerSeconds = phase?.timed && typeof phase.secondsLeft === "number"
     ? phase.secondsLeft
-    : timer?.secondsLeft ?? 0;
-  const activeTimerFinished = phase?.timed ? phase.finished : Boolean(timer?.finished);
+    : liveTimerSeconds(timer);
+  const activeTimerFinished = phase?.timed
+    ? phase.finished
+    : Boolean(timer?.finished || (timer?.running && activeTimerSeconds <= 0));
   const activeTimerRunning = phase?.timed ? phase.running : Boolean(timer?.running);
   const status = activeTimerFinished ? "Time is up. Wait for the teacher." : activeTimerRunning ? "In progress" : "Ready";
   const pollSubmitted = activePoll ? submittedPollIds.includes(activePoll.id) : false;
@@ -460,16 +463,16 @@ export default function LiveFlowPage() {
         .lf-exit:hover, .lf-exit:focus-visible { border-color:var(--lf-accent); outline:none; }
         .lf-shell { width:min(100%,960px); text-align:center; display:grid; justify-items:center; gap:clamp(20px,3.6vw,38px); }
         .lf-brand { margin:0; color:var(--lf-accent); font-size:0.76rem; font-weight:900; letter-spacing:0.14em; text-transform:uppercase; }
-        .lf-title { margin:0; max-width:22ch; color:var(--bdb-ink); font-size:clamp(2.4rem,7vw,5.9rem); line-height:1.02; font-weight:900; letter-spacing:0; }
-        .lf-subtitle { margin:0; max-width:34ch; color:var(--bdb-ink-soft); font-size:clamp(1.15rem,2.8vw,1.75rem); line-height:1.35; font-weight:700; }
+        .lf-title { margin:0; max-width:26ch; color:var(--bdb-ink); font-size:clamp(1.8rem,4.4vw,3.4rem); line-height:1.08; font-weight:900; letter-spacing:0; }
+        .lf-subtitle { margin:0; max-width:42ch; color:var(--bdb-ink-soft); font-size:clamp(1rem,2vw,1.3rem); line-height:1.42; font-weight:700; }
         .lf-media-wrap { width:min(100%,760px); display:grid; place-items:center; }
         .lf-media { width:min(100%,720px); max-height:38vh; border:1px solid var(--bdb-line); border-radius:12px; background:#fff; object-fit:contain; box-shadow:var(--bdb-shadow); }
         .lf-media.embed { aspect-ratio:16 / 9; height:auto; }
         .lf-timer { display:grid; justify-items:center; gap:10px; }
-        .lf-time { color:var(--bdb-ink); font-size:clamp(4.6rem,15vw,10rem); font-variant-numeric:tabular-nums; font-weight:900; line-height:0.9; letter-spacing:0; }
+        .lf-time { color:var(--bdb-ink); font-size:clamp(3.6rem,10vw,7rem); font-variant-numeric:tabular-nums; font-weight:900; line-height:0.9; letter-spacing:0; }
         .lf-status { color:var(--lf-accent); font-size:0.78rem; font-weight:900; letter-spacing:0.13em; text-transform:uppercase; }
         .lf-directions { width:min(100%,720px); display:grid; gap:10px; margin:0; padding:0; list-style:none; }
-        .lf-direction { border:1px solid var(--bdb-line); border-left:5px solid var(--lf-accent); background:#fff; color:var(--bdb-ink); padding:clamp(13px,2vw,18px) clamp(17px,3vw,26px); text-align:left; font-size:clamp(1.05rem,2.5vw,1.45rem); font-weight:800; line-height:1.35; box-shadow:var(--bdb-shadow-sm); }
+        .lf-direction { border:1px solid var(--bdb-line); border-left:5px solid var(--lf-accent); background:#fff; color:var(--bdb-ink); padding:clamp(13px,2vw,18px) clamp(17px,3vw,26px); text-align:left; font-size:clamp(1rem,1.8vw,1.22rem); font-weight:800; line-height:1.4; box-shadow:var(--bdb-shadow-sm); }
         .lf-supports { width:min(100%,1000px); display:grid; grid-template-columns:minmax(0,1.35fr) minmax(230px,0.75fr); gap:14px; text-align:left; }
         .lf-support-panel { min-width:0; display:grid; align-content:start; gap:13px; border:1px solid var(--bdb-line); border-top:5px solid var(--lf-accent); border-radius:12px; background:#fff; padding:clamp(16px,2.5vw,24px); box-shadow:var(--bdb-shadow-sm); }
         .lf-support-title { margin:0; color:var(--lf-accent); font-size:clamp(0.78rem,1.6vw,0.98rem); font-weight:900; letter-spacing:0.12em; text-transform:uppercase; }
@@ -478,7 +481,7 @@ export default function LiveFlowPage() {
         .lf-vocab-list { display:flex; flex-wrap:wrap; gap:9px; margin:0; padding:0; list-style:none; }
         .lf-vocab { background:var(--bdb-ground); border:1px solid var(--bdb-line); border-radius:999px; color:var(--bdb-ink); padding:9px 12px; font-size:clamp(0.95rem,1.9vw,1.16rem); font-weight:900; line-height:1.1; }
         .lf-poll { width:min(100%,760px); display:grid; gap:18px; justify-items:center; }
-        .lf-poll-question { margin:0; max-width:28ch; color:var(--bdb-ink); font-size:clamp(1.7rem,4.6vw,3.6rem); font-weight:900; line-height:1.12; }
+        .lf-poll-question { margin:0; max-width:34ch; color:var(--bdb-ink); font-size:clamp(1.45rem,3.4vw,2.6rem); font-weight:900; line-height:1.18; }
         .lf-poll-help { margin:0; color:var(--bdb-ink-soft); font-size:clamp(1rem,2.2vw,1.3rem); font-weight:700; }
         .lf-poll-choices { width:min(100%,620px); display:grid; gap:10px; }
         .lf-poll-choice, .lf-poll-send { width:100%; min-height:62px; border:2px solid var(--bdb-line); border-radius:10px; background:#fff; color:var(--bdb-ink); padding:14px 18px; font:inherit; font-size:clamp(1rem,2.4vw,1.3rem); font-weight:900; cursor:pointer; box-shadow:var(--bdb-shadow-sm); }
@@ -489,7 +492,7 @@ export default function LiveFlowPage() {
         .lf-poll-send { border-color:var(--lf-accent); background:var(--lf-accent); color:#fff; }
         .lf-fist { width:min(100%,650px); display:grid; gap:14px; }
         .lf-slider { width:100%; accent-color:var(--lf-accent); cursor:pointer; }
-        .lf-fist-value { color:var(--bdb-ink); font-size:clamp(4rem,10vw,7rem); font-weight:900; line-height:0.9; }
+        .lf-fist-value { color:var(--bdb-ink); font-size:clamp(3.4rem,8vw,5.5rem); font-weight:900; line-height:0.9; }
         .lf-fist-labels { display:flex; justify-content:space-between; gap:6px; color:var(--bdb-ink-soft); font-size:0.76rem; font-weight:900; text-transform:uppercase; }
         .lf-poll-sent { color:#287652; font-size:clamp(1.1rem,2.5vw,1.5rem); font-weight:900; }
         .lf-poll-save-state { margin:0; color:var(--bdb-ink-soft); font-size:0.78rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
@@ -497,7 +500,7 @@ export default function LiveFlowPage() {
         .lf-result { display:grid; grid-template-columns:minmax(70px,1fr) minmax(100px,3fr) auto; gap:10px; align-items:center; color:var(--bdb-ink); font-size:clamp(0.95rem,2vw,1.18rem); font-weight:800; }
         .lf-result-bar { height:13px; overflow:hidden; border-radius:999px; background:var(--bdb-line); }
         .lf-result-fill { height:100%; border-radius:inherit; background:var(--lf-accent); transition:width 220ms ease; }
-        .lf-wait { color:var(--bdb-ink); font-size:clamp(2rem,5vw,4.2rem); font-weight:900; line-height:1.1; }
+        .lf-wait { color:var(--bdb-ink); font-size:clamp(1.7rem,4vw,3rem); font-weight:900; line-height:1.14; }
         .lf-ready { display:inline-flex; align-items:center; gap:9px; color:var(--bdb-ink-soft); font-size:0.95rem; font-weight:800; letter-spacing:0.04em; text-transform:uppercase; }
         .lf-ready-dot { width:11px; height:11px; border-radius:50%; background:var(--lf-accent); animation:lfPulse 1.8s ease-out infinite; }
         @keyframes lfPulse { 0% { box-shadow:0 0 0 0 rgba(20,184,166,0.5); } 70% { box-shadow:0 0 0 12px rgba(20,184,166,0); } 100% { box-shadow:0 0 0 0 rgba(20,184,166,0); } }
@@ -508,7 +511,7 @@ export default function LiveFlowPage() {
         .lf-resource { width:min(100%,900px); display:grid; gap:12px; justify-items:center; }
         .lf-resource-frame { width:100%; height:min(62vh,720px); border:1px solid var(--bdb-line); border-radius:12px; background:#fff; box-shadow:var(--bdb-shadow); }
         .lf-resource-link { display:inline-flex; min-height:58px; align-items:center; justify-content:center; border:2px solid var(--lf-accent); border-radius:10px; background:var(--lf-accent); color:#fff; padding:0 24px; text-decoration:none; font-size:1.05rem; font-weight:900; }
-        .lf-action { width:min(100%,720px); border:1px solid var(--bdb-line); border-left:6px solid var(--lf-accent); border-radius:12px; background:#fff; padding:clamp(18px,3vw,28px); color:var(--bdb-ink); text-align:left; white-space:pre-wrap; font-size:clamp(1.05rem,2.3vw,1.38rem); line-height:1.45; font-weight:760; box-shadow:var(--bdb-shadow); }
+        .lf-action { width:min(100%,720px); border:1px solid var(--bdb-line); border-left:6px solid var(--lf-accent); border-radius:12px; background:#fff; padding:clamp(18px,3vw,28px); color:var(--bdb-ink); text-align:left; white-space:pre-wrap; font-size:clamp(1rem,1.8vw,1.2rem); line-height:1.5; font-weight:760; box-shadow:var(--bdb-shadow); }
         .lf-connection { position:fixed; left:50%; top:16px; z-index:6; transform:translateX(-50%); border:1px solid #c78b24; border-radius:999px; background:#fff4d8; color:#694716; padding:9px 14px; font-size:0.76rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; box-shadow:var(--bdb-shadow-sm); }
         .lf-loading { color:var(--bdb-ink-soft); font-weight:800; }
         @media (max-width:760px) { .lf-supports { grid-template-columns:1fr; } }

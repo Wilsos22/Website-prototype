@@ -17,6 +17,8 @@ export const TEACHER_REMOTE_ACTIONS = [
   "add-30",
   "subtract-30",
   "reset-timer",
+  "show-board",
+  "hide-board",
   "play-warning",
   "play-countdown",
   "play-times-up",
@@ -121,6 +123,25 @@ export interface DiscussionPhaseSnapshot {
   keyVocabulary?: string[];
 }
 
+export interface LiveFlowSequenceStep {
+  stateId: string;
+  label: string;
+  description: string;
+  color: string;
+  semantic: ClassroomStageId;
+  durationSeconds: number;
+  question: string;
+  pollKind: LivePollKind | null;
+  choices: string[];
+  correctAnswer: string;
+  standard: string;
+  resourceUrl: string;
+  paperTask: string;
+  notionStepId: string | null;
+  notionLessonId: string | null;
+  lessonCode: string;
+}
+
 export interface LiveClassFlowSnapshot {
   version: 1;
   updatedAt: string;
@@ -137,6 +158,7 @@ export interface LiveClassFlowSnapshot {
     secondsLeft: number;
     running: boolean;
     finished: boolean;
+    endsAt?: string | null;
   } | null;
   poll: {
     id: string;
@@ -154,6 +176,7 @@ export interface LiveClassFlowSnapshot {
     body: string;
     mode: "board" | "directions" | "resource" | "poll" | "tool";
     notionStepId: string | null;
+    boardOpen?: boolean;
   } | null;
   tool: LiveToolConfig | null;
   lesson?: {
@@ -169,10 +192,22 @@ export interface LiveClassFlowSnapshot {
     nextLabel: string | null;
     nextDirections: string | null;
     advanceMode: "manual" | "automatic";
+    steps?: LiveFlowSequenceStep[];
   } | null;
   paper?: {
     task: string;
   } | null;
+}
+
+export function liveTimerSeconds(
+  timer: LiveClassFlowSnapshot["timer"],
+  now = Date.now(),
+): number {
+  if (!timer) return 0;
+  if (!timer.running || !timer.endsAt) return Math.max(0, timer.secondsLeft);
+  const end = Date.parse(timer.endsAt);
+  if (!Number.isFinite(end)) return Math.max(0, timer.secondsLeft);
+  return Math.max(0, Math.ceil((end - now) / 1000));
 }
 
 export interface TeacherRemoteCommand {

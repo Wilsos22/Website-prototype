@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { LiveClassFlowSnapshot, TeacherRemoteAction, TeacherRemoteCommand } from "@/lib/liveClassFlow";
+import { liveTimerSeconds, type LiveClassFlowSnapshot, type TeacherRemoteAction, type TeacherRemoteCommand } from "@/lib/liveClassFlow";
 import { ABBIE_REMOTE_BUTTONS, SOUND_REMOTE_BUTTONS, type RemoteDeckButton } from "@/lib/remoteDeck";
 
 const REMOTE_SESSION_KEY = "bdm-remote-session";
@@ -9,7 +9,7 @@ const REMOTE_SESSION_KEY = "bdm-remote-session";
 const STAGE_BUTTONS: readonly RemoteDeckButton[] = [
   { action: "previous", label: "Back", detail: "Previous stage", tone: "neutral" },
   { action: "toggle-timer", label: "Start or pause", detail: "Control the timer", tone: "timer" },
-  { action: "next", label: "Next", detail: "Advance the lesson", tone: "next" },
+  { action: "next", label: "Next state", detail: "Load paused", tone: "next" },
 ];
 
 const TIMER_BUTTONS: readonly RemoteDeckButton[] = [
@@ -74,6 +74,7 @@ export default function TeacherRemotePage() {
   const [pendingCommand, setPendingCommand] = useState<{ nonce: string; label: string } | null>(null);
   const [lastReceipt, setLastReceipt] = useState<string | null>(null);
   const [pollAnswers, setPollAnswers] = useState<PollAnswer[]>([]);
+  const [boardPanelOpen, setBoardPanelOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -172,6 +173,7 @@ export default function TeacherRemotePage() {
     setSession(null);
     setPendingCommand(null);
     setLastReceipt(null);
+    setBoardPanelOpen(false);
     setStatus("Confirming the selected classroom session.");
     try { localStorage.setItem(REMOTE_SESSION_KEY, sessionId); } catch { /* ignore */ }
   }, []);
@@ -181,6 +183,7 @@ export default function TeacherRemotePage() {
     setSession(null);
     setPendingCommand(null);
     setLastReceipt(null);
+    setBoardPanelOpen(false);
     setStatus("Choose the class session this Remote should control.");
     try { localStorage.removeItem(REMOTE_SESSION_KEY); } catch { /* ignore */ }
   }, []);
@@ -196,9 +199,14 @@ export default function TeacherRemotePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: button.action, sessionId: session.id }),
       });
-      const data = await response.json() as { command?: TeacherRemoteCommand; error?: string };
+      const data = await response.json() as { command?: TeacherRemoteCommand; liveFlow?: LiveClassFlowSnapshot; error?: string };
       if (!response.ok || !data.command) {
         setStatus(data.error || "Command failed.");
+      } else if (data.command.receivedAt) {
+        if (data.liveFlow) setSession((current) => current ? { ...current, liveFlow: data.liveFlow || null, remoteCommand: data.command || null } : current);
+        setPendingCommand(null);
+        setLastReceipt(button.label);
+        setStatus(`Received by classroom: ${button.label}`);
       } else {
         setPendingCommand({ nonce: data.command.nonce, label: button.label });
         setStatus(`Sent to classroom: ${button.label}. Waiting for receipt.`);
@@ -210,8 +218,48 @@ export default function TeacherRemotePage() {
     }
   }, [busy, session]);
 
+  const setWritingMode = useCallback(async (open: boolean) => {
+    if (!session || busy) return;
+    const action: TeacherRemoteAction = open ? "show-board" : "hide-board";
+    const label = open ? "Open work space" : "Close work space";
+    setBusy(action);
+    setLastReceipt(null);
+    setStatus(`Sending to classroom: ${label}`);
+    try {
+      const response = await fetch("/api/control-remote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, sessionId: session.id }),
+      });
+      const data = await response.json() as { command?: TeacherRemoteCommand; liveFlow?: LiveClassFlowSnapshot; error?: string };
+      if (!response.ok || !data.command) {
+        setStatus(data.error || "Command failed.");
+      } else if (data.command.receivedAt) {
+        if (data.liveFlow) setSession((current) => current ? { ...current, liveFlow: data.liveFlow || null, remoteCommand: data.command || null } : current);
+        setPendingCommand(null);
+        setLastReceipt(label);
+        setStatus(`Received by classroom: ${label}`);
+        setBoardPanelOpen(open);
+      } else {
+        setPendingCommand({ nonce: data.command.nonce, label });
+        setStatus(`Sent to classroom: ${label}. Waiting for receipt.`);
+        setBoardPanelOpen(open);
+      }
+    } catch {
+      setStatus("Command failed. Check the classroom connection.");
+    } finally {
+      window.setTimeout(() => setBusy(null), 850);
+    }
+  }, [busy, session]);
+
+  useEffect(() => {
+    if (session?.liveFlow?.presentation?.boardOpen) setBoardPanelOpen(true);
+  }, [session?.liveFlow?.presentation?.boardOpen]);
+
   const flow = session?.liveFlow ?? null;
   const timer = flow?.timer ?? null;
+  const timerSeconds = liveTimerSeconds(timer);
+  const timerFinished = Boolean(timer?.finished || (timer?.running && timerSeconds <= 0));
   const sequence = flow?.sequence ?? null;
   const lesson = flow?.lesson ?? null;
   const controlsDisabled = !session || Boolean(busy);
@@ -220,9 +268,33 @@ export default function TeacherRemotePage() {
     return {
       present: `/teacher/present${query}`,
       pace: `/teacher/pace${query}`,
-      board: session ? `/ipad?room=${encodeURIComponent(session.id)}` : "/ipad",
     };
   }, [session]);
+
+  if (boardPanelOpen && session) {
+    return (
+      <main className="remote-write-page">
+        <style>{`
+          .remote-write-page { position:fixed; inset:0; display:grid; grid-template-rows:auto minmax(0,1fr); background:#0d1017; font-family:var(--bdb-font); }
+          .remote-write-bar { display:flex; align-items:center; justify-content:space-between; gap:14px; border-bottom:1px solid #2b364d; background:#151b28; color:#f8fafc; padding:10px 14px; }
+          .remote-write-copy { min-width:0; }
+          .remote-write-copy strong { display:block; font-size:1rem; }
+          .remote-write-copy span { display:block; margin-top:2px; color:#94a3b8; font-size:0.76rem; font-weight:700; }
+          .remote-write-back { min-height:44px; border:1px solid #14b8a6; border-radius:10px; background:#0d2a27; color:#7ff3df; padding:0 16px; font:inherit; font-weight:900; cursor:pointer; }
+          .remote-write-back:disabled { opacity:0.5; cursor:not-allowed; }
+          .remote-write-frame { width:100%; height:100%; border:0; background:#fff; }
+        `}</style>
+        <header className="remote-write-bar">
+          <div className="remote-write-copy">
+            <strong>Writing on the main projector</strong>
+            <span>The current problem stays visible beside this work space.</span>
+          </div>
+          <button className="remote-write-back" type="button" disabled={Boolean(busy)} onClick={() => { void setWritingMode(false); }}>Back to Remote</button>
+        </header>
+        <iframe className="remote-write-frame" src={`/ipad?room=${encodeURIComponent(session.id)}`} title="iPad writing work space" />
+      </main>
+    );
+  }
 
   return (
     <main className="remote-page">
@@ -332,7 +404,7 @@ export default function TeacherRemotePage() {
                 <p className="current-directions">{flow?.state?.description || "The classroom computer has not published directions yet."}</p>
                 <p className="current-next"><strong>Next:</strong> {sequence?.nextLabel || "Lesson closeout"}{sequence?.nextDirections ? ` - ${sequence.nextDirections}` : ""}</p>
               </div>
-              <div className={`current-time ${timer?.finished ? "finished" : ""}`}>{timer ? formatTime(timer.secondsLeft) : "--:--"}</div>
+              <div className={`current-time ${timerFinished ? "finished" : ""}`}>{timer ? formatTime(timerSeconds) : "--:--"}</div>
             </section>
 
             <section className="deck-section" aria-labelledby="stage-controls-title">
@@ -390,7 +462,7 @@ export default function TeacherRemotePage() {
             <div className="remote-links">
               <a className="remote-link" href={stageLinks.present} target="_blank" rel="noreferrer">Open main projector</a>
               <a className="remote-link" href={stageLinks.pace} target="_blank" rel="noreferrer">Open Pace + Support</a>
-              <a className="remote-link" href={stageLinks.board} target="_blank" rel="noreferrer">Open writing board</a>
+              <button className="remote-link" type="button" disabled={controlsDisabled} onClick={() => { void setWritingMode(true); }}>Open work space</button>
               <button className="remote-change" type="button" onClick={changeSession}>Change session</button>
             </div>
           </>

@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
+import type { LiveClassFlowSnapshot } from "@/lib/liveClassFlow";
 
 export const dynamic = "force-dynamic";
 
@@ -10,8 +11,24 @@ export async function POST(request: Request) {
   }
   const db = getSupabaseAdmin();
   if (!db) return Response.json({ error: "Live sessions are not configured." }, { status: 503 });
-  const { count, error } = await db.from("sessions").select("id", { count: "exact", head: true })
-    .eq("join_code", code).eq("status", "open");
+  const { data, error } = await db
+    .from("sessions")
+    .select("id,live_flow")
+    .eq("join_code", code)
+    .eq("status", "open")
+    .limit(1)
+    .maybeSingle();
   if (error) return Response.json({ error: "The class code could not be checked." }, { status: 500 });
-  return Response.json({ open: Boolean(count) }, { headers: { "cache-control": "no-store" } });
+  const session = data as { id: string; live_flow: LiveClassFlowSnapshot | null } | null;
+  const currentWarmUpLink = session?.live_flow?.state?.id === "warmup"
+    ? session.live_flow.resource?.url || null
+    : null;
+  const lessonWarmUpLink = session?.live_flow?.sequence?.steps
+    ?.find((step) => step.stateId === "warmup")
+    ?.resourceUrl || null;
+  const warmUpLink = currentWarmUpLink || lessonWarmUpLink;
+  return Response.json(
+    { open: Boolean(session), warmUpLink },
+    { headers: { "cache-control": "no-store" } },
+  );
 }

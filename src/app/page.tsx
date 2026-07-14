@@ -46,7 +46,7 @@ export default function StudentLanding() {
             await ensureAnonymousStudentSession();
             setCode(pending);
             setPendingCode(pending);
-            await loadWarmupLink();
+            await loadWarmupLink(pending);
           }
         } catch (error) {
           setJoinErr(error instanceof Error ? error.message : "Secure student sign-in is unavailable.");
@@ -82,11 +82,15 @@ export default function StudentLanding() {
     return () => { stopped = true; };
   }, [supabase]);
 
-  async function loadWarmupLink() {
+  async function loadWarmupLink(classCode: string) {
     const authUserId = await getStudentAuthUserId();
-    const response = await fetch("/api/today", { cache: "no-store" });
-    const data = await response.json().catch(() => ({})) as { lesson?: { warmUpLink?: string | null } };
-    if (data.lesson?.warmUpLink) setWarmupHref(personalizeWarmupLink(data.lesson.warmUpLink, authUserId));
+    const response = await fetch("/api/student/session-code", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ code: classCode }),
+    });
+    const data = await response.json().catch(() => ({})) as { open?: boolean; warmUpLink?: string | null };
+    setWarmupHref(data.open && data.warmUpLink ? personalizeWarmupLink(data.warmUpLink, authUserId) : null);
   }
 
   async function signInWithGoogle() {
@@ -187,7 +191,7 @@ export default function StudentLanding() {
         if (error instanceof StudentApiError && error.code === "warmup_verification_required") {
           sessionStorage.setItem("bdm-pending-class-code", c);
           setPendingCode(c);
-          await loadWarmupLink().catch(() => undefined);
+          await loadWarmupLink(c).catch(() => undefined);
           setJoinErr("Complete today's Google warm-up. This page will join the class automatically after the verified response arrives.");
         } else {
           setJoinErr(error instanceof Error ? error.message : "The class could not be joined.");
@@ -225,10 +229,10 @@ export default function StudentLanding() {
       <style>{`
         .st-page { min-height:100vh; background:var(--bdb-ground); font-family:var(--bdb-font); color:var(--bdb-ink);
           padding:clamp(18px,4vw,44px) 16px; box-sizing:border-box; display:flex; flex-direction:column; align-items:center; }
-        .st-banner { width:100%; max-width:min(440px, 86vw); margin-top:clamp(2px,1.5vw,12px); }
+        .st-banner { width:100%; max-width:min(320px, 74vw); margin-top:clamp(2px,1vw,8px); }
         .st-banner img { width:100%; height:auto; display:block; }
-        .st-hello { margin:6px 0 2px; font-size:clamp(1.5rem,4vw,2.2rem); font-weight:700; letter-spacing:-0.02em; color:var(--bdb-ink); text-align:center; }
-        .st-hello-sub { margin:0 0 clamp(16px,3vw,24px); color:var(--bdb-ink-soft); font-weight:500; font-size:clamp(0.98rem,2.4vw,1.12rem); text-align:center; }
+        .st-hello { margin:4px 0 2px; font-size:clamp(1.35rem,3vw,1.8rem); font-weight:700; letter-spacing:-0.02em; color:var(--bdb-ink); text-align:center; }
+        .st-hello-sub { margin:0 0 clamp(14px,2.4vw,20px); color:var(--bdb-ink-soft); font-weight:500; font-size:clamp(0.94rem,1.8vw,1.04rem); text-align:center; }
 
         .st-cards { width:100%; max-width:440px; display:grid; gap:16px; }
         .st-join { border:none; border-radius:var(--bdb-r-lg); background:var(--bdb-card); padding:22px 22px 24px;
@@ -242,6 +246,10 @@ export default function StudentLanding() {
         .st-code-btn { background:var(--bdb-teal); color:#fff; border:none; border-radius:12px; padding:0 22px; font-weight:800; font-size:1.05rem; cursor:pointer; }
         .st-code-btn:hover { filter:brightness(1.04); }
         .st-joinerr { color:var(--bdb-coral); font-weight:600; font-size:0.9rem; margin-top:10px; }
+        .st-warmup { display:grid; gap:10px; text-align:left; }
+        .st-warmup-label { margin:0; color:var(--bdb-teal); font-size:0.72rem; font-weight:850; letter-spacing:0.1em; text-transform:uppercase; }
+        .st-warmup-copy { margin:0; color:var(--bdb-ink-soft); font-size:0.94rem; font-weight:600; line-height:1.45; }
+        .st-warmup-wait { margin:2px 0 0; color:var(--bdb-ink-faint); font-size:0.86rem; font-weight:700; }
 
         .st-namepick-label { font-size:0.78rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--bdb-ink-faint); margin:0 0 10px; }
         .st-names { display:flex; flex-wrap:wrap; gap:8px; }
@@ -274,11 +282,24 @@ export default function StudentLanding() {
         <img src="/big-dog-logo.svg" alt="Big Dog Math" />
       </div>
       <h1 className="st-hello">{name ? `Hey ${name}!` : "Welcome!"}</h1>
-      <p className="st-hello-sub">Enter your class code to join today&apos;s lesson.</p>
+      <p className="st-hello-sub">{pendingCode ? "Complete the warm-up, then return here." : "Enter your class code to join today&apos;s lesson."}</p>
 
       <div className="st-cards">
         <div className="st-join">
-          {REQUIRE_GOOGLE_AUTH && authLoading ? (
+          {pendingCode ? (
+            <div className="st-warmup">
+              <p className="st-warmup-label">Warm-up first</p>
+              <h2 className="st-join-h">Complete today&apos;s Google warm-up</h2>
+              <p className="st-warmup-copy">Submit all five questions. This Chromebook will join the lesson automatically after the verified response arrives.</p>
+              {warmupHref ? (
+                <a className="st-explore" href={warmupHref} target="_blank" rel="noopener noreferrer">
+                  Open today&apos;s verified warm-up
+                </a>
+              ) : (
+                <p className="st-warmup-wait">Waiting for the teacher to load the warm-up.</p>
+              )}
+            </div>
+          ) : REQUIRE_GOOGLE_AUTH && authLoading ? (
             <p className="st-join-sub">Checking your school sign-in.</p>
           ) : REQUIRE_GOOGLE_AUTH && !student ? (
             <div className="st-auth">
@@ -313,11 +334,6 @@ export default function StudentLanding() {
                 <button className="st-code-btn" onClick={submitCode} disabled={joining}>{joining ? "Checking" : "Join"}</button>
               </div>
               {joinErr && <div className="st-joinerr">{joinErr}</div>}
-              {pendingCode && warmupHref && (
-                <a className="st-explore" href={warmupHref} target="_blank" rel="noopener noreferrer">
-                  Open today&apos;s verified warm-up
-                </a>
-              )}
             </>
           ) : (
             <>

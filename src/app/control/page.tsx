@@ -22,6 +22,7 @@ import { teacherApiRequest, teacherPost } from "@/lib/teacherApi";
 import {
   LIVE_FLOW_MODE,
   getStoredTeacherSessionId,
+  liveTimerSeconds,
   type DiscussionPhaseSnapshot,
   type LiveClassFlowSnapshot,
   type LivePollKind,
@@ -67,6 +68,7 @@ interface TeacherSessionRow {
   id: string;
   status: string;
   broadcast: string | null;
+  live_flow: LiveClassFlowSnapshot | null;
   remote_command: TeacherRemoteCommand | null;
 }
 
@@ -474,6 +476,7 @@ export default function ControlPage() {
   const [notionLessonCode, setNotionLessonCode] = useState("");
   const [showDiscussion, setShowDiscussion] = useState(false);
   const [autoAdvance, setAutoAdvance] = useState(false);
+  const [boardOpen, setBoardOpen] = useState(false);
   const [activeLessonContext, setActiveLessonContext] = useState<ActiveLessonContext | null>(null);
   const [soundUrls, setSoundUrls] = useState<Record<string, string>>({});
   const [teacherSession, setTeacherSession] = useState<TeacherSessionRow | null>(null);
@@ -499,6 +502,8 @@ export default function ControlPage() {
   const autoOpenedStepRef = useRef<Set<string>>(new Set());
   const openingStepRef = useRef<string | null>(null);
   const lastRemoteCommandRef = useRef<string | null>(null);
+  const pendingLiveFlowSyncRef = useRef<{ sessionId: string; snapshot: LiveClassFlowSnapshot } | null>(null);
+  const liveFlowSyncingRef = useRef(false);
 
   // ── Load saved bank minutes + lineup + uploaded sounds ──────────────────
   useEffect(() => {
@@ -1021,10 +1026,13 @@ export default function ControlPage() {
     const resource = activeItem?.linkUrl
       ? { label: activeState?.id === "exit" ? "Open Exit Ticket" : "Open Lesson Resource", url: activeItem.linkUrl }
       : null;
+    const presentationBody = activeState?.id === "independent" || activeState?.id === "closeout"
+      ? activeItem?.paperTask || activeItem?.question || activeItem?.studentDirections || activeState.desc
+      : activeItem?.question || activeItem?.studentDirections || activeItem?.paperTask || activeState?.desc || "";
     const presentation = activeState
       ? {
           title: activeItem?.title || activeState.label,
-          body: activeItem?.paperTask || activeItem?.question || activeItem?.studentDirections || activeState.desc,
+          body: presentationBody,
           mode: resource
             ? "resource" as const
             : poll
@@ -1035,6 +1043,7 @@ export default function ControlPage() {
                   ? "board" as const
                   : "directions" as const,
           notionStepId: activeItem?.notionStepId || null,
+          boardOpen,
         }
       : null;
     const timer = poll?.stage === "results"
@@ -1052,6 +1061,7 @@ export default function ControlPage() {
             secondsLeft,
             running,
             finished,
+            endsAt: running ? new Date(Date.now() + secondsLeft * 1000).toISOString() : null,
           }
         : null;
 
@@ -1073,36 +1083,71 @@ export default function ControlPage() {
           nextLabel: nextItem?.title || nextState?.label || null,
           nextDirections: nextItem?.studentDirections || nextState?.desc || null,
           advanceMode: autoAdvance ? "automatic" as const : "manual" as const,
+          steps: lineup.map((item) => {
+            const itemState = bank.find((candidate) => candidate.id === item.stateId);
+            return {
+              stateId: item.stateId,
+              label: item.title || itemState?.label || "Lesson state",
+              description: item.studentDirections || itemState?.desc || "Wait for the teacher's directions.",
+              color: itemState?.color || "#35785a",
+              semantic: inferClassroomStage(item.stateId, item.title || itemState?.label || ""),
+              durationSeconds: minutesForLineupItem(item, bank) * 60,
+              question: item.question || "",
+              pollKind: item.pollKind || null,
+              choices: item.choices || [],
+              correctAnswer: item.correctAnswer || "",
+              standard: item.standard || "",
+              resourceUrl: item.linkUrl || "",
+              paperTask: item.paperTask || "",
+              notionStepId: item.notionStepId || null,
+              notionLessonId: item.notionLessonId || null,
+              lessonCode: item.lessonCode || activeLessonContext?.code || "",
+            };
+          }),
         }
       : null;
     const paper = activeItem?.paperTask ? { task: activeItem.paperTask } : null;
 
     return JSON.stringify({ version: 1, state, phase, timer, poll, resource, presentation, tool, lesson, sequence, paper });
-  }, [activeInteractiveState, activeItem, activeLessonContext, activeMinutes, activeState, activeToolState, autoAdvance, bank, controlPoll, currentIndex, discussionFlow, finished, lineup, publishedTool, running, secondsLeft, showDiscussion]);
+  }, [activeInteractiveState, activeItem, activeLessonContext, activeMinutes, activeState, activeToolState, autoAdvance, bank, boardOpen, controlPoll, currentIndex, discussionFlow, finished, lineup, publishedTool, running, secondsLeft, showDiscussion]);
+
+  const flushLiveFlowUpdates = useCallback(async () => {
+    if (liveFlowSyncingRef.current) return;
+    liveFlowSyncingRef.current = true;
+    try {
+      while (pendingLiveFlowSyncRef.current) {
+        const pending = pendingLiveFlowSyncRef.current;
+        pendingLiveFlowSyncRef.current = null;
+        try {
+          await teacherPost("/api/teacher/session", {
+            action: "update",
+            sessionId: pending.sessionId,
+            liveFlow: pending.snapshot,
+          });
+          setFlowSyncError(null);
+        } catch (syncError) {
+          setFlowSyncError(syncError instanceof Error ? syncError.message : "Live flow could not be synchronized.");
+        }
+      }
+    } finally {
+      liveFlowSyncingRef.current = false;
+    }
+  }, []);
 
   // Keep student Chromebooks in sync with the existing /control state machine.
   // The write is skipped unless the teacher explicitly selected Live Class Flow.
   useEffect(() => {
-    if (!supabase || teacherSession?.broadcast !== LIVE_FLOW_MODE) return;
+    if (!supabase || teacherSession?.broadcast !== LIVE_FLOW_MODE) {
+      pendingLiveFlowSyncRef.current = null;
+      return;
+    }
     const snapshot = {
       ...(JSON.parse(liveFlowSignature) as Omit<LiveClassFlowSnapshot, "updatedAt">),
       updatedAt: new Date().toISOString(),
     };
-    let cancelled = false;
-    void (async () => {
-      try {
-        await teacherPost("/api/teacher/session", {
-          action: "update",
-          sessionId: teacherSession.id,
-          liveFlow: snapshot,
-        });
-        if (!cancelled) setFlowSyncError(null);
-      } catch (syncError) {
-        if (!cancelled) setFlowSyncError(syncError instanceof Error ? syncError.message : "Live flow could not be synchronized.");
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [liveFlowSignature, supabase, teacherSession]);
+    pendingLiveFlowSyncRef.current = { sessionId: teacherSession.id, snapshot };
+    void flushLiveFlowUpdates();
+  }, [flushLiveFlowUpdates, liveFlowSignature, supabase, teacherSession?.broadcast, teacherSession?.id]);
 
   const handleDiscussionFlowChange = useCallback((snapshot: DiscussionPhaseSnapshot) => {
     setDiscussionFlow(snapshot);
@@ -1155,6 +1200,7 @@ export default function ControlPage() {
     setSecondsLeft(minutes * 60);
     setRunning(false);
     setFinished(false);
+    setBoardOpen(false);
     stopMusic();
   }
 
@@ -1379,6 +1425,7 @@ export default function ControlPage() {
     setCurrentIndex(-1);
     secRef.current = 0;
     setSecondsLeft(0);
+    setBoardOpen(false);
     stopMusic();
   }
   function adjust(deltaSeconds: number) {
@@ -1387,13 +1434,13 @@ export default function ControlPage() {
     if (deltaSeconds > 0) setFinished(false);
   }
   function next() {
+    setRunning(false);
+    stopMusic();
     if (controlPoll?.stage === "responding") {
-      setRunning(false);
       setFinished(true);
       closeActivePoll();
       return;
     }
-    stopMusic();
     if (currentIndex + 1 < lineup.length) loadIndex(currentIndex + 1);
     else { setRunning(false); setFinished(false); setCurrentIndex(-1); }
   }
@@ -1409,12 +1456,44 @@ export default function ControlPage() {
     const command = teacherSession?.remote_command;
     if (!command || command.nonce === lastRemoteCommandRef.current) return;
     lastRemoteCommandRef.current = command.nonce;
+    if (command.receivedAt && teacherSession?.live_flow) {
+      const publishedFlow = teacherSession.live_flow;
+      const publishedTimer = publishedFlow.timer;
+      if (publishedFlow.sequence) setCurrentIndex(publishedFlow.sequence.currentIndex);
+      if (publishedTimer) {
+        const publishedSeconds = liveTimerSeconds(publishedTimer);
+        secRef.current = publishedSeconds;
+        setSecondsLeft(publishedSeconds);
+        setRunning(publishedTimer.running && publishedSeconds > 0);
+        setFinished(publishedTimer.finished || (publishedTimer.running && publishedSeconds <= 0));
+      }
+      setBoardOpen(Boolean(publishedFlow.presentation?.boardOpen));
+      const publishedPoll = publishedFlow.poll;
+      const publishedStateId = publishedFlow.state?.id;
+      const interactiveStateId = publishedStateId === "question" || publishedStateId === "poll" || publishedStateId === "learning-check"
+        ? publishedStateId
+        : null;
+      setControlPoll(publishedPoll && interactiveStateId
+        ? {
+            id: publishedPoll.id,
+            stateId: interactiveStateId,
+            kind: publishedPoll.kind,
+            question: publishedPoll.question,
+            choices: publishedPoll.choices,
+            stage: publishedPoll.stage,
+          }
+        : null);
+      setPollAnswers([]);
+      return;
+    }
     if (command.action === "next") next();
     else if (command.action === "previous") previous();
     else if (command.action === "toggle-timer") toggleRun();
     else if (command.action === "add-30") adjust(30);
     else if (command.action === "subtract-30") adjust(-30);
     else if (command.action === "reset-timer") reset();
+    else if (command.action === "show-board") setBoardOpen(true);
+    else if (command.action === "hide-board") setBoardOpen(false);
     else if (command.action === "play-warning") playCue("warn30");
     else if (command.action === "play-countdown") playCue("tick");
     else if (command.action === "play-times-up") playCue("end");

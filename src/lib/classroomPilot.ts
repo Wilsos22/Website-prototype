@@ -21,6 +21,46 @@ export interface ClassroomStageTheme {
   projectorGlow: string;
 }
 
+export interface ClassroomDiscussionSupports {
+  sentenceStems: string[];
+  keyVocabulary: string[];
+}
+
+const RATIO_DISCUSSION_SUPPORTS: ClassroomDiscussionSupports = {
+  sentenceStems: [
+    "The ratio of ___ to ___ is ___ because...",
+    "I used additive reasoning because...",
+    "I used multiplicative reasoning because...",
+    "This is part-to-part or part-to-whole because...",
+    "The order matters because...",
+    "I changed my thinking because...",
+  ],
+  keyVocabulary: [
+    "ratio",
+    "part-to-part",
+    "part-to-whole",
+    "additive reasoning",
+    "multiplicative reasoning",
+    "revision",
+  ],
+};
+
+const DEFAULT_DISCUSSION_SUPPORTS: ClassroomDiscussionSupports = {
+  sentenceStems: [
+    "I agree with ___ because...",
+    "I disagree because...",
+    "My evidence is...",
+    "I changed my thinking because...",
+  ],
+  keyVocabulary: ["strategy", "evidence", "justify", "represent", "revise"],
+};
+
+export function discussionSupportsForLesson(lessonCode: string | null | undefined): ClassroomDiscussionSupports {
+  return lessonCode?.toUpperCase().startsWith("M2.T1.L1")
+    ? RATIO_DISCUSSION_SUPPORTS
+    : DEFAULT_DISCUSSION_SUPPORTS;
+}
+
 export const CLASSROOM_STAGE_THEMES: Record<ClassroomStageId, ClassroomStageTheme> = {
   evergreen: {
     id: "evergreen",
