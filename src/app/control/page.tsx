@@ -17,6 +17,7 @@ import AbbieConsole from "@/components/AbbieConsole";
 import RedBullCounter from "@/components/RedBullCounter";
 import { requestAbbieLine } from "@/lib/abbieBus";
 import { abbieDirectionForRemoteAction } from "@/lib/remoteDeck";
+import { inferClassroomStage } from "@/lib/classroomPilot";
 import { teacherApiRequest, teacherPost } from "@/lib/teacherApi";
 import {
   LIVE_FLOW_MODE,
@@ -59,6 +60,7 @@ interface LineupItem {
   lessonCode?: string;
   linkUrl?: string;
   paperTask?: string;
+  advance?: string;
 }
 
 interface TeacherSessionRow {
@@ -70,7 +72,7 @@ interface TeacherSessionRow {
 
 const TEACHER_SERVER_CLIENT = {} as never;
 
-type InteractiveStateId = "question" | "poll";
+type InteractiveStateId = "question" | "poll" | "learning-check";
 
 const TOOL_STATE_INFO = {
   "tool-whiteboard": { route: "/whiteboard", label: "Whiteboard" },
@@ -358,6 +360,7 @@ interface TodayLessonStep {
   standard: string;
   linkUrl: string;
   paperTask: string;
+  advance: string;
 }
 
 type TodayLesson = {
@@ -370,6 +373,14 @@ type TodayLesson = {
   warmUpLink?: string;
   exitTicketLink?: string;
   steps?: TodayLessonStep[];
+};
+
+type ActiveLessonContext = {
+  id: string;
+  code: string;
+  title: string;
+  learningIntention: string;
+  successCriteria: string;
 };
 
 const LESSON_TOOL_ALIASES: Record<string, string> = {
@@ -462,7 +473,8 @@ export default function ControlPage() {
   const [todayMsg, setTodayMsg] = useState<string | null>(null);
   const [notionLessonCode, setNotionLessonCode] = useState("");
   const [showDiscussion, setShowDiscussion] = useState(false);
-  const [autoAdvance, setAutoAdvance] = useState(true);
+  const [autoAdvance, setAutoAdvance] = useState(false);
+  const [activeLessonContext, setActiveLessonContext] = useState<ActiveLessonContext | null>(null);
   const [soundUrls, setSoundUrls] = useState<Record<string, string>>({});
   const [teacherSession, setTeacherSession] = useState<TeacherSessionRow | null>(null);
   const [joinCode, setJoinCode] = useState<string | null>(null);
@@ -695,7 +707,7 @@ export default function ControlPage() {
   const activeState = activeItem ? bank.find((s) => s.id === activeItem.stateId) : undefined;
   const activeMinutes = minutesForLineupItem(activeItem, bank);
   const totalMin = lineup.reduce((sum, item) => sum + minutesForLineupItem(item, bank), 0);
-  const activeInteractiveState: InteractiveStateId | null = activeState?.id === "question" || activeState?.id === "poll"
+  const activeInteractiveState: InteractiveStateId | null = activeState?.id === "question" || activeState?.id === "poll" || activeState?.id === "learning-check"
     ? activeState.id
     : null;
   const activeToolState: ToolStateId | null = isToolStateId(activeState?.id) ? activeState.id : null;
@@ -703,7 +715,7 @@ export default function ControlPage() {
   useEffect(() => {
     if (activeInteractiveState === "question") {
       setPollKind("short-answer");
-    } else if (activeInteractiveState === "poll") {
+    } else if (activeInteractiveState === "poll" || activeInteractiveState === "learning-check") {
       setPollKind("fist-to-five");
       setPollQuestion((current) => current || "How well do you understand this right now?");
     }
@@ -779,12 +791,6 @@ export default function ControlPage() {
     };
   }, [controlPoll, supabase]);
 
-  useEffect(() => {
-    if (finished && controlPoll?.stage === "responding") {
-      closeActivePoll();
-    }
-  }, [closeActivePoll, controlPoll?.stage, finished]);
-
   async function openControlPoll(config?: PollLaunchConfig): Promise<boolean> {
     const stateId = config?.stateId ?? activeInteractiveState;
     if (!supabase || !teacherSession || !stateId) {
@@ -849,7 +855,7 @@ export default function ControlPage() {
     openingStepRef.current = activeItem.uid;
     void openControlPoll({
       stateId: activeInteractiveState,
-      kind: activeItem.pollKind || (activeInteractiveState === "poll" ? "fist-to-five" : "short-answer"),
+      kind: activeItem.pollKind || (activeInteractiveState === "poll" || activeInteractiveState === "learning-check" ? "fist-to-five" : "short-answer"),
       question: activeItem.question,
       choices: activeItem.choices,
       correctAnswer: activeItem.correctAnswer,
@@ -870,7 +876,7 @@ export default function ControlPage() {
     setPollAnswers([]);
     setPollError(null);
     setPollChoices(["", "", "", ""]);
-    setPollQuestion(activeInteractiveState === "poll" ? "How well do you understand this right now?" : "");
+    setPollQuestion(activeInteractiveState === "poll" || activeInteractiveState === "learning-check" ? "How well do you understand this right now?" : "");
     setFinished(false);
   }
 
@@ -998,6 +1004,7 @@ export default function ControlPage() {
           label: activeItem?.title || activeState.label,
           description: activeItem?.studentDirections || activeState.desc,
           color: activeState.color,
+          semantic: inferClassroomStage(activeState.id, activeItem?.title || activeState.label),
         }
       : null;
     const phase = activeState?.id === "discussion" && showDiscussion ? discussionFlow : null;
@@ -1048,8 +1055,30 @@ export default function ControlPage() {
           }
         : null;
 
-    return JSON.stringify({ version: 1, state, phase, timer, poll, resource, presentation, tool });
-  }, [activeInteractiveState, activeItem, activeMinutes, activeState, activeToolState, controlPoll, discussionFlow, finished, publishedTool, running, secondsLeft, showDiscussion]);
+    const nextItem = currentIndex >= 0 ? lineup[currentIndex + 1] : undefined;
+    const nextState = nextItem ? bank.find((candidate) => candidate.id === nextItem.stateId) : undefined;
+    const lesson = activeLessonContext
+      ? {
+          id: activeLessonContext.id,
+          code: activeLessonContext.code,
+          title: activeLessonContext.title,
+          learningIntention: activeLessonContext.learningIntention,
+          successCriteria: activeLessonContext.successCriteria,
+        }
+      : null;
+    const sequence = activeState
+      ? {
+          currentIndex,
+          totalSteps: lineup.length,
+          nextLabel: nextItem?.title || nextState?.label || null,
+          nextDirections: nextItem?.studentDirections || nextState?.desc || null,
+          advanceMode: autoAdvance ? "automatic" as const : "manual" as const,
+        }
+      : null;
+    const paper = activeItem?.paperTask ? { task: activeItem.paperTask } : null;
+
+    return JSON.stringify({ version: 1, state, phase, timer, poll, resource, presentation, tool, lesson, sequence, paper });
+  }, [activeInteractiveState, activeItem, activeLessonContext, activeMinutes, activeState, activeToolState, autoAdvance, bank, controlPoll, currentIndex, discussionFlow, finished, lineup, publishedTool, running, secondsLeft, showDiscussion]);
 
   // Keep student Chromebooks in sync with the existing /control state machine.
   // The write is skipped unless the teacher explicitly selected Live Class Flow.
@@ -1147,6 +1176,7 @@ export default function ControlPage() {
     if (first) { secRef.current = first.minutes * 60; setSecondsLeft(first.minutes * 60); }
     setRunning(false);
     setFinished(false);
+    setActiveLessonContext(null);
     stopMusic();
     setShowLessons(false);
     setLessonMsg(null);
@@ -1211,11 +1241,19 @@ export default function ControlPage() {
             || (step.stateId === "exit" ? lesson.exitTicketLink : "")
             || "",
           paperTask: step.paperTask,
+          advance: step.advance,
         }))
       : ["warmup", ...mapped, "exit"].map((stateId) => ({ uid: uid(), stateId }));
     autoOpenedStepRef.current.clear();
     setControlPoll(null);
     setPollAnswers([]);
+    setActiveLessonContext({
+      id: lesson.id,
+      code: lesson.lessonCode || "",
+      title: lesson.title || lesson.lessonCode || "Math 6 lesson",
+      learningIntention: lesson.learningIntention || "",
+      successCriteria: lesson.successCriteria || "",
+    });
     persistLineup(newLineup);
     const first = newLineup[0];
     setCurrentIndex(0);
@@ -1317,7 +1355,7 @@ export default function ControlPage() {
     const item = lineup[nextIndex];
     const state = item ? bank.find((bankState) => bankState.id === item.stateId) : undefined;
     if (!state) return;
-    setAutoAdvance(true);
+    setAutoAdvance(false);
     setCurrentIndex(nextIndex);
     secRef.current = secondsLeft > 0 && currentIndex === nextIndex ? secondsLeft : minutesForLineupItem(item, bank) * 60;
     setSecondsLeft(secRef.current);
@@ -1383,6 +1421,13 @@ export default function ControlPage() {
     else {
       const direction = abbieDirectionForRemoteAction(command.action);
       if (direction) requestAbbieLine(direction);
+    }
+    if (teacherSession) {
+      void teacherPost("/api/teacher/session", {
+        action: "update",
+        sessionId: teacherSession.id,
+        remoteCommand: { ...command, receivedAt: new Date().toISOString() },
+      }).catch(() => { /* the Remote will keep showing the command as sent */ });
     }
     // These controls intentionally operate on the current state-machine snapshot.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1660,7 +1705,7 @@ export default function ControlPage() {
                     <>
                       <div className="cx-poll-head">
                         <h2 className="cx-poll-title">{activeInteractiveState === "question" ? "Question setup" : "Live poll setup"}</h2>
-                        <span className="cx-poll-note">The state timer above is the response window. At 0:00, results appear.</span>
+                        <span className="cx-poll-note">The timer chimes at 0:00. Tap Show results when the room is ready.</span>
                       </div>
                       <div className="cx-poll-grid">
                         <label className="cx-poll-label" htmlFor="control-poll-kind">Response type</label>

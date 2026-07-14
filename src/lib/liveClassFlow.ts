@@ -1,5 +1,7 @@
 // Shared client-safe contracts for the teacher control runtime and student live flow.
 
+import type { ClassroomStageId } from "@/lib/classroomPilot";
+
 export const LIVE_FLOW_MODE = "live-flow";
 export const LIVE_FLOW_ROUTE = "/live-flow";
 export const STUDENT_SESSION_KEY = "bdm-student-session";
@@ -127,6 +129,7 @@ export interface LiveClassFlowSnapshot {
     label: string;
     description: string;
     color: string;
+    semantic?: ClassroomStageId;
   } | null;
   phase: DiscussionPhaseSnapshot | null;
   timer: {
@@ -153,12 +156,30 @@ export interface LiveClassFlowSnapshot {
     notionStepId: string | null;
   } | null;
   tool: LiveToolConfig | null;
+  lesson?: {
+    id: string | null;
+    code: string;
+    title: string;
+    learningIntention: string;
+    successCriteria: string;
+  } | null;
+  sequence?: {
+    currentIndex: number;
+    totalSteps: number;
+    nextLabel: string | null;
+    nextDirections: string | null;
+    advanceMode: "manual" | "automatic";
+  } | null;
+  paper?: {
+    task: string;
+  } | null;
 }
 
 export interface TeacherRemoteCommand {
   nonce: string;
   action: TeacherRemoteAction;
   issuedAt: string;
+  receivedAt?: string;
 }
 
 // A single thing Abbie says, broadcast to joined student screens. `nonce` is

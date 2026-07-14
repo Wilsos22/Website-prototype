@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
 import { SECURE_STUDENT_DATA, studentApiRequest } from "@/lib/studentApi";
@@ -27,6 +27,22 @@ type PollAnswer = {
   id: string;
   answer: string | null;
 };
+
+type ConnectionState = "connecting" | "connected" | "reconnecting";
+type PollSaveState = "idle" | "editing" | "saved" | "saving" | "error" | "submitted";
+
+type StoredPollDraft = {
+  answer: string;
+  fistRating: number;
+};
+
+function pollDraftKey(sessionId: string, responseKey: string) {
+  return `bdm-live-draft:${sessionId}:${responseKey}`;
+}
+
+function submittedPollsKey(sessionId: string) {
+  return `bdm-live-submitted:${sessionId}`;
+}
 
 type DiscussionContent = {
   title: string;
@@ -107,22 +123,30 @@ export default function LiveFlowPage() {
   const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [identityConfirmed, setIdentityConfirmed] = useState(false);
   const [pollSubmitError, setPollSubmitError] = useState<string | null>(null);
+  const [connectionState, setConnectionState] = useState<ConnectionState>("connecting");
+  const [pollSaveState, setPollSaveState] = useState<PollSaveState>("idle");
+  const loadedDraftKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     const sessionId = getStoredStudentSessionId();
     if (!supabase || !sessionId) {
       setEmptyMessage(!supabase ? "Live sync is not set up." : "Join the class first.");
+      setConnectionState("reconnecting");
       setLoading(false);
       return;
     }
 
     let stopped = false;
     const connectionFallback = window.setTimeout(() => {
-      if (!stopped) setLoading(false);
+      if (!stopped) {
+        setConnectionState("reconnecting");
+        setLoading(false);
+      }
     }, 3500);
     const applySession = (row: SessionRow | null) => {
       if (stopped) return;
       window.clearTimeout(connectionFallback);
+      setConnectionState("connected");
       const isLiveFlow = row?.status === "open" && row.broadcast === LIVE_FLOW_MODE;
       if (!row) {
         setEmptyMessage("This class session is not open.");
@@ -148,7 +172,7 @@ export default function LiveFlowPage() {
           applySession(result.session);
         } catch (error) {
           setEmptyMessage(error instanceof Error ? error.message : "Live Flow could not load.");
-          setFlow(null);
+          setConnectionState("reconnecting");
           setLoading(false);
         }
         return;
@@ -166,7 +190,7 @@ export default function LiveFlowPage() {
           .maybeSingle();
         if (fallback.error) {
           setEmptyMessage(fallback.error.message);
-          setFlow(null);
+          setConnectionState("reconnecting");
           setLoading(false);
           return;
         }
@@ -255,6 +279,22 @@ export default function LiveFlowPage() {
 
   const activePoll = flow?.poll ?? null;
   const activePollId = activePoll?.id ?? null;
+  const activeResponseKey = activePoll
+    ? flow?.presentation?.notionStepId || activePoll.id
+    : null;
+
+  useEffect(() => {
+    const sessionId = getStoredStudentSessionId();
+    if (!sessionId) return;
+    try {
+      const stored = JSON.parse(localStorage.getItem(submittedPollsKey(sessionId)) || "[]") as unknown;
+      if (Array.isArray(stored)) {
+        setSubmittedPollIds(stored.filter((value): value is string => typeof value === "string"));
+      }
+    } catch {
+      setSubmittedPollIds([]);
+    }
+  }, []);
 
   useEffect(() => {
     if (SECURE_STUDENT_DATA) {
@@ -283,29 +323,80 @@ export default function LiveFlowPage() {
   }, [activePollId, supabase]);
 
   useEffect(() => {
-    setPollAnswer("");
-    setFistRating(3);
     setPollSubmitError(null);
-  }, [activePoll?.id]);
+    if (!activePoll || !activeResponseKey) {
+      loadedDraftKeyRef.current = null;
+      setPollSaveState("idle");
+      return;
+    }
+    const sessionId = getStoredStudentSessionId();
+    const key = sessionId ? pollDraftKey(sessionId, activeResponseKey) : null;
+    let draft: StoredPollDraft | null = null;
+    if (key) {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(key) || "null") as Partial<StoredPollDraft> | null;
+        if (parsed && typeof parsed.answer === "string" && typeof parsed.fistRating === "number") {
+          draft = { answer: parsed.answer, fistRating: Math.max(0, Math.min(5, parsed.fistRating)) };
+        }
+      } catch {
+        draft = null;
+      }
+    }
+    setPollAnswer(draft?.answer || "");
+    setFistRating(draft?.fistRating ?? 3);
+    loadedDraftKeyRef.current = key;
+    setPollSaveState(submittedPollIds.includes(activePoll.id) ? "submitted" : draft ? "saved" : "idle");
+  }, [activePollId, activeResponseKey, submittedPollIds]);
+
+  useEffect(() => {
+    if (!activePoll || !activeResponseKey || submittedPollIds.includes(activePoll.id)) return;
+    const sessionId = getStoredStudentSessionId();
+    const key = sessionId ? pollDraftKey(sessionId, activeResponseKey) : null;
+    if (!key || loadedDraftKeyRef.current !== key) return;
+    setPollSaveState("editing");
+    const save = window.setTimeout(() => {
+      try {
+        localStorage.setItem(key, JSON.stringify({ answer: pollAnswer, fistRating } satisfies StoredPollDraft));
+        setPollSaveState("saved");
+      } catch {
+        setPollSaveState("error");
+      }
+    }, 350);
+    return () => window.clearTimeout(save);
+  }, [activePollId, activeResponseKey, fistRating, pollAnswer, submittedPollIds]);
 
   async function submitPollAnswer(answer: string) {
     const student = getStoredStudentSession();
     if (!supabase || !activePoll || !student || !answer.trim() || submittedPollIds.includes(activePoll.id)) return;
-    if (SECURE_STUDENT_DATA) {
-      await studentApiRequest("/api/student/poll-answer", {
-        method: "POST",
-        body: JSON.stringify({ pollId: activePoll.id, answer: answer.trim() }),
-      });
-    } else {
-      await supabase.from("poll_answers").insert({
-        poll_id: activePoll.id,
-        ...(student.studentId ? { student_id: student.studentId } : {}),
-        display_name: student.name,
-        answer: answer.trim(),
-      });
+    setPollSubmitError(null);
+    setPollSaveState("saving");
+    try {
+      if (SECURE_STUDENT_DATA) {
+        await studentApiRequest("/api/student/poll-answer", {
+          method: "POST",
+          body: JSON.stringify({ pollId: activePoll.id, answer: answer.trim() }),
+        });
+      } else {
+        const result = await supabase.from("poll_answers").insert({
+          poll_id: activePoll.id,
+          ...(student.studentId ? { student_id: student.studentId } : {}),
+          display_name: student.name,
+          answer: answer.trim(),
+        });
+        if (result.error) throw result.error;
+      }
+      const nextSubmitted = [...new Set([...submittedPollIds, activePoll.id])];
+      setSubmittedPollIds(nextSubmitted);
+      try {
+        localStorage.setItem(submittedPollsKey(student.sessionId), JSON.stringify(nextSubmitted));
+        if (activeResponseKey) localStorage.removeItem(pollDraftKey(student.sessionId, activeResponseKey));
+      } catch { /* ignore */ }
+      setPollAnswer("");
+      setPollSaveState("submitted");
+    } catch (error) {
+      setPollSubmitError(error instanceof Error ? error.message : "Your answer could not be saved. Try again.");
+      setPollSaveState("error");
     }
-    setSubmittedPollIds((current) => [...current, activePoll.id]);
-    setPollAnswer("");
   }
 
   function exitLiveFlow() {
@@ -321,8 +412,26 @@ export default function LiveFlowPage() {
   const timer = flow?.timer ?? null;
   const showTimer = Boolean(timer && timer.totalSeconds > 0 && (!phase || phase.timed));
   const accent = flow?.state?.color ?? "#14b8a6";
-  const status = phase?.finished ? "Time is up." : phase?.running ? "In progress" : "Ready";
+  const activeTimerSeconds = phase?.timed && typeof phase.secondsLeft === "number"
+    ? phase.secondsLeft
+    : timer?.secondsLeft ?? 0;
+  const activeTimerFinished = phase?.timed ? phase.finished : Boolean(timer?.finished);
+  const activeTimerRunning = phase?.timed ? phase.running : Boolean(timer?.running);
+  const status = activeTimerFinished ? "Time is up. Wait for the teacher." : activeTimerRunning ? "In progress" : "Ready";
   const pollSubmitted = activePoll ? submittedPollIds.includes(activePoll.id) : false;
+  const pollSaveLabel = connectionState === "reconnecting"
+    ? "Reconnecting"
+    : pollSubmitted || pollSaveState === "submitted"
+      ? "Submitted"
+      : pollSaveState === "saving"
+        ? "Saving"
+        : pollSaveState === "error"
+          ? "Could not save"
+          : pollSaveState === "saved"
+            ? "Saved on this Chromebook"
+            : pollSaveState === "editing"
+              ? "Editing"
+              : "Ready";
   const sentenceStems = (phase?.sentenceStems ? phase.sentenceStems : discussion?.sentenceStems ?? [])
     .map((stem) => stem.trim())
     .filter(Boolean);
@@ -331,6 +440,8 @@ export default function LiveFlowPage() {
     .filter(Boolean);
   const showDiscussionSupports = !activePoll && (sentenceStems.length > 0 || keyVocabulary.length > 0);
   const resource = flow?.resource ?? null;
+  const actionBody = flow?.paper?.task || flow?.presentation?.body || "";
+  const showActionBody = Boolean(!activePoll && !resource && actionBody && actionBody.trim() !== subtitle.trim());
   const resourceNeedsIdentity = Boolean(resource?.url.includes(WARMUP_IDENTITY_PLACEHOLDER));
   const resolvedResourceUrl = resource?.url && (!resourceNeedsIdentity || authUserId)
     ? resource.url
@@ -344,63 +455,68 @@ export default function LiveFlowPage() {
   return (
     <main className="lf-page" style={{ "--lf-accent": accent } as CSSProperties}>
       <style>{`
-        .lf-page { min-height:100vh; display:grid; place-items:center; box-sizing:border-box; overflow:hidden; background:#0b0d14; color:#fff; font-family:Inter,ui-sans-serif,system-ui,sans-serif; padding:clamp(20px,5vw,72px); }
-        .lf-exit { position:fixed; top:16px; right:16px; z-index:5; min-height:42px; border:1px solid #29324a; border-radius:10px; background:#151a27; color:#5eead4; padding:0 14px; font:inherit; font-size:0.74rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; cursor:pointer; }
-        .lf-exit:hover, .lf-exit:focus-visible { border-color:#14b8a6; outline:none; }
+        .lf-page { min-height:100vh; display:grid; place-items:center; box-sizing:border-box; overflow:hidden; background:radial-gradient(circle at 18% 12%,color-mix(in srgb,var(--lf-accent) 12%,transparent),transparent 34%),var(--bdb-ground); color:var(--bdb-ink); font-family:var(--bdb-font); padding:clamp(20px,5vw,72px); }
+        .lf-exit { position:fixed; top:16px; right:16px; z-index:5; min-height:42px; border:1px solid var(--bdb-line); border-radius:10px; background:#fff; color:var(--bdb-ink); padding:0 14px; font:inherit; font-size:0.74rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; cursor:pointer; box-shadow:var(--bdb-shadow-sm); }
+        .lf-exit:hover, .lf-exit:focus-visible { border-color:var(--lf-accent); outline:none; }
         .lf-shell { width:min(100%,960px); text-align:center; display:grid; justify-items:center; gap:clamp(20px,3.6vw,38px); }
         .lf-brand { margin:0; color:var(--lf-accent); font-size:0.76rem; font-weight:900; letter-spacing:0.14em; text-transform:uppercase; }
-        .lf-title { margin:0; max-width:22ch; font-size:clamp(2.4rem,7vw,5.9rem); line-height:1.02; font-weight:900; letter-spacing:0; }
-        .lf-subtitle { margin:0; max-width:34ch; color:#c8cedd; font-size:clamp(1.15rem,2.8vw,1.75rem); line-height:1.35; font-weight:700; }
+        .lf-title { margin:0; max-width:22ch; color:var(--bdb-ink); font-size:clamp(2.4rem,7vw,5.9rem); line-height:1.02; font-weight:900; letter-spacing:0; }
+        .lf-subtitle { margin:0; max-width:34ch; color:var(--bdb-ink-soft); font-size:clamp(1.15rem,2.8vw,1.75rem); line-height:1.35; font-weight:700; }
         .lf-media-wrap { width:min(100%,760px); display:grid; place-items:center; }
-        .lf-media { width:min(100%,720px); max-height:38vh; border:1px solid #29324a; border-radius:12px; background:#090b11; object-fit:contain; box-shadow:0 18px 48px rgb(0 0 0 / 30%); }
+        .lf-media { width:min(100%,720px); max-height:38vh; border:1px solid var(--bdb-line); border-radius:12px; background:#fff; object-fit:contain; box-shadow:var(--bdb-shadow); }
         .lf-media.embed { aspect-ratio:16 / 9; height:auto; }
         .lf-timer { display:grid; justify-items:center; gap:10px; }
-        .lf-time { color:#fff; font-size:clamp(4.6rem,15vw,10rem); font-variant-numeric:tabular-nums; font-weight:900; line-height:0.9; letter-spacing:0; }
+        .lf-time { color:var(--bdb-ink); font-size:clamp(4.6rem,15vw,10rem); font-variant-numeric:tabular-nums; font-weight:900; line-height:0.9; letter-spacing:0; }
         .lf-status { color:var(--lf-accent); font-size:0.78rem; font-weight:900; letter-spacing:0.13em; text-transform:uppercase; }
         .lf-directions { width:min(100%,720px); display:grid; gap:10px; margin:0; padding:0; list-style:none; }
-        .lf-direction { border-left:5px solid var(--lf-accent); background:#151a27; color:#f4f6fb; padding:clamp(13px,2vw,18px) clamp(17px,3vw,26px); text-align:left; font-size:clamp(1.05rem,2.5vw,1.45rem); font-weight:800; line-height:1.35; }
+        .lf-direction { border:1px solid var(--bdb-line); border-left:5px solid var(--lf-accent); background:#fff; color:var(--bdb-ink); padding:clamp(13px,2vw,18px) clamp(17px,3vw,26px); text-align:left; font-size:clamp(1.05rem,2.5vw,1.45rem); font-weight:800; line-height:1.35; box-shadow:var(--bdb-shadow-sm); }
         .lf-supports { width:min(100%,1000px); display:grid; grid-template-columns:minmax(0,1.35fr) minmax(230px,0.75fr); gap:14px; text-align:left; }
-        .lf-support-panel { min-width:0; display:grid; align-content:start; gap:13px; border:1px solid #29324a; border-top:5px solid var(--lf-accent); border-radius:12px; background:#151a27; padding:clamp(16px,2.5vw,24px); }
+        .lf-support-panel { min-width:0; display:grid; align-content:start; gap:13px; border:1px solid var(--bdb-line); border-top:5px solid var(--lf-accent); border-radius:12px; background:#fff; padding:clamp(16px,2.5vw,24px); box-shadow:var(--bdb-shadow-sm); }
         .lf-support-title { margin:0; color:var(--lf-accent); font-size:clamp(0.78rem,1.6vw,0.98rem); font-weight:900; letter-spacing:0.12em; text-transform:uppercase; }
         .lf-stem-list { display:grid; gap:9px; margin:0; padding:0; list-style:none; }
-        .lf-stem { display:flex; align-items:center; min-height:58px; border-left:4px solid var(--lf-accent); background:#0f1420; color:#f4f6fb; padding:10px 14px; font-size:clamp(1rem,2vw,1.22rem); font-weight:850; line-height:1.28; }
+        .lf-stem { display:flex; align-items:center; min-height:58px; border-left:4px solid var(--lf-accent); background:var(--bdb-ground); color:var(--bdb-ink); padding:10px 14px; font-size:clamp(1rem,2vw,1.22rem); font-weight:850; line-height:1.28; }
         .lf-vocab-list { display:flex; flex-wrap:wrap; gap:9px; margin:0; padding:0; list-style:none; }
-        .lf-vocab { background:#0f1420; border:1px solid #34415e; border-radius:999px; color:#f4f6fb; padding:9px 12px; font-size:clamp(0.95rem,1.9vw,1.16rem); font-weight:900; line-height:1.1; }
+        .lf-vocab { background:var(--bdb-ground); border:1px solid var(--bdb-line); border-radius:999px; color:var(--bdb-ink); padding:9px 12px; font-size:clamp(0.95rem,1.9vw,1.16rem); font-weight:900; line-height:1.1; }
         .lf-poll { width:min(100%,760px); display:grid; gap:18px; justify-items:center; }
-        .lf-poll-question { margin:0; max-width:28ch; color:#fff; font-size:clamp(1.7rem,4.6vw,3.6rem); font-weight:900; line-height:1.12; }
-        .lf-poll-help { margin:0; color:#c8cedd; font-size:clamp(1rem,2.2vw,1.3rem); font-weight:700; }
+        .lf-poll-question { margin:0; max-width:28ch; color:var(--bdb-ink); font-size:clamp(1.7rem,4.6vw,3.6rem); font-weight:900; line-height:1.12; }
+        .lf-poll-help { margin:0; color:var(--bdb-ink-soft); font-size:clamp(1rem,2.2vw,1.3rem); font-weight:700; }
         .lf-poll-choices { width:min(100%,620px); display:grid; gap:10px; }
-        .lf-poll-choice, .lf-poll-send { width:100%; min-height:62px; border:2px solid #34415e; border-radius:10px; background:#151a27; color:#fff; padding:14px 18px; font:inherit; font-size:clamp(1rem,2.4vw,1.3rem); font-weight:900; cursor:pointer; }
+        .lf-poll-choice, .lf-poll-send { width:100%; min-height:62px; border:2px solid var(--bdb-line); border-radius:10px; background:#fff; color:var(--bdb-ink); padding:14px 18px; font:inherit; font-size:clamp(1rem,2.4vw,1.3rem); font-weight:900; cursor:pointer; box-shadow:var(--bdb-shadow-sm); }
         .lf-poll-choice:hover, .lf-poll-choice:focus-visible, .lf-poll-send:hover, .lf-poll-send:focus-visible { border-color:var(--lf-accent); outline:none; }
         .lf-poll-entry { width:min(100%,620px); display:grid; gap:10px; }
-        .lf-poll-text { width:100%; min-height:130px; box-sizing:border-box; border:2px solid #34415e; border-radius:10px; background:#151a27; color:#fff; padding:14px 16px; font:inherit; font-size:1.1rem; font-weight:700; resize:vertical; }
-        .lf-poll-send { border-color:var(--lf-accent); background:var(--lf-accent); color:#061312; }
+        .lf-poll-text { width:100%; min-height:130px; box-sizing:border-box; border:2px solid var(--bdb-line); border-radius:10px; background:#fff; color:var(--bdb-ink); padding:14px 16px; font:inherit; font-size:1.1rem; font-weight:700; resize:vertical; box-shadow:var(--bdb-shadow-sm); }
+        .lf-poll-text:focus { border-color:var(--lf-accent); outline:none; }
+        .lf-poll-send { border-color:var(--lf-accent); background:var(--lf-accent); color:#fff; }
         .lf-fist { width:min(100%,650px); display:grid; gap:14px; }
         .lf-slider { width:100%; accent-color:var(--lf-accent); cursor:pointer; }
-        .lf-fist-value { color:#fff; font-size:clamp(4rem,10vw,7rem); font-weight:900; line-height:0.9; }
-        .lf-fist-labels { display:flex; justify-content:space-between; gap:6px; color:#8a93ad; font-size:0.76rem; font-weight:900; text-transform:uppercase; }
-        .lf-poll-sent { color:#86efac; font-size:clamp(1.1rem,2.5vw,1.5rem); font-weight:900; }
+        .lf-fist-value { color:var(--bdb-ink); font-size:clamp(4rem,10vw,7rem); font-weight:900; line-height:0.9; }
+        .lf-fist-labels { display:flex; justify-content:space-between; gap:6px; color:var(--bdb-ink-soft); font-size:0.76rem; font-weight:900; text-transform:uppercase; }
+        .lf-poll-sent { color:#287652; font-size:clamp(1.1rem,2.5vw,1.5rem); font-weight:900; }
+        .lf-poll-save-state { margin:0; color:var(--bdb-ink-soft); font-size:0.78rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
         .lf-results { width:min(100%,760px); display:grid; gap:10px; }
-        .lf-result { display:grid; grid-template-columns:minmax(70px,1fr) minmax(100px,3fr) auto; gap:10px; align-items:center; color:#dfe5f5; font-size:clamp(0.95rem,2vw,1.18rem); font-weight:800; }
-        .lf-result-bar { height:13px; overflow:hidden; border-radius:999px; background:#20283b; }
+        .lf-result { display:grid; grid-template-columns:minmax(70px,1fr) minmax(100px,3fr) auto; gap:10px; align-items:center; color:var(--bdb-ink); font-size:clamp(0.95rem,2vw,1.18rem); font-weight:800; }
+        .lf-result-bar { height:13px; overflow:hidden; border-radius:999px; background:var(--bdb-line); }
         .lf-result-fill { height:100%; border-radius:inherit; background:var(--lf-accent); transition:width 220ms ease; }
-        .lf-wait { color:#c8cedd; font-size:clamp(2rem,5vw,4.2rem); font-weight:900; line-height:1.1; }
-        .lf-ready { display:inline-flex; align-items:center; gap:9px; color:#8a93ad; font-size:0.95rem; font-weight:800; letter-spacing:0.04em; text-transform:uppercase; }
+        .lf-wait { color:var(--bdb-ink); font-size:clamp(2rem,5vw,4.2rem); font-weight:900; line-height:1.1; }
+        .lf-ready { display:inline-flex; align-items:center; gap:9px; color:var(--bdb-ink-soft); font-size:0.95rem; font-weight:800; letter-spacing:0.04em; text-transform:uppercase; }
         .lf-ready-dot { width:11px; height:11px; border-radius:50%; background:var(--lf-accent); animation:lfPulse 1.8s ease-out infinite; }
         @keyframes lfPulse { 0% { box-shadow:0 0 0 0 rgba(20,184,166,0.5); } 70% { box-shadow:0 0 0 12px rgba(20,184,166,0); } 100% { box-shadow:0 0 0 0 rgba(20,184,166,0); } }
         @media (prefers-reduced-motion: reduce) { .lf-ready-dot { animation:none; } }
         .lf-switches { display:flex; flex-wrap:wrap; justify-content:center; gap:10px; }
-        .lf-switch { display:inline-flex; align-items:center; justify-content:center; min-height:48px; border:1px solid #29324a; border-radius:10px; background:#151a27; color:#5eead4; padding:0 18px; text-decoration:none; font-size:0.9rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; }
-        .lf-switch:hover, .lf-switch:focus-visible { border-color:#14b8a6; outline:none; }
+        .lf-switch { display:inline-flex; align-items:center; justify-content:center; min-height:48px; border:1px solid var(--bdb-line); border-radius:10px; background:#fff; color:var(--bdb-ink); padding:0 18px; text-decoration:none; font-size:0.9rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; }
+        .lf-switch:hover, .lf-switch:focus-visible { border-color:var(--lf-accent); outline:none; }
         .lf-resource { width:min(100%,900px); display:grid; gap:12px; justify-items:center; }
-        .lf-resource-frame { width:100%; height:min(62vh,720px); border:1px solid #29324a; border-radius:12px; background:#fff; }
-        .lf-resource-link { display:inline-flex; min-height:58px; align-items:center; justify-content:center; border:2px solid var(--lf-accent); border-radius:10px; background:var(--lf-accent); color:#061312; padding:0 24px; text-decoration:none; font-size:1.05rem; font-weight:900; }
-        .lf-loading { color:#8a93ad; font-weight:800; }
+        .lf-resource-frame { width:100%; height:min(62vh,720px); border:1px solid var(--bdb-line); border-radius:12px; background:#fff; box-shadow:var(--bdb-shadow); }
+        .lf-resource-link { display:inline-flex; min-height:58px; align-items:center; justify-content:center; border:2px solid var(--lf-accent); border-radius:10px; background:var(--lf-accent); color:#fff; padding:0 24px; text-decoration:none; font-size:1.05rem; font-weight:900; }
+        .lf-action { width:min(100%,720px); border:1px solid var(--bdb-line); border-left:6px solid var(--lf-accent); border-radius:12px; background:#fff; padding:clamp(18px,3vw,28px); color:var(--bdb-ink); text-align:left; white-space:pre-wrap; font-size:clamp(1.05rem,2.3vw,1.38rem); line-height:1.45; font-weight:760; box-shadow:var(--bdb-shadow); }
+        .lf-connection { position:fixed; left:50%; top:16px; z-index:6; transform:translateX(-50%); border:1px solid #c78b24; border-radius:999px; background:#fff4d8; color:#694716; padding:9px 14px; font-size:0.76rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; box-shadow:var(--bdb-shadow-sm); }
+        .lf-loading { color:var(--bdb-ink-soft); font-weight:800; }
         @media (max-width:760px) { .lf-supports { grid-template-columns:1fr; } }
         @media (max-width:600px) { .lf-page { padding:26px 18px; } }
       `}</style>
 
       <button className="lf-exit" type="button" onClick={exitLiveFlow}>Exit Live Flow</button>
+      {connectionState === "reconnecting" ? <div className="lf-connection" role="status">Reconnecting. Your draft is safe.</div> : null}
 
       <section className="lf-shell" aria-live="polite">
         <p className="lf-brand">Big Dog Math</p>
@@ -445,7 +561,7 @@ export default function LiveFlowPage() {
             )}
             {showTimer && timer && (
               <div className="lf-timer">
-                <div className="lf-time">{formatTime(timer.secondsLeft)}</div>
+                <div className="lf-time">{formatTime(activeTimerSeconds)}</div>
                 <div className="lf-status">{status}</div>
               </div>
             )}
@@ -460,6 +576,7 @@ export default function LiveFlowPage() {
                 )}
               </section>
             )}
+            {showActionBody ? <section className="lf-action" aria-label="Current action">{actionBody}</section> : null}
             {activePoll ? activePoll.stage === "responding" ? (
               <section className="lf-poll">
                 <h1 className="lf-poll-question">{activePoll.question}</h1>
@@ -481,24 +598,25 @@ export default function LiveFlowPage() {
                       />
                       <div className="lf-fist-labels"><span>0 · Not yet</span><span>5 · Can explain</span></div>
                     </div>
-                    {pollSubmitted ? <p className="lf-poll-sent">Check-in sent.</p> : <button className="lf-poll-send" onClick={() => submitPollAnswer(String(fistRating))}>Send check-in</button>}
+                    {pollSubmitted ? <p className="lf-poll-sent">Check-in submitted.</p> : <button className="lf-poll-send" disabled={pollSaveState === "saving"} onClick={() => submitPollAnswer(String(fistRating))}>Send check-in</button>}
                     {pollSubmitError && <p className="lf-poll-help">{pollSubmitError}</p>}
                   </>
                 ) : activePoll.kind === "multiple-choice" ? (
                   <div className="lf-poll-choices">
                     {activePoll.choices?.map((choice) => (
-                      <button className="lf-poll-choice" key={choice} disabled={pollSubmitted} onClick={() => submitPollAnswer(choice)}>{choice}</button>
+                      <button className="lf-poll-choice" key={choice} disabled={pollSubmitted || pollSaveState === "saving"} onClick={() => submitPollAnswer(choice)}>{choice}</button>
                     ))}
-                    {pollSubmitted && <p className="lf-poll-sent">Answer sent.</p>}
+                    {pollSubmitted && <p className="lf-poll-sent">Answer submitted.</p>}
                     {pollSubmitError && <p className="lf-poll-help">{pollSubmitError}</p>}
                   </div>
                 ) : (
                   <div className="lf-poll-entry">
                     <textarea className="lf-poll-text" value={pollAnswer} disabled={pollSubmitted} onChange={(event) => setPollAnswer(event.target.value)} placeholder="Type your answer" />
-                    {pollSubmitted ? <p className="lf-poll-sent">Answer sent.</p> : <button className="lf-poll-send" onClick={() => submitPollAnswer(pollAnswer)}>Send answer</button>}
+                    {pollSubmitted ? <p className="lf-poll-sent">Answer submitted.</p> : <button className="lf-poll-send" disabled={pollSaveState === "saving"} onClick={() => submitPollAnswer(pollAnswer)}>Send answer</button>}
                     {pollSubmitError && <p className="lf-poll-help">{pollSubmitError}</p>}
                   </div>
                 )}
+                <p className="lf-poll-save-state" role="status">{pollSaveLabel}</p>
               </section>
             ) : (
               <section className="lf-poll">
