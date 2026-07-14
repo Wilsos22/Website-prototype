@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties } from "react";
+import ClassroomNamePicker from "@/components/ClassroomNamePicker";
 import InkBoard from "@/components/InkBoard";
 import RatioBuilder from "@/components/RatioBuilder";
 import { teacherApiRequest } from "@/lib/teacherApi";
@@ -8,6 +9,7 @@ import { LIVE_FLOW_MODE, type LiveClassFlowSnapshot } from "@/lib/liveClassFlow"
 
 interface StageSession {
   id: string;
+  period_id: string | null;
   status: string;
   broadcast: string | null;
   live_flow: LiveClassFlowSnapshot | null;
@@ -16,6 +18,11 @@ interface StageSession {
 interface PollAnswer {
   id: string;
   answer: string | null;
+}
+
+interface RosterStudent {
+  periodId: string;
+  fullName: string;
 }
 
 function formatTime(totalSeconds: number) {
@@ -33,6 +40,7 @@ function toolUrl(flow: LiveClassFlowSnapshot) {
 
 const RATIO_STAGE_PREVIEW: StageSession = {
   id: "ratio-preview-room",
+  period_id: null,
   status: "open",
   broadcast: LIVE_FLOW_MODE,
   live_flow: {
@@ -55,17 +63,44 @@ const RATIO_STAGE_PREVIEW: StageSession = {
       notionStepId: null,
     },
     tool: null,
+    lesson: {
+      lessonCode: "M2.T1.L1-D1",
+      title: "Ratios Are Everywhere",
+      learningIntention: "I can describe a ratio as a comparison of two quantities.",
+      successCriteria: "I can build, name, and write part-to-part and part-to-whole ratios.",
+    },
+    stage: { showGoals: true },
   },
 };
+
+const RATIO_PREVIEW_ROSTER = [
+  "Avery Brooks",
+  "Jordan Lee",
+  "Maya Patel",
+  "Noah Rivera",
+  "Sofia Chen",
+  "Eli Morgan",
+];
 
 export default function ClassroomStagePage() {
   const [session, setSession] = useState<StageSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [pollAnswers, setPollAnswers] = useState<PollAnswer[]>([]);
+  const [rosterNames, setRosterNames] = useState<string[]>([]);
 
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("preview") === "ratio") {
-      setSession(RATIO_STAGE_PREVIEW);
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("preview") === "ratio") {
+      setSession({
+        ...RATIO_STAGE_PREVIEW,
+        live_flow: RATIO_STAGE_PREVIEW.live_flow
+          ? {
+              ...RATIO_STAGE_PREVIEW.live_flow,
+              stage: { showGoals: params.get("goals") !== "0" },
+            }
+          : null,
+      });
+      setRosterNames(RATIO_PREVIEW_ROSTER);
       setLoading(false);
       return;
     }
@@ -86,6 +121,24 @@ export default function ClassroomStagePage() {
       window.clearInterval(interval);
     };
   }, []);
+
+  const periodId = session?.period_id ?? null;
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("preview") === "ratio") return;
+    if (!periodId) {
+      setRosterNames([]);
+      return;
+    }
+    let stopped = false;
+    void teacherApiRequest<{ students: RosterStudent[] }>("/api/teacher/roster")
+      .then(({ students }) => {
+        if (!stopped) setRosterNames(students.filter((student) => student.periodId === periodId).map((student) => student.fullName));
+      })
+      .catch(() => {
+        if (!stopped) setRosterNames([]);
+      });
+    return () => { stopped = true; };
+  }, [periodId]);
 
   const flow = session?.live_flow ?? null;
   const pollId = flow?.poll?.id ?? null;
@@ -115,6 +168,8 @@ export default function ClassroomStagePage() {
   const poll = flow?.poll ?? null;
   const resource = flow?.resource ?? null;
   const presentation = flow?.presentation ?? null;
+  const lesson = flow?.lesson ?? null;
+  const showGoals = Boolean(flow?.stage?.showGoals && lesson);
   const accent = state?.color || "#14b8a6";
   const embeddedResourceUrl = resource?.url.includes("docs.google.com/forms")
     ? `${resource.url}${resource.url.includes("?") ? "&" : "?"}embedded=true`
@@ -128,6 +183,17 @@ export default function ClassroomStagePage() {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
+  const presenterNeeded = Boolean(
+    !showGoals
+    && !poll
+    && !resource
+    && presentation
+    && (
+      presentation.mode === "board"
+      || presentation.mode === "tool"
+      || /\b(show|share|present|explain|model|compare|justify|whiteboard)\b/i.test(`${presentation.title} ${presentation.body}`)
+    ),
+  );
 
   return (
     <main className="stage-page" style={{ "--stage-accent": accent } as CSSProperties}>
@@ -147,6 +213,16 @@ export default function ClassroomStagePage() {
         .stage-directions-inner { width:min(100%,1100px); display:grid; gap:18px; }
         .stage-directions h2 { margin:0; max-width:20ch; color:#201e1a; font-size:clamp(2.4rem,6.8vw,6.6rem); line-height:1.02; letter-spacing:-0.035em; }
         .stage-directions p { margin:0; max-width:48ch; border-left:8px solid var(--stage-accent); padding-left:22px; color:#4d463b; white-space:pre-wrap; font-size:clamp(1.2rem,2.7vw,2.15rem); line-height:1.35; font-weight:760; }
+        .stage-goals { position:absolute; inset:0; display:grid; grid-template-rows:auto minmax(0,1fr) auto; gap:12px; overflow:auto; background:#faf6ee; padding:clamp(18px,2vw,26px); }
+        .stage-goals-heading { display:flex; align-items:flex-end; justify-content:space-between; gap:20px; }
+        .stage-goals-kicker { margin:0 0 5px; color:var(--stage-accent); font-size:0.72rem; font-weight:900; letter-spacing:0.12em; text-transform:uppercase; }
+        .stage-goals-title { margin:0; color:#201e1a; font-size:clamp(1.8rem,3.4vw,3.4rem); line-height:1; letter-spacing:-0.035em; }
+        .stage-goals-code { flex:none; border:1px solid #d8cebb; border-radius:999px; background:#fff; color:#766d5f; padding:8px 13px; font-size:0.72rem; font-weight:900; letter-spacing:0.08em; }
+        .stage-goals-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; align-items:stretch; }
+        .stage-goal-card { min-height:0; display:grid; align-content:center; gap:10px; border:1px solid #d8cebb; border-top:8px solid var(--goal-color); border-radius:18px; background:#fff; padding:clamp(18px,2vw,24px); box-shadow:0 12px 30px rgba(32,30,26,0.08); }
+        .stage-goal-label { margin:0; color:var(--goal-color); font-size:0.78rem; font-weight:900; letter-spacing:0.12em; text-transform:uppercase; }
+        .stage-goal-copy { margin:0; color:#201e1a; white-space:pre-wrap; font-size:clamp(1.35rem,2.4vw,2.35rem); line-height:1.14; font-weight:860; letter-spacing:-0.02em; }
+        .stage-goals-readers { border-top:1px solid #ded4c2; padding-top:12px; }
         .stage-resource, .stage-tool { position:absolute; inset:0; width:100%; height:100%; border:0; background:#fff; }
         .stage-resource-link { position:absolute; inset:0; display:grid; place-items:center; background:#fbf7ef; }
         .stage-resource-link a { display:flex; min-height:72px; align-items:center; justify-content:center; border:2px solid var(--stage-accent); border-radius:14px; background:var(--stage-accent); color:#08211f; padding:0 30px; text-decoration:none; font-size:1.25rem; font-weight:900; }
@@ -170,13 +246,17 @@ export default function ClassroomStagePage() {
         .stage-bottom { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:20px; min-height:62px; border:1px solid #3b3327; border-top:none; border-radius:0 0 18px 18px; background:#211c14; color:#d8d0c3; padding:8px 20px 8px 24px; }
         .stage-description { margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:clamp(0.9rem,1.6vw,1.2rem); font-weight:750; }
         .stage-status { color:var(--stage-accent); font-size:0.72rem; font-weight:900; letter-spacing:0.12em; text-transform:uppercase; }
+        @media (max-width:780px) {
+          .stage-goals-grid { grid-template-columns:1fr; }
+          .stage-goals-heading { align-items:flex-start; }
+        }
       `}</style>
 
       <section className="stage-frame">
         <header className="stage-top">
           <div className="stage-step">
             <p className="stage-kicker">Big Dog Math Classroom Stage</p>
-            <h1 className="stage-title">{presentation?.title || state?.label || "Waiting for the lesson"}</h1>
+            <h1 className="stage-title">{showGoals ? lesson?.title || "Today's learning goal" : presentation?.title || state?.label || "Waiting for the lesson"}</h1>
           </div>
           <div className="stage-timer">{timer ? formatTime(timer.secondsLeft) : "--:--"}</div>
         </header>
@@ -186,6 +266,33 @@ export default function ClassroomStagePage() {
             <div className="stage-empty"><div><h1>Connecting to the classroom</h1><p>The stage will update when Live Class Flow opens.</p></div></div>
           ) : !session || !flow || !state ? (
             <div className="stage-empty"><div><h1>Ready for class</h1><p>Start a session and select Live Class Flow.</p></div></div>
+          ) : showGoals && lesson ? (
+            <section className="stage-goals" aria-label="Learning intention and success criteria">
+              <header className="stage-goals-heading">
+                <div>
+                  <p className="stage-goals-kicker">Today's learning goal</p>
+                  <h2 className="stage-goals-title">{lesson.title || "What we are learning"}</h2>
+                </div>
+                {lesson.lessonCode ? <span className="stage-goals-code">{lesson.lessonCode}</span> : null}
+              </header>
+              <div className="stage-goals-grid">
+                <article className="stage-goal-card" style={{ "--goal-color": "#50a3a4" } as CSSProperties}>
+                  <p className="stage-goal-label">Learning intention</p>
+                  <p className="stage-goal-copy">{lesson.learningIntention || "Listen for what you will understand by the end of today's lesson."}</p>
+                </article>
+                <article className="stage-goal-card" style={{ "--goal-color": "#2f9e6f" } as CSSProperties}>
+                  <p className="stage-goal-label">Success criteria</p>
+                  <p className="stage-goal-copy">{lesson.successCriteria || "Be ready to explain how your work shows the lesson goal."}</p>
+                </article>
+              </div>
+              <div className="stage-goals-readers">
+                <ClassroomNamePicker
+                  names={rosterNames}
+                  labels={["Learning intention reader", "Success criteria reader"]}
+                  buttonLabel="Pick both readers"
+                />
+              </div>
+            </section>
           ) : resource ? (
             embeddedResourceUrl ? <iframe className="stage-resource" src={embeddedResourceUrl} title={resource.label} /> : (
               <div className="stage-resource-link"><a href={resource.url} target="_blank" rel="noreferrer">{resource.label}</a></div>
@@ -242,10 +349,18 @@ export default function ClassroomStagePage() {
               </div>
             </div>
           )}
+          {presenterNeeded ? (
+            <ClassroomNamePicker
+              names={rosterNames}
+              labels={["Student presenter"]}
+              buttonLabel="Pick a presenter"
+              compact
+            />
+          ) : null}
         </section>
 
         <footer className="stage-bottom">
-          <p className="stage-description">{state?.description || "The work stays at the center of the screen."}</p>
+          <p className="stage-description">{showGoals ? "Pick two readers, then move into the lesson." : state?.description || "The work stays at the center of the screen."}</p>
           <span className="stage-status">{timer?.finished ? "Time is up" : timer?.running ? "In progress" : "Ready"}</span>
         </footer>
       </section>

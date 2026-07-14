@@ -6,6 +6,7 @@ import { ABBIE_REMOTE_BUTTONS, SOUND_REMOTE_BUTTONS, type RemoteDeckButton } fro
 
 const STAGE_BUTTONS: readonly RemoteDeckButton[] = [
   { action: "previous", label: "Back", detail: "Previous stage", tone: "neutral" },
+  { action: "toggle-goals", label: "Goal slide", detail: "Show or hide the lesson goal", tone: "gold" },
   { action: "toggle-timer", label: "Start or pause", detail: "Control the timer", tone: "timer" },
   { action: "next", label: "Next", detail: "Advance the lesson", tone: "next" },
 ];
@@ -110,6 +111,7 @@ export default function TeacherRemotePage() {
         .deck-section-title { margin:0; color:#f8fafc; font-size:0.76rem; font-weight:900; letter-spacing:0.12em; text-transform:uppercase; }
         .deck-section-note { margin:0; color:#71809a; font-size:0.75rem; font-weight:700; text-align:right; }
         .deck-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+        .deck-grid.stages { grid-template-columns:repeat(4,minmax(0,1fr)); }
         .deck-grid.abbie { grid-template-columns:repeat(3,minmax(0,1fr)); }
         .deck-key { min-height:92px; display:grid; align-content:center; gap:5px; border:1px solid #35415a; border-bottom-width:4px; border-radius:14px; background:#171d2a; color:#f8fafc; padding:12px; font:inherit; text-align:left; cursor:pointer; touch-action:manipulation; box-shadow:0 8px 18px rgba(0,0,0,0.2); }
         .deck-key:active:not(:disabled) { transform:translateY(2px); border-bottom-width:2px; }
@@ -124,10 +126,10 @@ export default function TeacherRemotePage() {
         .deck-key.purple { border-color:#8b5cf6; background:#21183a; color:#cbb7ff; }
         .deck-key.green { border-color:#22a06b; background:#102b21; color:#92efc1; }
         .deck-key.red { border-color:#dc5b5b; background:#321818; color:#ffaaaa; }
-        .remote-links { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+        .remote-links { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
         .remote-link { display:flex; min-height:54px; align-items:center; justify-content:center; border:1px solid #35415a; border-radius:12px; background:#151b28; color:#dce6f5; padding:0 12px; text-align:center; text-decoration:none; font-weight:850; }
         @media (max-width:680px) {
-          .deck-grid, .deck-grid.abbie { grid-template-columns:repeat(2,minmax(0,1fr)); }
+          .deck-grid, .deck-grid.abbie, .deck-grid.stages { grid-template-columns:repeat(2,minmax(0,1fr)); }
           .deck-grid.stages .deck-key.timer { grid-column:1 / -1; grid-row:1; }
           .remote-links { grid-template-columns:1fr; }
           .deck-section-head { display:block; }
@@ -182,6 +184,7 @@ export default function TeacherRemotePage() {
         <div className="remote-links">
           <a className="remote-link" href="/control" target="_blank" rel="noreferrer">Open full control</a>
           <a className="remote-link" href="/teacher/present" target="_blank" rel="noreferrer">Open classroom stage</a>
+          <a className="remote-link" href="/teacher/timer" target="_blank" rel="noreferrer">Open timer panel</a>
           <a className="remote-link" href={session ? `/ipad?room=${session.id}` : "/ipad"} target="_blank" rel="noreferrer">Open live writing board</a>
         </div>
       </section>

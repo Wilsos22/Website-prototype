@@ -12,6 +12,7 @@ export const TEACHER_REMOTE_ACTIONS = [
   "next",
   "previous",
   "toggle-timer",
+  "toggle-goals",
   "add-30",
   "subtract-30",
   "reset-timer",
@@ -153,6 +154,15 @@ export interface LiveClassFlowSnapshot {
     body: string;
     mode: "board" | "directions" | "resource" | "poll" | "tool";
     notionStepId: string | null;
+  } | null;
+  lesson?: {
+    lessonCode: string;
+    title: string;
+    learningIntention: string;
+    successCriteria: string;
+  } | null;
+  stage?: {
+    showGoals: boolean;
   } | null;
   tool: LiveToolConfig | null;
 }

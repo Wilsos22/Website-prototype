@@ -193,6 +193,7 @@ export default function IpadPage() {
         <span className="ip-divider" />
 
         <button className="ip-btn stage" disabled={!remoteSession || Boolean(remoteBusy)} onClick={() => sendRemote("previous")}>Back</button>
+        <button className="ip-btn stage" disabled={!remoteSession || Boolean(remoteBusy)} onClick={() => sendRemote("toggle-goals")}>Goal slide</button>
         <button className="ip-btn stage timer" disabled={!remoteSession || Boolean(remoteBusy)} onClick={() => sendRemote("toggle-timer")}>{remoteBusy === "toggle-timer" ? "Sending" : "Start or pause"}</button>
         <button className="ip-btn stage next" disabled={!remoteSession || Boolean(remoteBusy)} onClick={() => sendRemote("next")}>Next</button>
         <button className="ip-btn stage" disabled={!remoteSession || Boolean(remoteBusy)} onClick={() => sendRemote("add-30")}>Add 30 sec</button>
@@ -230,7 +231,7 @@ export default function IpadPage() {
 
         <span className="ip-spacer" />
         <a className="ip-view-link" href="/teacher/present" target="_blank" rel="noreferrer">Panel 1</a>
-        <a className="ip-view-link" href={`/board?room=${encodeURIComponent(room)}`} target="_blank" rel="noreferrer">Panel 2</a>
+        <a className="ip-view-link" href="/teacher/timer" target="_blank" rel="noreferrer">Panel 2</a>
         <button className="ip-btn" onClick={() => setExportSignal((n) => n + 1)}>Export</button>
         <button className="ip-btn" onClick={toggleFullscreen}>Full screen</button>
         <input ref={fileRef} type="file" accept="image/*" onChange={onPickFile} style={{ display: "none" }} />

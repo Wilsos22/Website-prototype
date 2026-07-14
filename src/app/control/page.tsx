@@ -155,11 +155,14 @@ interface PollLaunchConfig {
   lessonCode?: string;
 }
 
+type LessonFocus = NonNullable<LiveClassFlowSnapshot["lesson"]>;
+
 // DEFAULT_STATES + BANK_GROUPS now live in @/lib/classStates (shared with the
 // standalone Sequence Builder so the catalog never drifts).
 
 const LS_BANK = "bdm-control-bank-v2";
 const LS_LINEUP = "bdm-control-lineup-v1";
+const LS_LESSON_FOCUS = "bdm-control-lesson-focus-v1";
 const PERIOD_MIN = 55;
 
 const DEFAULT_TOOL_SETUP: ToolSetupValues = {
@@ -461,6 +464,8 @@ export default function ControlPage() {
   const [editing, setEditing] = useState(false);
   const [showSounds, setShowSounds] = useState(false);
   const [showSpinner, setShowSpinner] = useState(false);
+  const [showGoals, setShowGoals] = useState(false);
+  const [lessonFocus, setLessonFocus] = useState<LessonFocus | null>(null);
   const [showLessons, setShowLessons] = useState(false);
   const [presets, setPresets] = useState<LessonPreset[]>([]);
   const [presetSearch, setPresetSearch] = useState("");
@@ -520,6 +525,8 @@ export default function ControlPage() {
           setSecondsLeft(secRef.current);
         }
       }
+      const rawLessonFocus = localStorage.getItem(LS_LESSON_FOCUS);
+      if (rawLessonFocus) setLessonFocus(JSON.parse(rawLessonFocus) as LessonFocus);
     } catch { /* ignore */ }
 
     (async () => {
@@ -1073,8 +1080,19 @@ export default function ControlPage() {
           }
         : null;
 
-    return JSON.stringify({ version: 1, state, phase, timer, poll, resource, presentation, tool });
-  }, [activeInteractiveState, activeItem, activeMinutes, activeState, activeToolState, controlPoll, discussionFlow, finished, publishedTool, running, secondsLeft, showDiscussion]);
+    return JSON.stringify({
+      version: 1,
+      state,
+      phase,
+      timer,
+      poll,
+      resource,
+      presentation,
+      lesson: lessonFocus,
+      stage: lessonFocus ? { showGoals } : null,
+      tool,
+    });
+  }, [activeInteractiveState, activeItem, activeMinutes, activeState, activeToolState, controlPoll, discussionFlow, finished, lessonFocus, publishedTool, running, secondsLeft, showDiscussion, showGoals]);
 
   // Keep student Chromebooks in sync with the existing /control state machine.
   // The write is skipped unless the teacher explicitly selected Live Class Flow.
@@ -1151,6 +1169,7 @@ export default function ControlPage() {
     setSecondsLeft(minutes * 60);
     setRunning(false);
     setFinished(false);
+    setShowGoals(false);
     stopMusic();
   }
 
@@ -1175,6 +1194,9 @@ export default function ControlPage() {
     stopMusic();
     setShowLessons(false);
     setLessonMsg(null);
+    setLessonFocus(null);
+    setShowGoals(false);
+    try { localStorage.removeItem(LS_LESSON_FOCUS); } catch { /* ignore */ }
   }
 
   async function saveCurrentLesson() {
@@ -1215,6 +1237,15 @@ export default function ControlPage() {
       setTodayMsg(null);
       return false;
     }
+    const nextLessonFocus: LessonFocus = {
+      lessonCode: lesson.lessonCode || "",
+      title: lesson.title || "Today's lesson",
+      learningIntention: lesson.learningIntention || "",
+      successCriteria: lesson.successCriteria || "",
+    };
+    setLessonFocus(nextLessonFocus);
+    setShowGoals(Boolean(nextLessonFocus.learningIntention || nextLessonFocus.successCriteria));
+    try { localStorage.setItem(LS_LESSON_FOCUS, JSON.stringify(nextLessonFocus)); } catch { /* ignore */ }
     const lessonSteps = (lesson.steps || []).filter((step) => step.stateId && bank.some((state) => state.id === step.stateId));
     const newLineup: LineupItem[] = lessonSteps.length
       ? lessonSteps.flatMap((step) => {
@@ -1410,6 +1441,7 @@ export default function ControlPage() {
     setCurrentIndex(-1);
     secRef.current = 0;
     setSecondsLeft(0);
+    setShowGoals(false);
     stopMusic();
   }
   function adjust(deltaSeconds: number) {
@@ -1418,6 +1450,10 @@ export default function ControlPage() {
     if (deltaSeconds > 0) setFinished(false);
   }
   function next() {
+    if (showGoals) {
+      setShowGoals(false);
+      return;
+    }
     if (controlPoll?.stage === "responding") {
       setRunning(false);
       setFinished(true);
@@ -1429,6 +1465,10 @@ export default function ControlPage() {
     else { setRunning(false); setFinished(false); setCurrentIndex(-1); }
   }
   function previous() {
+    if (showGoals) {
+      setShowGoals(false);
+      return;
+    }
     if (currentIndex <= 0) return;
     if (controlPoll?.stage === "responding") closeActivePoll();
     setControlPoll(null);
@@ -1443,6 +1483,7 @@ export default function ControlPage() {
     if (command.action === "next") next();
     else if (command.action === "previous") previous();
     else if (command.action === "toggle-timer") toggleRun();
+    else if (command.action === "toggle-goals") setShowGoals((current) => lessonFocus ? !current : false);
     else if (command.action === "add-30") adjust(30);
     else if (command.action === "subtract-30") adjust(-30);
     else if (command.action === "reset-timer") reset();
@@ -1547,6 +1588,7 @@ export default function ControlPage() {
         .cx-tbtns { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
         .cx-sbtn { font-size:0.76rem; font-weight:800; letter-spacing:0.05em; text-transform:uppercase; color:#a39a88; background:transparent; border:1px solid #2a241a; border-radius:7px; padding:7px 12px; cursor:pointer; text-decoration:none; transition:all 140ms ease; }
         .cx-sbtn:hover { border-color:${accent}; color:#fff; }
+        .cx-sbtn:disabled { opacity:0.38; cursor:not-allowed; border-color:#2a241a; color:#6f6658; }
         .cx-home { border-color:#3a3228; color:#d8d2c5; }
         .cx-divider { width:1px; height:22px; background:#2a241a; flex:none; margin:0 2px; }
 
@@ -1678,6 +1720,14 @@ export default function ControlPage() {
             <a className="cx-sbtn" href="/roster">Rosters</a>
             <span className="cx-divider" />
             <button className="cx-sbtn" style={{ borderColor: "#14b8a6", color: "#5eead4" }} onClick={loadTodayLesson}>Today&apos;s lesson</button>
+            <button
+              className="cx-sbtn"
+              disabled={!lessonFocus}
+              style={showGoals ? { borderColor: "#fcaf38", color: "#fcd67d" } : undefined}
+              onClick={() => setShowGoals((current) => lessonFocus ? !current : false)}
+            >
+              {showGoals ? "Close goal slide" : "Goal slide"}
+            </button>
             <button className="cx-sbtn" onClick={() => { setShowLessons(true); setLessonMsg(null); }}>Lessons</button>
             <button className="cx-sbtn" onClick={() => setShowSpinner(true)}>Spinner</button>
             <button className="cx-sbtn" style={autoAdvance ? { borderColor: accent, color: "#fff" } : undefined} onClick={() => setAutoAdvance((v) => !v)}>Auto {autoAdvance ? "on" : "off"}</button>
