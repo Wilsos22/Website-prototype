@@ -90,7 +90,13 @@ export default function StudentLanding() {
       body: JSON.stringify({ code: classCode }),
     });
     const data = await response.json().catch(() => ({})) as { open?: boolean; warmUpLink?: string | null };
-    setWarmupHref(data.open && data.warmUpLink ? personalizeWarmupLink(data.warmUpLink, authUserId) : null);
+    let link = data.open ? data.warmUpLink || null : null;
+    if (data.open && !link) {
+      const todayResponse = await fetch("/api/today", { cache: "no-store" });
+      const today = await todayResponse.json().catch(() => ({})) as { lesson?: { warmUpLink?: string } | null };
+      link = todayResponse.ok ? today.lesson?.warmUpLink || null : null;
+    }
+    setWarmupHref(link ? personalizeWarmupLink(link, authUserId) : null);
   }
 
   async function signInWithGoogle() {
@@ -192,7 +198,7 @@ export default function StudentLanding() {
           sessionStorage.setItem("bdm-pending-class-code", c);
           setPendingCode(c);
           await loadWarmupLink(c).catch(() => undefined);
-          setJoinErr("Complete today's Google warm-up. This page will join the class automatically after the verified response arrives.");
+          setJoinErr(null);
         } else {
           setJoinErr(error instanceof Error ? error.message : "The class could not be joined.");
         }
@@ -250,6 +256,8 @@ export default function StudentLanding() {
         .st-warmup-label { margin:0; color:var(--bdb-teal); font-size:0.72rem; font-weight:850; letter-spacing:0.1em; text-transform:uppercase; }
         .st-warmup-copy { margin:0; color:var(--bdb-ink-soft); font-size:0.94rem; font-weight:600; line-height:1.45; }
         .st-warmup-wait { margin:2px 0 0; color:var(--bdb-ink-faint); font-size:0.86rem; font-weight:700; }
+        .st-warmup-action { background:var(--bdb-teal); border-color:var(--bdb-teal); color:#fff; font-weight:800; }
+        .st-warmup-action:hover { border-color:var(--bdb-teal); color:#fff; filter:brightness(1.04); }
 
         .st-namepick-label { font-size:0.78rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--bdb-ink-faint); margin:0 0 10px; }
         .st-names { display:flex; flex-wrap:wrap; gap:8px; }
@@ -282,21 +290,21 @@ export default function StudentLanding() {
         <img src="/big-dog-logo.svg" alt="Big Dog Math" />
       </div>
       <h1 className="st-hello">{name ? `Hey ${name}!` : "Welcome!"}</h1>
-      <p className="st-hello-sub">{pendingCode ? "Complete the warm-up, then return here." : "Enter your class code to join today&apos;s lesson."}</p>
+      <p className="st-hello-sub">{pendingCode ? "Your class code is accepted. Start today&apos;s warm-up." : "Enter your class code to start today&apos;s lesson."}</p>
 
       <div className="st-cards">
         <div className="st-join">
           {pendingCode ? (
             <div className="st-warmup">
-              <p className="st-warmup-label">Warm-up first</p>
-              <h2 className="st-join-h">Complete today&apos;s Google warm-up</h2>
-              <p className="st-warmup-copy">Submit all five questions. This Chromebook will join the lesson automatically after the verified response arrives.</p>
+              <p className="st-warmup-label">Code accepted</p>
+              <h2 className="st-join-h">Today&apos;s Google Form warm-up</h2>
+              <p className="st-warmup-copy">Open the form and submit all five questions. Keep this tab open; it will move into the lesson automatically when Google confirms your response.</p>
               {warmupHref ? (
-                <a className="st-explore" href={warmupHref} target="_blank" rel="noopener noreferrer">
-                  Open today&apos;s verified warm-up
+                <a className="st-explore st-warmup-action" href={warmupHref} target="_blank" rel="noopener noreferrer">
+                  Open today&apos;s warm-up
                 </a>
               ) : (
-                <p className="st-warmup-wait">Waiting for the teacher to load the warm-up.</p>
+                <p className="st-warmup-wait">Today&apos;s warm-up is not published yet. Ask your teacher.</p>
               )}
             </div>
           ) : REQUIRE_GOOGLE_AUTH && authLoading ? (

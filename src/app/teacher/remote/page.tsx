@@ -8,8 +8,8 @@ const REMOTE_SESSION_KEY = "bdm-remote-session";
 
 const STAGE_BUTTONS: readonly RemoteDeckButton[] = [
   { action: "previous", label: "Back", detail: "Previous stage", tone: "neutral" },
-  { action: "toggle-timer", label: "Start or pause", detail: "Control the timer", tone: "timer" },
-  { action: "next", label: "Next state", detail: "Load paused", tone: "next" },
+  { action: "toggle-timer", label: "Pause or resume", detail: "Control automatic pacing", tone: "timer" },
+  { action: "next", label: "Next state", detail: "Advance the lesson", tone: "next" },
 ];
 
 const TIMER_BUTTONS: readonly RemoteDeckButton[] = [
@@ -410,7 +410,15 @@ export default function TeacherRemotePage() {
             <section className="deck-section" aria-labelledby="stage-controls-title">
               <div className="deck-section-head">
                 <h2 className="deck-section-title" id="stage-controls-title">Lesson stages</h2>
-                <p className="deck-section-note">Manual advance is the default. Zero does not advance.</p>
+                <p className="deck-section-note">
+                  {flow?.poll?.stage === "results" && sequence?.advanceMode === "automatic"
+                    ? "Results are showing. The next stage will advance automatically."
+                    : timer?.running
+                      ? "Automatic pacing is running. Pause the timer to hold this stage."
+                      : sequence?.advanceMode === "automatic"
+                        ? "Pacing is paused. Resume when the room is ready."
+                        : "Automatic pacing is off. Start when the room is ready."}
+                </p>
               </div>
               <div className="deck-grid stages">
                 {STAGE_BUTTONS.map((button) => <DeckKey key={button.action} button={button} busy={busy} disabled={controlsDisabled} onSend={send} />)}

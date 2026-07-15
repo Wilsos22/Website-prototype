@@ -3,8 +3,8 @@
 // Teacher Classroom Control Panel — front-of-room display.
 // Bank (bottom): pull states into the day's LINEUP (sequence) with a running
 //   total vs. a 55-minute period.
-// Each state loads an adjustable countdown. At 0 it flashes and WAITS for you
-//   to tap Next.
+// Each state loads an adjustable countdown. After Start, the timed sequence
+// advances automatically until the teacher pauses or stops it.
 // Ending sequence: 30-second alert, giant on-screen 10-to-1 countdown with ticks,
 //   flash at zero.
 // Upload your own sounds (warm-up music + cue sounds). They're remembered on
@@ -506,6 +506,8 @@ export default function ControlPage() {
   const autoOpenedStepRef = useRef<Set<string>>(new Set());
   const openingStepRef = useRef<string | null>(null);
   const lastRemoteCommandRef = useRef<string | null>(null);
+  const hydratedSessionRef = useRef<string | null>(null);
+  const skipNextLiveFlowSyncRef = useRef(false);
   const pendingLiveFlowSyncRef = useRef<{ sessionId: string; snapshot: LiveClassFlowSnapshot } | null>(null);
   const liveFlowSyncingRef = useRef(false);
 
@@ -643,6 +645,75 @@ export default function ControlPage() {
     musicRef.current = a;
   }, [soundUrls, stopMusic]);
 
+  // Restore the active pacing state once when Control reconnects to an open
+  // session. Subsequent live updates continue through the normal sync path.
+  useEffect(() => {
+    if (!teacherSession) {
+      hydratedSessionRef.current = null;
+      return;
+    }
+    const flow = teacherSession.live_flow;
+    if (!flow?.sequence || hydratedSessionRef.current === teacherSession.id) return;
+    hydratedSessionRef.current = teacherSession.id;
+    skipNextLiveFlowSyncRef.current = true;
+
+    if (flow.sequence.steps?.length) {
+      persistLineup(flow.sequence.steps.map((step) => ({
+        uid: uid(),
+        stateId: step.stateId,
+        minutes: Math.max(1, Math.round(step.durationSeconds / 60)),
+        title: step.label,
+        studentDirections: step.description,
+        question: step.question,
+        pollKind: step.pollKind || "",
+        choices: step.choices,
+        correctAnswer: step.correctAnswer,
+        standard: step.standard,
+        notionStepId: step.notionStepId || undefined,
+        notionLessonId: step.notionLessonId || undefined,
+        lessonCode: step.lessonCode,
+        linkUrl: step.resourceUrl,
+        paperTask: step.paperTask,
+      })));
+    }
+
+    setCurrentIndex(flow.sequence.currentIndex);
+    setAutoAdvance(flow.sequence.advanceMode === "automatic");
+    if (flow.lesson) {
+      setActiveLessonContext({
+        id: flow.lesson.id || "",
+        code: flow.lesson.code,
+        title: flow.lesson.title,
+        learningIntention: flow.lesson.learningIntention,
+        successCriteria: flow.lesson.successCriteria,
+      });
+    }
+    if (flow.timer) {
+      const remaining = liveTimerSeconds(flow.timer);
+      secRef.current = remaining;
+      setSecondsLeft(remaining);
+      const shouldRun = flow.timer.running && remaining > 0;
+      setRunning(shouldRun);
+      setFinished(flow.timer.finished || (flow.timer.running && remaining <= 0));
+      if (shouldRun && flow.state) startMusicFor(flow.state.id);
+      else stopMusic();
+    }
+    setBoardOpen(Boolean(flow.presentation?.boardOpen));
+    const interactiveStateId = flow.state?.id === "question" || flow.state?.id === "poll" || flow.state?.id === "learning-check"
+      ? flow.state.id
+      : null;
+    setControlPoll(flow.poll && interactiveStateId
+      ? {
+          id: flow.poll.id,
+          stateId: interactiveStateId,
+          kind: flow.poll.kind,
+          question: flow.poll.question,
+          choices: flow.poll.choices,
+          stage: flow.poll.stage,
+        }
+      : null);
+  }, [persistLineup, startMusicFor, stopMusic, teacherSession]);
+
   // ── Countdown engine ────────────────────────────────────────────────────
   useEffect(() => {
     if (!running) return;
@@ -663,9 +734,15 @@ export default function ControlPage() {
     return () => { if (tickRef.current) clearInterval(tickRef.current); };
   }, [running, playCue, stopMusic]);
 
-  // ── Auto-advance to the next lineup item when time's up ─────────────────
+  // Automatically close a timed response check, briefly show results, and
+  // advance while lesson pacing remains on.
   useEffect(() => {
-    if (!finished || !autoAdvance || controlPoll) return;
+    if (!finished || !autoAdvance) return;
+    if (controlPoll?.stage === "responding") {
+      setControlPoll((current) => current ? { ...current, stage: "results" } : null);
+      void teacherPost("/api/teacher/poll", { action: "close", pollId: controlPoll.id });
+      return;
+    }
     const ni = currentIndex + 1;
     if (ni >= lineup.length) return;
     const t = setTimeout(() => {
@@ -680,7 +757,7 @@ export default function ControlPage() {
       setFinished(false);
       setRunning(true);
       startMusicFor(st.id);
-    }, 2600);
+    }, controlPoll?.stage === "results" ? 6000 : 2600);
     return () => clearTimeout(t);
   }, [finished, autoAdvance, bank, controlPoll, currentIndex, lineup, startMusicFor, stopMusic]);
 
@@ -1121,6 +1198,11 @@ export default function ControlPage() {
       pendingLiveFlowSyncRef.current = null;
       return;
     }
+    if (skipNextLiveFlowSyncRef.current) {
+      skipNextLiveFlowSyncRef.current = false;
+      pendingLiveFlowSyncRef.current = null;
+      return;
+    }
     const snapshot = {
       ...(JSON.parse(liveFlowSignature) as Omit<LiveClassFlowSnapshot, "updatedAt">),
       updatedAt: new Date().toISOString(),
@@ -1169,7 +1251,7 @@ export default function ControlPage() {
     [next[i], next[j]] = [next[j], next[i]];
     persistLineup(next);
   }
-  function loadIndex(i: number) {
+  function loadIndex(i: number, startImmediately = false) {
     const item = lineup[i];
     if (!item) return;
     const st = bank.find((s) => s.id === item.stateId);
@@ -1178,10 +1260,11 @@ export default function ControlPage() {
     const minutes = minutesForLineupItem(item, bank);
     secRef.current = minutes * 60;
     setSecondsLeft(minutes * 60);
-    setRunning(false);
+    setRunning(startImmediately && minutes > 0);
     setFinished(false);
     setBoardOpen(false);
     stopMusic();
+    if (startImmediately && minutes > 0) startMusicFor(st.id);
   }
 
   // ── Lesson presets (saved sequences) ────────────────────────────────────
@@ -1200,6 +1283,7 @@ export default function ControlPage() {
     const first = newLineup[0] ? newBank.find((s) => s.id === newLineup[0].stateId) : undefined;
     setCurrentIndex(newLineup.length ? 0 : -1);
     if (first) { secRef.current = first.minutes * 60; setSecondsLeft(first.minutes * 60); }
+    setAutoAdvance(false);
     setRunning(false);
     setFinished(false);
     setActiveLessonContext(null);
@@ -1288,6 +1372,7 @@ export default function ControlPage() {
       secRef.current = minutes * 60;
       setSecondsLeft(minutes * 60);
     }
+    setAutoAdvance(false);
     setRunning(false);
     setFinished(false);
     stopMusic();
@@ -1371,6 +1456,7 @@ export default function ControlPage() {
     if (!activeState) return;
     if (secondsLeft <= 0) { secRef.current = activeMinutes * 60; setSecondsLeft(secRef.current); setFinished(false); }
     const willRun = !running;
+    if (willRun) setAutoAdvance(true);
     setRunning(willRun);
     if (willRun) startMusicFor(activeState.id);
     else if (musicRef.current) musicRef.current.pause();
@@ -1381,7 +1467,7 @@ export default function ControlPage() {
     const item = lineup[nextIndex];
     const state = item ? bank.find((bankState) => bankState.id === item.stateId) : undefined;
     if (!state) return;
-    setAutoAdvance(false);
+    setAutoAdvance(true);
     setCurrentIndex(nextIndex);
     secRef.current = secondsLeft > 0 && currentIndex === nextIndex ? secondsLeft : minutesForLineupItem(item, bank) * 60;
     setSecondsLeft(secRef.current);
@@ -1400,6 +1486,7 @@ export default function ControlPage() {
   }
   // Stop the whole running sequence and return the room to idle/free.
   function stopSequence() {
+    setAutoAdvance(false);
     setRunning(false);
     setFinished(false);
     setCurrentIndex(-1);
@@ -1414,6 +1501,7 @@ export default function ControlPage() {
     if (deltaSeconds > 0) setFinished(false);
   }
   function next() {
+    const keepPacing = running && autoAdvance;
     setRunning(false);
     stopMusic();
     if (controlPoll?.stage === "responding") {
@@ -1421,15 +1509,16 @@ export default function ControlPage() {
       closeActivePoll();
       return;
     }
-    if (currentIndex + 1 < lineup.length) loadIndex(currentIndex + 1);
-    else { setRunning(false); setFinished(false); setCurrentIndex(-1); }
+    if (currentIndex + 1 < lineup.length) loadIndex(currentIndex + 1, keepPacing);
+    else { setAutoAdvance(false); setRunning(false); setFinished(false); setCurrentIndex(-1); }
   }
   function previous() {
     if (currentIndex <= 0) return;
+    const keepPacing = running && autoAdvance;
     if (controlPoll?.stage === "responding") closeActivePoll();
     setControlPoll(null);
     setPollAnswers([]);
-    loadIndex(currentIndex - 1);
+    loadIndex(currentIndex - 1, keepPacing);
   }
 
   useEffect(() => {
@@ -1440,6 +1529,7 @@ export default function ControlPage() {
       const publishedFlow = teacherSession.live_flow;
       const publishedTimer = publishedFlow.timer;
       if (publishedFlow.sequence) setCurrentIndex(publishedFlow.sequence.currentIndex);
+      if (publishedFlow.sequence) setAutoAdvance(publishedFlow.sequence.advanceMode === "automatic");
       if (publishedTimer) {
         const publishedSeconds = liveTimerSeconds(publishedTimer);
         secRef.current = publishedSeconds;
@@ -1750,7 +1840,7 @@ export default function ControlPage() {
             <button className="cx-sbtn" style={{ borderColor: "#14b8a6", color: "#5eead4" }} onClick={loadTodayLesson}>Today&apos;s lesson</button>
             <button className="cx-sbtn" onClick={() => { setShowLessons(true); setLessonMsg(null); }}>Lessons</button>
             <button className="cx-sbtn" onClick={() => setShowSpinner(true)}>Spinner</button>
-            <button className="cx-sbtn" style={autoAdvance ? { borderColor: accent, color: "#fff" } : undefined} onClick={() => setAutoAdvance((v) => !v)}>Auto {autoAdvance ? "on" : "off"}</button>
+            <button className="cx-sbtn" style={autoAdvance ? { borderColor: accent, color: "#fff" } : undefined} onClick={() => setAutoAdvance((v) => !v)}>Pacing {autoAdvance ? "on" : "off"}</button>
             <button className="cx-sbtn" onClick={() => setShowSounds((v) => !v)}>Sounds</button>
             <button className="cx-sbtn" onClick={() => setEditing((v) => !v)}>{editing ? "Done" : "Edit times"}</button>
             <button className="cx-sbtn" onClick={toggleFullscreen}>Full screen</button>
@@ -2089,10 +2179,12 @@ export default function ControlPage() {
                 </section>
               )}
               <div className="cx-actions">
-                <button className="cx-btn pri" onClick={running ? toggleRun : runSequence}>{running ? "Pause" : "Start"}</button>
+                <button className="cx-btn pri" onClick={running ? toggleRun : runSequence}>
+                  {running ? "Pause" : autoAdvance ? "Resume" : "Start lesson"}
+                </button>
                 <button className="cx-btn" onClick={previous} disabled={currentIndex <= 0}>Back</button>
                 <button className="cx-btn next" onClick={next} disabled={controlPoll?.stage !== "responding" && currentIndex + 1 >= lineup.length}>{controlPoll?.stage === "responding" ? "Show results" : "Advance"}</button>
-                <button className="cx-btn" onClick={stopSequence}>Stop</button>
+                <button className="cx-btn" onClick={stopSequence}>Stop pacing</button>
                 <span className="cx-actions-sep" />
                 <button className="cx-btn" onClick={reset}>Reset state</button>
                 <button className="cx-btn" onClick={() => adjust(60)}>+1 min</button>

@@ -12,7 +12,7 @@ export interface ClassState {
 
 export const DEFAULT_STATES: ClassState[] = [
   { id: "warmup", label: "Warm-Up", minutes: 5, color: "#35785a", desc: "Open the assigned warm-up. Complete all five questions on your own." },
-  { id: "review", label: "Review", minutes: 4, color: "#35785a", desc: "Compare strategies and correct your warm-up work." },
+  { id: "review", label: "Review", minutes: 4, color: "#35785a", desc: "Review the answers and the problems the class missed most often." },
   { id: "launch", label: "Lesson Launch", minutes: 4, color: "#a86735", desc: "Make sense of the scenario, quantities, and question." },
   { id: "concrete", label: "Concrete", minutes: 5, color: "#3f7d50", desc: "Build the relationship with the assigned concrete model." },
   { id: "representational", label: "Representational", minutes: 5, color: "#357f7d", desc: "Connect the concrete model to a diagram or representation." },

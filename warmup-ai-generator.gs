@@ -70,7 +70,7 @@ function createWarmupFormFromAI_(weekConfig, dayIndex, requestedTopic) {
     { ok: false, error: "Response export helper is not installed." }
   );
 
-  // Save CCSS + distractor→misconception metadata for the evidence bridge
+  // Save CCSS and distractor-to-misconception metadata for the evidence bridge
   // (warmup-evidence.gs) so submissions can post per-standard, tagged evidence.
   callIfAvailable_(
     "saveWarmupFormMetaSafely_",
@@ -97,7 +97,7 @@ function createWarmupFormFromAI_(weekConfig, dayIndex, requestedTopic) {
       weekFolderUrl: weekFolder.getUrl(),
       formId: formResult.form.getId(),
       editUrl: formResult.form.getEditUrl(),
-      publishedUrl: formResult.form.getPublishedUrl(),
+      publishedUrl: formResult.publishedUrl,
       responseSpreadsheetId: RESPONSE_SS_ID,
       responseSheetUrl: responseSpreadsheet.getUrl(),
       responseTabName: formResult.responseTabName,
@@ -111,7 +111,7 @@ function createWarmupFormFromAI_(weekConfig, dayIndex, requestedTopic) {
     new Date(),
     title,
     formResult.form.getEditUrl(),
-    formResult.form.getPublishedUrl(),
+    formResult.publishedUrl,
     RESPONSE_SS_ID,
     weekFolderName,
     formResult.form.getId(),
@@ -126,7 +126,7 @@ function createWarmupFormFromAI_(weekConfig, dayIndex, requestedTopic) {
     dailyTopic: dailyTopic,
     reviewTopics: questionSet.reviewTopics,
     editUrl: formResult.form.getEditUrl(),
-    publishedUrl: formResult.form.getPublishedUrl(),
+    publishedUrl: formResult.publishedUrl,
     responseTabName: formResult.responseTabName,
     source: OPENAI_WARMUP_SOURCE,
     notionStatus: linkStatus,
@@ -219,8 +219,8 @@ function generateAIQuestionSet_(dailyTopic, weekConfig, dayIndex) {
       }
       let correct = String(q.correct || "").trim();
       if (choices.indexOf(correct) === -1) correct = choices[0];
-      // Sanitize the distractor→misconception map: keep only real wrong choices,
-      // tags must come from the fixed vocabulary (anything else → "other").
+      // Sanitize the distractor-to-misconception map: keep only real wrong choices,
+      // and use "other" for tags outside the fixed vocabulary.
       const misconceptions = {};
       if (q.misconceptions && typeof q.misconceptions === "object") {
         Object.keys(q.misconceptions).forEach(function (choiceText) {

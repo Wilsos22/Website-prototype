@@ -138,6 +138,8 @@ async function navigateFlow(
     ? step.paperTask || step.question || step.description
     : step.question || step.description || step.paperTask;
   const nextStep = steps[targetIndex + 1] || null;
+  const continuePacing = flow.sequence.advanceMode === "automatic" && Boolean(flow.timer?.running);
+  const now = Date.now();
   const mode = resource
     ? "resource" as const
     : poll
@@ -160,9 +162,9 @@ async function navigateFlow(
     timer: {
       totalSeconds: step.durationSeconds,
       secondsLeft: step.durationSeconds,
-      running: false,
+      running: continuePacing,
       finished: false,
-      endsAt: null,
+      endsAt: continuePacing ? new Date(now + step.durationSeconds * 1000).toISOString() : null,
     },
     poll,
     resource,
@@ -179,7 +181,7 @@ async function navigateFlow(
       totalSteps: steps.length,
       nextLabel: nextStep?.label || null,
       nextDirections: nextStep?.description || null,
-      advanceMode: "manual",
+      advanceMode: flow.sequence.advanceMode,
       steps,
     },
     paper: step.paperTask ? { task: step.paperTask } : null,
@@ -223,6 +225,9 @@ function updateTimer(flow: LiveClassFlowSnapshot, action: TeacherRemoteAction): 
     ...flow,
     updatedAt: new Date(now).toISOString(),
     timer: { totalSeconds, secondsLeft, running, finished, endsAt },
+    sequence: flow.sequence && action === "toggle-timer" && running
+      ? { ...flow.sequence, advanceMode: "automatic" }
+      : flow.sequence,
   };
 }
 
@@ -281,7 +286,16 @@ export async function POST(request: Request) {
       handledDirectly = true;
     } else if (DIRECT_TIMER_ACTIONS.has(action)) {
       if (!liveFlow) throw new Error("Load a lesson before controlling its timer.");
-      liveFlow = updateTimer(liveFlow, action);
+      if (action === "toggle-timer" && !liveFlow.timer && liveFlow.poll?.stage === "results" && liveFlow.sequence) {
+        const advanceMode = liveFlow.sequence.advanceMode === "automatic" ? "manual" : "automatic";
+        liveFlow = {
+          ...liveFlow,
+          updatedAt: new Date().toISOString(),
+          sequence: { ...liveFlow.sequence, advanceMode },
+        };
+      } else {
+        liveFlow = updateTimer(liveFlow, action);
+      }
       handledDirectly = true;
     } else if (DIRECT_BOARD_ACTIONS.has(action)) {
       if (!liveFlow) throw new Error("Load a lesson before opening the work space.");

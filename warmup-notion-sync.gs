@@ -244,6 +244,9 @@ function syncSubmissionToExportSheet(e) {
         formId: "",
         formTitle: sheetName,
         email: email,
+        authUserId: String(
+          (values["Big Dog connection"] && values["Big Dog connection"][0]) || ""
+        ).trim(),
         period: period,
         score: "",
         week: "",
@@ -395,6 +398,7 @@ function buildSubmissionDataFromFormResponse_(form, response) {
     formId,
     formTitle,
     email,
+    authUserId: String(itemValues["Big Dog connection"] || "").trim(),
     period,
     score,
     week: week,
