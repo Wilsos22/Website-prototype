@@ -6,7 +6,7 @@
 // why any of them can drive the game and none of them can disagree about it.
 
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
-import { drawReward, pickVocab, rewardByKey, teamColor, type BruhReward } from "@/lib/bruhGame";
+import { applyReward, drawReward, pickVocab, rewardByKey, teamColor } from "@/lib/bruhGame";
 import { loadGameState, type BruhTeamRow } from "@/lib/bruhState";
 
 export const dynamic = "force-dynamic";
@@ -346,33 +346,4 @@ export async function POST(request: Request) {
     default:
       return bad("Unknown action.");
   }
-}
-
-/** Pure: what each team's score becomes once a card lands. */
-export function applyReward(
-  reward: BruhReward,
-  teams: BruhTeamRow[],
-  pickedTeamId: string,
-  giftTeamId: string,
-): { id: string; score: number }[] {
-  const out: { id: string; score: number }[] = [];
-  const me = teams.find((t) => t.id === pickedTeamId);
-  if (!me) return out;
-
-  if (reward.scope === "self") {
-    if (reward.pts === "zero") out.push({ id: me.id, score: 0 });
-    else out.push({ id: me.id, score: me.score + reward.pts });
-    return out;
-  }
-  if (reward.scope === "others") {
-    const pts = reward.pts === "zero" ? 0 : reward.pts;
-    for (const t of teams) if (t.id !== me.id) out.push({ id: t.id, score: t.score + pts });
-    return out;
-  }
-  // gift: the teacher names the recipient out loud; default to last place.
-  const pts = reward.pts === "zero" ? 0 : reward.pts;
-  const chosen = teams.find((t) => t.id === giftTeamId && t.id !== me.id);
-  const target = chosen ?? [...teams].filter((t) => t.id !== me.id).sort((a, b) => a.score - b.score)[0];
-  if (target) out.push({ id: target.id, score: target.score + pts });
-  return out;
 }

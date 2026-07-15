@@ -187,6 +187,48 @@ export function bigQ(question: string): BigQuestion {
 }
 
 // ---------------------------------------------------------------------------
+// Scoring
+
+export interface BruhScorable {
+  id: string;
+  score: number;
+}
+
+/**
+ * What each team's score becomes once a card lands. Pure, so the outcome of a
+ * draw can be reasoned about (and tested) without a database.
+ *
+ * Only the teams that actually change are returned.
+ */
+export function applyReward<T extends BruhScorable>(
+  reward: BruhReward,
+  teams: T[],
+  pickedTeamId: string,
+  giftTeamId: string,
+): { id: string; score: number }[] {
+  const out: { id: string; score: number }[] = [];
+  const me = teams.find((t) => t.id === pickedTeamId);
+  if (!me) return out;
+  const pts = reward.pts === "zero" ? 0 : reward.pts;
+
+  if (reward.scope === "self") {
+    out.push({ id: me.id, score: reward.pts === "zero" ? 0 : me.score + pts });
+    return out;
+  }
+  if (reward.scope === "others") {
+    for (const t of teams) if (t.id !== me.id) out.push({ id: t.id, score: t.score + pts });
+    return out;
+  }
+  // gift: the teacher names the recipient out loud; default to last place.
+  // Never the drawer - that would quietly turn a wild card into a plain gain.
+  const others = teams.filter((t) => t.id !== me.id);
+  const chosen = others.find((t) => t.id === giftTeamId);
+  const target = chosen ?? [...others].sort((a, b) => a.score - b.score)[0];
+  if (target) out.push({ id: target.id, score: target.score + pts });
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Teams
 
 export const BRUH_TEAM_COLORS = [
