@@ -21,6 +21,7 @@ import { inferClassroomStage } from "@/lib/classroomPilot";
 import { teacherApiRequest, teacherPost } from "@/lib/teacherApi";
 import {
   LIVE_FLOW_MODE,
+  clearStoredTeacherSession,
   getStoredTeacherSessionId,
   liveTimerSeconds,
   type DiscussionPhaseSnapshot,
@@ -67,6 +68,8 @@ interface LineupItem {
 interface TeacherSessionRow {
   id: string;
   status: string;
+  period_id: string;
+  join_code: string | null;
   broadcast: string | null;
   live_flow: LiveClassFlowSnapshot | null;
   remote_command: TeacherRemoteCommand | null;
@@ -481,6 +484,7 @@ export default function ControlPage() {
   const [soundUrls, setSoundUrls] = useState<Record<string, string>>({});
   const [teacherSession, setTeacherSession] = useState<TeacherSessionRow | null>(null);
   const [joinCode, setJoinCode] = useState<string | null>(null);
+  const [endingSession, setEndingSession] = useState(false);
   const [discussionFlow, setDiscussionFlow] = useState<DiscussionPhaseSnapshot | null>(null);
   const [controlPoll, setControlPoll] = useState<ControlPoll | null>(null);
   const [pollKind, setPollKind] = useState<LivePollKind>("short-answer");
@@ -544,15 +548,18 @@ export default function ControlPage() {
     })();
   }, []);
 
-  // The session page records the current teacher session locally. When that is
-  // unavailable, use the open Live Class Flow session as a safe fallback.
+  // Recover the newest server-side open session. This keeps Control attached
+  // even on a different teacher device or before Live Class Flow is selected.
   useEffect(() => {
     let stopped = false;
     const setCurrentTeacherSession = (next: TeacherSessionRow | null) => {
+      setJoinCode(next?.join_code || null);
       setTeacherSession((current) => (
         current?.id === next?.id
         && current?.status === next?.status
+        && current?.join_code === next?.join_code
         && current?.broadcast === next?.broadcast
+        && current?.live_flow?.updatedAt === next?.live_flow?.updatedAt
         && current?.remote_command?.nonce === next?.remote_command?.nonce
           ? current
           : next
@@ -561,22 +568,11 @@ export default function ControlPage() {
 
     const findTeacherSession = async () => {
       const storedSessionId = getStoredTeacherSessionId();
-      if (storedSessionId) {
-        const result = await teacherApiRequest<{ session: TeacherSessionRow }>(
-          `/api/teacher/session?sessionId=${encodeURIComponent(storedSessionId)}`,
-        ).catch(() => ({ session: null }));
-        if (stopped) return;
-        const storedSession = result.session;
-        if (storedSession?.status === "open") {
-          setCurrentTeacherSession(storedSession);
-          return;
-        }
-      }
-
       const result = await teacherApiRequest<{ sessions: TeacherSessionRow[] }>("/api/teacher/session")
         .catch(() => ({ sessions: [] }));
-      const liveSession = result.sessions.find((candidate) => candidate.status === "open" && candidate.broadcast === LIVE_FLOW_MODE) ?? null;
-      if (!stopped) setCurrentTeacherSession(liveSession);
+      const openSession = result.sessions.find((candidate) => candidate.status === "open") ?? null;
+      if (storedSessionId && storedSessionId !== openSession?.id) clearStoredTeacherSession(storedSessionId);
+      if (!stopped) setCurrentTeacherSession(openSession);
     };
 
     void findTeacherSession();
@@ -585,22 +581,6 @@ export default function ControlPage() {
       stopped = true;
       window.clearInterval(interval);
     };
-  }, [supabase]);
-
-  // Show the join code on the pacer during arrival/warm-up. Polls the newest
-  // open session's code directly, so it works on the second-board device even
-  // though that machine has no stored teacher session of its own.
-  useEffect(() => {
-    let stop = false;
-    const tick = async () => {
-      const result = await teacherApiRequest<{ sessions: Array<{ status: string; join_code: string | null }> }>("/api/teacher/session")
-        .catch(() => ({ sessions: [] }));
-      const open = result.sessions.find((candidate) => candidate.status === "open");
-      if (!stop) setJoinCode(open?.join_code || null);
-    };
-    void tick();
-    const t = window.setInterval(tick, 4000);
-    return () => { stop = true; window.clearInterval(t); };
   }, [supabase]);
 
   const persistBank = useCallback((next: ClassState[]) => {
@@ -1536,6 +1516,31 @@ export default function ControlPage() {
     });
   }
 
+  async function endTeacherSession() {
+    if (!teacherSession || endingSession) return;
+    if (!window.confirm("End this session for every connected student?")) return;
+    const sessionId = teacherSession.id;
+    setEndingSession(true);
+    setTodayMsg(null);
+    try {
+      await teacherPost("/api/teacher/session", { action: "close", sessionId });
+      clearStoredTeacherSession(sessionId);
+      pendingLiveFlowSyncRef.current = null;
+      setTeacherSession(null);
+      setJoinCode(null);
+      setControlPoll(null);
+      setPollAnswers([]);
+      setLiveChallenge(null);
+      setLiveChallengeBoard([]);
+      setFlowSyncError(null);
+      setTodayMsg("Session ended. Connected student screens have been released.");
+    } catch (actionError) {
+      setTodayMsg(actionError instanceof Error ? actionError.message : "The session could not be ended.");
+    } finally {
+      setEndingSession(false);
+    }
+  }
+
   function toggleFullscreen() {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
     else document.exitFullscreen?.();
@@ -1570,7 +1575,9 @@ export default function ControlPage() {
       ? formatLiveFlowError(flowSyncError)
       : liveFlowConnected
         ? "Live Class Flow connected"
-        : "Select Live Class Flow in Session";
+        : teacherSession?.status === "open"
+          ? `Session ${teacherSession.join_code || "open"} - select Live Class Flow`
+          : "Start a session to connect students";
   const groupedBankSections = BANK_GROUPS.map((group) => ({
     ...group,
     states: bank.filter((state) => (group.stateIds as readonly string[]).includes(state.id)),
@@ -1603,6 +1610,9 @@ export default function ControlPage() {
         .cx-sbtn { font-size:0.76rem; font-weight:800; letter-spacing:0.05em; text-transform:uppercase; color:#a39a88; background:transparent; border:1px solid #2a241a; border-radius:7px; padding:7px 12px; cursor:pointer; text-decoration:none; transition:all 140ms ease; }
         .cx-sbtn:hover { border-color:${accent}; color:#fff; }
         .cx-home { border-color:#3a3228; color:#d8d2c5; }
+        .cx-end-session { border-color:rgba(249,83,53,0.55); color:#fca5a5; }
+        .cx-end-session:hover { border-color:#f95335; color:#fff; background:rgba(249,83,53,0.14); }
+        .cx-end-session:disabled { opacity:0.5; cursor:wait; }
         .cx-divider { width:1px; height:22px; background:#2a241a; flex:none; margin:0 2px; }
 
         .cx-main { display:grid; align-content:center; justify-items:center; gap:18px; padding:18px; text-align:center; }
@@ -1728,7 +1738,12 @@ export default function ControlPage() {
           <p className="cx-live-status">{liveFlowStatus}</p>
           <div className="cx-tbtns">
             <a className="cx-sbtn cx-home" href="/teacher">Home</a>
-            <a className="cx-sbtn" href="/session">Session</a>
+            <a className="cx-sbtn" href={teacherSession ? `/session?sessionId=${encodeURIComponent(teacherSession.id)}` : "/session"}>{teacherSession ? "Session" : "Start session"}</a>
+            {teacherSession && (
+              <button className="cx-sbtn cx-end-session" onClick={endTeacherSession} disabled={endingSession}>
+                {endingSession ? "Ending session" : "End session"}
+              </button>
+            )}
             <a className="cx-sbtn" href="/session#challenge">Games</a>
             <a className="cx-sbtn" href="/roster">Rosters</a>
             <span className="cx-divider" />
@@ -1962,7 +1977,7 @@ export default function ControlPage() {
                       <>
                         <label className="cx-tool-field" htmlFor="game-skill">Game
                           <select id="game-skill" className="cx-tool-select" value={toolSetup.gameSkill} onChange={(event) => { updateToolSetup("gameSkill", event.target.value); updateToolSetup("gameLevel", "1"); }}>
-                            {SKILLS.map((s) => <option key={s.key} value={s.key}>{s.emoji} {s.label}</option>)}
+                            {SKILLS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
                           </select>
                         </label>
                         <label className="cx-tool-field" htmlFor="game-level">Level
