@@ -111,7 +111,7 @@ export default function PaceSupportPage() {
             <section className="pace-current" aria-label="Current directions and timer">
               <div className="pace-current-inner">
                 <p className="pace-current-label">Current directions</p>
-                <h2 className="pace-directions">{state.description}</h2>
+                <h2 className="pace-directions">{flow.presentation?.paceDirections || state.description}</h2>
               </div>
             </section>
           </>

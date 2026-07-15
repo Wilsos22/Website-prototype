@@ -31,6 +31,14 @@ export interface LessonStepData {
   advance: string;
   required: boolean;
   linkUrl: string;
+  mainDisplay: string;
+  paceDirections: string;
+  studentAction: string;
+  remoteActions: string;
+  discussionStems: string;
+  vocabulary: string;
+  responseMode: string;
+  workSpaceAvailable?: boolean;
 }
 
 
@@ -59,6 +67,16 @@ export interface LessonData {
   // Lesson-flow fields for the auto-built sequence. Empty if the Notion column is absent.
   learningIntention: string;
   successCriteria: string;
+  selectedSuccessCriterion: string;
+  classroomMode: string;
+  discussionStems: string;
+  discussionVocabulary: string;
+  requiredPaperWork: string;
+  requiredDigitalWork: string;
+  optionalSupport: string;
+  bigDogChallenge: string;
+  dueAndTurnIn: string;
+  helpPath: string;
   discussionPrompt: string;
   practiceProblems: string;
   // Pre-planned reteach groups: one line per group, "misconception tag :: prepared move".
@@ -365,6 +383,16 @@ async function mapPage(page: NotionPage, token: string, cache: Map<string, Promi
       linkUrl: extractFirstText(step, ["Link", "Link URL"])
         ? extractUrl(step["Link"]) || extractUrl(step["Link URL"])
         : "",
+      mainDisplay: extractText(step["Main Display"]),
+      paceDirections: extractText(step["Pace Directions"]),
+      studentAction: extractText(step["Student Action"]),
+      remoteActions: extractText(step["Remote Actions"]),
+      discussionStems: extractText(step["Discussion Stems"]),
+      vocabulary: extractText(step["Vocabulary"]),
+      responseMode: extractText(step["Response Mode"]),
+      workSpaceAvailable: step["Work Space Available"]?.type === "checkbox"
+        ? step["Work Space Available"].checkbox
+        : undefined,
     } satisfies LessonStepData;
   }));
   steps.sort((a, b) => a.order - b.order || a.startMinute - b.startMinute || a.title.localeCompare(b.title));
@@ -398,6 +426,16 @@ async function mapPage(page: NotionPage, token: string, cache: Map<string, Promi
     exitTicketLink: await resolveFirstLink(p, ["Exit Ticket Link", "Exit-Ticket Link", "Exit Ticket", "Exit Ticket URL"], token, cache),
     learningIntention: extractText(p["Learning Intention"]),
     successCriteria: extractText(p["Success Criteria"]),
+    selectedSuccessCriterion: extractText(p["Selected Success Criterion"]),
+    classroomMode: extractText(p["Classroom Mode"]),
+    discussionStems: extractText(p["Discussion Stems"]),
+    discussionVocabulary: extractText(p["Discussion Vocabulary"]),
+    requiredPaperWork: extractText(p["Required Paper Work"]),
+    requiredDigitalWork: extractText(p["Required Digital Work"]),
+    optionalSupport: extractText(p["Optional Support"]),
+    bigDogChallenge: extractText(p["Big Dog Challenge"]),
+    dueAndTurnIn: extractText(p["Due and Turn In"]),
+    helpPath: extractText(p["Help Path"]),
     discussionPrompt: extractText(p["Discussion Prompt"]),
     practiceProblems: extractText(p["Practice Problems"]),
     misconceptionPlans: extractText(p["Misconception Plans"]),

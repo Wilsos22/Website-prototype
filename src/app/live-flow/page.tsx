@@ -355,15 +355,12 @@ export default function LiveFlowPage() {
     const key = sessionId ? pollDraftKey(sessionId, activeResponseKey) : null;
     if (!key || loadedDraftKeyRef.current !== key) return;
     setPollSaveState("editing");
-    const save = window.setTimeout(() => {
-      try {
-        localStorage.setItem(key, JSON.stringify({ answer: pollAnswer, fistRating } satisfies StoredPollDraft));
-        setPollSaveState("saved");
-      } catch {
-        setPollSaveState("error");
-      }
-    }, 350);
-    return () => window.clearTimeout(save);
+    try {
+      localStorage.setItem(key, JSON.stringify({ answer: pollAnswer, fistRating } satisfies StoredPollDraft));
+      setPollSaveState("saved");
+    } catch {
+      setPollSaveState("error");
+    }
   }, [activePollId, activeResponseKey, fistRating, pollAnswer, submittedPollIds]);
 
   async function submitPollAnswer(answer: string) {
@@ -408,7 +405,7 @@ export default function LiveFlowPage() {
   const phase = flow?.phase ?? null;
   const discussion = phase ? DISCUSSION_CONTENT[phase.id] : null;
   const title = discussion?.title ?? flow?.state?.label ?? "Waiting for the teacher.";
-  const subtitle = discussion?.subtitle ?? flow?.state?.description ?? "";
+  const subtitle = discussion?.subtitle ?? flow?.presentation?.studentAction ?? flow?.state?.description ?? "";
   const phaseMedia = phase?.media ?? null;
   const timer = flow?.timer ?? null;
   const showTimer = Boolean(timer && timer.totalSeconds > 0 && (!phase || phase.timed));
@@ -435,15 +432,25 @@ export default function LiveFlowPage() {
             : pollSaveState === "editing"
               ? "Editing"
               : "Ready";
-  const sentenceStems = (phase?.sentenceStems ? phase.sentenceStems : discussion?.sentenceStems ?? [])
+  const sentenceStems = (flow?.presentation?.discussionStems?.length
+    ? flow.presentation.discussionStems
+    : phase?.sentenceStems?.length
+      ? phase.sentenceStems
+      : discussion?.sentenceStems ?? [])
     .map((stem) => stem.trim())
     .filter(Boolean);
-  const keyVocabulary = (phase?.keyVocabulary ? phase.keyVocabulary : discussion?.keyVocabulary ?? [])
+  const keyVocabulary = (flow?.presentation?.vocabulary?.length
+    ? flow.presentation.vocabulary
+    : phase?.keyVocabulary?.length
+      ? phase.keyVocabulary
+      : discussion?.keyVocabulary ?? [])
     .map((word) => word.trim())
     .filter(Boolean);
   const showDiscussionSupports = !activePoll && (sentenceStems.length > 0 || keyVocabulary.length > 0);
   const resource = flow?.resource ?? null;
-  const actionBody = flow?.paper?.task || flow?.presentation?.body || "";
+  const actionBody = flow?.state?.id === "independent" && flow?.paper?.task
+    ? flow.paper.task
+    : flow?.presentation?.studentAction || "";
   const showActionBody = Boolean(!activePoll && !resource && actionBody && actionBody.trim() !== subtitle.trim());
   const resourceNeedsIdentity = Boolean(resource?.url.includes(WARMUP_IDENTITY_PLACEHOLDER));
   const resolvedResourceUrl = resource?.url && (!resourceNeedsIdentity || authUserId)
@@ -515,7 +522,10 @@ export default function LiveFlowPage() {
         .lf-connection { position:fixed; left:50%; top:16px; z-index:6; transform:translateX(-50%); border:1px solid #c78b24; border-radius:999px; background:#fff4d8; color:#694716; padding:9px 14px; font-size:0.76rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; box-shadow:var(--bdb-shadow-sm); }
         .lf-loading { color:var(--bdb-ink-soft); font-weight:800; }
         @media (max-width:760px) { .lf-supports { grid-template-columns:1fr; } }
-        @media (max-width:600px) { .lf-page { padding:26px 18px; } }
+        @media (max-width:600px) {
+          .lf-page { padding:84px 18px 26px; }
+          .lf-connection { top:68px; left:18px; right:18px; transform:none; box-sizing:border-box; text-align:center; }
+        }
       `}</style>
 
       <button className="lf-exit" type="button" onClick={exitLiveFlow}>Exit Live Flow</button>

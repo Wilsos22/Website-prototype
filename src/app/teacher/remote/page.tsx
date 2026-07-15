@@ -75,6 +75,7 @@ export default function TeacherRemotePage() {
   const [lastReceipt, setLastReceipt] = useState<string | null>(null);
   const [pollAnswers, setPollAnswers] = useState<PollAnswer[]>([]);
   const [boardPanelOpen, setBoardPanelOpen] = useState(false);
+  const [endingSession, setEndingSession] = useState(false);
 
   useEffect(() => {
     try {
@@ -188,6 +189,33 @@ export default function TeacherRemotePage() {
     try { localStorage.removeItem(REMOTE_SESSION_KEY); } catch { /* ignore */ }
   }, []);
 
+  const endSession = useCallback(async () => {
+    if (!session || endingSession) return;
+    if (!window.confirm("End this session for every connected student?")) return;
+    setEndingSession(true);
+    setStatus("Ending the confirmed class session.");
+    try {
+      const response = await fetch("/api/teacher/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "close", sessionId: session.id }),
+      });
+      const data = await response.json() as { closed?: boolean; error?: string };
+      if (!response.ok || !data.closed) throw new Error(data.error || "The session could not be ended.");
+      try { localStorage.removeItem(REMOTE_SESSION_KEY); } catch { /* ignore */ }
+      setSession(null);
+      setSelectedSessionId(null);
+      setPendingCommand(null);
+      setLastReceipt(null);
+      setBoardPanelOpen(false);
+      setStatus("Session ended. Connected student screens have been released.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "The session could not be ended.");
+    } finally {
+      setEndingSession(false);
+    }
+  }, [endingSession, session]);
+
   const send = useCallback(async (button: RemoteDeckButton) => {
     if (!session || busy) return;
     setBusy(button.action);
@@ -253,7 +281,7 @@ export default function TeacherRemotePage() {
   }, [busy, session]);
 
   useEffect(() => {
-    if (session?.liveFlow?.presentation?.boardOpen) setBoardPanelOpen(true);
+    setBoardPanelOpen(Boolean(session?.liveFlow?.presentation?.boardOpen));
   }, [session?.liveFlow?.presentation?.boardOpen]);
 
   const flow = session?.liveFlow ?? null;
@@ -347,8 +375,10 @@ export default function TeacherRemotePage() {
         .response-answer { color:#b7c3d4; overflow-wrap:anywhere; }
         .response-empty { margin:0; color:#94a3b8; font-size:0.84rem; font-weight:700; }
         .remote-links { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
-        .remote-link, .remote-change { display:flex; min-height:54px; align-items:center; justify-content:center; border:1px solid #35415a; border-radius:12px; background:#151b28; color:#dce6f5; padding:0 12px; text-align:center; text-decoration:none; font:inherit; font-weight:850; cursor:pointer; }
+        .remote-link, .remote-change, .remote-end { display:flex; min-height:54px; align-items:center; justify-content:center; border:1px solid #35415a; border-radius:12px; background:#151b28; color:#dce6f5; padding:0 12px; text-align:center; text-decoration:none; font:inherit; font-weight:850; cursor:pointer; }
         .remote-change { color:#fcd67d; }
+        .remote-end { border-color:#7f3340; color:#ffb2bc; }
+        .remote-end:disabled { opacity:0.5; cursor:not-allowed; }
         @media (max-width:680px) {
           .deck-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
           .deck-grid.stages .deck-key.timer { grid-column:1 / -1; grid-row:1; }
@@ -401,7 +431,7 @@ export default function TeacherRemotePage() {
               <div>
                 <p className="current-label">{lesson?.code || "Live lesson"} · {sequence ? `Step ${sequence.currentIndex + 1} of ${sequence.totalSteps}` : "Current step"}</p>
                 <h2 className="current-title">{flow?.state?.label || "Waiting for a lesson step"}</h2>
-                <p className="current-directions">{flow?.state?.description || "The classroom computer has not published directions yet."}</p>
+                <p className="current-directions">{flow?.presentation?.remoteActions || flow?.presentation?.paceDirections || flow?.state?.description || "The classroom computer has not published directions yet."}</p>
                 <p className="current-next"><strong>Next:</strong> {sequence?.nextLabel || "Lesson closeout"}{sequence?.nextDirections ? ` - ${sequence.nextDirections}` : ""}</p>
               </div>
               <div className={`current-time ${timerFinished ? "finished" : ""}`}>{timer ? formatTime(timerSeconds) : "--:--"}</div>
@@ -470,8 +500,11 @@ export default function TeacherRemotePage() {
             <div className="remote-links">
               <a className="remote-link" href={stageLinks.present} target="_blank" rel="noreferrer">Open main projector</a>
               <a className="remote-link" href={stageLinks.pace} target="_blank" rel="noreferrer">Open Pace + Support</a>
-              <button className="remote-link" type="button" disabled={controlsDisabled} onClick={() => { void setWritingMode(true); }}>Open work space</button>
+              {flow?.presentation && flow.presentation.workSpaceAvailable !== false ? (
+                <button className="remote-link" type="button" disabled={controlsDisabled} onClick={() => { void setWritingMode(true); }}>Open work space</button>
+              ) : null}
               <button className="remote-change" type="button" onClick={changeSession}>Change session</button>
+              <button className="remote-end" type="button" disabled={endingSession} onClick={() => { void endSession(); }}>{endingSession ? "Ending session" : "End session"}</button>
             </div>
           </>
         )}

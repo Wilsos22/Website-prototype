@@ -9,7 +9,9 @@
     "typecheck": "tsc --noEmit",
     "test:mastery": "tsc src/lib/mastery.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2020 --skipLibCheck && node scripts/mastery-golden.mjs",
     "test:grouping": "tsc src/lib/grouping.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2021 --skipLibCheck && node scripts/grouping-golden.mjs",
-    "test:warmup": "tsc src/lib/warmupEngine.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2021 --skipLibCheck && node scripts/warmup-golden.mjs"
+    "test:warmup": "tsc src/lib/warmupEngine.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2021 --skipLibCheck && node scripts/warmup-golden.mjs",
+    "test:live-flow-contract": "tsc src/lib/liveFlowContract.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2021 --skipLibCheck && node scripts/live-flow-contract.mjs",
+    "test:notion-lesson-contract": "tsc src/lib/notionLessons.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2021 --types node --skipLibCheck && node scripts/notion-lesson-contract.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

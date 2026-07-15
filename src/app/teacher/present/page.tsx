@@ -64,6 +64,7 @@ function discussionRounds(text: string) {
 const INDEPENDENT_SECTION_LABELS = [
   "Required Paper Work",
   "Required Digital Work",
+  "Due and Turn In",
   "Due",
   "Turn in",
   "Help path",
@@ -80,7 +81,7 @@ function independentSections(text: string) {
   const labelsByName = new Map(
     INDEPENDENT_SECTION_LABELS.map((label) => [label.toLowerCase(), label]),
   );
-  const labelPattern = /(Required Paper Work|Required Digital Work|Due|Turn in|Help path|Optional Support|Challenge)\s*:\s*/gi;
+  const labelPattern = /(Required Paper Work|Required Digital Work|Due and Turn In|Due|Turn in|Help path|Optional Support|Challenge)\s*:\s*/gi;
   const matches = Array.from(content.matchAll(labelPattern));
 
   if (!matches.length) {
@@ -104,6 +105,26 @@ function independentSections(text: string) {
   }
 
   return sections;
+}
+
+function structuredWorkSections(
+  lesson: NonNullable<LiveClassFlowSnapshot["lesson"]> | null,
+  closeout: boolean,
+) {
+  if (!lesson) return [];
+  const sections: Array<{ label: IndependentSectionLabel; body: string }> = [
+    { label: "Required Paper Work", body: lesson.requiredPaperWork || "" },
+    ...(closeout ? [
+      { label: "Required Digital Work" as IndependentSectionLabel, body: lesson.requiredDigitalWork || "" },
+    ] : []),
+    ...(!closeout ? [
+      { label: "Due and Turn In" as IndependentSectionLabel, body: lesson.dueAndTurnIn || "" },
+      { label: "Help path" as IndependentSectionLabel, body: lesson.helpPath || "" },
+    ] : []),
+    { label: "Optional Support", body: lesson.optionalSupport || "" },
+    { label: "Challenge", body: lesson.bigDogChallenge || "" },
+  ];
+  return sections.filter((section) => section.body.trim());
 }
 
 export default function ClassroomStagePage() {
@@ -179,24 +200,37 @@ export default function ClassroomStagePage() {
   const embeddedResourceUrl = resource?.url.includes("docs.google.com/forms")
     ? `${resource.url}${resource.url.includes("?") ? "&" : "?"}embedded=true`
     : null;
+  const embeddedAssignedToolUrl = presentation?.responseMode?.trim().toLowerCase() === "assigned tool"
+    && resource?.url.startsWith("/")
+    ? resource.url
+    : null;
   const liveToolUrl = flow ? toolUrl(flow) : null;
   const showBoardPanel = Boolean(session && presentation?.boardOpen && presentation.mode !== "board");
-  const slideBody = presentation?.body || state?.description || "";
+  const slideBody = presentation?.mainDisplay || presentation?.body || state?.description || "";
   const score = theme.id === "scenario" ? halftimeScenario(slideBody) : null;
   const configuredDiscussionSupports = discussionSupportsForLesson(lesson?.code);
-  const useRatioDiscussionSupports = Boolean(lesson?.code?.toUpperCase().startsWith("M2.T1.L1"));
-  const sentenceStems = useRatioDiscussionSupports
-    ? configuredDiscussionSupports.sentenceStems
-    : phase?.sentenceStems?.filter(Boolean).length
-      ? phase.sentenceStems
-      : configuredDiscussionSupports.sentenceStems;
-  const keyVocabulary = useRatioDiscussionSupports
-    ? configuredDiscussionSupports.keyVocabulary
-    : phase?.keyVocabulary?.filter(Boolean).length
-      ? phase.keyVocabulary
-      : configuredDiscussionSupports.keyVocabulary;
+  const sentenceStems = presentation?.discussionStems?.filter(Boolean).length
+    ? presentation.discussionStems
+    : lesson?.discussionStems?.filter(Boolean).length
+      ? lesson.discussionStems
+      : phase?.sentenceStems?.filter(Boolean).length
+        ? phase.sentenceStems
+        : configuredDiscussionSupports.sentenceStems;
+  const keyVocabulary = presentation?.vocabulary?.filter(Boolean).length
+    ? presentation.vocabulary
+    : lesson?.discussionVocabulary?.filter(Boolean).length
+      ? lesson.discussionVocabulary
+      : phase?.keyVocabulary?.filter(Boolean).length
+        ? phase.keyVocabulary
+        : configuredDiscussionSupports.keyVocabulary;
   const rounds = discussionRounds(slideBody);
-  const paperSections = theme.id === "independent" ? independentSections(slideBody) : [];
+  const structuredSections = structuredWorkSections(lesson, theme.id === "closeout");
+  const paperSections = theme.id === "independent" || theme.id === "closeout"
+    ? structuredSections.length ? structuredSections : independentSections(slideBody)
+    : [];
+  const assignedToolActive = presentation?.responseMode?.trim().toLowerCase() === "assigned tool";
+  const showPollPanel = Boolean(poll && (theme.id === "learning-check" || poll.stage === "results" || !presentation?.mainDisplay));
+  const showResourcePanel = Boolean(resource && !showPollPanel && (assignedToolActive || !presentation?.mainDisplay));
   const style = {
     "--stage-accent": theme.accent,
     "--stage-base": theme.projectorBase,
@@ -335,18 +369,14 @@ export default function ClassroomStagePage() {
           {showLessonTargets && !resource ? (
             <aside className="stage-success" aria-label="Success criteria">
               <p className="stage-success-label">Success criteria</p>
-              <p className="stage-success-text">{lesson?.successCriteria || "Success criteria will appear when the lesson is loaded."}</p>
+              <p className="stage-success-text">{lesson?.selectedSuccessCriterion || lesson?.successCriteria || "Success criteria will appear when the lesson is loaded."}</p>
             </aside>
           ) : null}
           {loading ? (
             <div className="stage-empty"><div><h1>Connecting to the classroom</h1><p>{sessionMessage}</p></div></div>
           ) : !session || !flow || !state ? (
             <div className="stage-empty"><div><h1>Ready for class</h1><p>{sessionMessage}</p></div></div>
-          ) : resource ? (
-            embeddedResourceUrl ? <iframe className="stage-resource" src={embeddedResourceUrl} title={resource.label} /> : (
-              <div className="stage-resource-link"><a href={resource.url} target="_blank" rel="noreferrer">{resource.label}</a></div>
-            )
-          ) : poll ? (
+          ) : showPollPanel && poll ? (
             <div className="stage-poll">
               {showLessonTargets && lesson?.learningIntention ? <p className="stage-learning">{lesson.learningIntention}</p> : null}
               <h2 className="stage-question">{poll.stage === "results" ? "Class Results" : poll.question}</h2>
@@ -369,6 +399,10 @@ export default function ClassroomStagePage() {
               )}
               {poll.stage === "results" ? <p className="stage-response-count">{poll.question}</p> : null}
             </div>
+          ) : showResourcePanel && resource ? (
+            embeddedResourceUrl || embeddedAssignedToolUrl ? <iframe className="stage-resource" src={embeddedResourceUrl || embeddedAssignedToolUrl || ""} title={resource.label} /> : (
+              <div className="stage-resource-link"><a href={resource.url} target="_blank" rel="noreferrer">{resource.label}</a></div>
+            )
           ) : liveToolUrl ? (
             <iframe className="stage-tool" src={liveToolUrl} title={flow.tool?.label || "Lesson tool"} />
           ) : presentation?.mode === "board" ? (
@@ -403,8 +437,8 @@ export default function ClassroomStagePage() {
                 </section>
               </aside>
             </section>
-          ) : theme.id === "independent" ? (
-            <section className="stage-independent" aria-label="Independent paper work directions">
+          ) : theme.id === "independent" || theme.id === "closeout" ? (
+            <section className="stage-independent" aria-label={theme.id === "closeout" ? "Closeout assignment summary" : "Independent paper work directions"}>
               <div className="stage-independent-grid">
                 {paperSections.map((section) => (
                   <article

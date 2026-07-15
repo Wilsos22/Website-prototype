@@ -1,6 +1,16 @@
 // Shared client-safe contracts for the teacher control runtime and student live flow.
 
 import type { ClassroomStageId } from "@/lib/classroomPilot";
+import type { LivePollKind } from "@/lib/liveFlowContract";
+
+export {
+  LIVE_RESPONSE_MODES,
+  liveAssignedToolRoute,
+  liveResponseModePollKind,
+  splitLiveFlowLines,
+  splitLiveFlowVocabulary,
+} from "@/lib/liveFlowContract";
+export type { LivePollKind, LiveResponseMode } from "@/lib/liveFlowContract";
 
 export const LIVE_FLOW_MODE = "live-flow";
 export const LIVE_FLOW_ROUTE = "/live-flow";
@@ -9,7 +19,6 @@ export const TEACHER_SESSION_KEY = "bdm-teacher-session";
 export const CLASS_MODE_EXIT_KEY = "bdm-class-mode-exited";
 
 export type DiscussionPhaseId = "think" | "marker" | "table" | "revise" | "share";
-export type LivePollKind = "short-answer" | "multiple-choice" | "fist-to-five";
 export const TEACHER_REMOTE_ACTIONS = [
   "next",
   "previous",
@@ -140,11 +149,23 @@ export interface LiveFlowSequenceStep {
   notionStepId: string | null;
   notionLessonId: string | null;
   lessonCode: string;
+  mainDisplay?: string;
+  paceDirections?: string;
+  studentAction?: string;
+  remoteActions?: string;
+  discussionStems?: string[];
+  vocabulary?: string[];
+  responseMode?: string;
+  workSpaceAvailable?: boolean;
 }
 
 export interface LiveClassFlowSnapshot {
-  version: 1;
+  version: 2;
   updatedAt: string;
+  transition?: {
+    token: string;
+    startedAt: string;
+  };
   state: {
     id: string;
     label: string;
@@ -174,9 +195,17 @@ export interface LiveClassFlowSnapshot {
   presentation: {
     title: string;
     body: string;
+    mainDisplay?: string;
     mode: "board" | "directions" | "resource" | "poll" | "tool";
     notionStepId: string | null;
     boardOpen?: boolean;
+    paceDirections?: string;
+    studentAction?: string;
+    remoteActions?: string;
+    responseMode?: string;
+    workSpaceAvailable?: boolean;
+    discussionStems?: string[];
+    vocabulary?: string[];
   } | null;
   tool: LiveToolConfig | null;
   lesson?: {
@@ -185,6 +214,16 @@ export interface LiveClassFlowSnapshot {
     title: string;
     learningIntention: string;
     successCriteria: string;
+    selectedSuccessCriterion?: string;
+    classroomMode?: string;
+    discussionStems?: string[];
+    discussionVocabulary?: string[];
+    requiredPaperWork?: string;
+    requiredDigitalWork?: string;
+    optionalSupport?: string;
+    bigDogChallenge?: string;
+    dueAndTurnIn?: string;
+    helpPath?: string;
   } | null;
   sequence?: {
     currentIndex: number;

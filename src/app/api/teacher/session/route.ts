@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 type SessionAction =
   | { action: "start"; periodId?: unknown; joinCode?: unknown; assignmentId?: unknown }
-  | { action: "update"; sessionId?: unknown; broadcast?: unknown; liveFlow?: unknown; abbie?: unknown; remoteCommand?: unknown }
+  | { action: "update"; sessionId?: unknown; broadcast?: unknown; liveFlow?: unknown; expectedLiveFlowUpdatedAt?: unknown; abbie?: unknown; remoteCommand?: unknown }
   | { action: "close"; sessionId?: unknown };
 
 function text(value: unknown, max: number): string {
@@ -108,14 +108,25 @@ export async function POST(request: Request) {
     if ("remoteCommand" in body) patch.remote_command = body.remoteCommand ?? null;
     if (!Object.keys(patch).length) return Response.json({ error: "No session fields were supplied." }, { status: 400 });
 
-    const { data, error: updateError } = await db
+    let update = db
       .from("sessions")
       .update(patch)
       .eq("id", sessionId)
-      .eq("status", "open")
+      .eq("status", "open");
+    const checksLiveFlowRevision = "liveFlow" in body && "expectedLiveFlowUpdatedAt" in body;
+    if (checksLiveFlowRevision) {
+      const expectedRevision = text(body.expectedLiveFlowUpdatedAt, 80);
+      update = expectedRevision
+        ? update.filter("live_flow->>updatedAt", "eq", expectedRevision)
+        : update.is("live_flow", null);
+    }
+    const { data, error: updateError } = await update
       .select("id,status,broadcast,live_flow,abbie,remote_command")
       .maybeSingle();
     if (updateError) return Response.json({ error: updateError.message }, { status: 500 });
+    if (!data && checksLiveFlowRevision) {
+      return Response.json({ error: "The live lesson changed on another teacher device. Control is reconnecting to the newer state." }, { status: 409 });
+    }
     if (!data) return Response.json({ error: "Open session not found." }, { status: 404 });
     return Response.json({ session: data });
   }
