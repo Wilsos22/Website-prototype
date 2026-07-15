@@ -18,6 +18,7 @@ import {
 } from "@/lib/studentApi";
 
 type ClaimedStudent = { id: string; name: string; email: string };
+type AdmissionRequest = { sessionId: string; requestCode: string };
 
 const REQUIRE_GOOGLE_AUTH = process.env.NEXT_PUBLIC_REQUIRE_STUDENT_GOOGLE_AUTH === "true";
 const WARMUP_IDENTITY = process.env.NEXT_PUBLIC_WARMUP_IDENTITY_ENABLED === "true";
@@ -33,6 +34,8 @@ export default function StudentLanding() {
   const [joining, setJoining] = useState(false);
   const [pendingCode, setPendingCode] = useState<string | null>(null);
   const [warmupHref, setWarmupHref] = useState<string | null>(null);
+  const [admissionRequest, setAdmissionRequest] = useState<AdmissionRequest | null>(null);
+  const [admissionError, setAdmissionError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(REQUIRE_GOOGLE_AUTH);
   const [student, setStudent] = useState<ClaimedStudent | null>(null);
 
@@ -46,7 +49,10 @@ export default function StudentLanding() {
             await ensureAnonymousStudentSession();
             setCode(pending);
             setPendingCode(pending);
-            await loadWarmupLink(pending);
+            await Promise.all([
+              loadWarmupLink(pending),
+              requestTeacherAdmission(pending),
+            ]);
           }
         } catch (error) {
           setJoinErr(error instanceof Error ? error.message : "Secure student sign-in is unavailable.");
@@ -99,6 +105,19 @@ export default function StudentLanding() {
     setWarmupHref(link ? personalizeWarmupLink(link, authUserId) : null);
   }
 
+  async function requestTeacherAdmission(classCode: string) {
+    setAdmissionError(null);
+    try {
+      const result = await studentApiRequest<{ request: AdmissionRequest }>("/api/student/admission-request", {
+        method: "POST",
+        body: JSON.stringify({ code: classCode }),
+      });
+      setAdmissionRequest(result.request);
+    } catch (error) {
+      setAdmissionError(error instanceof Error ? error.message : "Your teacher approval code could not be created.");
+    }
+  }
+
   async function signInWithGoogle() {
     setJoinErr(null);
     if (!supabase) {
@@ -121,6 +140,8 @@ export default function StudentLanding() {
     setJoinSess(null);
     setRoster([]);
     setJoinErr(null);
+    setAdmissionRequest(null);
+    setAdmissionError(null);
   }
 
   function finishJoin(result: { session: { sessionId: string; studentId: string; name: string } }) {
@@ -129,6 +150,8 @@ export default function StudentLanding() {
     localStorage.setItem("bdm-student-session", JSON.stringify(result.session));
     sessionStorage.removeItem("bdm-pending-class-code");
     setPendingCode(null);
+    setAdmissionRequest(null);
+    setAdmissionError(null);
     markStudentTab();
     router.push("/lesson");
   }
@@ -197,7 +220,10 @@ export default function StudentLanding() {
         if (error instanceof StudentApiError && error.code === "warmup_verification_required") {
           sessionStorage.setItem("bdm-pending-class-code", c);
           setPendingCode(c);
-          await loadWarmupLink(c).catch(() => undefined);
+          await Promise.all([
+            loadWarmupLink(c).catch(() => undefined),
+            requestTeacherAdmission(c),
+          ]);
           setJoinErr(null);
         } else {
           setJoinErr(error instanceof Error ? error.message : "The class could not be joined.");
@@ -258,6 +284,10 @@ export default function StudentLanding() {
         .st-warmup-wait { margin:2px 0 0; color:var(--bdb-ink-faint); font-size:0.86rem; font-weight:700; }
         .st-warmup-action { background:var(--bdb-teal); border-color:var(--bdb-teal); color:#fff; font-weight:800; }
         .st-warmup-action:hover { border-color:var(--bdb-teal); color:#fff; filter:brightness(1.04); }
+        .st-request-box { margin-top:4px; border:1px solid color-mix(in srgb, var(--bdb-teal) 28%, var(--bdb-line)); border-radius:12px;
+          background:color-mix(in srgb, var(--bdb-teal) 7%, white); padding:12px 14px; display:grid; gap:3px; }
+        .st-request-label { margin:0; color:var(--bdb-ink-soft); font-size:0.7rem; font-weight:850; letter-spacing:0.08em; text-transform:uppercase; }
+        .st-request-code { margin:0; color:#0f5e5f; font-size:1.55rem; font-weight:900; letter-spacing:0.14em; line-height:1.15; }
 
         .st-namepick-label { font-size:0.78rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--bdb-ink-faint); margin:0 0 10px; }
         .st-names { display:flex; flex-wrap:wrap; gap:8px; }
@@ -297,15 +327,21 @@ export default function StudentLanding() {
           {pendingCode ? (
             <div className="st-warmup">
               <p className="st-warmup-label">Code accepted</p>
-              <h2 className="st-join-h">Today&apos;s Google Form warm-up</h2>
-              <p className="st-warmup-copy">Open the form and submit all five questions. Keep this tab open; it will move into the lesson automatically when Google confirms your response.</p>
+              <h2 className="st-join-h">Start today&apos;s warm-up</h2>
+              <p className="st-warmup-copy">Submit all five Google Form questions. Keep this tab open; it will move into the lesson when your response is confirmed.</p>
               {warmupHref ? (
                 <a className="st-explore st-warmup-action" href={warmupHref} target="_blank" rel="noopener noreferrer">
                   Open today&apos;s warm-up
                 </a>
               ) : (
-                <p className="st-warmup-wait">Today&apos;s warm-up is not published yet. Ask your teacher.</p>
+                <p className="st-warmup-wait">The warm-up is unavailable. Your teacher can admit you with the code below.</p>
               )}
+              <div className="st-request-box" role="status" aria-live="polite">
+                <p className="st-request-label">Teacher approval code</p>
+                <p className="st-request-code">{admissionRequest?.requestCode || "Preparing"}</p>
+              </div>
+              <p className="st-warmup-wait">Waiting for warm-up confirmation or teacher approval.</p>
+              {admissionError && <p className="st-joinerr" role="status" aria-live="polite">{admissionError}</p>}
             </div>
           ) : REQUIRE_GOOGLE_AUTH && authLoading ? (
             <p className="st-join-sub">Checking your school sign-in.</p>

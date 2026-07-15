@@ -87,6 +87,19 @@ interface TeacherSessionRow {
   remote_command: TeacherRemoteCommand | null;
 }
 
+interface AdmissionRequest {
+  id: string;
+  requestCode: string;
+  requestedAt: string;
+}
+
+interface AdmissionRosterStudent {
+  id: string;
+  periodId: string;
+  fullName: string;
+  email: string | null;
+}
+
 const TEACHER_SERVER_CLIENT = {} as never;
 
 type InteractiveStateId = string;
@@ -528,6 +541,7 @@ export default function ControlPage() {
   const [showSounds, setShowSounds] = useState(false);
   const [showSpinner, setShowSpinner] = useState(false);
   const [showLessons, setShowLessons] = useState(false);
+  const [showAdmissions, setShowAdmissions] = useState(false);
   const [presets, setPresets] = useState<LessonPreset[]>([]);
   const [presetSearch, setPresetSearch] = useState("");
   const [saveCode, setSaveCode] = useState("");
@@ -543,6 +557,12 @@ export default function ControlPage() {
   const [teacherSession, setTeacherSession] = useState<TeacherSessionRow | null>(null);
   const [joinCode, setJoinCode] = useState<string | null>(null);
   const [endingSession, setEndingSession] = useState(false);
+  const [admissionRequests, setAdmissionRequests] = useState<AdmissionRequest[]>([]);
+  const [admissionRoster, setAdmissionRoster] = useState<AdmissionRosterStudent[]>([]);
+  const [admissionJoinedStudentIds, setAdmissionJoinedStudentIds] = useState<string[]>([]);
+  const [admissionSelections, setAdmissionSelections] = useState<Record<string, string>>({});
+  const [admittingRequestCode, setAdmittingRequestCode] = useState<string | null>(null);
+  const [admissionError, setAdmissionError] = useState<string | null>(null);
   const [discussionFlow, setDiscussionFlow] = useState<DiscussionPhaseSnapshot | null>(null);
   const [controlPoll, setControlPoll] = useState<ControlPoll | null>(null);
   const [pollKind, setPollKind] = useState<LivePollKind>("short-answer");
@@ -712,6 +732,73 @@ export default function ControlPage() {
       window.clearInterval(interval);
     };
   }, [supabase]);
+
+  // Keep the private iPad queue current without changing the classroom timer,
+  // live-flow broadcast, or the student-facing display.
+  useEffect(() => {
+    const sessionId = teacherSession?.id;
+    const periodId = teacherSession?.period_id;
+    if (!sessionId || !periodId) {
+      setAdmissionRequests([]);
+      setAdmissionRoster([]);
+      setAdmissionJoinedStudentIds([]);
+      setAdmissionSelections({});
+      setAdmissionError(null);
+      setShowAdmissions(false);
+      return;
+    }
+
+    let stopped = false;
+    let checking = false;
+
+    const loadAdmissionRequests = async () => {
+      if (checking) return;
+      checking = true;
+      try {
+        const result = await teacherApiRequest<{
+          admissionRequests?: AdmissionRequest[];
+          joins?: Array<{ student_id: string | null }>;
+        }>(
+          `/api/teacher/session?sessionId=${encodeURIComponent(sessionId)}`,
+        );
+        if (!stopped) {
+          setAdmissionRequests(result.admissionRequests ?? []);
+          setAdmissionJoinedStudentIds(
+            (result.joins ?? []).flatMap((join) => join.student_id ? [join.student_id] : []),
+          );
+        }
+      } catch (requestError) {
+        if (!stopped) {
+          setAdmissionError(requestError instanceof Error ? requestError.message : "Waiting students could not be refreshed.");
+        }
+      } finally {
+        checking = false;
+      }
+    };
+
+    const loadAdmissionRoster = async () => {
+      try {
+        const result = await teacherApiRequest<{ students: AdmissionRosterStudent[] }>("/api/teacher/roster");
+        if (!stopped) setAdmissionRoster(result.students.filter((student) => student.periodId === periodId));
+      } catch (rosterError) {
+        if (!stopped) {
+          setAdmissionError(rosterError instanceof Error ? rosterError.message : "The class roster could not be loaded.");
+        }
+      }
+    };
+
+    void loadAdmissionRoster();
+    void loadAdmissionRequests();
+    const interval = window.setInterval(loadAdmissionRequests, 3000);
+    return () => {
+      stopped = true;
+      window.clearInterval(interval);
+    };
+  }, [teacherSession?.id, teacherSession?.period_id]);
+
+  useEffect(() => {
+    if (showAdmissions && admissionRequests.length === 0) setShowAdmissions(false);
+  }, [admissionRequests.length, showAdmissions]);
 
   const persistBank = useCallback((next: ClassState[]) => {
     setBank(next);
@@ -1937,6 +2024,37 @@ export default function ControlPage() {
     });
   }
 
+  async function admitWaitingStudent(request: AdmissionRequest) {
+    const studentEmail = admissionSelections[request.id];
+    if (!teacherSession || !studentEmail || admittingRequestCode) return;
+
+    setAdmittingRequestCode(request.requestCode);
+    setAdmissionError(null);
+    try {
+      const result = await teacherPost<{
+        sessionJoin: { id: string; studentId: string; displayName: string; joinedAt: string };
+      }>("/api/teacher/session", {
+        action: "admit",
+        sessionId: teacherSession.id,
+        requestCode: request.requestCode,
+        studentEmail,
+      });
+      setAdmissionRequests((current) => current.filter((candidate) => candidate.id !== request.id));
+      setAdmissionJoinedStudentIds((current) => current.includes(result.sessionJoin.studentId)
+        ? current
+        : [...current, result.sessionJoin.studentId]);
+      setAdmissionSelections((current) => {
+        const next = { ...current };
+        delete next[request.id];
+        return next;
+      });
+    } catch (actionError) {
+      setAdmissionError(actionError instanceof Error ? actionError.message : "The student could not be admitted.");
+    } finally {
+      setAdmittingRequestCode(null);
+    }
+  }
+
   async function endTeacherSession() {
     if (!teacherSession || endingSession) return;
     if (!window.confirm("End this session for every connected student?")) return;
@@ -1949,6 +2067,12 @@ export default function ControlPage() {
       pendingLiveFlowSyncRef.current = null;
       setTeacherSession(null);
       setJoinCode(null);
+      setAdmissionRequests([]);
+      setAdmissionRoster([]);
+      setAdmissionJoinedStudentIds([]);
+      setAdmissionSelections({});
+      setAdmissionError(null);
+      setShowAdmissions(false);
       setControlPoll(null);
       setPollAnswers([]);
       setLiveChallenge(null);
@@ -1971,7 +2095,7 @@ export default function ControlPage() {
     function onKey(e: KeyboardEvent) {
       const target = e.target as HTMLElement | null;
       const isTyping = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.tagName === "SELECT" || target?.isContentEditable;
-      if (isTyping || !activeState || editing || showSounds) return;
+      if (isTyping || !activeState || editing || showSounds || showAdmissions) return;
       if (e.code === "Space") { e.preventDefault(); toggleRun(); }
       else if (e.code === "ArrowRight" || e.code === "PageDown") { e.preventDefault(); next(); }
       else if (e.code === "ArrowLeft" || e.code === "PageUp") { e.preventDefault(); previous(); }
@@ -1979,7 +2103,7 @@ export default function ControlPage() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeState, editing, showSounds, secondsLeft, running]);
+  }, [activeState, editing, showAdmissions, showSounds, secondsLeft, running]);
 
   const accent = activeState?.color ?? "#4e6ef2";
   const inFinal10 = running && secondsLeft <= 10 && secondsLeft > 0;
@@ -2032,6 +2156,8 @@ export default function ControlPage() {
         .cx-sbtn { font-size:0.76rem; font-weight:800; letter-spacing:0.05em; text-transform:uppercase; color:#a39a88; background:transparent; border:1px solid #2a241a; border-radius:7px; padding:7px 12px; cursor:pointer; text-decoration:none; transition:all 140ms ease; }
         .cx-sbtn:hover { border-color:${accent}; color:#fff; }
         .cx-home { border-color:#3a3228; color:#d8d2c5; }
+        .cx-admission-alert { border-color:rgba(252,175,56,0.7); background:rgba(252,175,56,0.12); color:#ffd28a; }
+        .cx-admission-alert:hover { border-color:#fcaf38; background:rgba(252,175,56,0.2); color:#fff; }
         .cx-end-session { border-color:rgba(249,83,53,0.55); color:#fca5a5; }
         .cx-end-session:hover { border-color:#f95335; color:#fff; background:rgba(249,83,53,0.14); }
         .cx-end-session:disabled { opacity:0.5; cursor:wait; }
@@ -2152,6 +2278,19 @@ export default function ControlPage() {
         .cx-lesson-name { color:#d8d2c5; font-weight:700; font-size:0.9rem; }
         .cx-lesson-stats { color:#7c7363; font-weight:800; font-size:0.78rem; }
         .cx-lesson-actions { display:flex; gap:8px; align-items:center; }
+        .cx-admissions .cx-lessons-body { max-width:860px; }
+        .cx-admission-intro { margin:0; color:#b9b09f; font-size:0.92rem; font-weight:700; line-height:1.5; }
+        .cx-admission-list { display:grid; gap:10px; }
+        .cx-admission-row { display:grid; grid-template-columns:minmax(110px,auto) minmax(230px,1fr) auto; gap:12px; align-items:end; border:1px solid #3a3020; border-radius:12px; background:#1a160f; padding:14px; }
+        .cx-admission-code-wrap, .cx-admission-field { display:grid; gap:5px; }
+        .cx-admission-label { color:#a39a88; font-size:0.7rem; font-weight:900; letter-spacing:0.09em; text-transform:uppercase; }
+        .cx-admission-code { color:#ffd28a; font-size:1.65rem; font-weight:900; letter-spacing:0.13em; line-height:1; font-variant-numeric:tabular-nums; }
+        .cx-admission-select { width:100%; min-height:44px; box-sizing:border-box; border:1px solid #4a3d28; border-radius:9px; background:#100d09; color:#fff; padding:10px 12px; font:inherit; font-size:0.9rem; font-weight:800; }
+        .cx-admission-select:focus { outline:2px solid #fcaf38; outline-offset:2px; }
+        .cx-btn.cx-admission-submit { background:#fcaf38; border-color:#fcaf38; color:#201e1a; }
+        .cx-btn.cx-admission-submit:hover { border-color:#ffd28a; filter:brightness(1.04); }
+        .cx-admission-error { margin:0; border:1px solid rgba(249,83,53,0.45); border-radius:9px; background:rgba(249,83,53,0.1); color:#fca5a5; padding:10px 12px; font-size:0.84rem; font-weight:800; }
+        @media (max-width:640px) { .cx-admission-row { grid-template-columns:1fr; align-items:stretch; } .cx-admission-row .cx-btn { width:100%; } }
       `}</style>
 
       <div className="cx-root">
@@ -2162,6 +2301,15 @@ export default function ControlPage() {
           <div className="cx-tbtns">
             <a className="cx-sbtn cx-home" href="/teacher">Home</a>
             <a className="cx-sbtn" href={teacherSession ? `/session?sessionId=${encodeURIComponent(teacherSession.id)}` : "/session"}>{teacherSession ? "Session" : "Start session"}</a>
+            {admissionRequests.length > 0 && (
+              <button
+                className="cx-sbtn cx-admission-alert"
+                onClick={() => setShowAdmissions(true)}
+                aria-live="polite"
+              >
+                {admissionRequests.length} waiting
+              </button>
+            )}
             {teacherSession && (
               <button className="cx-sbtn cx-end-session" onClick={endTeacherSession} disabled={endingSession}>
                 {endingSession ? "Ending session" : "End session"}
@@ -2640,6 +2788,66 @@ export default function ControlPage() {
             )}
           </div>
         </section>
+
+        {showAdmissions && (
+          <div
+            className="cx-overlay cx-admissions"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cx-admissions-title"
+          >
+            <div className="cx-lessons-head">
+              <h2 className="cx-lessons-title" id="cx-admissions-title">Students waiting</h2>
+              <button className="cx-sbtn" onClick={() => setShowAdmissions(false)}>Close</button>
+            </div>
+            <div className="cx-lessons-body">
+              <p className="cx-admission-intro">Match the code on the Chromebook, choose the student, then admit them.</p>
+              {admissionError && <p className="cx-admission-error" role="alert">{admissionError}</p>}
+              <div className="cx-admission-list">
+                {admissionRequests.map((request) => {
+                  const rosterWithEmail = admissionRoster.filter((student) =>
+                    Boolean(student.email) && !admissionJoinedStudentIds.includes(student.id),
+                  );
+                  const isAdmitting = admittingRequestCode === request.requestCode;
+                  return (
+                    <div className="cx-admission-row" key={request.id}>
+                      <div className="cx-admission-code-wrap">
+                        <span className="cx-admission-label">Chromebook code</span>
+                        <strong className="cx-admission-code">{request.requestCode}</strong>
+                      </div>
+                      <label className="cx-admission-field">
+                        <span className="cx-admission-label">Student</span>
+                        <select
+                          className="cx-admission-select"
+                          value={admissionSelections[request.id] || ""}
+                          onChange={(event) => setAdmissionSelections((current) => ({
+                            ...current,
+                            [request.id]: event.target.value,
+                          }))}
+                          disabled={rosterWithEmail.length === 0 || Boolean(admittingRequestCode)}
+                        >
+                          <option value="">{rosterWithEmail.length ? "Choose a student" : "No unjoined students available"}</option>
+                          {rosterWithEmail.map((student) => (
+                            <option value={student.email || ""} key={student.id}>
+                              {student.fullName}{student.email ? ` - ${student.email}` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <button
+                        className="cx-btn cx-admission-submit"
+                        onClick={() => { void admitWaitingStudent(request); }}
+                        disabled={!admissionSelections[request.id] || Boolean(admittingRequestCode)}
+                      >
+                        {isAdmitting ? "Admitting" : "Admit"}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
 
         {showLessons && (
           <div className="cx-overlay cx-lessons">

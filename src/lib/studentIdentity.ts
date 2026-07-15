@@ -17,6 +17,10 @@ export type VerifiedStudentSession = {
   status: string;
 };
 
+export type AnonymousStudentAuth = {
+  authUserId: string;
+};
+
 type StudentRow = {
   id: string;
   full_name: string;
@@ -46,6 +50,18 @@ function bearerToken(request: Request): string {
     );
   }
   return match[1];
+}
+
+async function authenticatedUser(request: Request): Promise<User> {
+  const token = bearerToken(request);
+  const db = getSupabaseAdmin();
+  if (!db) throw new StudentIdentityError("Student sign-in is not configured.", 503, "identity_not_configured");
+
+  const { data: authData, error: authError } = await db.auth.getUser(token);
+  if (authError || !authData.user) {
+    throw new StudentIdentityError("Your sign-in expired. Sign in again.", 401, "invalid_access_token");
+  }
+  return authData.user;
 }
 
 function providersFor(user: User): string[] {
@@ -135,16 +151,7 @@ async function claimGoogleRosterRow(user: User): Promise<StudentRow> {
 }
 
 export async function requireVerifiedStudent(request: Request): Promise<VerifiedStudent> {
-  const token = bearerToken(request);
-  const db = getSupabaseAdmin();
-  if (!db) throw new StudentIdentityError("Student sign-in is not configured.", 503, "identity_not_configured");
-
-  const { data: authData, error: authError } = await db.auth.getUser(token);
-  if (authError || !authData.user) {
-    throw new StudentIdentityError("Your sign-in expired. Sign in again.", 401, "invalid_access_token");
-  }
-
-  const user = authData.user;
+  const user = await authenticatedUser(request);
   let student = await linkedStudent(user.id);
   let identityMethod: VerifiedStudent["identityMethod"];
 
@@ -175,6 +182,18 @@ export async function requireVerifiedStudent(request: Request): Promise<Verified
     authUserId: user.id,
     identityMethod,
   };
+}
+
+export async function requireAnonymousStudentAuth(request: Request): Promise<AnonymousStudentAuth> {
+  const user = await authenticatedUser(request);
+  if (!user.is_anonymous) {
+    throw new StudentIdentityError(
+      "Your verified account can join the class directly.",
+      409,
+      "verified_student_admission_not_needed",
+    );
+  }
+  return { authUserId: user.id };
 }
 
 export async function requireOpenJoinedSession(

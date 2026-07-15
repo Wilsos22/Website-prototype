@@ -166,6 +166,7 @@ function buildForm_(title, topic, questions, weekFolder, responseSpreadsheet, re
   });
 
   const identityItem = getOrCreateBigDogIdentityItem_(form);
+  publishWarmupForm_(form);
   const publishedUrl = buildBigDogWarmupUrl_(form, identityItem);
 
   const beforeSheetIds = getSheetIdMap_(responseSpreadsheet);
@@ -177,6 +178,17 @@ function buildForm_(title, topic, questions, weekFolder, responseSpreadsheet, re
     publishedUrl,
     responseTabName: renamedTabName
   };
+}
+
+function publishWarmupForm_(form) {
+  if (
+    typeof form.supportsAdvancedResponderPermissions === "function" &&
+    form.supportsAdvancedResponderPermissions()
+  ) {
+    form.setPublished(true);
+    return;
+  }
+  form.setAcceptingResponses(true);
 }
 
 function getOrCreateBigDogIdentityItem_(form) {
@@ -650,7 +662,7 @@ function getAvailableSheetName_(spreadsheet, targetName, currentSheetId) {
   const existing = spreadsheet.getSheetByName(targetName);
   if (!existing || existing.getSheetId() === currentSheetId) return targetName;
 
-  if (isSheetEmptyOrHeaderOnly_(existing)) {
+  if (isSheetEmptyOrHeaderOnly_(existing) && !existing.getFormUrl()) {
     spreadsheet.deleteSheet(existing);
     return targetName;
   }

@@ -22,9 +22,16 @@ import {
 } from "@/lib/challenges";
 
 interface Period { id: string; name: string; }
-interface Join { id: string; display_name: string | null; joined_at: string; }
+interface Join { id: string; student_id: string | null; display_name: string | null; joined_at: string; }
 interface Answer { id: string; display_name: string | null; answer: string | null; }
-interface RosterStudent { periodId: string; }
+interface RosterStudent {
+  id: string;
+  periodId: string;
+  fullName: string;
+  email: string | null;
+  identityLinked: boolean;
+}
+interface AdmissionRequest { id: string; requestCode: string; requestedAt: string; }
 interface TeacherSessionRow {
   id: string;
   status: string;
@@ -52,9 +59,14 @@ export default function SessionPage() {
   const supabase = TEACHER_SERVER_CLIENT;
   const [periods, setPeriods] = useState<Period[]>([]);
   const [periodId, setPeriodId] = useState("");
-  const [session, setSession] = useState<{ id: string; code: string; periodName: string } | null>(null);
+  const [session, setSession] = useState<{ id: string; code: string; periodName: string; periodId: string } | null>(null);
   const [joins, setJoins] = useState<Join[]>([]);
+  const [rosterStudents, setRosterStudents] = useState<RosterStudent[]>([]);
   const [rosterCount, setRosterCount] = useState(0);
+  const [admissionRequests, setAdmissionRequests] = useState<AdmissionRequest[]>([]);
+  const [admissionSelections, setAdmissionSelections] = useState<Record<string, string>>({});
+  const [admittingRequestCode, setAdmittingRequestCode] = useState<string | null>(null);
+  const [admissionError, setAdmissionError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(true);
   const [ending, setEnding] = useState(false);
@@ -88,6 +100,7 @@ export default function SessionPage() {
         const roster = await teacherApiRequest<{ periods: Period[]; students: RosterStudent[] }>("/api/teacher/roster");
         if (cancelled) return;
         setPeriods(roster.periods);
+        setRosterStudents(roster.students);
         setPeriodId((current) => current || roster.periods[0]?.id || "");
 
         const requestedSessionId = new URLSearchParams(window.location.search).get("sessionId")?.trim() || "";
@@ -122,7 +135,7 @@ export default function SessionPage() {
           || "----";
         setRosterCount(roster.students.filter((student) => student.periodId === openSession.period_id).length);
         setBroadcast(openSession.broadcast);
-        setSession({ id: openSession.id, code, periodName });
+        setSession({ id: openSession.id, code, periodName, periodId: openSession.period_id });
         saveTeacherSession(openSession.id, code, periodName);
       } catch (loadError) {
         if (!cancelled) {
@@ -136,8 +149,9 @@ export default function SessionPage() {
   }, []);
 
   const pollJoins = useCallback(async (sessionId: string) => {
-    const result = await teacherApiRequest<{ joins: Join[] }>(`/api/teacher/session?sessionId=${encodeURIComponent(sessionId)}`);
+    const result = await teacherApiRequest<{ joins: Join[]; admissionRequests?: AdmissionRequest[] }>(`/api/teacher/session?sessionId=${encodeURIComponent(sessionId)}`);
     setJoins(result.joins);
+    setAdmissionRequests(result.admissionRequests || []);
   }, []);
 
   useEffect(() => {
@@ -176,12 +190,13 @@ export default function SessionPage() {
       data = result.session;
     } catch (actionError) { setError(actionError instanceof Error ? actionError.message : "Session could not be started."); return; }
     const periodName = periods.find((p) => p.id === periodId)?.name || "";
-    const roster = await teacherApiRequest<{ students: Array<{ periodId: string }> }>("/api/teacher/roster");
+    const roster = await teacherApiRequest<{ students: RosterStudent[] }>("/api/teacher/roster");
+    setRosterStudents(roster.students);
     setRosterCount(roster.students.filter((student) => student.periodId === periodId).length);
     const sessionId = (data as { id: string }).id;
     saveTeacherSession(sessionId, code, periodName);
-    setSession({ id: sessionId, code, periodName });
-    setJoins([]); setBroadcast("/lesson");
+    setSession({ id: sessionId, code, periodName, periodId });
+    setJoins([]); setAdmissionRequests([]); setBroadcast("/lesson");
   }
   async function end() {
     if (!session || ending) return;
@@ -193,12 +208,40 @@ export default function SessionPage() {
     try {
       await teacherPost("/api/teacher/session", { action: "close", sessionId: session.id });
       clearStoredTeacherSession(session.id);
-      setSession(null); setJoins([]); setPoll(null); setAnswers([]); setBroadcast(null);
+      setSession(null); setJoins([]); setAdmissionRequests([]); setPoll(null); setAnswers([]); setBroadcast(null);
       setChallenge(null); setBoard([]);
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : "The session could not be ended.");
     } finally {
       setEnding(false);
+    }
+  }
+  async function admitStudent(request: AdmissionRequest) {
+    if (!session || admittingRequestCode) return;
+    const studentEmail = admissionSelections[request.id];
+    if (!studentEmail) {
+      setAdmissionError("Choose the student whose Chromebook shows this approval code.");
+      return;
+    }
+    setAdmissionError(null);
+    setAdmittingRequestCode(request.requestCode);
+    try {
+      await teacherPost("/api/teacher/session", {
+        action: "admit",
+        sessionId: session.id,
+        requestCode: request.requestCode,
+        studentEmail,
+      });
+      setAdmissionSelections((current) => {
+        const next = { ...current };
+        delete next[request.id];
+        return next;
+      });
+      await pollJoins(session.id);
+    } catch (actionError) {
+      setAdmissionError(actionError instanceof Error ? actionError.message : "The student could not be admitted.");
+    } finally {
+      setAdmittingRequestCode(null);
     }
   }
   async function setBroadcastTo(value: string | null) {
@@ -300,6 +343,12 @@ export default function SessionPage() {
         .se-count { font-size:1rem; font-weight:800; color:#5a5346; margin-bottom:10px; }
         .se-joins { display:flex; flex-wrap:wrap; gap:8px; }
         .se-chip { background:#e7f8f3; border:1px solid #b9ebdf; color:#0f766e; border-radius:999px; padding:9px 16px; font-weight:800; animation:sePop 0.3s ease; }
+        .se-admissions { display:grid; gap:10px; }
+        .se-admission-row { display:grid; grid-template-columns:minmax(92px,auto) minmax(190px,1fr) auto; gap:10px; align-items:center;
+          border:1px solid #ffe2a8; background:#fffaf0; border-radius:12px; padding:12px; }
+        .se-admission-code { color:#92660a; font-size:1.18rem; font-weight:900; letter-spacing:0.1em; }
+        .se-admission-help { margin:0 0 12px; color:#7a7468; font-size:0.9rem; font-weight:650; line-height:1.45; }
+        @media (max-width:560px) { .se-admission-row { grid-template-columns:1fr; } .se-admission-row .se-start { width:100%; } }
         @keyframes sePop { from{transform:scale(0.85); opacity:0.4;} to{transform:none; opacity:1;} }
         .se-empty { color:#b3aa97; font-weight:600; }
         .se-warn { background:#fff7e6; border:1px solid #ffe2a8; color:#92660a; border-radius:14px; padding:16px 18px; font-weight:700; line-height:1.6; }
@@ -368,6 +417,48 @@ export default function SessionPage() {
               <div className="se-code">{session.code}</div>
               <button className="se-end" onClick={end} disabled={ending}>{ending ? "Ending session" : "End session"}</button>
             </div>
+            {admissionRequests.length > 0 && (
+              <div className="se-card">
+                <h3 className="se-qh">Waiting for teacher: {admissionRequests.length}</h3>
+                <p className="se-admission-help">Match the code on the Chromebook, choose the student, then admit.</p>
+                {admissionError && <div className="se-err" style={{ marginBottom: 10 }} role="status">{admissionError}</div>}
+                <div className="se-admissions">
+                  {admissionRequests.map((request) => {
+                    const availableStudents = rosterStudents.filter((student) =>
+                      student.periodId === session.periodId &&
+                      Boolean(student.email) &&
+                      !joins.some((join) => join.student_id === student.id),
+                    );
+                    return (
+                      <div className="se-admission-row" key={request.id}>
+                        <strong className="se-admission-code">{request.requestCode}</strong>
+                        <select
+                          className="se-sel"
+                          aria-label={`Student for approval code ${request.requestCode}`}
+                          value={admissionSelections[request.id] || ""}
+                          onChange={(event) => setAdmissionSelections((current) => ({
+                            ...current,
+                            [request.id]: event.target.value,
+                          }))}
+                        >
+                          <option value="">Choose student</option>
+                          {availableStudents.map((student) => (
+                            <option key={student.id} value={student.email || ""}>{student.fullName}</option>
+                          ))}
+                        </select>
+                        <button
+                          className="se-start"
+                          onClick={() => admitStudent(request)}
+                          disabled={!admissionSelections[request.id] || admittingRequestCode !== null}
+                        >
+                          {admittingRequestCode === request.requestCode ? "Admitting" : "Admit"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <div className="se-card">
               <div className="se-count">Joined: {joins.length}{rosterCount ? ` of ${rosterCount}` : ""}</div>
               {joins.length === 0 ? <span className="se-empty">Waiting for students to join…</span>
