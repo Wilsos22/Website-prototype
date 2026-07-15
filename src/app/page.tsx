@@ -96,12 +96,10 @@ export default function StudentLanding() {
       body: JSON.stringify({ code: classCode }),
     });
     const data = await response.json().catch(() => ({})) as { open?: boolean; warmUpLink?: string | null };
-    let link = data.open ? data.warmUpLink || null : null;
-    if (data.open && !link) {
-      const todayResponse = await fetch("/api/today", { cache: "no-store" });
-      const today = await todayResponse.json().catch(() => ({})) as { lesson?: { warmUpLink?: string } | null };
-      link = todayResponse.ok ? today.lesson?.warmUpLink || null : null;
-    }
+    // A class code must resolve only to the lesson the teacher loaded into that
+    // live session. Falling back to a date-based lesson can open an unrelated or
+    // superseded form when the teacher has not selected a lesson yet.
+    const link = data.open ? data.warmUpLink || null : null;
     setWarmupHref(link ? personalizeWarmupLink(link, authUserId) : null);
   }
 
@@ -117,6 +115,36 @@ export default function StudentLanding() {
       setAdmissionError(error instanceof Error ? error.message : "Your teacher approval code could not be created.");
     }
   }
+
+  // The teacher may load the lesson after Chromebooks have already accepted
+  // the class code. Keep checking that specific live session until its warm-up
+  // resource is published; never substitute a date-based lesson.
+  useEffect(() => {
+    if (!SECURE_STUDENT_DATA || !pendingCode || warmupHref) return;
+    let stopped = false;
+    let checking = false;
+    const refreshWarmup = async () => {
+      if (checking || stopped) return;
+      checking = true;
+      try {
+        await loadWarmupLink(pendingCode);
+      } catch {
+        // A temporary session lookup failure is retried while the code is pending.
+      } finally {
+        checking = false;
+      }
+    };
+    void refreshWarmup();
+    const interval = window.setInterval(refreshWarmup, 3000);
+    window.addEventListener("focus", refreshWarmup);
+    return () => {
+      stopped = true;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshWarmup);
+    };
+    // loadWarmupLink only writes the session-scoped URL for pendingCode.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingCode, warmupHref]);
 
   async function signInWithGoogle() {
     setJoinErr(null);
@@ -320,21 +348,25 @@ export default function StudentLanding() {
         <img src="/big-dog-logo.svg" alt="Big Dog Math" />
       </div>
       <h1 className="st-hello">{name ? `Hey ${name}!` : "Welcome!"}</h1>
-      <p className="st-hello-sub">{pendingCode ? "Your class code is accepted. Start today&apos;s warm-up." : "Enter your class code to start today&apos;s lesson."}</p>
+      <p className="st-hello-sub">{pendingCode ? "Your class code is accepted. Wait for your teacher to load the lesson." : "Enter your class code to start today&apos;s lesson."}</p>
 
       <div className="st-cards">
         <div className="st-join">
           {pendingCode ? (
             <div className="st-warmup">
               <p className="st-warmup-label">Code accepted</p>
-              <h2 className="st-join-h">Start today&apos;s warm-up</h2>
-              <p className="st-warmup-copy">Submit all five Google Form questions. Keep this tab open; it will move into the lesson when your response is confirmed.</p>
+              <h2 className="st-join-h">{warmupHref ? "Start today&apos;s warm-up" : "Waiting for your teacher"}</h2>
+              <p className="st-warmup-copy">
+                {warmupHref
+                  ? "Submit all five Google Form questions. Keep this tab open; it will move into the lesson when your response is confirmed."
+                  : "Your teacher is selecting the lesson. The assigned warm-up will appear here when it is ready."}
+              </p>
               {warmupHref ? (
                 <a className="st-explore st-warmup-action" href={warmupHref} target="_blank" rel="noopener noreferrer">
                   Open today&apos;s warm-up
                 </a>
               ) : (
-                <p className="st-warmup-wait">The warm-up is unavailable. Your teacher can admit you with the code below.</p>
+                <p className="st-warmup-wait">You can also use the teacher approval code below while you wait.</p>
               )}
               <div className="st-request-box" role="status" aria-live="polite">
                 <p className="st-request-label">Teacher approval code</p>

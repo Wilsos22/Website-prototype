@@ -382,6 +382,7 @@ interface TodayLessonStep {
   duration: number;
   stateId: string;
   studentDirections: string;
+  teacherNotes: string;
   tool: string;
   question: string;
   pollKind: LivePollKind | "";
@@ -551,10 +552,14 @@ export default function ControlPage() {
   const [notionLessonCode, setNotionLessonCode] = useState("");
   const [showDiscussion, setShowDiscussion] = useState(false);
   const [autoAdvance, setAutoAdvance] = useState(false);
+  const [previewSyncPaused, setPreviewSyncPaused] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
   const [activeLessonContext, setActiveLessonContext] = useState<ActiveLessonContext | null>(null);
   const [soundUrls, setSoundUrls] = useState<Record<string, string>>({});
   const [teacherSession, setTeacherSession] = useState<TeacherSessionRow | null>(null);
+  const [teacherSessionReady, setTeacherSessionReady] = useState(false);
+  const [notionLaunchRequest, setNotionLaunchRequest] = useState<{ id: string; code: string; run: boolean } | null>(null);
+  const [presetLaunchRequest, setPresetLaunchRequest] = useState<{ id: string; run: boolean } | null>(null);
   const [joinCode, setJoinCode] = useState<string | null>(null);
   const [endingSession, setEndingSession] = useState(false);
   const [admissionRequests, setAdmissionRequests] = useState<AdmissionRequest[]>([]);
@@ -600,6 +605,8 @@ export default function ControlPage() {
   const processedHydrationGenerationRef = useRef(0);
   const serverFlowSessionRef = useRef<string | null>(null);
   const serverFlowRevisionRef = useRef<string | null>(null);
+  const handledNotionLaunchRef = useRef(false);
+  const handledPresetLaunchRef = useRef(false);
 
   const markServerHydration = useCallback((flow: LiveClassFlowSnapshot) => {
     liveFlowSyncEpochRef.current += 1;
@@ -717,12 +724,18 @@ export default function ControlPage() {
     };
 
     const findTeacherSession = async () => {
-      const storedSessionId = getStoredTeacherSessionId();
-      const result = await teacherApiRequest<{ sessions: TeacherSessionRow[] }>("/api/teacher/session")
-        .catch(() => ({ sessions: [] }));
-      const openSession = result.sessions.find((candidate) => candidate.status === "open") ?? null;
-      if (storedSessionId && storedSessionId !== openSession?.id) clearStoredTeacherSession(storedSessionId);
-      if (!stopped) setCurrentTeacherSession(openSession);
+      try {
+        const storedSessionId = getStoredTeacherSessionId();
+        const result = await teacherApiRequest<{ sessions: TeacherSessionRow[] }>("/api/teacher/session");
+        if (stopped) return;
+        const openSession = result.sessions.find((candidate) => candidate.status === "open") ?? null;
+        if (storedSessionId && storedSessionId !== openSession?.id) clearStoredTeacherSession(storedSessionId);
+        setCurrentTeacherSession(openSession);
+        setTeacherSessionReady(true);
+      } catch {
+        // Preserve the last confirmed session and retry. A temporary network or
+        // auth failure must not be mistaken for a successful "no session" result.
+      }
     };
 
     void findTeacherSession();
@@ -1525,7 +1538,7 @@ export default function ControlPage() {
   // Keep student Chromebooks in sync with the existing /control state machine.
   // The write is skipped unless the teacher explicitly selected Live Class Flow.
   useEffect(() => {
-    if (!supabase || teacherSession?.broadcast !== LIVE_FLOW_MODE) {
+    if (previewSyncPaused || !supabase || teacherSession?.broadcast !== LIVE_FLOW_MODE) {
       pendingLiveFlowSyncRef.current = null;
       return;
     }
@@ -1549,7 +1562,7 @@ export default function ControlPage() {
       expectedRevision: liveFlowSyncingRef.current ? undefined : serverFlowRevisionRef.current,
     };
     void flushLiveFlowUpdates();
-  }, [flushLiveFlowUpdates, liveFlowSignature, serverHydrationGeneration, supabase, teacherSession?.broadcast, teacherSession?.id]);
+  }, [flushLiveFlowUpdates, liveFlowSignature, previewSyncPaused, serverHydrationGeneration, supabase, teacherSession?.broadcast, teacherSession?.id]);
 
   const handleDiscussionFlowChange = useCallback((snapshot: DiscussionPhaseSnapshot) => {
     setDiscussionFlow(snapshot);
@@ -1615,6 +1628,7 @@ export default function ControlPage() {
   }, []);
 
   function loadPreset(p: LessonPreset) {
+    setPreviewSyncPaused(true);
     const newBank = DEFAULT_STATES.map((d) => ({
       ...d,
       minutes: typeof p.minutes[d.id] === "number" ? p.minutes[d.id] : d.minutes,
@@ -1631,7 +1645,9 @@ export default function ControlPage() {
     setActiveLessonContext(null);
     stopMusic();
     setShowLessons(false);
-    setLessonMsg(null);
+    const previewMessage = `Previewed ${p.code || p.title || "saved sequence"}. Student and projector screens are unchanged until you start the sequence.`;
+    setLessonMsg(previewMessage);
+    setTodayMsg(previewMessage);
   }
 
   async function saveCurrentLesson() {
@@ -1660,7 +1676,7 @@ export default function ControlPage() {
 
   // Lesson Steps are the source of truth; the older tools-only path remains as
   // a fallback for pages that have not been converted yet.
-  function applyNotionLesson(lesson: TodayLesson): boolean {
+  function applyNotionLesson(lesson: TodayLesson, confirmReplace = true): boolean {
     const mapped: string[] = [];
     const unmatched: string[] = [];
     for (const name of parseLessonList(lesson.tools)) {
@@ -1668,10 +1684,11 @@ export default function ControlPage() {
       if (id) { if (!mapped.includes(id)) mapped.push(id); }
       else unmatched.push(name);
     }
-    if (lineup.length > 0 && !window.confirm(`Replace the current lineup with “${lesson.title || "this lesson"}”?`)) {
+    if (confirmReplace && lineup.length > 0 && !window.confirm(`Replace the current lineup with “${lesson.title || "this lesson"}”?`)) {
       setTodayMsg(null);
       return false;
     }
+    setPreviewSyncPaused(true);
     const lessonSteps = (lesson.steps || []).filter((step) => step.stateId && bank.some((state) => state.id === step.stateId));
     const newLineup: LineupItem[] = lessonSteps.length
       ? lessonSteps.map((step) => ({
@@ -1698,7 +1715,7 @@ export default function ControlPage() {
           mainDisplay: step.mainDisplay,
           paceDirections: step.paceDirections,
           studentAction: step.studentAction,
-          remoteActions: step.remoteActions,
+          remoteActions: step.remoteActions || step.teacherNotes,
           discussionStems: step.discussionStems,
           vocabulary: step.vocabulary,
           responseMode: step.responseMode,
@@ -1739,8 +1756,9 @@ export default function ControlPage() {
     stopMusic();
     setShowLessons(false);
     const parts = [
-      `Loaded “${lesson.title || "today's lesson"}”`,
+      `Previewed “${lesson.title || "today's lesson"}”`,
       lessonSteps.length ? `${lessonSteps.length} timed steps added` : `${mapped.length} tool${mapped.length === 1 ? "" : "s"} added`,
+      "student and projector screens unchanged until start",
     ];
     if (unmatched.length) parts.push(`couldn't match: ${unmatched.join(", ")}`);
     setTodayMsg(parts.join(" · "));
@@ -1767,28 +1785,73 @@ export default function ControlPage() {
     }
   }
 
-  async function loadNotionLessonByCode() {
-    const code = notionLessonCode.trim();
-    if (!code) {
+  async function loadNotionLesson(
+    requestedCode: string,
+    options: { lessonId?: string; confirmReplace?: boolean; run?: boolean } = {},
+  ): Promise<boolean> {
+    const code = requestedCode.trim();
+    const lessonId = options.lessonId?.trim() || "";
+    if (!code && !lessonId) {
       setLessonMsg("Enter a Notion lesson code first.");
-      return;
+      return false;
     }
-    setLessonMsg(`Loading ${code} from Notion…`);
+    const displayCode = code || "the selected lesson";
+    setLessonMsg(`Loading ${displayCode} from Notion…`);
     try {
-      const res = await fetch(`/api/teacher/lesson?code=${encodeURIComponent(code)}`, { cache: "no-store" });
+      const lessonQuery = lessonId
+        ? `id=${encodeURIComponent(lessonId)}`
+        : `code=${encodeURIComponent(code)}`;
+      const res = await fetch(`/api/teacher/lesson?${lessonQuery}`, { cache: "no-store" });
       const data = (await res.json()) as { lesson?: TodayLesson | null; error?: string };
       if (!res.ok || data.error) throw new Error(data.error || "Couldn't load the lesson.");
       if (!data.lesson) {
-        setLessonMsg(`No Notion lesson uses the code ${code}.`);
-        return;
+        setLessonMsg(code ? `No Notion lesson uses the code ${code}.` : "The selected Notion lesson could not be found.");
+        return false;
       }
-      if (applyNotionLesson(data.lesson)) {
-        setLessonMsg(`Loaded ${data.lesson.lessonCode || code} from Notion.`);
+      if (applyNotionLesson(data.lesson, options.confirmReplace ?? true)) {
+        setLessonMsg(`Previewed ${data.lesson.lessonCode || code} from Notion. Student and projector screens are unchanged until you start the lesson.`);
         setNotionLessonCode("");
+        if (options.run) setPendingRun(true);
+        return true;
       }
+      return false;
     } catch (error) {
       setLessonMsg(error instanceof Error ? error.message : "Couldn't reach Notion.");
+      return false;
     }
+  }
+
+  async function loadNotionLessonByCode() {
+    await loadNotionLesson(notionLessonCode);
+  }
+
+  function consumeNotionLaunchQuery() {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("notionLessonId");
+    url.searchParams.delete("notionLessonCode");
+    url.searchParams.delete("run");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+
+  function consumePresetLaunchQuery() {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("lesson");
+    url.searchParams.delete("run");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+
+  async function switchSessionToLiveFlow(session: TeacherSessionRow): Promise<void> {
+    if (session.broadcast === LIVE_FLOW_MODE) return;
+    const result = await teacherPost<{ session: { broadcast: string | null } }>("/api/teacher/session", {
+      action: "update",
+      sessionId: session.id,
+      broadcast: LIVE_FLOW_MODE,
+    });
+    setTeacherSession((current) => (
+      current?.id === session.id
+        ? { ...current, broadcast: result.session.broadcast || LIVE_FLOW_MODE }
+        : current
+    ));
   }
 
   // When launched from the Sequence Builder with ?run=1, auto-start the lineup
@@ -1798,11 +1861,142 @@ export default function ControlPage() {
     refreshPresets();
     try {
       const params = new URLSearchParams(window.location.search);
-      const lessonId = params.get("lesson");
-      if (lessonId) getLessonPreset(lessonId).then((p) => { if (p) { loadPreset(p); if (params.get("run") === "1") setPendingRun(true); } });
+      const notionCode = params.get("notionLessonCode")?.trim() || "";
+      const notionId = params.get("notionLessonId")?.trim() || "";
+      if (notionCode || notionId) {
+        setNotionLessonCode(notionCode);
+        setNotionLaunchRequest({ id: notionId, code: notionCode, run: params.get("run") === "1" });
+        return;
+      }
+      const lessonId = params.get("lesson")?.trim() || "";
+      if (lessonId) setPresetLaunchRequest({ id: lessonId, run: params.get("run") === "1" });
     } catch { /* ignore */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Wait for the open server session to hydrate before replacing it with the
+  // lesson deliberately chosen from Teacher Home. Otherwise the older live
+  // flow can arrive a moment later and overwrite the teacher's selection.
+  useEffect(() => {
+    if (!teacherSessionReady || !notionLaunchRequest || handledNotionLaunchRef.current) return;
+    const serverSessionHydrated = !teacherSession?.live_flow?.sequence
+      || hydratedSessionRef.current === teacherSession.id;
+    if (!serverSessionHydrated) return;
+    handledNotionLaunchRef.current = true;
+    void (async () => {
+      const reviewOnly = !notionLaunchRequest.run;
+      setPreviewSyncPaused(reviewOnly);
+      const loaded = await loadNotionLesson(notionLaunchRequest.code, {
+        lessonId: notionLaunchRequest.id,
+        confirmReplace: false,
+        run: false,
+      });
+      if (!loaded) {
+        setPreviewSyncPaused(false);
+        return;
+      }
+
+      let shouldRun = notionLaunchRequest.run;
+      let blockedMessage: string | null = null;
+
+      if (shouldRun) {
+        if (!teacherSession || teacherSession.status !== "open") {
+          shouldRun = false;
+          blockedMessage = "Lesson loaded but not started. Start a live session, then choose Begin lesson again.";
+        } else {
+          try {
+            // The session must be in Live Class Flow before the new lineup can
+            // start or publish its first state to connected Chromebooks.
+            await switchSessionToLiveFlow(teacherSession);
+          } catch {
+            shouldRun = false;
+            blockedMessage = "Lesson loaded but not started. Control could not connect the open session to Live Class Flow. Open Session, select Live Class Flow, then choose Begin lesson again.";
+          }
+        }
+      }
+
+      consumeNotionLaunchQuery();
+      setNotionLaunchRequest(null);
+      if (shouldRun) {
+        const startingMessage = "Lesson connected. Starting automatic pacing.";
+        setLessonMsg(startingMessage);
+        setTodayMsg(startingMessage);
+        setPendingRun(true);
+      } else if (blockedMessage) {
+        setPreviewSyncPaused(true);
+        setLessonMsg(blockedMessage);
+        setTodayMsg(blockedMessage);
+      } else {
+        const previewMessage = "Preview loaded. Student and projector screens are unchanged until you start the lesson.";
+        setLessonMsg(previewMessage);
+        setTodayMsg(previewMessage);
+      }
+    })();
+    // loadNotionLesson intentionally runs only for the URL request captured at
+    // mount; Control's normal lesson controls handle later choices.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notionLaunchRequest, serverHydrationGeneration, teacherSession?.broadcast, teacherSession?.id, teacherSession?.status, teacherSessionReady]);
+
+  // Saved Sequence Builder links need the same server-session guard as Notion
+  // launches. Wait for any existing live flow to hydrate before replacing it,
+  // then put the session in Live Class Flow before starting the new sequence.
+  useEffect(() => {
+    if (!teacherSessionReady || !presetLaunchRequest || handledPresetLaunchRef.current) return;
+    const serverSessionHydrated = !teacherSession?.live_flow?.sequence
+      || hydratedSessionRef.current === teacherSession.id;
+    if (!serverSessionHydrated) return;
+    handledPresetLaunchRef.current = true;
+    void (async () => {
+      const reviewOnly = !presetLaunchRequest.run;
+      setPreviewSyncPaused(reviewOnly);
+      setLessonMsg("Loading saved sequence…");
+      const preset = await getLessonPreset(presetLaunchRequest.id);
+      if (!preset) {
+        setPreviewSyncPaused(false);
+        setLessonMsg("The saved sequence could not be loaded. Refresh this page to try again.");
+        return;
+      }
+      loadPreset(preset);
+
+      let shouldRun = presetLaunchRequest.run;
+      let blockedMessage: string | null = null;
+      if (shouldRun && preset.lineup.length === 0) {
+        shouldRun = false;
+        blockedMessage = "Sequence loaded but not started because it has no steps. Add at least one step in Sequence Builder, then choose Run again.";
+      } else if (shouldRun) {
+        if (!teacherSession || teacherSession.status !== "open") {
+          shouldRun = false;
+          blockedMessage = "Sequence loaded but not started. Start a live session, then return to Sequence Builder and choose Run again.";
+        } else {
+          try {
+            await switchSessionToLiveFlow(teacherSession);
+          } catch {
+            shouldRun = false;
+            blockedMessage = "Sequence loaded but not started. Control could not connect the open session to Live Class Flow. Open Session, select Live Class Flow, then return to Sequence Builder and choose Run again.";
+          }
+        }
+      }
+
+      consumePresetLaunchQuery();
+      setPresetLaunchRequest(null);
+      if (shouldRun) {
+        const startingMessage = "Sequence connected. Starting automatic pacing.";
+        setLessonMsg(startingMessage);
+        setTodayMsg(startingMessage);
+        setPendingRun(true);
+      } else if (blockedMessage) {
+        setPreviewSyncPaused(true);
+        setLessonMsg(blockedMessage);
+        setTodayMsg(blockedMessage);
+      } else {
+        const previewMessage = `Previewed ${preset.code || preset.title || "saved sequence"}. Student and projector screens are unchanged until you start the sequence.`;
+        setLessonMsg(previewMessage);
+        setTodayMsg(previewMessage);
+      }
+    })();
+    // Preset URL launches are one-shot requests captured at mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presetLaunchRequest, serverHydrationGeneration, teacherSession?.broadcast, teacherSession?.id, teacherSession?.status, teacherSessionReady]);
 
   useEffect(() => {
     if (pendingRun && lineup.length > 0) {
@@ -1815,6 +2009,7 @@ export default function ControlPage() {
   // ── Timer controls ──────────────────────────────────────────────────────
   function toggleRun() {
     if (!activeState) return;
+    setPreviewSyncPaused(false);
     if (secondsLeft <= 0) { secRef.current = activeMinutes * 60; setSecondsLeft(secRef.current); setFinished(false); }
     const willRun = !running;
     if (willRun) setAutoAdvance(true);
@@ -1830,6 +2025,7 @@ export default function ControlPage() {
     const item = lineup[nextIndex];
     const state = item ? bank.find((bankState) => bankState.id === item.stateId) : undefined;
     if (!state) return;
+    setPreviewSyncPaused(false);
     setAutoAdvance(true);
     setCurrentIndex(nextIndex);
     secRef.current = secondsLeft > 0 && currentIndex === nextIndex ? secondsLeft : minutesForLineupItem(item, bank) * 60;
@@ -2868,7 +3064,7 @@ export default function ControlPage() {
                   />
                   <button className="cx-btn pri" onClick={() => { void loadNotionLessonByCode(); }}>Load from Notion</button>
                 </div>
-                <p className="cx-hint">This can load a draft pilot without changing its date or publishing it to students.</p>
+                <p className="cx-hint">Loads a published Notion lesson into a private preview. Student and projector screens do not change until you start it.</p>
                 {lessonMsg && <p className="cx-lessons-msg">{lessonMsg}</p>}
               </div>
 

@@ -11,7 +11,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { teacherApiRequest } from "@/lib/teacherApi";
 import { listLessonPresets, type LessonPreset } from "@/lib/lessonPresets";
 
-interface LinkItem { href: string; label: string; letter: string; color: string; desc: string }
+interface LinkItem { href: string; label: string; letter: string; color: string; desc: string; newWindow?: boolean }
 
 // Run the live class.
 const RUN: LinkItem[] = [
@@ -22,6 +22,7 @@ const RUN: LinkItem[] = [
   { href: "/whiteboard", label: "Whiteboard", letter: "W", color: "#4d8df6", desc: "Full-screen board canvas" },
   { href: "/teacher/remote", label: "iPad remote", letter: "I", color: "#50a3a4", desc: "Private lesson controls, responses, audio, and writing" },
   { href: "/board", label: "Board display", letter: "B", color: "#f5b915", desc: "Open on the projector to show your iPad ink" },
+  { href: "/weekly-display", label: "Weekly display", letter: "L", color: "#8b4fb3", desc: "Open today's Notion learning target on a separate screen", newWindow: true },
 ];
 
 // See the learning.
@@ -88,6 +89,7 @@ const TOOL_GROUPS: { label: string; tools: LinkItem[] }[] = [
 
 const JUMP = [
   { label: "Right now", href: "#now" },
+  { label: "Find lesson", href: "#lesson-finder" },
   { label: "Run class", href: "#run" },
   { label: "See learning", href: "#learn" },
   { label: "Manage", href: "#manage" },
@@ -95,6 +97,48 @@ const JUMP = [
 ];
 
 interface LiveSession { id: string; code: string; period: string; joined: number }
+
+interface PublishedLesson {
+  id: string;
+  lessonCode: string;
+  title: string;
+  subtitle?: string;
+  date: string;
+  module?: string;
+  topic?: string;
+}
+
+const OMITTED_LESSON_MARKERS = /\b(skip|skipped|superseded|deprecated|archived|cancelled|canceled|replaced|do not use)\b/i;
+
+function usablePublishedLessons(lessons: PublishedLesson[]): PublishedLesson[] {
+  const seenIds = new Set<string>();
+  return lessons.filter((lesson) => {
+    const lessonCode = lesson.lessonCode.trim();
+    if (!lessonCode) return false;
+    if (OMITTED_LESSON_MARKERS.test([lessonCode, lesson.title, lesson.subtitle || ""].join(" "))) return false;
+    const key = lesson.id.trim().replace(/-/g, "").toLowerCase();
+    if (!key || seenIds.has(key)) return false;
+    seenIds.add(key);
+    return true;
+  });
+}
+
+function lessonDateValue(iso: string): number {
+  const [year, month, day] = iso.slice(0, 10).split("-").map(Number);
+  if (!year || !month || !day) return Number.POSITIVE_INFINITY;
+  return new Date(year, month - 1, day).getTime();
+}
+
+function formatLessonDate(iso: string): string {
+  const value = lessonDateValue(iso);
+  if (!Number.isFinite(value)) return "Date not set";
+  return new Date(value).toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
 
 function greetingFor(hour: number): string {
   if (hour < 12) return "Good morning";
@@ -104,7 +148,13 @@ function greetingFor(hour: number): string {
 
 function LinkCard({ item }: { item: LinkItem }) {
   return (
-    <Link href={item.href} className="bd-card" style={{ ["--c" as string]: item.color }}>
+    <Link
+      href={item.href}
+      className="bd-card"
+      style={{ ["--c" as string]: item.color }}
+      target={item.newWindow ? "_blank" : undefined}
+      rel={item.newWindow ? "noreferrer" : undefined}
+    >
       <span className="bd-tile">{item.letter}</span>
       <div className="bd-card-text">
         <h3>{item.label}</h3>
@@ -118,6 +168,9 @@ export default function TeacherHome() {
   const [greeting, setGreeting] = useState("Welcome");
   const [query, setQuery] = useState("");
   const [presets, setPresets] = useState<LessonPreset[]>([]);
+  const [publishedLessons, setPublishedLessons] = useState<PublishedLesson[]>([]);
+  const [publishedLessonsLoading, setPublishedLessonsLoading] = useState(true);
+  const [publishedLessonsError, setPublishedLessonsError] = useState<string | null>(null);
 
   const [today, setToday] = useState<{ loading: boolean; lesson: { title?: string; module?: string; topic?: string } | null; error?: string }>({ loading: true, lesson: null });
   const [live, setLive] = useState<{ loading: boolean; connected: boolean; sessions: LiveSession[] }>({ loading: true, connected: true, sessions: [] });
@@ -134,6 +187,29 @@ export default function TeacherHome() {
       .then((r) => r.json())
       .then((d) => setToday({ loading: false, lesson: d.lesson || null, error: d.error }))
       .catch(() => setToday({ loading: false, lesson: null, error: "Couldn't reach the lesson feed." }));
+  }, []);
+
+  // Published Notion lessons for the teacher's lesson finder.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch("/api/lessons", { cache: "no-store" });
+        const result = await response.json().catch(() => ({})) as { lessons?: PublishedLesson[]; error?: string };
+        if (!response.ok || result.error) throw new Error(result.error || "Published lessons could not be loaded.");
+        if (!cancelled) {
+          setPublishedLessons(usablePublishedLessons(result.lessons ?? []));
+          setPublishedLessonsError(null);
+        }
+      } catch (lessonError) {
+        if (!cancelled) {
+          setPublishedLessonsError(lessonError instanceof Error ? lessonError.message : "Published lessons could not be loaded.");
+        }
+      } finally {
+        if (!cancelled) setPublishedLessonsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   // Live sessions running right now (polls every 5s so the band stays current).
@@ -181,7 +257,27 @@ export default function TeacherHome() {
       .filter((g) => g.tools.length > 0),
     [q],
   );
-  const lessons = useMemo(() => presets.filter((p) => !q || p.code.toLowerCase().includes(q) || p.title.toLowerCase().includes(q)), [presets, q]);
+  const presetMatches = useMemo(() => presets.filter((p) => !q || p.code.toLowerCase().includes(q) || p.title.toLowerCase().includes(q)), [presets, q]);
+  const notionLessonMatches = useMemo(() => {
+    const todayValue = new Date().setHours(0, 0, 0, 0);
+    return publishedLessons
+      .filter((lesson) => {
+        if (!q) return true;
+        return [lesson.lessonCode, lesson.title, lesson.subtitle, lesson.date, lesson.module, lesson.topic]
+          .some((value) => value?.toLowerCase().includes(q));
+      })
+      .sort((left, right) => {
+        const leftDate = lessonDateValue(left.date);
+        const rightDate = lessonDateValue(right.date);
+        if (!Number.isFinite(leftDate)) return Number.isFinite(rightDate) ? 1 : 0;
+        if (!Number.isFinite(rightDate)) return -1;
+        const leftFuture = leftDate >= todayValue;
+        const rightFuture = rightDate >= todayValue;
+        if (leftFuture !== rightFuture) return leftFuture ? -1 : 1;
+        return leftFuture ? leftDate - rightDate : rightDate - leftDate;
+      });
+  }, [publishedLessons, q]);
+  const visibleNotionLessons = notionLessonMatches.slice(0, 6);
 
   return (
     <div className="bd-home">
@@ -236,6 +332,26 @@ export default function TeacherHome() {
         .bd-mods { display:flex; flex-wrap:wrap; gap:6px; margin:0 0 8px; }
         .bd-mod { font-size:0.72rem; font-weight:700; padding:3px 9px; border-radius:var(--bdb-r-pill); background:var(--bdb-ground-2); color:var(--bdb-ink-soft); }
 
+        /* Compact published-lesson finder */
+        .bd-lesson-finder { margin-top:14px; background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:var(--bdb-r-lg); box-shadow:var(--bdb-shadow-sm); overflow:hidden; scroll-margin-top:80px; }
+        .bd-lesson-find-head { display:flex; align-items:end; justify-content:space-between; gap:16px; padding:14px 16px; border-bottom:1px solid var(--bdb-line); }
+        .bd-lesson-find-copy h2 { margin:0; font-size:1rem; font-weight:800; letter-spacing:-0.01em; }
+        .bd-lesson-find-copy p { margin:3px 0 0; color:var(--bdb-ink-soft); font-size:0.8rem; }
+        .bd-lesson-search { display:grid; gap:5px; width:min(100%,330px); color:var(--bdb-ink-soft); font-size:0.7rem; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; }
+        .bd-lesson-search input { width:100%; box-sizing:border-box; border:1px solid var(--bdb-line); border-radius:var(--bdb-r-sm); background:var(--bdb-ground); color:var(--bdb-ink); padding:9px 11px; font:inherit; font-size:0.88rem; font-weight:600; letter-spacing:0; text-transform:none; }
+        .bd-lesson-search input:focus { outline:2px solid color-mix(in srgb,var(--bdb-teal) 48%,transparent); outline-offset:1px; border-color:var(--bdb-teal); }
+        .bd-lesson-list { display:grid; }
+        .bd-lesson-row { display:grid; grid-template-columns:145px minmax(115px,155px) minmax(180px,1fr) auto; align-items:center; gap:12px; padding:11px 16px; border-bottom:1px solid var(--bdb-line); }
+        .bd-lesson-row:last-child { border-bottom:0; }
+        .bd-lesson-date { color:var(--bdb-ink-soft); font-size:0.78rem; font-weight:600; }
+        .bd-lesson-code { color:var(--bdb-teal); font-size:0.82rem; font-weight:800; letter-spacing:0.03em; }
+        .bd-lesson-title { margin:0; min-width:0; color:var(--bdb-ink); font-size:0.9rem; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .bd-lesson-actions { display:flex; justify-content:flex-end; gap:7px; }
+        .bd-lesson-actions .bd-btn { display:inline-flex; align-items:center; justify-content:center; white-space:nowrap; }
+        .bd-lesson-state { margin:0; padding:18px 16px; color:var(--bdb-ink-soft); font-size:0.86rem; font-weight:600; }
+        .bd-lesson-state.error { color:var(--bdb-coral); }
+        .bd-lesson-more { margin:0; padding:9px 16px; border-top:1px solid var(--bdb-line); background:var(--bdb-ground-2); color:var(--bdb-ink-soft); font-size:0.76rem; font-weight:600; }
+
         /* Card grids for link groups + tools */
         .bd-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(232px,1fr)); gap:12px; }
         .bd-grid.tools { grid-template-columns:repeat(auto-fill, minmax(198px,1fr)); }
@@ -254,6 +370,12 @@ export default function TeacherHome() {
           .bd-body { grid-template-columns:1fr; }
           .bd-rail { position:static; flex-direction:row; flex-wrap:wrap; gap:6px; }
           .bd-rail-label { display:none; }
+          .bd-lesson-find-head { align-items:stretch; flex-direction:column; }
+          .bd-lesson-search { width:100%; }
+          .bd-lesson-row { grid-template-columns:1fr 1fr; gap:7px 10px; }
+          .bd-lesson-title { grid-column:1 / -1; white-space:normal; }
+          .bd-lesson-actions { grid-column:1 / -1; justify-content:stretch; }
+          .bd-lesson-actions .bd-btn { flex:1; }
         }
       `}</style>
 
@@ -361,6 +483,57 @@ export default function TeacherHome() {
             </div>
           </div>
 
+          <section className="bd-lesson-finder" id="lesson-finder" aria-labelledby="bd-lesson-finder-title">
+            <div className="bd-lesson-find-head">
+              <div className="bd-lesson-find-copy">
+                <h2 id="bd-lesson-finder-title">Find a published lesson</h2>
+                <p>Linked Notion Lesson Steps fill each screen. Review the formatted sequence or begin it.</p>
+              </div>
+              <label className="bd-lesson-search">
+                Find by date, code, or title
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="M1.T1.L1 or lesson title"
+                  aria-label="Find a published lesson by date, code, or title"
+                />
+              </label>
+            </div>
+
+            {publishedLessonsLoading ? (
+              <p className="bd-lesson-state" role="status">Loading published lessons.</p>
+            ) : publishedLessonsError ? (
+              <p className="bd-lesson-state error" role="alert">{publishedLessonsError}</p>
+            ) : visibleNotionLessons.length === 0 ? (
+              <p className="bd-lesson-state">
+                {q ? `No published lessons match "${query.trim()}".` : "No published lessons with usable lesson codes were found."}
+              </p>
+            ) : (
+              <>
+                <div className="bd-lesson-list">
+                  {visibleNotionLessons.map((lesson) => {
+                    const encodedId = encodeURIComponent(lesson.id);
+                    return (
+                      <div className="bd-lesson-row" key={lesson.id}>
+                        <time className="bd-lesson-date" dateTime={lesson.date || undefined}>{formatLessonDate(lesson.date)}</time>
+                        <span className="bd-lesson-code">{lesson.lessonCode}</span>
+                        <p className="bd-lesson-title" title={lesson.title}>{lesson.title || "Untitled lesson"}</p>
+                        <div className="bd-lesson-actions">
+                          <Link className="bd-btn" href={`/control?notionLessonId=${encodedId}`}>Review</Link>
+                          <Link className="bd-btn p" href={`/control?notionLessonId=${encodedId}&run=1`}>Begin lesson</Link>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {notionLessonMatches.length > visibleNotionLessons.length && (
+                  <p className="bd-lesson-more">Showing {visibleNotionLessons.length} of {notionLessonMatches.length}. Refine the search to find another lesson.</p>
+                )}
+              </>
+            )}
+          </section>
+
           {/* RUN CLASS */}
           <h2 className="bd-sec-h" id="run">Run class</h2>
           <div className="bd-grid">{RUN.map((i) => <LinkCard key={i.href} item={i} />)}</div>
@@ -378,10 +551,10 @@ export default function TeacherHome() {
             <>
               <h2 className="bd-sec-h">Lesson library - load and start</h2>
               <div className="bd-grid">
-                {lessons.length === 0 ? (
+                {presetMatches.length === 0 ? (
                   <div className="bd-empty">No lessons match &ldquo;{query}&rdquo;.</div>
                 ) : (
-                  lessons.map((p) => (
+                  presetMatches.map((p) => (
                     <Link key={p.id} href={`/control?lesson=${p.id}`} className="bd-card" style={{ ["--c" as string]: "#fcaf38" }}>
                       <span className="bd-tile">L</span>
                       <div className="bd-card-text">

@@ -8,6 +8,7 @@ const DATA_SOURCE_IDS = [
   "3282eba1-de37-8069-a043-000b7c36799d",
   "d1c8e7b0-9a3c-4f1b-8c5c-9a2e5f0a1a3f",
 ];
+const LESSON_DATABASE_ID = "613d13a5-ac90-4ab3-9f5f-b7da95911ec3";
 const NOTION_API = "https://api.notion.com/v1";
 const NOTION_VERSION = "2025-09-03";
 
@@ -121,7 +122,30 @@ interface NotionProperty {
 
 interface NotionPage {
   id: string;
+  archived?: boolean;
+  in_trash?: boolean;
+  parent?: {
+    type?: string;
+    data_source_id?: string;
+    database_id?: string;
+  };
   properties: Record<string, NotionProperty>;
+}
+
+interface NotionQueryResponse {
+  results: NotionPage[];
+  has_more?: boolean;
+  next_cursor?: string | null;
+}
+
+export class LessonLookupConflictError extends Error {
+  readonly lessonCode: string;
+
+  constructor(lessonCode: string) {
+    super(`Multiple published Notion lessons use lesson code ${lessonCode}. Open the exact lesson from Teacher Home or unpublish the duplicate.`);
+    this.name = "LessonLookupConflictError";
+    this.lessonCode = lessonCode;
+  }
 }
 
 function extractText(prop: NotionProperty | undefined): string {
@@ -192,6 +216,30 @@ async function fetchRelatedPage(pageId: string, token: string, cache: Map<string
   return cached;
 }
 
+function compactNotionId(value: string | undefined): string {
+  return (value || "").trim().replace(/-/g, "").toLowerCase();
+}
+
+function normalizeNotionPageId(value: string): string | null {
+  const compact = compactNotionId(value);
+  if (!/^[0-9a-f]{32}$/.test(compact)) return null;
+  return [
+    compact.slice(0, 8),
+    compact.slice(8, 12),
+    compact.slice(12, 16),
+    compact.slice(16, 20),
+    compact.slice(20),
+  ].join("-");
+}
+
+const LESSON_PARENT_IDS = new Set([...DATA_SOURCE_IDS, LESSON_DATABASE_ID].map(compactNotionId));
+
+function belongsToLessonDatabase(page: NotionPage): boolean {
+  return [page.parent?.data_source_id, page.parent?.database_id]
+    .map(compactNotionId)
+    .some((parentId) => LESSON_PARENT_IDS.has(parentId));
+}
+
 async function resolveLink(
   prop: NotionProperty | undefined,
   token: string,
@@ -211,6 +259,10 @@ async function resolveLink(
       console.warn(err instanceof Error ? err.message : err);
       continue;
     }
+
+    // Notion relations can keep pointing at pages after those pages have been
+    // moved to Trash. Never surface a form or resource from a deleted record.
+    if (relatedPage.archived || relatedPage.in_trash) continue;
 
     for (const name of relatedPropertyNames) {
       const url = extractUrl(relatedPage.properties[name]);
@@ -447,7 +499,10 @@ async function mapPage(page: NotionPage, token: string, cache: Map<string, Promi
   };
 }
 
-async function queryLessons(body: object): Promise<LessonData[]> {
+async function queryLessons(
+  body: Record<string, unknown>,
+  options: { requireComplete?: boolean } = {},
+): Promise<LessonData[]> {
   const token = process.env.NOTION_TOKEN;
 
   if (!token) {
@@ -457,30 +512,59 @@ async function queryLessons(body: object): Promise<LessonData[]> {
   const lessons: LessonData[] = [];
   const errors: string[] = [];
   const relatedPageCache = new Map<string, Promise<NotionPage>>();
+  let failedDataSources = 0;
 
   for (const dataSourceId of DATA_SOURCE_IDS) {
-    const res = await fetch(`${NOTION_API}/data_sources/${dataSourceId}/query`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        "Notion-Version": NOTION_VERSION,
-      },
-      body: JSON.stringify(body),
-      cache: "no-store",
-    });
+    let startCursor: string | null = null;
+    let dataSourceFailed = false;
 
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      errors.push(`${dataSourceId}: Notion API error ${res.status}: ${detail}`);
-      continue;
-    }
+    do {
+      const requestBody: Record<string, unknown> = {
+        ...body,
+        page_size: 100,
+        ...(startCursor ? { start_cursor: startCursor } : {}),
+      };
+      const res = await fetch(`${NOTION_API}/data_sources/${dataSourceId}/query`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "Notion-Version": NOTION_VERSION,
+        },
+        body: JSON.stringify(requestBody),
+        cache: "no-store",
+      });
 
-    const data = (await res.json()) as { results: NotionPage[] };
-    lessons.push(...await Promise.all(data.results.map((page) => mapPage(page, token, relatedPageCache))));
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        errors.push(`${dataSourceId}: Notion API error ${res.status}: ${detail}`);
+        dataSourceFailed = true;
+        break;
+      }
+
+      const data = (await res.json()) as NotionQueryResponse;
+      lessons.push(...await Promise.all(
+        data.results
+          .filter((page) => !page.archived && !page.in_trash)
+          .map((page) => mapPage(page, token, relatedPageCache)),
+      ));
+
+      if (!data.has_more) {
+        startCursor = null;
+        break;
+      }
+      if (!data.next_cursor || data.next_cursor === startCursor) {
+        errors.push(`${dataSourceId}: Notion pagination did not return a usable next cursor.`);
+        dataSourceFailed = true;
+        break;
+      }
+      startCursor = data.next_cursor;
+    } while (startCursor);
+
+    if (dataSourceFailed) failedDataSources += 1;
   }
 
-  if (!lessons.length && errors.length === DATA_SOURCE_IDS.length) {
+  if ((options.requireComplete && failedDataSources > 0) || (!lessons.length && failedDataSources === DATA_SOURCE_IDS.length)) {
     throw new Error(errors.join(" | "));
   }
 
@@ -512,11 +596,53 @@ export async function getAllPublishedLessons(): Promise<LessonData[]> {
 export async function getLessonByCode(code: string): Promise<LessonData | null> {
   const normalizedCode = code.trim();
   if (!normalizedCode) return null;
-  const lessons = await queryLessons({
-    filter: {
-      property: "Lesson Code",
-      rich_text: { equals: normalizedCode },
+  const lessons = await queryLessons(
+    {
+      filter: {
+        and: [
+          { property: "Publish Workflow", select: { equals: "Published" } },
+          { property: "Lesson Code", rich_text: { equals: normalizedCode } },
+        ],
+      },
     },
+    { requireComplete: true },
+  );
+  const uniqueLessons = [...new Map(lessons.map((lesson) => [compactNotionId(lesson.id), lesson])).values()];
+  if (uniqueLessons.length > 1) throw new LessonLookupConflictError(normalizedCode);
+  return uniqueLessons[0] ?? null;
+}
+
+export async function getPublishedLessonById(pageId: string): Promise<LessonData | null> {
+  const normalizedPageId = normalizeNotionPageId(pageId);
+  if (!normalizedPageId) return null;
+
+  const token = process.env.NOTION_TOKEN;
+  if (!token) {
+    throw new Error("NOTION_TOKEN is not set. Add it to your Vercel environment variables.");
+  }
+
+  const res = await fetch(`${NOTION_API}/pages/${normalizedPageId}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Notion-Version": NOTION_VERSION,
+    },
+    cache: "no-store",
   });
-  return lessons[0] ?? null;
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Notion lesson page error ${res.status}: ${detail}`);
+  }
+
+  const page = (await res.json()) as NotionPage;
+  if (
+    page.archived
+    || page.in_trash
+    || !belongsToLessonDatabase(page)
+    || extractText(page.properties["Publish Workflow"]) !== "Published"
+  ) {
+    return null;
+  }
+
+  return mapPage(page, token, new Map<string, Promise<NotionPage>>());
 }
