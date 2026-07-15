@@ -42,6 +42,7 @@ const CLASS_MODE_TARGETS = new Set([
   "/term-identifier",
   "/exit-ticket",
   "/checkpoint",
+  "/bruh",
 ]);
 
 type StudentSessionState = {
