@@ -5,8 +5,8 @@
 // into the Warm up Submissions database.
 // =====================================================================
 
-const WARMUP_LINKS_EXPORT_SHEET = "Warm Up Links Export";
-const WARMUP_SUBMISSIONS_EXPORT_SHEET = "Warm Up Submissions Export";
+const BDM_WARMUP_LINKS_EXPORT_SHEET = "Warm Up Links Export";
+const BDM_WARMUP_SUBMISSIONS_EXPORT_SHEET = "Warm Up Submissions Export";
 
 const WARMUP_NOTION_API_BASE = "https://api.notion.com/v1";
 const WARMUP_NOTION_VERSION = "2026-03-11";
@@ -133,7 +133,7 @@ function recordWarmUpLinkSafely_(data) {
 
 function recordWarmUpLinkExport_(data) {
   const ss = SpreadsheetApp.openById(RESPONSE_SS_ID);
-  const sheet = getOrCreateExportSheet_(ss, WARMUP_LINKS_EXPORT_SHEET, [
+  const sheet = getOrCreateExportSheet_(ss, BDM_WARMUP_LINKS_EXPORT_SHEET, [
     "Synced At",
     "Key",
     "Name",
@@ -287,7 +287,7 @@ function findFormResponseForSubmission_(form, email) {
 
 function writeSubmissionExportRow_(data) {
   const ss = SpreadsheetApp.openById(RESPONSE_SS_ID);
-  const sheet = getOrCreateExportSheet_(ss, WARMUP_SUBMISSIONS_EXPORT_SHEET, [
+  const sheet = getOrCreateExportSheet_(ss, BDM_WARMUP_SUBMISSIONS_EXPORT_SHEET, [
     "Exported At",
     "Submission Key",
     "Submitted",
@@ -620,7 +620,7 @@ function promptForWarmupNotionProperties() {
 
 function backfillWarmupSubmissionExportsToNotion() {
   const ss = SpreadsheetApp.openById(RESPONSE_SS_ID);
-  const sheet = ss.getSheetByName(WARMUP_SUBMISSIONS_EXPORT_SHEET);
+  const sheet = ss.getSheetByName(BDM_WARMUP_SUBMISSIONS_EXPORT_SHEET);
   if (!sheet || sheet.getLastRow() < 2) {
     SpreadsheetApp.getUi().alert("No exported warm-up submissions were found to backfill.");
     return;
@@ -957,7 +957,7 @@ function getKnownWarmupFormIds_() {
 
   try {
     const responseSs = SpreadsheetApp.openById(RESPONSE_SS_ID);
-    const exportSheet = responseSs.getSheetByName(WARMUP_LINKS_EXPORT_SHEET);
+    const exportSheet = responseSs.getSheetByName(BDM_WARMUP_LINKS_EXPORT_SHEET);
     collectWarmupFormIdsFromSheet_(exportSheet, ids);
   } catch (err) {
     Logger.log(`Could not scan warm-up link export sheet: ${err.message}`);
