@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import LessonVisual from "@/components/LessonVisual";
 import { DEFAULT_STATES } from "@/lib/classStates";
 import { classroomStageTheme } from "@/lib/classroomPilot";
+import { resolveLessonVisual } from "@/lib/lessonVisuals";
 import { liveAssignedToolRoute } from "@/lib/liveFlowContract";
 import { TeacherApiError, teacherApiRequest } from "@/lib/teacherApi";
 
@@ -86,7 +88,15 @@ interface StepDraft {
   workSpaceAvailable: boolean;
 }
 
+interface SurfaceTextResolution {
+  text: string;
+  inheritedText: string;
+  source: string;
+  isOverride: boolean;
+}
+
 type EditableField = keyof StepDraft;
+type SurfaceField = "mainDisplay" | "paceDirections" | "studentAction" | "remoteActions";
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "conflict" | "error";
 type ConnectionState = "online" | "offline" | "reconnecting";
 
@@ -157,6 +167,20 @@ function normalizeChoices(choices: string[] | null | undefined): string[] {
   return (choices || []).map((choice) => choice.trim()).filter(Boolean);
 }
 
+function resolveSurfaceText(
+  override: string,
+  fallbacks: Array<{ text: string | undefined; source: string }>,
+): SurfaceTextResolution {
+  const inherited = fallbacks.find((fallback) => Boolean(fallback.text));
+  const inheritedText = inherited?.text || "";
+  return {
+    text: override || inheritedText,
+    inheritedText,
+    source: override ? "Custom screen text" : inherited?.source || "",
+    isOverride: Boolean(override),
+  };
+}
+
 function choicesMatch(left: string[] | null | undefined, right: string[] | null | undefined): boolean {
   const normalizedLeft = normalizeChoices(left);
   const normalizedRight = normalizeChoices(right);
@@ -217,6 +241,7 @@ export default function LessonScreenStudioPage() {
   const [selectedStepId, setSelectedStepId] = useState("");
   const [canonicalDraft, setCanonicalDraft] = useState<StepDraft | null>(null);
   const [draft, setDraft] = useState<StepDraft | null>(null);
+  const [surfaceEditBuffers, setSurfaceEditBuffers] = useState<Partial<Record<SurfaceField, string>>>({});
   const [lastEditedTime, setLastEditedTime] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [connectionState, setConnectionState] = useState<ConnectionState>("online");
@@ -244,6 +269,10 @@ export default function LessonScreenStudioPage() {
   useEffect(() => {
     activeSelectionRef.current = { lessonId: lesson?.id || "", stepId: selectedStepId };
   }, [lesson?.id, selectedStepId]);
+
+  useEffect(() => {
+    setSurfaceEditBuffers({});
+  }, [selectedLessonId, selectedStepId]);
 
   useEffect(() => {
     if (!isDirty) return;
@@ -353,6 +382,12 @@ export default function LessonScreenStudioPage() {
         setMessage("Notion changed while this draft was disconnected. Your local draft is still safe here.");
         return;
       }
+      setLesson((current) => current ? {
+        ...current,
+        steps: current.steps.map((currentStep) => currentStep.id === result.step.id
+          ? { ...currentStep, ...result.step }
+          : currentStep),
+      } : current);
       setCanonicalDraft(nextDraft);
       if (!useCurrentDraft) setDraft(nextDraft);
       lastEditedTimeRef.current = result.step.lastEditedTime;
@@ -413,6 +448,32 @@ export default function LessonScreenStudioPage() {
     }
   }
 
+  function beginSurfaceEdit(field: SurfaceField, value: string) {
+    setSurfaceEditBuffers((current) => Object.prototype.hasOwnProperty.call(current, field)
+      ? current
+      : { ...current, [field]: value });
+  }
+
+  function endSurfaceEdit(field: SurfaceField) {
+    setSurfaceEditBuffers((current) => {
+      if (!Object.prototype.hasOwnProperty.call(current, field)) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function updateSurfaceField(field: SurfaceField, value: string, resolution: SurfaceTextResolution) {
+    setSurfaceEditBuffers((current) => ({ ...current, [field]: value }));
+    const canonicalValue = canonicalDraft?.[field] || "";
+    updateDraft(field, !canonicalValue && value === resolution.inheritedText ? "" : value);
+  }
+
+  function useInheritedSurfaceText(field: SurfaceField) {
+    endSurfaceEdit(field);
+    updateDraft(field, "");
+  }
+
   function chooseLesson(id: string) {
     if (saveState === "saving") return;
     if (isDirty && !window.confirm("Discard the unsaved changes and open another lesson?")) return;
@@ -437,6 +498,7 @@ export default function LessonScreenStudioPage() {
   function discardChanges() {
     if (!canonicalDraft) return;
     setDraft(canonicalDraft);
+    setSurfaceEditBuffers({});
     setSaveState("idle");
     setConflictStep(null);
     setMessage("Changes discarded. The preview matches Notion.");
@@ -447,6 +509,7 @@ export default function LessonScreenStudioPage() {
     const nextDraft = draftFromStep(conflictStep);
     setCanonicalDraft(nextDraft);
     setDraft(nextDraft);
+    setSurfaceEditBuffers({});
     lastEditedTimeRef.current = conflictStep.lastEditedTime;
     setLastEditedTime(conflictStep.lastEditedTime);
     setConflictStep(null);
@@ -497,6 +560,7 @@ export default function LessonScreenStudioPage() {
       } : current);
       setCanonicalDraft(nextDraft);
       setDraft(nextDraft);
+      setSurfaceEditBuffers({});
       lastEditedTimeRef.current = result.step.lastEditedTime;
       setLastEditedTime(result.step.lastEditedTime);
       setSaveState("saved");
@@ -533,21 +597,56 @@ export default function LessonScreenStudioPage() {
   const isDiscussion = theme.id === "discussion";
   const isIndependent = theme.id === "independent" || theme.id === "closeout";
   const timer = draft ? formatTimer(draft.duration) : "--:--";
-  const mainBody = selectedStep && draft
-    ? draft.mainDisplay || draft.question || selectedStep.studentDirections || draft.paperTask || stateDefinition?.desc || "Add the main projector prompt."
-    : "Choose a lesson state.";
-  const paceBody = selectedStep && draft
-    ? draft.paceDirections || selectedStep.studentDirections || stateDefinition?.desc || "Add the current directions."
-    : "Current directions";
-  const studentBody = selectedStep && draft
-    ? draft.studentAction || selectedStep.studentDirections || stateDefinition?.desc || "Add one current student action."
-    : "Current student action";
-  const remoteBody = selectedStep && draft
-    ? draft.remoteActions || selectedStep.teacherNotes || draft.paceDirections || selectedStep.studentDirections || "Add private teacher actions."
-    : "Private teacher actions";
   const stems = splitLines(draft?.discussionStems || lesson?.discussionStems).slice(0, 4);
   const vocabulary = splitVocabulary(draft?.vocabulary || lesson?.discussionVocabulary).slice(0, 6);
   const paperSections = lesson && selectedStep && draft ? workSections(lesson, selectedStep, draft) : [];
+  const mainText = resolveSurfaceText(draft?.mainDisplay || "", [
+    { text: draft?.question, source: "Question" },
+    { text: selectedStep?.studentDirections, source: "Student Directions" },
+    { text: draft?.paperTask, source: "Paper Task" },
+    { text: stateDefinition?.desc, source: "state template" },
+  ]);
+  const paceText = resolveSurfaceText(draft?.paceDirections || "", [
+    { text: selectedStep?.studentDirections, source: "Student Directions" },
+    { text: stateDefinition?.desc, source: "state template" },
+  ]);
+  const studentText = resolveSurfaceText(draft?.studentAction || "", [
+    { text: selectedStep?.studentDirections, source: "Student Directions" },
+    { text: stateDefinition?.desc, source: "state template" },
+  ]);
+  const remoteText = resolveSurfaceText(draft?.remoteActions || "", [
+    { text: selectedStep?.teacherNotes, source: "Teacher Notes" },
+    { text: draft?.paceDirections, source: "Pace Directions" },
+    { text: selectedStep?.studentDirections, source: "Student Directions" },
+  ]);
+  const mainEditorText = Object.prototype.hasOwnProperty.call(surfaceEditBuffers, "mainDisplay")
+    ? surfaceEditBuffers.mainDisplay || ""
+    : mainText.text;
+  const paceEditorText = Object.prototype.hasOwnProperty.call(surfaceEditBuffers, "paceDirections")
+    ? surfaceEditBuffers.paceDirections || ""
+    : paceText.text;
+  const studentEditorText = Object.prototype.hasOwnProperty.call(surfaceEditBuffers, "studentAction")
+    ? surfaceEditBuffers.studentAction || ""
+    : studentText.text;
+  const remoteEditorText = Object.prototype.hasOwnProperty.call(surfaceEditBuffers, "remoteActions")
+    ? surfaceEditBuffers.remoteActions || ""
+    : remoteText.text;
+  const mainBody = selectedStep && draft ? mainEditorText || "Add the main projector prompt." : "Choose a lesson state.";
+  const paceBody = selectedStep && draft ? paceEditorText || "Add the current directions." : "Current directions";
+  const studentBody = selectedStep && draft ? studentEditorText || "Add one current student action." : "Current student action";
+  const remoteBody = selectedStep && draft ? remoteEditorText || "Add private teacher actions." : "Private teacher actions";
+  const mainScreenUsesStructuredLayout = isLearningCheck || (isIndependent && paperSections.length > 0);
+  const lessonVisual = selectedStep && draft ? resolveLessonVisual({
+    lessonCode: lesson?.lessonCode,
+    stateId: theme.id,
+    text: mainEditorText,
+    fallbackTexts: [selectedStep.studentDirections, draft.question, draft.paperTask],
+    contextSteps: lesson?.steps.map((step) => ({
+      stateId: classroomStageTheme(step.stateId, step.title).id,
+      text: step.mainDisplay || step.studentDirections || step.question || step.paperTask,
+    })),
+    currentStepIndex: lesson?.steps.findIndex((step) => step.id === selectedStep.id),
+  }) : null;
   const normalizedResponseMode = draft?.responseMode.trim().toLowerCase() || "";
   const normalizedChoices = normalizeChoices(draft?.choices);
   const responseModeNeedsQuestion = normalizedResponseMode === "short answer" || normalizedResponseMode === "multiple choice";
@@ -572,6 +671,20 @@ export default function LessonScreenStudioPage() {
       || (selectedStep.stateId === "warmup" ? lesson?.warmUpLink : "")
       || (selectedStep.stateId === "exit" ? lesson?.exitTicketLink : "")
     : "";
+  const hasConfiguredPollSurface = Boolean(
+    selectedStep?.pollKind
+    || normalizedResponseMode === "short answer"
+    || normalizedResponseMode === "multiple choice"
+    || normalizedResponseMode === "fist to five",
+  );
+  const studioPollSurfaceWins = hasConfiguredPollSurface && (isLearningCheck || !draft?.mainDisplay);
+  const hasConfiguredResourceSurface = Boolean(assignedResourceLink || (isAssignedTool && hasAssignedToolResource));
+  const studioResourceSurfaceWins = hasConfiguredResourceSurface
+    && !studioPollSurfaceWins
+    && (isAssignedTool || !draft?.mainDisplay);
+  const showLessonVisual = !studioPollSurfaceWins && !studioResourceSurfaceWins
+    ? lessonVisual
+    : null;
   const previewStyle = {
     "--studio-accent": theme.accent,
     "--studio-base": theme.projectorBase,
@@ -698,6 +811,11 @@ export default function LessonScreenStudioPage() {
         .studio-fields { min-width:0; margin:0; border:0; padding:0; }
         .studio-label { display:flex; justify-content:space-between; gap:10px; color:#6a6258; font-size:0.62rem; font-weight:850; letter-spacing:0.08em; text-transform:uppercase; }
         .studio-count { color:#9a9184; font-weight:650; letter-spacing:0; text-transform:none; }
+        .studio-source-row { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:6px; }
+        .studio-source-note { margin:0; color:#766e63; font-size:0.68rem; font-weight:650; line-height:1.35; }
+        .studio-source-action { min-height:44px; flex:0 0 auto; border:1px solid #b99a60; border-radius:7px; background:#fffaf0; color:#72551c; padding:0 11px; font-size:0.68rem; font-weight:800; cursor:pointer; }
+        .studio-source-action:focus-visible { outline:3px solid var(--studio-accent); outline-offset:2px; }
+        .studio-source-action:disabled { cursor:not-allowed; opacity:0.5; }
         .studio-input { width:100%; border:1px solid #d8cfc1; border-radius:7px; background:rgba(255,255,255,0.78); color:var(--bdb-ink); padding:10px 11px; font-size:0.78rem; font-weight:650; line-height:1.45; }
         textarea.studio-input { min-height:76px; resize:vertical; }
         textarea.studio-input.large { min-height:112px; }
@@ -819,7 +937,9 @@ export default function LessonScreenStudioPage() {
                   <span className="studio-phase">{stepLabel(selectedStep)}</span>
                   <span className="studio-screen-time">{timer}</span>
                 </div>
-                {isLearningCheck ? (
+                {showLessonVisual ? (
+                  <LessonVisual visual={showLessonVisual} variant="studio" accent={theme.accent} />
+                ) : isLearningCheck ? (
                   <div className="studio-target">
                     {lesson.learningIntention && <div className="studio-target-intention">{lesson.learningIntention}</div>}
                     <div className="studio-target-criterion">{selectedCriterion}</div>
@@ -971,19 +1091,69 @@ export default function LessonScreenStudioPage() {
               </label>
 
               <label className="studio-field">
-                <span className="studio-label">Main Display (projector prompt)<span className="studio-count">{draft.mainDisplay.length}</span></span>
-                <textarea className="studio-input large" maxLength={2000} value={draft.mainDisplay} onChange={(event) => updateDraft("mainDisplay", event.target.value)} />
+                <span className="studio-label">Main Display (projector prompt)<span className="studio-count">{mainEditorText.length}</span></span>
+                <textarea
+                  className="studio-input large"
+                  disabled={mainScreenUsesStructuredLayout}
+                  maxLength={2000}
+                  value={mainEditorText}
+                  onFocus={() => beginSurfaceEdit("mainDisplay", mainEditorText)}
+                  onBlur={() => endSurfaceEdit("mainDisplay")}
+                  onChange={(event) => updateSurfaceField("mainDisplay", event.target.value, mainText)}
+                />
               </label>
+              {mainScreenUsesStructuredLayout ? (
+                <div className="studio-source-row">
+                  <p className="studio-source-note">This state uses the structured layout shown in the Main projector preview.</p>
+                </div>
+              ) : mainText.source ? (
+                <div className="studio-source-row">
+                  <p className="studio-source-note">{mainText.isOverride ? "Custom screen-specific text." : `Using ${mainText.source}. Edit this box to create a screen-specific version.`}</p>
+                  {mainText.isOverride && mainText.inheritedText && (
+                    <button className="studio-source-action" type="button" onClick={() => useInheritedSurfaceText("mainDisplay")}>Use inherited text</button>
+                  )}
+                </div>
+              ) : null}
 
               <label className="studio-field">
-                <span className="studio-label">Pace Directions<span className="studio-count">{draft.paceDirections.length}</span></span>
-                <textarea className="studio-input" maxLength={2000} value={draft.paceDirections} onChange={(event) => updateDraft("paceDirections", event.target.value)} />
+                <span className="studio-label">Pace Directions<span className="studio-count">{paceEditorText.length}</span></span>
+                <textarea
+                  className="studio-input"
+                  maxLength={2000}
+                  value={paceEditorText}
+                  onFocus={() => beginSurfaceEdit("paceDirections", paceEditorText)}
+                  onBlur={() => endSurfaceEdit("paceDirections")}
+                  onChange={(event) => updateSurfaceField("paceDirections", event.target.value, paceText)}
+                />
               </label>
+              {paceText.source && (
+                <div className="studio-source-row">
+                  <p className="studio-source-note">{paceText.isOverride ? "Custom screen-specific text." : `Using ${paceText.source}. Edit this box to create a screen-specific version.`}</p>
+                  {paceText.isOverride && paceText.inheritedText && (
+                    <button className="studio-source-action" type="button" onClick={() => useInheritedSurfaceText("paceDirections")}>Use inherited text</button>
+                  )}
+                </div>
+              )}
 
               <label className="studio-field">
-                <span className="studio-label">Student Action (Chromebook)<span className="studio-count">{draft.studentAction.length}</span></span>
-                <textarea className="studio-input" maxLength={2000} value={draft.studentAction} onChange={(event) => updateDraft("studentAction", event.target.value)} />
+                <span className="studio-label">Student Action (Chromebook)<span className="studio-count">{studentEditorText.length}</span></span>
+                <textarea
+                  className="studio-input"
+                  maxLength={2000}
+                  value={studentEditorText}
+                  onFocus={() => beginSurfaceEdit("studentAction", studentEditorText)}
+                  onBlur={() => endSurfaceEdit("studentAction")}
+                  onChange={(event) => updateSurfaceField("studentAction", event.target.value, studentText)}
+                />
               </label>
+              {studentText.source && (
+                <div className="studio-source-row">
+                  <p className="studio-source-note">{studentText.isOverride ? "Custom screen-specific text." : `Using ${studentText.source}. Edit this box to create a screen-specific version.`}</p>
+                  {studentText.isOverride && studentText.inheritedText && (
+                    <button className="studio-source-action" type="button" onClick={() => useInheritedSurfaceText("studentAction")}>Use inherited text</button>
+                  )}
+                </div>
+              )}
 
               <label className="studio-field">
                 <span className="studio-label">Response Mode</span>
@@ -993,9 +1163,24 @@ export default function LessonScreenStudioPage() {
               </label>
 
               <label className="studio-field">
-                <span className="studio-label">Remote Actions<span className="studio-count">{draft.remoteActions.length}</span></span>
-                <textarea className="studio-input" maxLength={2000} value={draft.remoteActions} onChange={(event) => updateDraft("remoteActions", event.target.value)} />
+                <span className="studio-label">Remote Actions<span className="studio-count">{remoteEditorText.length}</span></span>
+                <textarea
+                  className="studio-input"
+                  maxLength={2000}
+                  value={remoteEditorText}
+                  onFocus={() => beginSurfaceEdit("remoteActions", remoteEditorText)}
+                  onBlur={() => endSurfaceEdit("remoteActions")}
+                  onChange={(event) => updateSurfaceField("remoteActions", event.target.value, remoteText)}
+                />
               </label>
+              {remoteText.source && (
+                <div className="studio-source-row">
+                  <p className="studio-source-note">{remoteText.isOverride ? "Custom screen-specific text." : `Using ${remoteText.source}. Edit this box to create a screen-specific version.`}</p>
+                  {remoteText.isOverride && remoteText.inheritedText && (
+                    <button className="studio-source-action" type="button" onClick={() => useInheritedSurfaceText("remoteActions")}>Use inherited text</button>
+                  )}
+                </div>
+              )}
 
               <label className="studio-field studio-check">
                 <input type="checkbox" checked={draft.workSpaceAvailable} onChange={(event) => updateDraft("workSpaceAvailable", event.target.checked)} />
