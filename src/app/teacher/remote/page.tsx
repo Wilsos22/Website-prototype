@@ -942,7 +942,7 @@ export default function TeacherRemotePage() {
         .response-name { font-weight:900; }
         .response-answer { color:#635c53; overflow-wrap:anywhere; }
         .response-empty { margin:0; color:#756d62; font-size:0.8rem; font-weight:700; }
-        .remote-links { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+        .remote-links { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
         .remote-link, .remote-change, .remote-end { display:flex; min-height:50px; align-items:center; justify-content:center; border:1px solid #d5cdbf; border-radius:11px; background:#fff; color:#39342d; padding:0 11px; text-align:center; text-decoration:none; font:inherit; font-size:0.78rem; font-weight:850; cursor:pointer; }
         .remote-link:hover, .remote-change:hover { border-color:var(--remote-accent); }
         .remote-link:focus-visible, .remote-change:focus-visible, .remote-end:focus-visible { outline:3px solid color-mix(in srgb,var(--remote-accent) 36%,transparent); outline-offset:2px; }
@@ -1275,7 +1275,6 @@ export default function TeacherRemotePage() {
                     <div className="remote-links">
                       <a className="remote-link" href={stageLinks.present} target="_blank" rel="noreferrer">Open main projector</a>
                       <a className="remote-link" href={stageLinks.pace} target="_blank" rel="noreferrer">Open Pace + Support</a>
-                      <a className="remote-link" href="/teacher/audio">Manage audio library</a>
                       <button className="remote-change" type="button" onClick={changeSession}>Change session</button>
                     </div>
                   </div>

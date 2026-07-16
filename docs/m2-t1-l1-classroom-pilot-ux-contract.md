@@ -72,7 +72,7 @@ The iPad is both the private controller and the teacher's writing surface.
 - Keep a stable header with the current phase, compact timer, connection state, and End session.
 - In landscape, keep compact Main, Pace, and Student mirrors in a 314-pixel rail. In portrait, move the same three mirrors into one compact row above the controls.
 - Put only the current state's navigation, timer, whiteboard, spinner, scoreboard, or discussion controls first. Speaker notes and private response data are secondary.
-- Keep Abbie, sound cues, projector links, the audio library, and session switching inside collapsed Utilities until the teacher asks for them.
+- Keep Abbie, sound cues, projector links, and session switching inside collapsed Utilities until the teacher asks for them. Upload host audio from the classroom laptop's Teacher Home audio library.
 - Show current state, time, directions, next state, and private aggregate or student-level data as appropriate.
 - Provide Back, Next state, start or pause, add time, remove time, reset, approved sound controls, and End session.
 - Starting the lesson turns on automatic pacing. Pause holds the current state; resume continues the timed sequence.
