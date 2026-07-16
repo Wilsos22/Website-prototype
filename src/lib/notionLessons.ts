@@ -391,7 +391,12 @@ function extractAnyCcss(properties: Record<string, NotionProperty>): string {
   return "";
 }
 
-async function mapPage(page: NotionPage, token: string, cache: Map<string, Promise<NotionPage>>): Promise<LessonData> {
+async function mapPage(
+  page: NotionPage,
+  token: string,
+  cache: Map<string, Promise<NotionPage>>,
+  options: { includeRelations?: boolean } = {},
+): Promise<LessonData> {
   const p = page.properties;
   const supplyText = extractText(p["Supplies"]);
   const toolText = extractText(p["Tools"]);
@@ -406,7 +411,7 @@ async function mapPage(page: NotionPage, token: string, cache: Map<string, Promi
   const hasSupplyCheckboxes = hasPrefixedCheckboxProperties(p, SUPPLY_PREFIXES) || hasNamedCheckboxProperties(p, SUPPLY_CHECKBOX_NAMES);
   const hasToolCheckboxes = hasPrefixedCheckboxProperties(p, TOOL_PREFIXES) || hasNamedCheckboxProperties(p, TOOL_CHECKBOX_NAMES);
 
-  const steps = await Promise.all((p["Lesson Steps"]?.relation ?? []).map(async ({ id }) => {
+  const steps = options.includeRelations === false ? [] : await Promise.all((p["Lesson Steps"]?.relation ?? []).map(async ({ id }) => {
     const related = await fetchRelatedPage(id, token, cache);
     const step = related.properties;
     const rawKind = extractText(step["Poll Kind"]);
@@ -455,7 +460,9 @@ async function mapPage(page: NotionPage, token: string, cache: Map<string, Promi
     title: extractText(p["Lesson"]),
     subtitle: extractText(p["Subtitle"]),
     essentialIdeas: extractText(p["Essential Ideas"]),
-    assignmentLink: await resolveFirstLink(p, ["Assignment Link", "Assignment", "Assignment URL"], token, cache),
+    assignmentLink: options.includeRelations === false
+      ? ""
+      : await resolveFirstLink(p, ["Assignment Link", "Assignment", "Assignment URL"], token, cache),
     date: extractText(p["Date"]),
     dateEnd: extractDateEnd(p["Date"]),
     dueDate: extractText(p["Due Date"]),
@@ -468,14 +475,18 @@ async function mapPage(page: NotionPage, token: string, cache: Map<string, Promi
     tools: uniq([...splitList(toolText), ...checkedTools]).join("\n"),
     suppliesConfigured: Boolean(supplyText.trim()) || hasSupplyCheckboxes,
     toolsConfigured: Boolean(toolText.trim()) || hasToolCheckboxes,
-    warmUpLink: await resolveFirstLink(
-      p,
-      ["Warm Up Link", "Warm-Up Link", "Warm up links 1", "Warm-Up", "Warm Up"],
-      token,
-      cache,
-      ["Form Link"],
-    ),
-    exitTicketLink: await resolveFirstLink(p, ["Exit Ticket Link", "Exit-Ticket Link", "Exit Ticket", "Exit Ticket URL"], token, cache),
+    warmUpLink: options.includeRelations === false
+      ? ""
+      : await resolveFirstLink(
+        p,
+        ["Warm Up Link", "Warm-Up Link", "Warm up links 1", "Warm-Up", "Warm Up"],
+        token,
+        cache,
+        ["Form Link"],
+      ),
+    exitTicketLink: options.includeRelations === false
+      ? ""
+      : await resolveFirstLink(p, ["Exit Ticket Link", "Exit-Ticket Link", "Exit Ticket", "Exit Ticket URL"], token, cache),
     learningIntention: extractText(p["Learning Intention"]),
     successCriteria: extractText(p["Success Criteria"]),
     selectedSuccessCriterion: extractText(p["Selected Success Criterion"]),
@@ -501,7 +512,7 @@ async function mapPage(page: NotionPage, token: string, cache: Map<string, Promi
 
 async function queryLessons(
   body: Record<string, unknown>,
-  options: { requireComplete?: boolean } = {},
+  options: { requireComplete?: boolean; includeRelations?: boolean } = {},
 ): Promise<LessonData[]> {
   const token = process.env.NOTION_TOKEN;
 
@@ -546,7 +557,7 @@ async function queryLessons(
       lessons.push(...await Promise.all(
         data.results
           .filter((page) => !page.archived && !page.in_trash)
-          .map((page) => mapPage(page, token, relatedPageCache)),
+          .map((page) => mapPage(page, token, relatedPageCache, { includeRelations: options.includeRelations })),
       ));
 
       if (!data.has_more) {
@@ -581,6 +592,22 @@ export async function getTodayLesson(isoDate: string): Promise<LessonData | null
     },
   });
   return lessons[0] ?? null;
+}
+
+export async function getPublishedLessonsForDateRange(startDate: string, endDate: string): Promise<LessonData[]> {
+  return queryLessons(
+    {
+      filter: {
+        and: [
+          { property: "Publish Workflow", select: { equals: "Published" } },
+          { property: "Date", date: { on_or_after: startDate } },
+          { property: "Date", date: { on_or_before: endDate } },
+        ],
+      },
+      sorts: [{ property: "Date", direction: "ascending" }],
+    },
+    { includeRelations: false },
+  );
 }
 
 export async function getAllPublishedLessons(): Promise<LessonData[]> {
