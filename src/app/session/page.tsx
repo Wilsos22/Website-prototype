@@ -22,8 +22,23 @@ import {
 } from "@/lib/challenges";
 
 interface Period { id: string; name: string; }
-interface Join { id: string; display_name: string | null; joined_at: string; }
+interface Join { id: string; student_id: string | null; display_name: string | null; joined_at: string; }
 interface Answer { id: string; display_name: string | null; answer: string | null; }
+interface RosterStudent {
+  id: string;
+  periodId: string;
+  fullName: string;
+  email: string | null;
+  identityLinked: boolean;
+}
+interface AdmissionRequest { id: string; requestCode: string; requestedAt: string; }
+interface TeacherSessionRow {
+  id: string;
+  status: string;
+  period_id: string;
+  join_code: string | null;
+  broadcast: string | null;
+}
 
 const TEACHER_SERVER_CLIENT = {} as never;
 
@@ -44,10 +59,17 @@ export default function SessionPage() {
   const supabase = TEACHER_SERVER_CLIENT;
   const [periods, setPeriods] = useState<Period[]>([]);
   const [periodId, setPeriodId] = useState("");
-  const [session, setSession] = useState<{ id: string; code: string; periodName: string } | null>(null);
+  const [session, setSession] = useState<{ id: string; code: string; periodName: string; periodId: string } | null>(null);
   const [joins, setJoins] = useState<Join[]>([]);
+  const [rosterStudents, setRosterStudents] = useState<RosterStudent[]>([]);
   const [rosterCount, setRosterCount] = useState(0);
+  const [admissionRequests, setAdmissionRequests] = useState<AdmissionRequest[]>([]);
+  const [admissionSelections, setAdmissionSelections] = useState<Record<string, string>>({});
+  const [admittingRequestCode, setAdmittingRequestCode] = useState<string | null>(null);
+  const [admissionError, setAdmissionError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [initializing, setInitializing] = useState(true);
+  const [ending, setEnding] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [question, setQuestion] = useState("");
@@ -68,42 +90,68 @@ export default function SessionPage() {
   const boardRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const activeSkill = SKILLS.find((s) => s.key === chSkill) || SKILLS[0];
 
+  // Recover the server's open session, even when this browser does not have the
+  // local teacher-session marker. Teacher Home, Control, and this page must all
+  // resolve to the same server row instead of offering to start a duplicate.
   useEffect(() => {
-    teacherApiRequest<{ periods: Period[] }>("/api/teacher/roster").then(({ periods: ps }) => {
-      setPeriods(ps); if (ps[0]) setPeriodId(ps[0].id);
-    }).catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Periods could not be loaded."));
-  }, []);
-
-  // Restore an already-open session if the teacher navigated away (e.g. to the
-  // Control panel) and came back — otherwise the page looks empty and a second
-  // "Start session" click spawns a duplicate with a new code, which is what made
-  // it keep asking to start/join a new session.
-  useEffect(() => {
-    const stored = getStoredTeacherSession();
-    if (!stored) return;
     let cancelled = false;
     (async () => {
-      const [sessionResult, rosterResult] = await Promise.all([
-        teacherApiRequest<{ session: { id: string; status: string; period_id: string; broadcast: string | null } }>(`/api/teacher/session?sessionId=${encodeURIComponent(stored.sessionId)}`),
-        teacherApiRequest<{ students: Array<{ periodId: string }> }>("/api/teacher/roster"),
-      ]).catch(() => [{ session: null }, { students: [] }] as const);
-      if (cancelled) return;
-      const s = sessionResult.session;
-      if (!s || s.status !== "open") {
-        clearStoredTeacherSession(stored.sessionId);
-        return;
+      try {
+        const roster = await teacherApiRequest<{ periods: Period[]; students: RosterStudent[] }>("/api/teacher/roster");
+        if (cancelled) return;
+        setPeriods(roster.periods);
+        setRosterStudents(roster.students);
+        setPeriodId((current) => current || roster.periods[0]?.id || "");
+
+        const requestedSessionId = new URLSearchParams(window.location.search).get("sessionId")?.trim() || "";
+        const stored = getStoredTeacherSession();
+        let openSession: TeacherSessionRow | null = null;
+
+        if (requestedSessionId) {
+          const result = await teacherApiRequest<{ session: TeacherSessionRow }>(
+            `/api/teacher/session?sessionId=${encodeURIComponent(requestedSessionId)}`,
+          ).catch(() => ({ session: null }));
+          if (result.session?.status === "open") {
+            openSession = result.session;
+          }
+        }
+
+        if (!openSession) {
+          const result = await teacherApiRequest<{ sessions: TeacherSessionRow[] }>("/api/teacher/session");
+          openSession = result.sessions.find((candidate) => candidate.status === "open") ?? null;
+        }
+
+        if (cancelled) return;
+        if (!openSession) {
+          if (stored) clearStoredTeacherSession(stored.sessionId);
+          return;
+        }
+
+        const periodName = roster.periods.find((period) => period.id === openSession.period_id)?.name
+          || (stored?.sessionId === openSession.id ? stored.periodName : "")
+          || "Class";
+        const code = openSession.join_code
+          || (stored?.sessionId === openSession.id ? stored.code : "")
+          || "----";
+        setRosterCount(roster.students.filter((student) => student.periodId === openSession.period_id).length);
+        setBroadcast(openSession.broadcast);
+        setSession({ id: openSession.id, code, periodName, periodId: openSession.period_id });
+        saveTeacherSession(openSession.id, code, periodName);
+      } catch (loadError) {
+        if (!cancelled) {
+          setError(loadError instanceof Error ? loadError.message : "The current session could not be loaded.");
+        }
+      } finally {
+        if (!cancelled) setInitializing(false);
       }
-      if (cancelled) return;
-      setRosterCount(rosterResult.students.filter((student) => student.periodId === s.period_id).length);
-      setBroadcast(s.broadcast ?? null);
-      setSession({ id: s.id, code: stored.code, periodName: stored.periodName });
     })();
     return () => { cancelled = true; };
   }, []);
 
   const pollJoins = useCallback(async (sessionId: string) => {
-    const result = await teacherApiRequest<{ joins: Join[] }>(`/api/teacher/session?sessionId=${encodeURIComponent(sessionId)}`);
+    const result = await teacherApiRequest<{ joins: Join[]; admissionRequests?: AdmissionRequest[] }>(`/api/teacher/session?sessionId=${encodeURIComponent(sessionId)}`);
     setJoins(result.joins);
+    setAdmissionRequests(result.admissionRequests || []);
   }, []);
 
   useEffect(() => {
@@ -142,21 +190,59 @@ export default function SessionPage() {
       data = result.session;
     } catch (actionError) { setError(actionError instanceof Error ? actionError.message : "Session could not be started."); return; }
     const periodName = periods.find((p) => p.id === periodId)?.name || "";
-    const roster = await teacherApiRequest<{ students: Array<{ periodId: string }> }>("/api/teacher/roster");
+    const roster = await teacherApiRequest<{ students: RosterStudent[] }>("/api/teacher/roster");
+    setRosterStudents(roster.students);
     setRosterCount(roster.students.filter((student) => student.periodId === periodId).length);
     const sessionId = (data as { id: string }).id;
     saveTeacherSession(sessionId, code, periodName);
-    setSession({ id: sessionId, code, periodName });
-    setJoins([]); setBroadcast("/lesson");
+    setSession({ id: sessionId, code, periodName, periodId });
+    setJoins([]); setAdmissionRequests([]); setBroadcast("/lesson");
   }
   async function end() {
-    if (!session) return;
+    if (!session || ending) return;
+    if (!window.confirm("End this session for every connected student?")) return;
     // Close any polls still open for this session so they can't linger and block
     // students who later join (an orphaned open poll otherwise has no off-switch).
-    await teacherPost("/api/teacher/session", { action: "close", sessionId: session.id });
-    clearStoredTeacherSession(session.id);
-    setSession(null); setJoins([]); setPoll(null); setAnswers([]); setBroadcast(null);
-    setChallenge(null); setBoard([]);
+    setEnding(true);
+    setError(null);
+    try {
+      await teacherPost("/api/teacher/session", { action: "close", sessionId: session.id });
+      clearStoredTeacherSession(session.id);
+      setSession(null); setJoins([]); setAdmissionRequests([]); setPoll(null); setAnswers([]); setBroadcast(null);
+      setChallenge(null); setBoard([]);
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "The session could not be ended.");
+    } finally {
+      setEnding(false);
+    }
+  }
+  async function admitStudent(request: AdmissionRequest) {
+    if (!session || admittingRequestCode) return;
+    const studentEmail = admissionSelections[request.id];
+    if (!studentEmail) {
+      setAdmissionError("Choose the student whose Chromebook shows this approval code.");
+      return;
+    }
+    setAdmissionError(null);
+    setAdmittingRequestCode(request.requestCode);
+    try {
+      await teacherPost("/api/teacher/session", {
+        action: "admit",
+        sessionId: session.id,
+        requestCode: request.requestCode,
+        studentEmail,
+      });
+      setAdmissionSelections((current) => {
+        const next = { ...current };
+        delete next[request.id];
+        return next;
+      });
+      await pollJoins(session.id);
+    } catch (actionError) {
+      setAdmissionError(actionError instanceof Error ? actionError.message : "The student could not be admitted.");
+    } finally {
+      setAdmittingRequestCode(null);
+    }
   }
   async function setBroadcastTo(value: string | null) {
     if (!session) return;
@@ -257,6 +343,12 @@ export default function SessionPage() {
         .se-count { font-size:1rem; font-weight:800; color:#5a5346; margin-bottom:10px; }
         .se-joins { display:flex; flex-wrap:wrap; gap:8px; }
         .se-chip { background:#e7f8f3; border:1px solid #b9ebdf; color:#0f766e; border-radius:999px; padding:9px 16px; font-weight:800; animation:sePop 0.3s ease; }
+        .se-admissions { display:grid; gap:10px; }
+        .se-admission-row { display:grid; grid-template-columns:minmax(92px,auto) minmax(190px,1fr) auto; gap:10px; align-items:center;
+          border:1px solid #ffe2a8; background:#fffaf0; border-radius:12px; padding:12px; }
+        .se-admission-code { color:#92660a; font-size:1.18rem; font-weight:900; letter-spacing:0.1em; }
+        .se-admission-help { margin:0 0 12px; color:#7a7468; font-size:0.9rem; font-weight:650; line-height:1.45; }
+        @media (max-width:560px) { .se-admission-row { grid-template-columns:1fr; } .se-admission-row .se-start { width:100%; } }
         @keyframes sePop { from{transform:scale(0.85); opacity:0.4;} to{transform:none; opacity:1;} }
         .se-empty { color:#b3aa97; font-weight:600; }
         .se-warn { background:#fff7e6; border:1px solid #ffe2a8; color:#92660a; border-radius:14px; padding:16px 18px; font-weight:700; line-height:1.6; }
@@ -281,7 +373,6 @@ export default function SessionPage() {
           border-radius:12px; padding:11px 13px; font-weight:800; font-size:0.88rem; cursor:pointer; }
         .se-skill:hover { border-color:#14b8a6; }
         .se-skill.on { background:#14b8a6; border-color:#14b8a6; color:#04231f; }
-        .se-skill-emoji { font-size:1.15rem; }
         .se-pills { display:flex; flex-wrap:wrap; gap:8px; }
         .se-pill { background:#f6f1e6; border:1px solid #e7dec9; color:#5a5346; border-radius:999px; padding:9px 15px; font-weight:800; font-size:0.88rem; cursor:pointer; }
         .se-pill:hover { border-color:#14b8a6; }
@@ -302,7 +393,11 @@ export default function SessionPage() {
         {!supabase && <div className="se-warn">Supabase isn&apos;t connected yet — add your keys in Vercel and redeploy.</div>}
         {error && <div className="se-err">{error}</div>}
 
-        {supabase && !session && (
+        {supabase && initializing && (
+          <div className="se-card"><p className="se-empty">Checking for an open session.</p></div>
+        )}
+
+        {supabase && !initializing && !session && (
           <div className="se-card">
             <div className="se-row">
               <select className="se-sel" value={periodId} onChange={(e) => setPeriodId(e.target.value)}>
@@ -320,8 +415,50 @@ export default function SessionPage() {
             <div className="se-card se-code-wrap">
               <div className="se-code-label">{session.periodName} · code</div>
               <div className="se-code">{session.code}</div>
-              <button className="se-end" onClick={end}>End session</button>
+              <button className="se-end" onClick={end} disabled={ending}>{ending ? "Ending session" : "End session"}</button>
             </div>
+            {admissionRequests.length > 0 && (
+              <div className="se-card">
+                <h3 className="se-qh">Waiting for teacher: {admissionRequests.length}</h3>
+                <p className="se-admission-help">Match the code on the Chromebook, choose the student, then admit.</p>
+                {admissionError && <div className="se-err" style={{ marginBottom: 10 }} role="status">{admissionError}</div>}
+                <div className="se-admissions">
+                  {admissionRequests.map((request) => {
+                    const availableStudents = rosterStudents.filter((student) =>
+                      student.periodId === session.periodId &&
+                      Boolean(student.email) &&
+                      !joins.some((join) => join.student_id === student.id),
+                    );
+                    return (
+                      <div className="se-admission-row" key={request.id}>
+                        <strong className="se-admission-code">{request.requestCode}</strong>
+                        <select
+                          className="se-sel"
+                          aria-label={`Student for approval code ${request.requestCode}`}
+                          value={admissionSelections[request.id] || ""}
+                          onChange={(event) => setAdmissionSelections((current) => ({
+                            ...current,
+                            [request.id]: event.target.value,
+                          }))}
+                        >
+                          <option value="">Choose student</option>
+                          {availableStudents.map((student) => (
+                            <option key={student.id} value={student.email || ""}>{student.fullName}</option>
+                          ))}
+                        </select>
+                        <button
+                          className="se-start"
+                          onClick={() => admitStudent(request)}
+                          disabled={!admissionSelections[request.id] || admittingRequestCode !== null}
+                        >
+                          {admittingRequestCode === request.requestCode ? "Admitting" : "Admit"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <div className="se-card">
               <div className="se-count">Joined: {joins.length}{rosterCount ? ` of ${rosterCount}` : ""}</div>
               {joins.length === 0 ? <span className="se-empty">Waiting for students to join…</span>
@@ -356,7 +493,7 @@ export default function SessionPage() {
                     {SKILLS.map((s) => (
                       <button key={s.key} className={`se-skill${chSkill === s.key ? " on" : ""}`}
                         onClick={() => { setChSkill(s.key); setChLevel(1); }}>
-                        <span className="se-skill-emoji">{s.emoji}</span>{s.label}
+                        {s.label}
                       </button>
                     ))}
                   </div>
@@ -387,7 +524,7 @@ export default function SessionPage() {
               ) : (
                 <>
                   <div className="se-row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-                    <div className="se-chtitle">{activeSkill.emoji} {challenge.title}</div>
+                    <div className="se-chtitle">{challenge.title}</div>
                     <button className="se-end" onClick={stopChallenge}>End challenge</button>
                   </div>
                   <div className="se-count" style={{ marginTop: 12 }}>Live leaderboard · {board.length} playing</div>

@@ -3,8 +3,8 @@
 // Teacher Classroom Control Panel — front-of-room display.
 // Bank (bottom): pull states into the day's LINEUP (sequence) with a running
 //   total vs. a 55-minute period.
-// Each state loads an adjustable countdown. At 0 it flashes and WAITS for you
-//   to tap Next.
+// Each state loads an adjustable countdown. After Start, the timed sequence
+// advances automatically until the teacher pauses or stops it.
 // Ending sequence: 30-second alert, giant on-screen 10-to-1 countdown with ticks,
 //   flash at zero.
 // Upload your own sounds (warm-up music + cue sounds). They're remembered on
@@ -17,10 +17,17 @@ import AbbieConsole from "@/components/AbbieConsole";
 import RedBullCounter from "@/components/RedBullCounter";
 import { requestAbbieLine } from "@/lib/abbieBus";
 import { abbieDirectionForRemoteAction } from "@/lib/remoteDeck";
-import { teacherApiRequest, teacherPost } from "@/lib/teacherApi";
+import { inferClassroomStage } from "@/lib/classroomPilot";
+import { TeacherApiError, teacherApiRequest, teacherPost } from "@/lib/teacherApi";
 import {
   LIVE_FLOW_MODE,
+  clearStoredTeacherSession,
   getStoredTeacherSessionId,
+  liveAssignedToolRoute,
+  liveResponseModePollKind,
+  liveTimerSeconds,
+  splitLiveFlowLines,
+  splitLiveFlowVocabulary,
   type DiscussionPhaseSnapshot,
   type LiveClassFlowSnapshot,
   type LivePollKind,
@@ -59,18 +66,43 @@ interface LineupItem {
   lessonCode?: string;
   linkUrl?: string;
   paperTask?: string;
+  advance?: string;
+  mainDisplay?: string;
+  paceDirections?: string;
+  studentAction?: string;
+  remoteActions?: string;
+  discussionStems?: string;
+  vocabulary?: string;
+  responseMode?: string;
+  workSpaceAvailable?: boolean;
 }
 
 interface TeacherSessionRow {
   id: string;
   status: string;
+  period_id: string;
+  join_code: string | null;
   broadcast: string | null;
+  live_flow: LiveClassFlowSnapshot | null;
   remote_command: TeacherRemoteCommand | null;
+}
+
+interface AdmissionRequest {
+  id: string;
+  requestCode: string;
+  requestedAt: string;
+}
+
+interface AdmissionRosterStudent {
+  id: string;
+  periodId: string;
+  fullName: string;
+  email: string | null;
 }
 
 const TEACHER_SERVER_CLIENT = {} as never;
 
-type InteractiveStateId = "question" | "poll";
+type InteractiveStateId = string;
 
 const TOOL_STATE_INFO = {
   "tool-whiteboard": { route: "/whiteboard", label: "Whiteboard" },
@@ -350,6 +382,7 @@ interface TodayLessonStep {
   duration: number;
   stateId: string;
   studentDirections: string;
+  teacherNotes: string;
   tool: string;
   question: string;
   pollKind: LivePollKind | "";
@@ -358,6 +391,15 @@ interface TodayLessonStep {
   standard: string;
   linkUrl: string;
   paperTask: string;
+  advance: string;
+  mainDisplay: string;
+  paceDirections: string;
+  studentAction: string;
+  remoteActions: string;
+  discussionStems: string;
+  vocabulary: string;
+  responseMode: string;
+  workSpaceAvailable?: boolean;
 }
 
 type TodayLesson = {
@@ -367,9 +409,37 @@ type TodayLesson = {
   tools?: string | null;
   learningIntention?: string;
   successCriteria?: string;
+  selectedSuccessCriterion?: string;
+  classroomMode?: string;
+  discussionStems?: string;
+  discussionVocabulary?: string;
+  requiredPaperWork?: string;
+  requiredDigitalWork?: string;
+  optionalSupport?: string;
+  bigDogChallenge?: string;
+  dueAndTurnIn?: string;
+  helpPath?: string;
   warmUpLink?: string;
   exitTicketLink?: string;
   steps?: TodayLessonStep[];
+};
+
+type ActiveLessonContext = {
+  id: string;
+  code: string;
+  title: string;
+  learningIntention: string;
+  successCriteria: string;
+  selectedSuccessCriterion: string;
+  classroomMode: string;
+  discussionStems: string;
+  discussionVocabulary: string;
+  requiredPaperWork: string;
+  requiredDigitalWork: string;
+  optionalSupport: string;
+  bigDogChallenge: string;
+  dueAndTurnIn: string;
+  helpPath: string;
 };
 
 const LESSON_TOOL_ALIASES: Record<string, string> = {
@@ -419,6 +489,24 @@ function parseLessonList(raw: string | undefined | null): string[] {
   return raw.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean);
 }
 
+function lessonWorkSummary(lesson: ActiveLessonContext | null, closeout = false): string {
+  if (!lesson) return "";
+  const sections = [
+    ["Required Paper Work", lesson.requiredPaperWork],
+    ["Required Digital Work", lesson.requiredDigitalWork],
+    ...(!closeout ? [
+      ["Due and Turn In", lesson.dueAndTurnIn],
+      ["Help Path", lesson.helpPath],
+    ] : []),
+    ["Optional Support", lesson.optionalSupport],
+    ["Challenge", lesson.bigDogChallenge],
+  ];
+  return sections
+    .filter((entry) => entry[1]?.trim())
+    .map(([label, body]) => `${label}: ${body}`)
+    .join("\n\n");
+}
+
 function minutesForLineupItem(item: LineupItem | undefined, bank: ClassState[]): number {
   if (!item) return 0;
   return item.minutes && item.minutes > 0
@@ -454,6 +542,7 @@ export default function ControlPage() {
   const [showSounds, setShowSounds] = useState(false);
   const [showSpinner, setShowSpinner] = useState(false);
   const [showLessons, setShowLessons] = useState(false);
+  const [showAdmissions, setShowAdmissions] = useState(false);
   const [presets, setPresets] = useState<LessonPreset[]>([]);
   const [presetSearch, setPresetSearch] = useState("");
   const [saveCode, setSaveCode] = useState("");
@@ -462,10 +551,23 @@ export default function ControlPage() {
   const [todayMsg, setTodayMsg] = useState<string | null>(null);
   const [notionLessonCode, setNotionLessonCode] = useState("");
   const [showDiscussion, setShowDiscussion] = useState(false);
-  const [autoAdvance, setAutoAdvance] = useState(true);
+  const [autoAdvance, setAutoAdvance] = useState(false);
+  const [previewSyncPaused, setPreviewSyncPaused] = useState(false);
+  const [boardOpen, setBoardOpen] = useState(false);
+  const [activeLessonContext, setActiveLessonContext] = useState<ActiveLessonContext | null>(null);
   const [soundUrls, setSoundUrls] = useState<Record<string, string>>({});
   const [teacherSession, setTeacherSession] = useState<TeacherSessionRow | null>(null);
+  const [teacherSessionReady, setTeacherSessionReady] = useState(false);
+  const [notionLaunchRequest, setNotionLaunchRequest] = useState<{ id: string; code: string; run: boolean } | null>(null);
+  const [presetLaunchRequest, setPresetLaunchRequest] = useState<{ id: string; run: boolean } | null>(null);
   const [joinCode, setJoinCode] = useState<string | null>(null);
+  const [endingSession, setEndingSession] = useState(false);
+  const [admissionRequests, setAdmissionRequests] = useState<AdmissionRequest[]>([]);
+  const [admissionRoster, setAdmissionRoster] = useState<AdmissionRosterStudent[]>([]);
+  const [admissionJoinedStudentIds, setAdmissionJoinedStudentIds] = useState<string[]>([]);
+  const [admissionSelections, setAdmissionSelections] = useState<Record<string, string>>({});
+  const [admittingRequestCode, setAdmittingRequestCode] = useState<string | null>(null);
+  const [admissionError, setAdmissionError] = useState<string | null>(null);
   const [discussionFlow, setDiscussionFlow] = useState<DiscussionPhaseSnapshot | null>(null);
   const [controlPoll, setControlPoll] = useState<ControlPoll | null>(null);
   const [pollKind, setPollKind] = useState<LivePollKind>("short-answer");
@@ -474,6 +576,7 @@ export default function ControlPage() {
   const [pollAnswers, setPollAnswers] = useState<ControlPollAnswer[]>([]);
   const [pollError, setPollError] = useState<string | null>(null);
   const [flowSyncError, setFlowSyncError] = useState<string | null>(null);
+  const [serverHydrationGeneration, setServerHydrationGeneration] = useState(0);
   const [toolSetup, setToolSetup] = useState<ToolSetupValues>(DEFAULT_TOOL_SETUP);
   const [publishedTool, setPublishedTool] = useState<PublishedTool | null>(null);
   const [toolError, setToolError] = useState<string | null>(null);
@@ -482,11 +585,82 @@ export default function ControlPage() {
 
   const secRef = useRef(0);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timerEndsAtRef = useRef<number | null>(null);
+  const timerStartSecondsRef = useRef(0);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const musicRef = useRef<HTMLAudioElement | null>(null);
   const autoOpenedStepRef = useRef<Set<string>>(new Set());
   const openingStepRef = useRef<string | null>(null);
   const lastRemoteCommandRef = useRef<string | null>(null);
+  const hydratedSessionRef = useRef<string | null>(null);
+  const pendingLiveFlowSyncRef = useRef<{
+    sessionId: string;
+    snapshot: LiveClassFlowSnapshot;
+    epoch: number;
+    expectedRevision?: string | null;
+  } | null>(null);
+  const liveFlowSyncingRef = useRef(false);
+  const liveFlowSyncEpochRef = useRef(0);
+  const hydrationGenerationRef = useRef(0);
+  const processedHydrationGenerationRef = useRef(0);
+  const serverFlowSessionRef = useRef<string | null>(null);
+  const serverFlowRevisionRef = useRef<string | null>(null);
+  const handledNotionLaunchRef = useRef(false);
+  const handledPresetLaunchRef = useRef(false);
+
+  const markServerHydration = useCallback((flow: LiveClassFlowSnapshot) => {
+    liveFlowSyncEpochRef.current += 1;
+    pendingLiveFlowSyncRef.current = null;
+    serverFlowRevisionRef.current = flow.updatedAt || null;
+    hydrationGenerationRef.current += 1;
+    setServerHydrationGeneration(hydrationGenerationRef.current);
+  }, []);
+
+  const armTimer = useCallback((seconds: number) => {
+    const safeSeconds = Math.max(0, seconds);
+    timerStartSecondsRef.current = safeSeconds;
+    timerEndsAtRef.current = safeSeconds > 0 ? Date.now() + safeSeconds * 1000 : null;
+  }, []);
+
+  const disarmTimer = useCallback(() => {
+    timerEndsAtRef.current = null;
+    timerStartSecondsRef.current = 0;
+  }, []);
+
+  useEffect(() => {
+    if (!autoAdvance) return;
+    type WakeLockHandle = { release: () => Promise<void> };
+    const wakeLock = (navigator as Navigator & {
+      wakeLock?: { request: (type: "screen") => Promise<WakeLockHandle> };
+    }).wakeLock;
+    if (!wakeLock) return;
+    let stopped = false;
+    let handle: WakeLockHandle | null = null;
+    const acquire = async () => {
+      if (stopped || document.visibilityState !== "visible") return;
+      try {
+        handle = await wakeLock.request("screen");
+      } catch {
+        handle = null;
+      }
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState !== "visible") {
+        if (handle) void handle.release();
+        handle = null;
+        return;
+      }
+      if (!handle) void acquire();
+    };
+    void acquire();
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      stopped = true;
+      document.removeEventListener("visibilitychange", handleVisibility);
+      if (handle) void handle.release();
+      handle = null;
+    };
+  }, [autoAdvance]);
 
   // ── Load saved bank minutes + lineup + uploaded sounds ──────────────────
   useEffect(() => {
@@ -527,15 +701,22 @@ export default function ControlPage() {
     })();
   }, []);
 
-  // The session page records the current teacher session locally. When that is
-  // unavailable, use the open Live Class Flow session as a safe fallback.
+  // Recover the newest server-side open session. This keeps Control attached
+  // even on a different teacher device or before Live Class Flow is selected.
   useEffect(() => {
     let stopped = false;
     const setCurrentTeacherSession = (next: TeacherSessionRow | null) => {
+      if (serverFlowSessionRef.current !== next?.id) {
+        serverFlowSessionRef.current = next?.id || null;
+        serverFlowRevisionRef.current = next?.live_flow?.transition ? null : next?.live_flow?.updatedAt || null;
+      }
+      setJoinCode(next?.join_code || null);
       setTeacherSession((current) => (
         current?.id === next?.id
         && current?.status === next?.status
+        && current?.join_code === next?.join_code
         && current?.broadcast === next?.broadcast
+        && current?.live_flow?.updatedAt === next?.live_flow?.updatedAt
         && current?.remote_command?.nonce === next?.remote_command?.nonce
           ? current
           : next
@@ -543,23 +724,18 @@ export default function ControlPage() {
     };
 
     const findTeacherSession = async () => {
-      const storedSessionId = getStoredTeacherSessionId();
-      if (storedSessionId) {
-        const result = await teacherApiRequest<{ session: TeacherSessionRow }>(
-          `/api/teacher/session?sessionId=${encodeURIComponent(storedSessionId)}`,
-        ).catch(() => ({ session: null }));
+      try {
+        const storedSessionId = getStoredTeacherSessionId();
+        const result = await teacherApiRequest<{ sessions: TeacherSessionRow[] }>("/api/teacher/session");
         if (stopped) return;
-        const storedSession = result.session;
-        if (storedSession?.status === "open") {
-          setCurrentTeacherSession(storedSession);
-          return;
-        }
+        const openSession = result.sessions.find((candidate) => candidate.status === "open") ?? null;
+        if (storedSessionId && storedSessionId !== openSession?.id) clearStoredTeacherSession(storedSessionId);
+        setCurrentTeacherSession(openSession);
+        setTeacherSessionReady(true);
+      } catch {
+        // Preserve the last confirmed session and retry. A temporary network or
+        // auth failure must not be mistaken for a successful "no session" result.
       }
-
-      const result = await teacherApiRequest<{ sessions: TeacherSessionRow[] }>("/api/teacher/session")
-        .catch(() => ({ sessions: [] }));
-      const liveSession = result.sessions.find((candidate) => candidate.status === "open" && candidate.broadcast === LIVE_FLOW_MODE) ?? null;
-      if (!stopped) setCurrentTeacherSession(liveSession);
     };
 
     void findTeacherSession();
@@ -570,21 +746,72 @@ export default function ControlPage() {
     };
   }, [supabase]);
 
-  // Show the join code on the pacer during arrival/warm-up. Polls the newest
-  // open session's code directly, so it works on the second-board device even
-  // though that machine has no stored teacher session of its own.
+  // Keep the private iPad queue current without changing the classroom timer,
+  // live-flow broadcast, or the student-facing display.
   useEffect(() => {
-    let stop = false;
-    const tick = async () => {
-      const result = await teacherApiRequest<{ sessions: Array<{ status: string; join_code: string | null }> }>("/api/teacher/session")
-        .catch(() => ({ sessions: [] }));
-      const open = result.sessions.find((candidate) => candidate.status === "open");
-      if (!stop) setJoinCode(open?.join_code || null);
+    const sessionId = teacherSession?.id;
+    const periodId = teacherSession?.period_id;
+    if (!sessionId || !periodId) {
+      setAdmissionRequests([]);
+      setAdmissionRoster([]);
+      setAdmissionJoinedStudentIds([]);
+      setAdmissionSelections({});
+      setAdmissionError(null);
+      setShowAdmissions(false);
+      return;
+    }
+
+    let stopped = false;
+    let checking = false;
+
+    const loadAdmissionRequests = async () => {
+      if (checking) return;
+      checking = true;
+      try {
+        const result = await teacherApiRequest<{
+          admissionRequests?: AdmissionRequest[];
+          joins?: Array<{ student_id: string | null }>;
+        }>(
+          `/api/teacher/session?sessionId=${encodeURIComponent(sessionId)}`,
+        );
+        if (!stopped) {
+          setAdmissionRequests(result.admissionRequests ?? []);
+          setAdmissionJoinedStudentIds(
+            (result.joins ?? []).flatMap((join) => join.student_id ? [join.student_id] : []),
+          );
+        }
+      } catch (requestError) {
+        if (!stopped) {
+          setAdmissionError(requestError instanceof Error ? requestError.message : "Waiting students could not be refreshed.");
+        }
+      } finally {
+        checking = false;
+      }
     };
-    void tick();
-    const t = window.setInterval(tick, 4000);
-    return () => { stop = true; window.clearInterval(t); };
-  }, [supabase]);
+
+    const loadAdmissionRoster = async () => {
+      try {
+        const result = await teacherApiRequest<{ students: AdmissionRosterStudent[] }>("/api/teacher/roster");
+        if (!stopped) setAdmissionRoster(result.students.filter((student) => student.periodId === periodId));
+      } catch (rosterError) {
+        if (!stopped) {
+          setAdmissionError(rosterError instanceof Error ? rosterError.message : "The class roster could not be loaded.");
+        }
+      }
+    };
+
+    void loadAdmissionRoster();
+    void loadAdmissionRequests();
+    const interval = window.setInterval(loadAdmissionRequests, 3000);
+    return () => {
+      stopped = true;
+      window.clearInterval(interval);
+    };
+  }, [teacherSession?.id, teacherSession?.period_id]);
+
+  useEffect(() => {
+    if (showAdmissions && admissionRequests.length === 0) setShowAdmissions(false);
+  }, [admissionRequests.length, showAdmissions]);
 
   const persistBank = useCallback((next: ClassState[]) => {
     setBank(next);
@@ -646,29 +873,137 @@ export default function ControlPage() {
     musicRef.current = a;
   }, [soundUrls, stopMusic]);
 
+  // Restore the active pacing state once when Control reconnects to an open
+  // session. Subsequent live updates continue through the normal sync path.
+  useEffect(() => {
+    if (!teacherSession) {
+      hydratedSessionRef.current = null;
+      return;
+    }
+    const flow = teacherSession.live_flow;
+    if (!flow?.sequence || hydratedSessionRef.current === teacherSession.id) return;
+    hydratedSessionRef.current = teacherSession.id;
+    markServerHydration(flow);
+
+    if (flow.sequence.steps?.length) {
+      persistLineup(flow.sequence.steps.map((step) => ({
+        uid: uid(),
+        stateId: step.stateId,
+        minutes: Math.max(1, Math.round(step.durationSeconds / 60)),
+        title: step.label,
+        studentDirections: step.description,
+        question: step.question,
+        pollKind: step.pollKind || "",
+        choices: step.choices,
+        correctAnswer: step.correctAnswer,
+        standard: step.standard,
+        notionStepId: step.notionStepId || undefined,
+        notionLessonId: step.notionLessonId || undefined,
+        lessonCode: step.lessonCode,
+        linkUrl: step.resourceUrl,
+        paperTask: step.paperTask,
+        mainDisplay: step.mainDisplay,
+        paceDirections: step.paceDirections,
+        studentAction: step.studentAction,
+        remoteActions: step.remoteActions,
+        discussionStems: step.discussionStems?.join("\n"),
+        vocabulary: step.vocabulary?.join("\n"),
+        responseMode: step.responseMode,
+        workSpaceAvailable: step.workSpaceAvailable,
+      })));
+    }
+
+    setCurrentIndex(flow.sequence.currentIndex);
+    setAutoAdvance(flow.sequence.advanceMode === "automatic");
+    if (flow.lesson) {
+      setActiveLessonContext({
+        id: flow.lesson.id || "",
+        code: flow.lesson.code,
+        title: flow.lesson.title,
+        learningIntention: flow.lesson.learningIntention,
+        successCriteria: flow.lesson.successCriteria,
+        selectedSuccessCriterion: flow.lesson.selectedSuccessCriterion || flow.lesson.successCriteria,
+        classroomMode: flow.lesson.classroomMode || "",
+        discussionStems: flow.lesson.discussionStems?.join("\n") || "",
+        discussionVocabulary: flow.lesson.discussionVocabulary?.join("\n") || "",
+        requiredPaperWork: flow.lesson.requiredPaperWork || "",
+        requiredDigitalWork: flow.lesson.requiredDigitalWork || "",
+        optionalSupport: flow.lesson.optionalSupport || "",
+        bigDogChallenge: flow.lesson.bigDogChallenge || "",
+        dueAndTurnIn: flow.lesson.dueAndTurnIn || "",
+        helpPath: flow.lesson.helpPath || "",
+      });
+    } else setActiveLessonContext(null);
+    if (flow.timer) {
+      const remaining = liveTimerSeconds(flow.timer);
+      secRef.current = remaining;
+      setSecondsLeft(remaining);
+      const shouldRun = flow.timer.running && remaining > 0;
+      if (shouldRun) armTimer(remaining);
+      else disarmTimer();
+      setRunning(shouldRun);
+      setFinished(flow.timer.finished || (flow.timer.running && remaining <= 0));
+      if (shouldRun && flow.state) startMusicFor(flow.state.id);
+      else stopMusic();
+    } else {
+      secRef.current = 0;
+      setSecondsLeft(0);
+      disarmTimer();
+      setRunning(false);
+      setFinished(flow.poll?.stage === "results");
+      stopMusic();
+    }
+    setBoardOpen(Boolean(flow.presentation?.boardOpen));
+    const interactiveStateId = flow.poll && flow.state ? flow.state.id : null;
+    setControlPoll(flow.poll && interactiveStateId
+      ? {
+          id: flow.poll.id,
+          stateId: interactiveStateId,
+          kind: flow.poll.kind,
+          question: flow.poll.question,
+          choices: flow.poll.choices,
+          stage: flow.poll.stage,
+        }
+      : null);
+  }, [armTimer, disarmTimer, markServerHydration, persistLineup, startMusicFor, stopMusic, teacherSession]);
+
   // ── Countdown engine ────────────────────────────────────────────────────
   useEffect(() => {
-    if (!running) return;
+    if (!running) {
+      disarmTimer();
+      return;
+    }
+    if (!timerEndsAtRef.current) armTimer(secRef.current);
     tickRef.current = setInterval(() => {
-      const next = secRef.current - 1;
+      const deadline = timerEndsAtRef.current;
+      const previous = secRef.current;
+      const next = deadline ? Math.max(0, Math.ceil((deadline - Date.now()) / 1000)) : 0;
+      if (next === previous) return;
       secRef.current = next;
       setSecondsLeft(next);
-      if (next === 30) { playCue("warn30"); setWarnFlash(true); setTimeout(() => setWarnFlash(false), 3000); }
+      if (previous > 30 && next <= 30) { playCue("warn30"); setWarnFlash(true); setTimeout(() => setWarnFlash(false), 3000); }
       else if (next <= 10 && next >= 1) { playCue("tick"); }
       if (next <= 0) {
         if (tickRef.current) clearInterval(tickRef.current);
+        disarmTimer();
         setRunning(false);
         setFinished(true);
         stopMusic();
         playCue("end");
       }
-    }, 1000);
+    }, 250);
     return () => { if (tickRef.current) clearInterval(tickRef.current); };
-  }, [running, playCue, stopMusic]);
+  }, [armTimer, disarmTimer, running, playCue, stopMusic]);
 
-  // ── Auto-advance to the next lineup item when time's up ─────────────────
+  // Automatically close a timed response check, briefly show results, and
+  // advance while lesson pacing remains on.
   useEffect(() => {
-    if (!finished || !autoAdvance || controlPoll) return;
+    if (!finished || !autoAdvance) return;
+    if (controlPoll?.stage === "responding") {
+      setControlPoll((current) => current ? { ...current, stage: "results" } : null);
+      void teacherPost("/api/teacher/poll", { action: "close", pollId: controlPoll.id });
+      return;
+    }
     const ni = currentIndex + 1;
     if (ni >= lineup.length) return;
     const t = setTimeout(() => {
@@ -679,13 +1014,14 @@ export default function ControlPage() {
       setCurrentIndex(ni);
       const minutes = minutesForLineupItem(item, bank);
       secRef.current = minutes * 60;
+      armTimer(secRef.current);
       setSecondsLeft(secRef.current);
       setFinished(false);
       setRunning(true);
       startMusicFor(st.id);
-    }, 2600);
+    }, controlPoll?.stage === "results" ? 6000 : 2600);
     return () => clearTimeout(t);
-  }, [finished, autoAdvance, bank, controlPoll, currentIndex, lineup, startMusicFor, stopMusic]);
+  }, [armTimer, finished, autoAdvance, bank, controlPoll, currentIndex, lineup, startMusicFor, stopMusic]);
 
   const activeItem = currentIndex >= 0 ? lineup[currentIndex] : undefined;
   const filteredPresets = presets.filter((p) => {
@@ -695,19 +1031,25 @@ export default function ControlPage() {
   const activeState = activeItem ? bank.find((s) => s.id === activeItem.stateId) : undefined;
   const activeMinutes = minutesForLineupItem(activeItem, bank);
   const totalMin = lineup.reduce((sum, item) => sum + minutesForLineupItem(item, bank), 0);
-  const activeInteractiveState: InteractiveStateId | null = activeState?.id === "question" || activeState?.id === "poll"
+  const configuredResponseKind = liveResponseModePollKind(activeItem?.responseMode);
+  const hasConfiguredResponseMode = Boolean(activeItem?.responseMode?.trim());
+  const legacyInteractiveState = !hasConfiguredResponseMode
+    && (activeState?.id === "question" || activeState?.id === "poll" || activeState?.id === "learning-check");
+  const activeInteractiveState: InteractiveStateId | null = activeState && (configuredResponseKind || legacyInteractiveState)
     ? activeState.id
     : null;
   const activeToolState: ToolStateId | null = isToolStateId(activeState?.id) ? activeState.id : null;
 
   useEffect(() => {
-    if (activeInteractiveState === "question") {
+    if (configuredResponseKind) {
+      setPollKind(configuredResponseKind);
+    } else if (activeInteractiveState === "question") {
       setPollKind("short-answer");
-    } else if (activeInteractiveState === "poll") {
+    } else if (activeInteractiveState === "poll" || activeInteractiveState === "learning-check") {
       setPollKind("fist-to-five");
       setPollQuestion((current) => current || "How well do you understand this right now?");
     }
-  }, [activeInteractiveState]);
+  }, [activeInteractiveState, configuredResponseKind]);
 
   const closeActivePoll = useCallback(() => {
     if (!controlPoll || controlPoll.stage === "results") return;
@@ -779,12 +1121,6 @@ export default function ControlPage() {
     };
   }, [controlPoll, supabase]);
 
-  useEffect(() => {
-    if (finished && controlPoll?.stage === "responding") {
-      closeActivePoll();
-    }
-  }, [closeActivePoll, controlPoll?.stage, finished]);
-
   async function openControlPoll(config?: PollLaunchConfig): Promise<boolean> {
     const stateId = config?.stateId ?? activeInteractiveState;
     if (!supabase || !teacherSession || !stateId) {
@@ -819,6 +1155,11 @@ export default function ControlPage() {
         question,
         choices,
         kind,
+        correctAnswer: config?.correctAnswer || null,
+        lessonCode: config?.lessonCode || null,
+        notionLessonId: config?.notionLessonId || null,
+        notionStepId: config?.notionStepId || null,
+        standardId: config?.standard || null,
       });
       pollId = result.poll.id;
     } catch (actionError) {
@@ -849,7 +1190,9 @@ export default function ControlPage() {
     openingStepRef.current = activeItem.uid;
     void openControlPoll({
       stateId: activeInteractiveState,
-      kind: activeItem.pollKind || (activeInteractiveState === "poll" ? "fist-to-five" : "short-answer"),
+      kind: liveResponseModePollKind(activeItem.responseMode)
+        || activeItem.pollKind
+        || (activeInteractiveState === "poll" || activeInteractiveState === "learning-check" ? "fist-to-five" : "short-answer"),
       question: activeItem.question,
       choices: activeItem.choices,
       correctAnswer: activeItem.correctAnswer,
@@ -870,7 +1213,7 @@ export default function ControlPage() {
     setPollAnswers([]);
     setPollError(null);
     setPollChoices(["", "", "", ""]);
-    setPollQuestion(activeInteractiveState === "poll" ? "How well do you understand this right now?" : "");
+    setPollQuestion(activeInteractiveState === "poll" || activeInteractiveState === "learning-check" ? "How well do you understand this right now?" : "");
     setFinished(false);
   }
 
@@ -998,6 +1341,7 @@ export default function ControlPage() {
           label: activeItem?.title || activeState.label,
           description: activeItem?.studentDirections || activeState.desc,
           color: activeState.color,
+          semantic: inferClassroomStage(activeState.id, activeItem?.title || activeState.label),
         }
       : null;
     const phase = activeState?.id === "discussion" && showDiscussion ? discussionFlow : null;
@@ -1012,12 +1356,33 @@ export default function ControlPage() {
       : null;
     const tool = publishedTool?.stateId === activeToolState ? publishedTool.tool : null;
     const resource = activeItem?.linkUrl
-      ? { label: activeState?.id === "exit" ? "Open Exit Ticket" : "Open Lesson Resource", url: activeItem.linkUrl }
+      ? {
+          label: activeState?.id === "exit"
+            ? "Open Exit Ticket"
+            : activeItem.responseMode?.trim().toLowerCase() === "assigned tool"
+              ? "Open Assigned Tool"
+              : "Open Lesson Resource",
+          url: activeItem.linkUrl,
+        }
       : null;
+    const structuredWork = activeState?.id === "independent" || activeState?.id === "closeout"
+      ? lessonWorkSummary(activeLessonContext, activeState.id === "closeout")
+      : "";
+    const presentationBody = activeItem?.mainDisplay
+      || (activeState?.id === "independent" || activeState?.id === "closeout"
+        ? structuredWork || activeItem?.paperTask || activeItem?.question || activeItem?.studentDirections || activeState.desc
+        : activeItem?.question || activeItem?.studentDirections || activeItem?.paperTask || activeState?.desc || "");
+    const discussionStems = activeState?.id === "discussion"
+      ? splitLiveFlowLines(activeItem?.discussionStems || activeLessonContext?.discussionStems)
+      : [];
+    const vocabulary = activeState?.id === "discussion"
+      ? splitLiveFlowVocabulary(activeItem?.vocabulary || activeLessonContext?.discussionVocabulary)
+      : [];
     const presentation = activeState
       ? {
           title: activeItem?.title || activeState.label,
-          body: activeItem?.paperTask || activeItem?.question || activeItem?.studentDirections || activeState.desc,
+          body: presentationBody,
+          mainDisplay: activeItem?.mainDisplay || "",
           mode: resource
             ? "resource" as const
             : poll
@@ -1028,6 +1393,14 @@ export default function ControlPage() {
                   ? "board" as const
                   : "directions" as const,
           notionStepId: activeItem?.notionStepId || null,
+          boardOpen,
+          paceDirections: activeItem?.paceDirections || activeItem?.studentDirections || activeState.desc,
+          studentAction: activeItem?.studentAction || activeItem?.studentDirections || activeState.desc,
+          remoteActions: activeItem?.remoteActions || activeItem?.paceDirections || activeItem?.studentDirections || activeState.desc,
+          responseMode: activeItem?.responseMode || "",
+          workSpaceAvailable: activeItem?.workSpaceAvailable,
+          discussionStems,
+          vocabulary,
         }
       : null;
     const timer = poll?.stage === "results"
@@ -1042,38 +1415,154 @@ export default function ControlPage() {
       : activeState
         ? {
             totalSeconds: activeMinutes * 60,
-            secondsLeft,
+            secondsLeft: running ? timerStartSecondsRef.current || secondsLeft : secondsLeft,
             running,
             finished,
+            endsAt: running && timerEndsAtRef.current ? new Date(timerEndsAtRef.current).toISOString() : null,
           }
         : null;
 
-    return JSON.stringify({ version: 1, state, phase, timer, poll, resource, presentation, tool });
-  }, [activeInteractiveState, activeItem, activeMinutes, activeState, activeToolState, controlPoll, discussionFlow, finished, publishedTool, running, secondsLeft, showDiscussion]);
+    const nextItem = currentIndex >= 0 ? lineup[currentIndex + 1] : undefined;
+    const nextState = nextItem ? bank.find((candidate) => candidate.id === nextItem.stateId) : undefined;
+    const lesson = activeLessonContext
+      ? {
+          id: activeLessonContext.id,
+          code: activeLessonContext.code,
+          title: activeLessonContext.title,
+          learningIntention: activeLessonContext.learningIntention,
+          successCriteria: activeLessonContext.successCriteria,
+          selectedSuccessCriterion: activeLessonContext.selectedSuccessCriterion,
+          classroomMode: activeLessonContext.classroomMode,
+          discussionStems: splitLiveFlowLines(activeLessonContext.discussionStems),
+          discussionVocabulary: splitLiveFlowVocabulary(activeLessonContext.discussionVocabulary),
+          requiredPaperWork: activeLessonContext.requiredPaperWork,
+          requiredDigitalWork: activeLessonContext.requiredDigitalWork,
+          optionalSupport: activeLessonContext.optionalSupport,
+          bigDogChallenge: activeLessonContext.bigDogChallenge,
+          dueAndTurnIn: activeLessonContext.dueAndTurnIn,
+          helpPath: activeLessonContext.helpPath,
+        }
+      : null;
+    const sequence = activeState
+      ? {
+          currentIndex,
+          totalSteps: lineup.length,
+          nextLabel: nextItem?.title || nextState?.label || null,
+          nextDirections: nextItem?.remoteActions || nextItem?.paceDirections || nextItem?.studentDirections || nextState?.desc || null,
+          advanceMode: autoAdvance ? "automatic" as const : "manual" as const,
+          steps: lineup.map((item) => {
+            const itemState = bank.find((candidate) => candidate.id === item.stateId);
+            return {
+              stateId: item.stateId,
+              label: item.title || itemState?.label || "Lesson state",
+              description: item.studentDirections || itemState?.desc || "Wait for the teacher's directions.",
+              color: itemState?.color || "#35785a",
+              semantic: inferClassroomStage(item.stateId, item.title || itemState?.label || ""),
+              durationSeconds: minutesForLineupItem(item, bank) * 60,
+              question: item.question || "",
+              pollKind: item.pollKind || null,
+              choices: item.choices || [],
+              correctAnswer: item.correctAnswer || "",
+              standard: item.standard || "",
+              resourceUrl: item.linkUrl || "",
+              paperTask: item.paperTask || "",
+              notionStepId: item.notionStepId || null,
+              notionLessonId: item.notionLessonId || null,
+              lessonCode: item.lessonCode || activeLessonContext?.code || "",
+              mainDisplay: item.mainDisplay || "",
+              paceDirections: item.paceDirections || item.studentDirections || itemState?.desc || "",
+              studentAction: item.studentAction || item.studentDirections || itemState?.desc || "",
+              remoteActions: item.remoteActions || item.paceDirections || item.studentDirections || itemState?.desc || "",
+              discussionStems: item.stateId === "discussion"
+                ? splitLiveFlowLines(item.discussionStems || activeLessonContext?.discussionStems)
+                : [],
+              vocabulary: item.stateId === "discussion"
+                ? splitLiveFlowVocabulary(item.vocabulary || activeLessonContext?.discussionVocabulary)
+                : [],
+              responseMode: item.responseMode || "",
+              workSpaceAvailable: item.workSpaceAvailable,
+            };
+          }),
+        }
+      : null;
+    const activePaperTask = activeItem?.paperTask
+      || (activeState?.id === "independent" ? activeLessonContext?.requiredPaperWork : "")
+      || "";
+    const paper = activePaperTask ? { task: activePaperTask } : null;
+
+    return JSON.stringify({ version: 2, state, phase, timer, poll, resource, presentation, tool, lesson, sequence, paper });
+  }, [activeInteractiveState, activeItem, activeLessonContext, activeMinutes, activeState, activeToolState, autoAdvance, bank, boardOpen, controlPoll, currentIndex, discussionFlow, finished, lineup, publishedTool, running, secondsLeft, showDiscussion]);
+
+  const flushLiveFlowUpdates = useCallback(async () => {
+    if (liveFlowSyncingRef.current) return;
+    liveFlowSyncingRef.current = true;
+    try {
+      while (pendingLiveFlowSyncRef.current) {
+        const pending = pendingLiveFlowSyncRef.current;
+        pendingLiveFlowSyncRef.current = null;
+        if (pending.epoch !== liveFlowSyncEpochRef.current) continue;
+        const expectedRevision = pending.expectedRevision === undefined
+          ? serverFlowRevisionRef.current
+          : pending.expectedRevision;
+        try {
+          const result = await teacherPost<{ session: TeacherSessionRow }>("/api/teacher/session", {
+            action: "update",
+            sessionId: pending.sessionId,
+            liveFlow: pending.snapshot,
+            expectedLiveFlowUpdatedAt: expectedRevision,
+          });
+          if (pending.epoch !== liveFlowSyncEpochRef.current) continue;
+          if (result.session.live_flow?.updatedAt) {
+            serverFlowRevisionRef.current = result.session.live_flow.updatedAt;
+          }
+          setFlowSyncError(null);
+        } catch (syncError) {
+          if (pending.epoch !== liveFlowSyncEpochRef.current) continue;
+          if (syncError instanceof TeacherApiError && syncError.status === 409) {
+            liveFlowSyncEpochRef.current += 1;
+            pendingLiveFlowSyncRef.current = null;
+            hydratedSessionRef.current = null;
+            const latest = await teacherApiRequest<{ sessions: TeacherSessionRow[] }>("/api/teacher/session")
+              .catch(() => ({ sessions: [] }));
+            const openSession = latest.sessions.find((candidate) => candidate.id === pending.sessionId) ?? null;
+            if (openSession) setTeacherSession(openSession);
+          }
+          setFlowSyncError(syncError instanceof Error ? syncError.message : "Live flow could not be synchronized.");
+        }
+      }
+    } finally {
+      liveFlowSyncingRef.current = false;
+    }
+  }, []);
 
   // Keep student Chromebooks in sync with the existing /control state machine.
   // The write is skipped unless the teacher explicitly selected Live Class Flow.
   useEffect(() => {
-    if (!supabase || teacherSession?.broadcast !== LIVE_FLOW_MODE) return;
+    if (previewSyncPaused || !supabase || teacherSession?.broadcast !== LIVE_FLOW_MODE) {
+      pendingLiveFlowSyncRef.current = null;
+      return;
+    }
+    if (serverHydrationGeneration !== hydrationGenerationRef.current) {
+      pendingLiveFlowSyncRef.current = null;
+      return;
+    }
+    if (processedHydrationGenerationRef.current !== serverHydrationGeneration) {
+      processedHydrationGenerationRef.current = serverHydrationGeneration;
+      pendingLiveFlowSyncRef.current = null;
+      return;
+    }
     const snapshot = {
       ...(JSON.parse(liveFlowSignature) as Omit<LiveClassFlowSnapshot, "updatedAt">),
       updatedAt: new Date().toISOString(),
     };
-    let cancelled = false;
-    void (async () => {
-      try {
-        await teacherPost("/api/teacher/session", {
-          action: "update",
-          sessionId: teacherSession.id,
-          liveFlow: snapshot,
-        });
-        if (!cancelled) setFlowSyncError(null);
-      } catch (syncError) {
-        if (!cancelled) setFlowSyncError(syncError instanceof Error ? syncError.message : "Live flow could not be synchronized.");
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [liveFlowSignature, supabase, teacherSession]);
+    pendingLiveFlowSyncRef.current = {
+      sessionId: teacherSession.id,
+      snapshot,
+      epoch: liveFlowSyncEpochRef.current,
+      expectedRevision: liveFlowSyncingRef.current ? undefined : serverFlowRevisionRef.current,
+    };
+    void flushLiveFlowUpdates();
+  }, [flushLiveFlowUpdates, liveFlowSignature, previewSyncPaused, serverHydrationGeneration, supabase, teacherSession?.broadcast, teacherSession?.id]);
 
   const handleDiscussionFlowChange = useCallback((snapshot: DiscussionPhaseSnapshot) => {
     setDiscussionFlow(snapshot);
@@ -1115,7 +1604,7 @@ export default function ControlPage() {
     [next[i], next[j]] = [next[j], next[i]];
     persistLineup(next);
   }
-  function loadIndex(i: number) {
+  function loadIndex(i: number, startImmediately = false) {
     const item = lineup[i];
     if (!item) return;
     const st = bank.find((s) => s.id === item.stateId);
@@ -1124,9 +1613,13 @@ export default function ControlPage() {
     const minutes = minutesForLineupItem(item, bank);
     secRef.current = minutes * 60;
     setSecondsLeft(minutes * 60);
-    setRunning(false);
+    if (startImmediately && minutes > 0) armTimer(minutes * 60);
+    else disarmTimer();
+    setRunning(startImmediately && minutes > 0);
     setFinished(false);
+    setBoardOpen(false);
     stopMusic();
+    if (startImmediately && minutes > 0) startMusicFor(st.id);
   }
 
   // ── Lesson presets (saved sequences) ────────────────────────────────────
@@ -1135,6 +1628,7 @@ export default function ControlPage() {
   }, []);
 
   function loadPreset(p: LessonPreset) {
+    setPreviewSyncPaused(true);
     const newBank = DEFAULT_STATES.map((d) => ({
       ...d,
       minutes: typeof p.minutes[d.id] === "number" ? p.minutes[d.id] : d.minutes,
@@ -1145,11 +1639,15 @@ export default function ControlPage() {
     const first = newLineup[0] ? newBank.find((s) => s.id === newLineup[0].stateId) : undefined;
     setCurrentIndex(newLineup.length ? 0 : -1);
     if (first) { secRef.current = first.minutes * 60; setSecondsLeft(first.minutes * 60); }
+    setAutoAdvance(false);
     setRunning(false);
     setFinished(false);
+    setActiveLessonContext(null);
     stopMusic();
     setShowLessons(false);
-    setLessonMsg(null);
+    const previewMessage = `Previewed ${p.code || p.title || "saved sequence"}. Student and projector screens are unchanged until you start the sequence.`;
+    setLessonMsg(previewMessage);
+    setTodayMsg(previewMessage);
   }
 
   async function saveCurrentLesson() {
@@ -1178,7 +1676,7 @@ export default function ControlPage() {
 
   // Lesson Steps are the source of truth; the older tools-only path remains as
   // a fallback for pages that have not been converted yet.
-  function applyNotionLesson(lesson: TodayLesson): boolean {
+  function applyNotionLesson(lesson: TodayLesson, confirmReplace = true): boolean {
     const mapped: string[] = [];
     const unmatched: string[] = [];
     for (const name of parseLessonList(lesson.tools)) {
@@ -1186,10 +1684,11 @@ export default function ControlPage() {
       if (id) { if (!mapped.includes(id)) mapped.push(id); }
       else unmatched.push(name);
     }
-    if (lineup.length > 0 && !window.confirm(`Replace the current lineup with “${lesson.title || "this lesson"}”?`)) {
+    if (confirmReplace && lineup.length > 0 && !window.confirm(`Replace the current lineup with “${lesson.title || "this lesson"}”?`)) {
       setTodayMsg(null);
       return false;
     }
+    setPreviewSyncPaused(true);
     const lessonSteps = (lesson.steps || []).filter((step) => step.stateId && bank.some((state) => state.id === step.stateId));
     const newLineup: LineupItem[] = lessonSteps.length
       ? lessonSteps.map((step) => ({
@@ -1206,16 +1705,43 @@ export default function ControlPage() {
           notionStepId: step.id,
           notionLessonId: lesson.id,
           lessonCode: lesson.lessonCode,
-          linkUrl: step.linkUrl
+          linkUrl: (step.responseMode.trim().toLowerCase() === "assigned tool" ? liveAssignedToolRoute(step.tool) : null)
+            || step.linkUrl
             || (step.stateId === "warmup" ? lesson.warmUpLink : "")
             || (step.stateId === "exit" ? lesson.exitTicketLink : "")
             || "",
           paperTask: step.paperTask,
+          advance: step.advance,
+          mainDisplay: step.mainDisplay,
+          paceDirections: step.paceDirections,
+          studentAction: step.studentAction,
+          remoteActions: step.remoteActions || step.teacherNotes,
+          discussionStems: step.discussionStems,
+          vocabulary: step.vocabulary,
+          responseMode: step.responseMode,
+          workSpaceAvailable: step.workSpaceAvailable,
         }))
       : ["warmup", ...mapped, "exit"].map((stateId) => ({ uid: uid(), stateId }));
     autoOpenedStepRef.current.clear();
     setControlPoll(null);
     setPollAnswers([]);
+    setActiveLessonContext({
+      id: lesson.id,
+      code: lesson.lessonCode || "",
+      title: lesson.title || lesson.lessonCode || "Math 6 lesson",
+      learningIntention: lesson.learningIntention || "",
+      successCriteria: lesson.selectedSuccessCriterion || lesson.successCriteria || "",
+      selectedSuccessCriterion: lesson.selectedSuccessCriterion || lesson.successCriteria || "",
+      classroomMode: lesson.classroomMode || "",
+      discussionStems: lesson.discussionStems || "",
+      discussionVocabulary: lesson.discussionVocabulary || "",
+      requiredPaperWork: lesson.requiredPaperWork || "",
+      requiredDigitalWork: lesson.requiredDigitalWork || "",
+      optionalSupport: lesson.optionalSupport || "",
+      bigDogChallenge: lesson.bigDogChallenge || "",
+      dueAndTurnIn: lesson.dueAndTurnIn || "",
+      helpPath: lesson.helpPath || "",
+    });
     persistLineup(newLineup);
     const first = newLineup[0];
     setCurrentIndex(0);
@@ -1224,13 +1750,15 @@ export default function ControlPage() {
       secRef.current = minutes * 60;
       setSecondsLeft(minutes * 60);
     }
+    setAutoAdvance(false);
     setRunning(false);
     setFinished(false);
     stopMusic();
     setShowLessons(false);
     const parts = [
-      `Loaded “${lesson.title || "today's lesson"}”`,
+      `Previewed “${lesson.title || "today's lesson"}”`,
       lessonSteps.length ? `${lessonSteps.length} timed steps added` : `${mapped.length} tool${mapped.length === 1 ? "" : "s"} added`,
+      "student and projector screens unchanged until start",
     ];
     if (unmatched.length) parts.push(`couldn't match: ${unmatched.join(", ")}`);
     setTodayMsg(parts.join(" · "));
@@ -1243,42 +1771,90 @@ export default function ControlPage() {
     setTodayMsg("Loading today's lesson from Notion…");
     try {
       const res = await fetch("/api/today", { cache: "no-store" });
-      const data = (await res.json()) as { lesson?: TodayLesson | null; error?: string };
+      const data = (await res.json()) as { lesson?: Pick<TodayLesson, "id"> | null; error?: string };
       if (!res.ok || data.error) throw new Error(data.error || "Couldn't load today's lesson.");
       if (!data.lesson) {
         setTodayMsg("No lesson is published in Notion for today.");
         window.setTimeout(() => setTodayMsg(null), 6000);
         return;
       }
-      applyNotionLesson(data.lesson);
+      const teacherLesson = await teacherApiRequest<{ lesson: TodayLesson }>(
+        `/api/teacher/lesson?id=${encodeURIComponent(data.lesson.id)}`,
+      );
+      applyNotionLesson(teacherLesson.lesson);
     } catch (error) {
       setTodayMsg(error instanceof Error ? error.message : "Couldn't reach Notion — check the connection and try again.");
       window.setTimeout(() => setTodayMsg(null), 6000);
     }
   }
 
-  async function loadNotionLessonByCode() {
-    const code = notionLessonCode.trim();
-    if (!code) {
+  async function loadNotionLesson(
+    requestedCode: string,
+    options: { lessonId?: string; confirmReplace?: boolean; run?: boolean } = {},
+  ): Promise<boolean> {
+    const code = requestedCode.trim();
+    const lessonId = options.lessonId?.trim() || "";
+    if (!code && !lessonId) {
       setLessonMsg("Enter a Notion lesson code first.");
-      return;
+      return false;
     }
-    setLessonMsg(`Loading ${code} from Notion…`);
+    const displayCode = code || "the selected lesson";
+    setLessonMsg(`Loading ${displayCode} from Notion…`);
     try {
-      const res = await fetch(`/api/teacher/lesson?code=${encodeURIComponent(code)}`, { cache: "no-store" });
+      const lessonQuery = lessonId
+        ? `id=${encodeURIComponent(lessonId)}`
+        : `code=${encodeURIComponent(code)}`;
+      const res = await fetch(`/api/teacher/lesson?${lessonQuery}`, { cache: "no-store" });
       const data = (await res.json()) as { lesson?: TodayLesson | null; error?: string };
       if (!res.ok || data.error) throw new Error(data.error || "Couldn't load the lesson.");
       if (!data.lesson) {
-        setLessonMsg(`No Notion lesson uses the code ${code}.`);
-        return;
+        setLessonMsg(code ? `No Notion lesson uses the code ${code}.` : "The selected Notion lesson could not be found.");
+        return false;
       }
-      if (applyNotionLesson(data.lesson)) {
-        setLessonMsg(`Loaded ${data.lesson.lessonCode || code} from Notion.`);
+      if (applyNotionLesson(data.lesson, options.confirmReplace ?? true)) {
+        setLessonMsg(`Previewed ${data.lesson.lessonCode || code} from Notion. Student and projector screens are unchanged until you start the lesson.`);
         setNotionLessonCode("");
+        if (options.run) setPendingRun(true);
+        return true;
       }
+      return false;
     } catch (error) {
       setLessonMsg(error instanceof Error ? error.message : "Couldn't reach Notion.");
+      return false;
     }
+  }
+
+  async function loadNotionLessonByCode() {
+    await loadNotionLesson(notionLessonCode);
+  }
+
+  function consumeNotionLaunchQuery() {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("notionLessonId");
+    url.searchParams.delete("notionLessonCode");
+    url.searchParams.delete("run");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+
+  function consumePresetLaunchQuery() {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("lesson");
+    url.searchParams.delete("run");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+
+  async function switchSessionToLiveFlow(session: TeacherSessionRow): Promise<void> {
+    if (session.broadcast === LIVE_FLOW_MODE) return;
+    const result = await teacherPost<{ session: { broadcast: string | null } }>("/api/teacher/session", {
+      action: "update",
+      sessionId: session.id,
+      broadcast: LIVE_FLOW_MODE,
+    });
+    setTeacherSession((current) => (
+      current?.id === session.id
+        ? { ...current, broadcast: result.session.broadcast || LIVE_FLOW_MODE }
+        : current
+    ));
   }
 
   // When launched from the Sequence Builder with ?run=1, auto-start the lineup
@@ -1288,11 +1864,142 @@ export default function ControlPage() {
     refreshPresets();
     try {
       const params = new URLSearchParams(window.location.search);
-      const lessonId = params.get("lesson");
-      if (lessonId) getLessonPreset(lessonId).then((p) => { if (p) { loadPreset(p); if (params.get("run") === "1") setPendingRun(true); } });
+      const notionCode = params.get("notionLessonCode")?.trim() || "";
+      const notionId = params.get("notionLessonId")?.trim() || "";
+      if (notionCode || notionId) {
+        setNotionLessonCode(notionCode);
+        setNotionLaunchRequest({ id: notionId, code: notionCode, run: params.get("run") === "1" });
+        return;
+      }
+      const lessonId = params.get("lesson")?.trim() || "";
+      if (lessonId) setPresetLaunchRequest({ id: lessonId, run: params.get("run") === "1" });
     } catch { /* ignore */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Wait for the open server session to hydrate before replacing it with the
+  // lesson deliberately chosen from Teacher Home. Otherwise the older live
+  // flow can arrive a moment later and overwrite the teacher's selection.
+  useEffect(() => {
+    if (!teacherSessionReady || !notionLaunchRequest || handledNotionLaunchRef.current) return;
+    const serverSessionHydrated = !teacherSession?.live_flow?.sequence
+      || hydratedSessionRef.current === teacherSession.id;
+    if (!serverSessionHydrated) return;
+    handledNotionLaunchRef.current = true;
+    void (async () => {
+      const reviewOnly = !notionLaunchRequest.run;
+      setPreviewSyncPaused(reviewOnly);
+      const loaded = await loadNotionLesson(notionLaunchRequest.code, {
+        lessonId: notionLaunchRequest.id,
+        confirmReplace: false,
+        run: false,
+      });
+      if (!loaded) {
+        setPreviewSyncPaused(false);
+        return;
+      }
+
+      let shouldRun = notionLaunchRequest.run;
+      let blockedMessage: string | null = null;
+
+      if (shouldRun) {
+        if (!teacherSession || teacherSession.status !== "open") {
+          shouldRun = false;
+          blockedMessage = "Lesson loaded but not started. Start a live session, then choose Begin lesson again.";
+        } else {
+          try {
+            // The session must be in Live Class Flow before the new lineup can
+            // start or publish its first state to connected Chromebooks.
+            await switchSessionToLiveFlow(teacherSession);
+          } catch {
+            shouldRun = false;
+            blockedMessage = "Lesson loaded but not started. Control could not connect the open session to Live Class Flow. Open Session, select Live Class Flow, then choose Begin lesson again.";
+          }
+        }
+      }
+
+      consumeNotionLaunchQuery();
+      setNotionLaunchRequest(null);
+      if (shouldRun) {
+        const startingMessage = "Lesson connected. Starting automatic pacing.";
+        setLessonMsg(startingMessage);
+        setTodayMsg(startingMessage);
+        setPendingRun(true);
+      } else if (blockedMessage) {
+        setPreviewSyncPaused(true);
+        setLessonMsg(blockedMessage);
+        setTodayMsg(blockedMessage);
+      } else {
+        const previewMessage = "Preview loaded. Student and projector screens are unchanged until you start the lesson.";
+        setLessonMsg(previewMessage);
+        setTodayMsg(previewMessage);
+      }
+    })();
+    // loadNotionLesson intentionally runs only for the URL request captured at
+    // mount; Control's normal lesson controls handle later choices.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notionLaunchRequest, serverHydrationGeneration, teacherSession?.broadcast, teacherSession?.id, teacherSession?.status, teacherSessionReady]);
+
+  // Saved Sequence Builder links need the same server-session guard as Notion
+  // launches. Wait for any existing live flow to hydrate before replacing it,
+  // then put the session in Live Class Flow before starting the new sequence.
+  useEffect(() => {
+    if (!teacherSessionReady || !presetLaunchRequest || handledPresetLaunchRef.current) return;
+    const serverSessionHydrated = !teacherSession?.live_flow?.sequence
+      || hydratedSessionRef.current === teacherSession.id;
+    if (!serverSessionHydrated) return;
+    handledPresetLaunchRef.current = true;
+    void (async () => {
+      const reviewOnly = !presetLaunchRequest.run;
+      setPreviewSyncPaused(reviewOnly);
+      setLessonMsg("Loading saved sequence…");
+      const preset = await getLessonPreset(presetLaunchRequest.id);
+      if (!preset) {
+        setPreviewSyncPaused(false);
+        setLessonMsg("The saved sequence could not be loaded. Refresh this page to try again.");
+        return;
+      }
+      loadPreset(preset);
+
+      let shouldRun = presetLaunchRequest.run;
+      let blockedMessage: string | null = null;
+      if (shouldRun && preset.lineup.length === 0) {
+        shouldRun = false;
+        blockedMessage = "Sequence loaded but not started because it has no steps. Add at least one step in Sequence Builder, then choose Run again.";
+      } else if (shouldRun) {
+        if (!teacherSession || teacherSession.status !== "open") {
+          shouldRun = false;
+          blockedMessage = "Sequence loaded but not started. Start a live session, then return to Sequence Builder and choose Run again.";
+        } else {
+          try {
+            await switchSessionToLiveFlow(teacherSession);
+          } catch {
+            shouldRun = false;
+            blockedMessage = "Sequence loaded but not started. Control could not connect the open session to Live Class Flow. Open Session, select Live Class Flow, then return to Sequence Builder and choose Run again.";
+          }
+        }
+      }
+
+      consumePresetLaunchQuery();
+      setPresetLaunchRequest(null);
+      if (shouldRun) {
+        const startingMessage = "Sequence connected. Starting automatic pacing.";
+        setLessonMsg(startingMessage);
+        setTodayMsg(startingMessage);
+        setPendingRun(true);
+      } else if (blockedMessage) {
+        setPreviewSyncPaused(true);
+        setLessonMsg(blockedMessage);
+        setTodayMsg(blockedMessage);
+      } else {
+        const previewMessage = `Previewed ${preset.code || preset.title || "saved sequence"}. Student and projector screens are unchanged until you start the sequence.`;
+        setLessonMsg(previewMessage);
+        setTodayMsg(previewMessage);
+      }
+    })();
+    // Preset URL launches are one-shot requests captured at mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presetLaunchRequest, serverHydrationGeneration, teacherSession?.broadcast, teacherSession?.id, teacherSession?.status, teacherSessionReady]);
 
   useEffect(() => {
     if (pendingRun && lineup.length > 0) {
@@ -1305,8 +2012,12 @@ export default function ControlPage() {
   // ── Timer controls ──────────────────────────────────────────────────────
   function toggleRun() {
     if (!activeState) return;
+    setPreviewSyncPaused(false);
     if (secondsLeft <= 0) { secRef.current = activeMinutes * 60; setSecondsLeft(secRef.current); setFinished(false); }
     const willRun = !running;
+    if (willRun) setAutoAdvance(true);
+    if (willRun) armTimer(secRef.current);
+    else disarmTimer();
     setRunning(willRun);
     if (willRun) startMusicFor(activeState.id);
     else if (musicRef.current) musicRef.current.pause();
@@ -1317,9 +2028,11 @@ export default function ControlPage() {
     const item = lineup[nextIndex];
     const state = item ? bank.find((bankState) => bankState.id === item.stateId) : undefined;
     if (!state) return;
+    setPreviewSyncPaused(false);
     setAutoAdvance(true);
     setCurrentIndex(nextIndex);
     secRef.current = secondsLeft > 0 && currentIndex === nextIndex ? secondsLeft : minutesForLineupItem(item, bank) * 60;
+    armTimer(secRef.current);
     setSecondsLeft(secRef.current);
     setFinished(false);
     setRunning(true);
@@ -1330,59 +2043,157 @@ export default function ControlPage() {
     if (!activeState) return;
     secRef.current = activeMinutes * 60;
     setSecondsLeft(secRef.current);
+    disarmTimer();
     setRunning(false);
     setFinished(false);
     stopMusic();
   }
-  // Stop the whole running sequence and return the room to idle/free.
+  // Stop automatic pacing while leaving the current lesson state visible.
   function stopSequence() {
+    setAutoAdvance(false);
+    disarmTimer();
     setRunning(false);
     setFinished(false);
-    setCurrentIndex(-1);
-    secRef.current = 0;
-    setSecondsLeft(0);
     stopMusic();
   }
   function adjust(deltaSeconds: number) {
     secRef.current = Math.max(0, secRef.current + deltaSeconds);
+    if (running) armTimer(secRef.current);
     setSecondsLeft(secRef.current);
     if (deltaSeconds > 0) setFinished(false);
   }
   function next() {
-    if (controlPoll?.stage === "responding") {
-      setRunning(false);
-      setFinished(true);
-      closeActivePoll();
-      return;
-    }
+    const keepRunning = running;
+    setRunning(false);
     stopMusic();
-    if (currentIndex + 1 < lineup.length) loadIndex(currentIndex + 1);
-    else { setRunning(false); setFinished(false); setCurrentIndex(-1); }
+    if (controlPoll?.stage === "responding") {
+      closeActivePoll();
+      setControlPoll(null);
+      setPollAnswers([]);
+    }
+    if (currentIndex + 1 < lineup.length) loadIndex(currentIndex + 1, keepRunning);
+    else { setAutoAdvance(false); setRunning(false); setFinished(false); setCurrentIndex(-1); }
   }
   function previous() {
     if (currentIndex <= 0) return;
+    const keepRunning = running;
     if (controlPoll?.stage === "responding") closeActivePoll();
     setControlPoll(null);
     setPollAnswers([]);
-    loadIndex(currentIndex - 1);
+    loadIndex(currentIndex - 1, keepRunning);
   }
 
   useEffect(() => {
     const command = teacherSession?.remote_command;
     if (!command || command.nonce === lastRemoteCommandRef.current) return;
     lastRemoteCommandRef.current = command.nonce;
+    if (command.receivedAt && teacherSession?.live_flow) {
+      const publishedFlow = teacherSession.live_flow;
+      const publishedTimer = publishedFlow.timer;
+      markServerHydration(publishedFlow);
+      if (publishedFlow.sequence?.steps?.length) {
+        persistLineup(publishedFlow.sequence.steps.map((step) => ({
+          uid: uid(),
+          stateId: step.stateId,
+          minutes: Math.max(1, Math.round(step.durationSeconds / 60)),
+          title: step.label,
+          studentDirections: step.description,
+          question: step.question,
+          pollKind: step.pollKind || "",
+          choices: step.choices,
+          correctAnswer: step.correctAnswer,
+          standard: step.standard,
+          notionStepId: step.notionStepId || undefined,
+          notionLessonId: step.notionLessonId || undefined,
+          lessonCode: step.lessonCode,
+          linkUrl: step.resourceUrl,
+          paperTask: step.paperTask,
+          mainDisplay: step.mainDisplay,
+          paceDirections: step.paceDirections,
+          studentAction: step.studentAction,
+          remoteActions: step.remoteActions,
+          discussionStems: step.discussionStems?.join("\n"),
+          vocabulary: step.vocabulary?.join("\n"),
+          responseMode: step.responseMode,
+          workSpaceAvailable: step.workSpaceAvailable,
+        })));
+      }
+      if (publishedFlow.sequence) setCurrentIndex(publishedFlow.sequence.currentIndex);
+      if (publishedFlow.sequence) setAutoAdvance(publishedFlow.sequence.advanceMode === "automatic");
+      if (publishedFlow.lesson) {
+        setActiveLessonContext({
+          id: publishedFlow.lesson.id || "",
+          code: publishedFlow.lesson.code,
+          title: publishedFlow.lesson.title,
+          learningIntention: publishedFlow.lesson.learningIntention,
+          successCriteria: publishedFlow.lesson.successCriteria,
+          selectedSuccessCriterion: publishedFlow.lesson.selectedSuccessCriterion || publishedFlow.lesson.successCriteria,
+          classroomMode: publishedFlow.lesson.classroomMode || "",
+          discussionStems: publishedFlow.lesson.discussionStems?.join("\n") || "",
+          discussionVocabulary: publishedFlow.lesson.discussionVocabulary?.join("\n") || "",
+          requiredPaperWork: publishedFlow.lesson.requiredPaperWork || "",
+          requiredDigitalWork: publishedFlow.lesson.requiredDigitalWork || "",
+          optionalSupport: publishedFlow.lesson.optionalSupport || "",
+          bigDogChallenge: publishedFlow.lesson.bigDogChallenge || "",
+          dueAndTurnIn: publishedFlow.lesson.dueAndTurnIn || "",
+          helpPath: publishedFlow.lesson.helpPath || "",
+        });
+      } else setActiveLessonContext(null);
+      if (publishedTimer) {
+        const publishedSeconds = liveTimerSeconds(publishedTimer);
+        secRef.current = publishedSeconds;
+        setSecondsLeft(publishedSeconds);
+        const shouldRun = publishedTimer.running && publishedSeconds > 0;
+        if (shouldRun) armTimer(publishedSeconds);
+        else disarmTimer();
+        setRunning(shouldRun);
+        setFinished(publishedTimer.finished || (publishedTimer.running && publishedSeconds <= 0));
+      } else {
+        secRef.current = 0;
+        setSecondsLeft(0);
+        disarmTimer();
+        setRunning(false);
+        setFinished(publishedFlow.poll?.stage === "results");
+        stopMusic();
+      }
+      setBoardOpen(Boolean(publishedFlow.presentation?.boardOpen));
+      const publishedPoll = publishedFlow.poll;
+      const publishedStateId = publishedFlow.state?.id;
+      const interactiveStateId = publishedPoll && publishedStateId ? publishedStateId : null;
+      setControlPoll(publishedPoll && interactiveStateId
+        ? {
+            id: publishedPoll.id,
+            stateId: interactiveStateId,
+            kind: publishedPoll.kind,
+            question: publishedPoll.question,
+            choices: publishedPoll.choices,
+            stage: publishedPoll.stage,
+          }
+        : null);
+      setPollAnswers([]);
+      return;
+    }
     if (command.action === "next") next();
     else if (command.action === "previous") previous();
     else if (command.action === "toggle-timer") toggleRun();
     else if (command.action === "add-30") adjust(30);
     else if (command.action === "subtract-30") adjust(-30);
     else if (command.action === "reset-timer") reset();
+    else if (command.action === "show-board") setBoardOpen(true);
+    else if (command.action === "hide-board") setBoardOpen(false);
     else if (command.action === "play-warning") playCue("warn30");
     else if (command.action === "play-countdown") playCue("tick");
     else if (command.action === "play-times-up") playCue("end");
     else {
       const direction = abbieDirectionForRemoteAction(command.action);
       if (direction) requestAbbieLine(direction);
+    }
+    if (teacherSession) {
+      void teacherPost("/api/teacher/session", {
+        action: "update",
+        sessionId: teacherSession.id,
+        remoteCommand: { ...command, receivedAt: new Date().toISOString() },
+      }).catch(() => { /* the Remote will keep showing the command as sent */ });
     }
     // These controls intentionally operate on the current state-machine snapshot.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1412,6 +2223,68 @@ export default function ControlPage() {
     });
   }
 
+  async function admitWaitingStudent(request: AdmissionRequest) {
+    const studentEmail = admissionSelections[request.id];
+    if (!teacherSession || !studentEmail || admittingRequestCode) return;
+
+    setAdmittingRequestCode(request.requestCode);
+    setAdmissionError(null);
+    try {
+      const result = await teacherPost<{
+        sessionJoin: { id: string; studentId: string; displayName: string; joinedAt: string };
+      }>("/api/teacher/session", {
+        action: "admit",
+        sessionId: teacherSession.id,
+        requestCode: request.requestCode,
+        studentEmail,
+      });
+      setAdmissionRequests((current) => current.filter((candidate) => candidate.id !== request.id));
+      setAdmissionJoinedStudentIds((current) => current.includes(result.sessionJoin.studentId)
+        ? current
+        : [...current, result.sessionJoin.studentId]);
+      setAdmissionSelections((current) => {
+        const next = { ...current };
+        delete next[request.id];
+        return next;
+      });
+    } catch (actionError) {
+      setAdmissionError(actionError instanceof Error ? actionError.message : "The student could not be admitted.");
+    } finally {
+      setAdmittingRequestCode(null);
+    }
+  }
+
+  async function endTeacherSession() {
+    if (!teacherSession || endingSession) return;
+    if (!window.confirm("End this session for every connected student?")) return;
+    const sessionId = teacherSession.id;
+    setEndingSession(true);
+    setTodayMsg(null);
+    try {
+      await teacherPost("/api/teacher/session", { action: "close", sessionId });
+      clearStoredTeacherSession(sessionId);
+      pendingLiveFlowSyncRef.current = null;
+      setTeacherSession(null);
+      setJoinCode(null);
+      setAdmissionRequests([]);
+      setAdmissionRoster([]);
+      setAdmissionJoinedStudentIds([]);
+      setAdmissionSelections({});
+      setAdmissionError(null);
+      setShowAdmissions(false);
+      setControlPoll(null);
+      setPollAnswers([]);
+      setLiveChallenge(null);
+      setLiveChallengeBoard([]);
+      setFlowSyncError(null);
+      setTodayMsg("Session ended. Connected student screens have been released.");
+    } catch (actionError) {
+      setTodayMsg(actionError instanceof Error ? actionError.message : "The session could not be ended.");
+    } finally {
+      setEndingSession(false);
+    }
+  }
+
   function toggleFullscreen() {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
     else document.exitFullscreen?.();
@@ -1421,7 +2294,7 @@ export default function ControlPage() {
     function onKey(e: KeyboardEvent) {
       const target = e.target as HTMLElement | null;
       const isTyping = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.tagName === "SELECT" || target?.isContentEditable;
-      if (isTyping || !activeState || editing || showSounds) return;
+      if (isTyping || !activeState || editing || showSounds || showAdmissions) return;
       if (e.code === "Space") { e.preventDefault(); toggleRun(); }
       else if (e.code === "ArrowRight" || e.code === "PageDown") { e.preventDefault(); next(); }
       else if (e.code === "ArrowLeft" || e.code === "PageUp") { e.preventDefault(); previous(); }
@@ -1429,7 +2302,7 @@ export default function ControlPage() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeState, editing, showSounds, secondsLeft, running]);
+  }, [activeState, editing, showAdmissions, showSounds, secondsLeft, running]);
 
   const accent = activeState?.color ?? "#4e6ef2";
   const inFinal10 = running && secondsLeft <= 10 && secondsLeft > 0;
@@ -1446,7 +2319,9 @@ export default function ControlPage() {
       ? formatLiveFlowError(flowSyncError)
       : liveFlowConnected
         ? "Live Class Flow connected"
-        : "Select Live Class Flow in Session";
+        : teacherSession?.status === "open"
+          ? `Session ${teacherSession.join_code || "open"} - select Live Class Flow`
+          : "Start a session to connect students";
   const groupedBankSections = BANK_GROUPS.map((group) => ({
     ...group,
     states: bank.filter((state) => (group.stateIds as readonly string[]).includes(state.id)),
@@ -1475,10 +2350,16 @@ export default function ControlPage() {
         .cx-top { display:flex; align-items:center; justify-content:space-between; padding:14px 26px; border-bottom:1px solid #2a241a; flex-wrap:wrap; gap:8px; }
         .cx-mark { font-size:0.76rem; font-weight:900; letter-spacing:0.14em; text-transform:uppercase; color:${accent}; margin:0; transition:color 300ms ease; }
         .cx-live-status { margin:0 auto 0 0; border:1px solid ${liveFlowConnected && !flowSyncError ? "rgba(20,184,166,0.45)" : "rgba(251,191,36,0.4)"}; background:${liveFlowConnected && !flowSyncError ? "rgba(20,184,166,0.12)" : "rgba(251,191,36,0.1)"}; color:${liveFlowConnected && !flowSyncError ? "#5eead4" : "#fcaf38"}; border-radius:999px; padding:6px 10px; font-size:0.72rem; font-weight:900; letter-spacing:0.07em; text-transform:uppercase; max-width:min(52vw,520px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .cx-conductor-note { color:#a39a88; font-size:0.7rem; font-weight:850; letter-spacing:0.04em; white-space:nowrap; }
         .cx-tbtns { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
         .cx-sbtn { font-size:0.76rem; font-weight:800; letter-spacing:0.05em; text-transform:uppercase; color:#a39a88; background:transparent; border:1px solid #2a241a; border-radius:7px; padding:7px 12px; cursor:pointer; text-decoration:none; transition:all 140ms ease; }
         .cx-sbtn:hover { border-color:${accent}; color:#fff; }
         .cx-home { border-color:#3a3228; color:#d8d2c5; }
+        .cx-admission-alert { border-color:rgba(252,175,56,0.7); background:rgba(252,175,56,0.12); color:#ffd28a; }
+        .cx-admission-alert:hover { border-color:#fcaf38; background:rgba(252,175,56,0.2); color:#fff; }
+        .cx-end-session { border-color:rgba(249,83,53,0.55); color:#fca5a5; }
+        .cx-end-session:hover { border-color:#f95335; color:#fff; background:rgba(249,83,53,0.14); }
+        .cx-end-session:disabled { opacity:0.5; cursor:wait; }
         .cx-divider { width:1px; height:22px; background:#2a241a; flex:none; margin:0 2px; }
 
         .cx-main { display:grid; align-content:center; justify-items:center; gap:18px; padding:18px; text-align:center; }
@@ -1596,22 +2477,50 @@ export default function ControlPage() {
         .cx-lesson-name { color:#d8d2c5; font-weight:700; font-size:0.9rem; }
         .cx-lesson-stats { color:#7c7363; font-weight:800; font-size:0.78rem; }
         .cx-lesson-actions { display:flex; gap:8px; align-items:center; }
+        .cx-admissions .cx-lessons-body { max-width:860px; }
+        .cx-admission-intro { margin:0; color:#b9b09f; font-size:0.92rem; font-weight:700; line-height:1.5; }
+        .cx-admission-list { display:grid; gap:10px; }
+        .cx-admission-row { display:grid; grid-template-columns:minmax(110px,auto) minmax(230px,1fr) auto; gap:12px; align-items:end; border:1px solid #3a3020; border-radius:12px; background:#1a160f; padding:14px; }
+        .cx-admission-code-wrap, .cx-admission-field { display:grid; gap:5px; }
+        .cx-admission-label { color:#a39a88; font-size:0.7rem; font-weight:900; letter-spacing:0.09em; text-transform:uppercase; }
+        .cx-admission-code { color:#ffd28a; font-size:1.65rem; font-weight:900; letter-spacing:0.13em; line-height:1; font-variant-numeric:tabular-nums; }
+        .cx-admission-select { width:100%; min-height:44px; box-sizing:border-box; border:1px solid #4a3d28; border-radius:9px; background:#100d09; color:#fff; padding:10px 12px; font:inherit; font-size:0.9rem; font-weight:800; }
+        .cx-admission-select:focus { outline:2px solid #fcaf38; outline-offset:2px; }
+        .cx-btn.cx-admission-submit { background:#fcaf38; border-color:#fcaf38; color:#201e1a; }
+        .cx-btn.cx-admission-submit:hover { border-color:#ffd28a; filter:brightness(1.04); }
+        .cx-admission-error { margin:0; border:1px solid rgba(249,83,53,0.45); border-radius:9px; background:rgba(249,83,53,0.1); color:#fca5a5; padding:10px 12px; font-size:0.84rem; font-weight:800; }
+        @media (max-width:640px) { .cx-admission-row { grid-template-columns:1fr; align-items:stretch; } .cx-admission-row .cx-btn { width:100%; } }
       `}</style>
 
       <div className="cx-root">
         <header className="cx-top">
           <p className="cx-mark">Big Dog Math — Classroom</p>
           <p className="cx-live-status">{liveFlowStatus}</p>
+          {autoAdvance ? <span className="cx-conductor-note">Keep this Control window open during automatic pacing.</span> : null}
           <div className="cx-tbtns">
             <a className="cx-sbtn cx-home" href="/teacher">Home</a>
-            <a className="cx-sbtn" href="/session">Session</a>
+            <a className="cx-sbtn" href={teacherSession ? `/session?sessionId=${encodeURIComponent(teacherSession.id)}` : "/session"}>{teacherSession ? "Session" : "Start session"}</a>
+            {admissionRequests.length > 0 && (
+              <button
+                className="cx-sbtn cx-admission-alert"
+                onClick={() => setShowAdmissions(true)}
+                aria-live="polite"
+              >
+                {admissionRequests.length} waiting
+              </button>
+            )}
+            {teacherSession && (
+              <button className="cx-sbtn cx-end-session" onClick={endTeacherSession} disabled={endingSession}>
+                {endingSession ? "Ending session" : "End session"}
+              </button>
+            )}
             <a className="cx-sbtn" href="/session#challenge">Games</a>
             <a className="cx-sbtn" href="/roster">Rosters</a>
             <span className="cx-divider" />
             <button className="cx-sbtn" style={{ borderColor: "#14b8a6", color: "#5eead4" }} onClick={loadTodayLesson}>Today&apos;s lesson</button>
             <button className="cx-sbtn" onClick={() => { setShowLessons(true); setLessonMsg(null); }}>Lessons</button>
             <button className="cx-sbtn" onClick={() => setShowSpinner(true)}>Spinner</button>
-            <button className="cx-sbtn" style={autoAdvance ? { borderColor: accent, color: "#fff" } : undefined} onClick={() => setAutoAdvance((v) => !v)}>Auto {autoAdvance ? "on" : "off"}</button>
+            <button className="cx-sbtn" style={autoAdvance ? { borderColor: accent, color: "#fff" } : undefined} onClick={() => setAutoAdvance((v) => !v)}>Pacing {autoAdvance ? "on" : "off"}</button>
             <button className="cx-sbtn" onClick={() => setShowSounds((v) => !v)}>Sounds</button>
             <button className="cx-sbtn" onClick={() => setEditing((v) => !v)}>{editing ? "Done" : "Edit times"}</button>
             <button className="cx-sbtn" onClick={toggleFullscreen}>Full screen</button>
@@ -1660,7 +2569,7 @@ export default function ControlPage() {
                     <>
                       <div className="cx-poll-head">
                         <h2 className="cx-poll-title">{activeInteractiveState === "question" ? "Question setup" : "Live poll setup"}</h2>
-                        <span className="cx-poll-note">The state timer above is the response window. At 0:00, results appear.</span>
+                        <span className="cx-poll-note">The timer chimes at 0:00. Tap Show results when the room is ready.</span>
                       </div>
                       <div className="cx-poll-grid">
                         <label className="cx-poll-label" htmlFor="control-poll-kind">Response type</label>
@@ -1838,7 +2747,7 @@ export default function ControlPage() {
                       <>
                         <label className="cx-tool-field" htmlFor="game-skill">Game
                           <select id="game-skill" className="cx-tool-select" value={toolSetup.gameSkill} onChange={(event) => { updateToolSetup("gameSkill", event.target.value); updateToolSetup("gameLevel", "1"); }}>
-                            {SKILLS.map((s) => <option key={s.key} value={s.key}>{s.emoji} {s.label}</option>)}
+                            {SKILLS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
                           </select>
                         </label>
                         <label className="cx-tool-field" htmlFor="game-level">Level
@@ -1950,10 +2859,12 @@ export default function ControlPage() {
                 </section>
               )}
               <div className="cx-actions">
-                <button className="cx-btn pri" onClick={running ? toggleRun : runSequence}>{running ? "Pause" : "Start"}</button>
+                <button className="cx-btn pri" onClick={running ? toggleRun : runSequence}>
+                  {running ? "Pause" : autoAdvance ? "Resume" : "Start lesson"}
+                </button>
                 <button className="cx-btn" onClick={previous} disabled={currentIndex <= 0}>Back</button>
                 <button className="cx-btn next" onClick={next} disabled={controlPoll?.stage !== "responding" && currentIndex + 1 >= lineup.length}>{controlPoll?.stage === "responding" ? "Show results" : "Advance"}</button>
-                <button className="cx-btn" onClick={stopSequence}>Stop</button>
+                <button className="cx-btn" onClick={stopSequence}>Stop pacing</button>
                 <span className="cx-actions-sep" />
                 <button className="cx-btn" onClick={reset}>Reset state</button>
                 <button className="cx-btn" onClick={() => adjust(60)}>+1 min</button>
@@ -2077,6 +2988,66 @@ export default function ControlPage() {
           </div>
         </section>
 
+        {showAdmissions && (
+          <div
+            className="cx-overlay cx-admissions"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cx-admissions-title"
+          >
+            <div className="cx-lessons-head">
+              <h2 className="cx-lessons-title" id="cx-admissions-title">Students waiting</h2>
+              <button className="cx-sbtn" onClick={() => setShowAdmissions(false)}>Close</button>
+            </div>
+            <div className="cx-lessons-body">
+              <p className="cx-admission-intro">Match the code on the Chromebook, choose the student, then admit them.</p>
+              {admissionError && <p className="cx-admission-error" role="alert">{admissionError}</p>}
+              <div className="cx-admission-list">
+                {admissionRequests.map((request) => {
+                  const rosterWithEmail = admissionRoster.filter((student) =>
+                    Boolean(student.email) && !admissionJoinedStudentIds.includes(student.id),
+                  );
+                  const isAdmitting = admittingRequestCode === request.requestCode;
+                  return (
+                    <div className="cx-admission-row" key={request.id}>
+                      <div className="cx-admission-code-wrap">
+                        <span className="cx-admission-label">Chromebook code</span>
+                        <strong className="cx-admission-code">{request.requestCode}</strong>
+                      </div>
+                      <label className="cx-admission-field">
+                        <span className="cx-admission-label">Student</span>
+                        <select
+                          className="cx-admission-select"
+                          value={admissionSelections[request.id] || ""}
+                          onChange={(event) => setAdmissionSelections((current) => ({
+                            ...current,
+                            [request.id]: event.target.value,
+                          }))}
+                          disabled={rosterWithEmail.length === 0 || Boolean(admittingRequestCode)}
+                        >
+                          <option value="">{rosterWithEmail.length ? "Choose a student" : "No unjoined students available"}</option>
+                          {rosterWithEmail.map((student) => (
+                            <option value={student.email || ""} key={student.id}>
+                              {student.fullName}{student.email ? ` - ${student.email}` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <button
+                        className="cx-btn cx-admission-submit"
+                        onClick={() => { void admitWaitingStudent(request); }}
+                        disabled={!admissionSelections[request.id] || Boolean(admittingRequestCode)}
+                      >
+                        {isAdmitting ? "Admitting" : "Admit"}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
         {showLessons && (
           <div className="cx-overlay cx-lessons">
             <div className="cx-lessons-head">
@@ -2096,7 +3067,7 @@ export default function ControlPage() {
                   />
                   <button className="cx-btn pri" onClick={() => { void loadNotionLessonByCode(); }}>Load from Notion</button>
                 </div>
-                <p className="cx-hint">This can load a draft pilot without changing its date or publishing it to students.</p>
+                <p className="cx-hint">Loads a published Notion lesson into a private preview. Student and projector screens do not change until you start it.</p>
                 {lessonMsg && <p className="cx-lessons-msg">{lessonMsg}</p>}
               </div>
 

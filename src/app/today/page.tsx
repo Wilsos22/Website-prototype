@@ -15,6 +15,12 @@ interface LessonData {
   module: string;
   warmUpLink: string;
   exitTicketLink: string;
+  requiredPaperWork: string;
+  requiredDigitalWork: string;
+  optionalSupport: string;
+  bigDogChallenge: string;
+  dueAndTurnIn: string;
+  helpPath: string;
 }
 
 function formatDate(iso: string): string {
@@ -64,14 +70,21 @@ export default function TodayPage() {
     load();
   }, []);
 
+  const workCategories = lesson ? [
+    { label: "Required Paper Work", body: lesson.requiredPaperWork },
+    { label: "Required Digital Work", body: lesson.requiredDigitalWork },
+    { label: "Optional Support", body: lesson.optionalSupport },
+    { label: "Challenge", body: lesson.bigDogChallenge },
+  ].filter((category) => category.body?.trim()) : [];
+
   return (
     <>
       <style>{`
         .today-root {
           min-height: 100vh;
-          background: #0b0d14;
-          color: #fff;
-          font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+          background: radial-gradient(circle at 14% 10%, rgba(79, 93, 168, 0.09), transparent 28%), var(--bdb-ground);
+          color: var(--bdb-ink);
+          font-family: var(--bdb-font);
           display: grid;
           grid-template-rows: auto 1fr auto;
         }
@@ -82,20 +95,20 @@ export default function TodayPage() {
           align-items: center;
           justify-content: space-between;
           padding: 18px 32px;
-          border-bottom: 1px solid #1f2332;
+          border-bottom: 1px solid var(--bdb-line);
         }
         .today-wordmark {
           font-size: 0.8rem;
           font-weight: 900;
           letter-spacing: 0.14em;
           text-transform: uppercase;
-          color: #4e6ef2;
+          color: #4f5da8;
           margin: 0;
         }
         .today-date-display {
           font-size: 0.9rem;
           font-weight: 700;
-          color: #5a6280;
+          color: var(--bdb-ink-soft);
           letter-spacing: 0.04em;
         }
         .today-nav-link {
@@ -103,16 +116,17 @@ export default function TodayPage() {
           font-weight: 800;
           letter-spacing: 0.06em;
           text-transform: uppercase;
-          color: #3a4460;
-          border: 1px solid #1f2332;
+          color: var(--bdb-ink-soft);
+          border: 1px solid var(--bdb-line);
+          background: #fff;
           border-radius: 6px;
           padding: 6px 14px;
           text-decoration: none;
           transition: border-color 150ms ease, color 150ms ease;
         }
         .today-nav-link:hover {
-          border-color: #4e6ef2;
-          color: #8ba0f8;
+          border-color: #4f5da8;
+          color: #4f5da8;
         }
 
         /* Main content */
@@ -131,15 +145,15 @@ export default function TodayPage() {
           display: inline-flex;
           align-items: center;
           gap: 8px;
-          background: rgba(78, 110, 242, 0.15);
-          border: 1px solid rgba(78, 110, 242, 0.3);
+          background: rgba(79, 93, 168, 0.09);
+          border: 1px solid rgba(79, 93, 168, 0.28);
           border-radius: 6px;
           padding: 5px 12px;
           font-size: 0.78rem;
           font-weight: 900;
           letter-spacing: 0.1em;
           text-transform: uppercase;
-          color: #8ba0f8;
+          color: #4f5da8;
           width: fit-content;
         }
         .today-title {
@@ -147,13 +161,13 @@ export default function TodayPage() {
           font-size: clamp(2rem, 6vw, 3.6rem);
           font-weight: 900;
           line-height: 1.05;
-          color: #fff;
+          color: var(--bdb-ink);
         }
         .today-subtitle {
           margin: 8px 0 0;
           font-size: clamp(1rem, 2.5vw, 1.35rem);
           font-weight: 600;
-          color: #5a6280;
+          color: var(--bdb-ink-soft);
           line-height: 1.4;
         }
 
@@ -164,38 +178,39 @@ export default function TodayPage() {
           gap: 16px;
         }
         .today-card {
-          background: #121520;
-          border: 1px solid #1f2332;
+          background: #fff;
+          border: 1px solid var(--bdb-line);
           border-radius: 12px;
           padding: 22px 24px;
           display: grid;
           gap: 10px;
+          box-shadow: var(--bdb-shadow-sm);
         }
         .today-card-label {
           font-size: 0.75rem;
           font-weight: 900;
           letter-spacing: 0.1em;
           text-transform: uppercase;
-          color: #3a4460;
+          color: #4f5da8;
           margin: 0;
         }
         .today-card-content {
           font-size: 1.02rem;
           font-weight: 600;
-          color: #c8cedd;
+          color: var(--bdb-ink);
           line-height: 1.6;
           margin: 0;
           white-space: pre-wrap;
         }
         .today-card.highlight {
-          border-color: rgba(78, 110, 242, 0.35);
-          background: rgba(78, 110, 242, 0.06);
+          border-color: rgba(79, 93, 168, 0.32);
+          background: rgba(79, 93, 168, 0.07);
         }
         .today-card.highlight .today-card-label {
-          color: #6880d8;
+          color: #4f5da8;
         }
         .today-card.highlight .today-card-content {
-          color: #d8e0ff;
+          color: var(--bdb-ink);
           font-size: 1.1rem;
         }
 
@@ -221,28 +236,28 @@ export default function TodayPage() {
           transform: translateY(-1px);
         }
         .today-assignment-btn.is-warmup {
-          background: #f97316;
+          background: #35785a;
         }
         .today-assignment-btn.is-warmup:hover {
-          background: #ea580c;
+          background: #285f46;
         }
         .today-assignment-btn.is-exit {
-          background: #10b981;
+          background: #8a3d50;
         }
         .today-assignment-btn.is-exit:hover {
-          background: #059669;
+          background: #6f3040;
         }
         .today-due {
           font-size: 0.9rem;
           font-weight: 700;
-          color: #5a6280;
+          color: var(--bdb-ink-soft);
           margin-top: 4px;
         }
 
         /* Join section */
         .today-join-section {
-          background: #121520;
-          border: 1px solid #1f2332;
+          background: #fff;
+          border: 1px solid var(--bdb-line);
           border-radius: 12px;
           padding: 22px 24px;
           display: flex;
@@ -250,13 +265,14 @@ export default function TodayPage() {
           justify-content: space-between;
           gap: 16px;
           flex-wrap: wrap;
+          box-shadow: var(--bdb-shadow-sm);
         }
         .today-join-label {
           font-size: 0.75rem;
           font-weight: 900;
           letter-spacing: 0.1em;
           text-transform: uppercase;
-          color: #3a4460;
+          color: #4f5da8;
           margin: 0 0 6px;
         }
         .today-join-link {
@@ -264,9 +280,9 @@ export default function TodayPage() {
           align-items: center;
           gap: 8px;
           background: transparent;
-          border: 1px solid #1f2332;
+          border: 1px solid var(--bdb-line);
           border-radius: 8px;
-          color: #8ba0f8;
+          color: #4f5da8;
           font-size: 0.9rem;
           font-weight: 800;
           padding: 10px 16px;
@@ -275,7 +291,7 @@ export default function TodayPage() {
           letter-spacing: 0.04em;
         }
         .today-join-link:hover {
-          border-color: #4e6ef2;
+          border-color: #4f5da8;
         }
 
         /* Empty / error states */
@@ -285,20 +301,16 @@ export default function TodayPage() {
           min-height: 50vh;
           gap: 16px;
           text-align: center;
-          color: #3a4460;
-        }
-        .today-empty-icon {
-          font-size: 3.5rem;
-          opacity: 0.5;
+          color: var(--bdb-ink-soft);
         }
         .today-empty-title {
           font-size: 1.4rem;
           font-weight: 900;
-          color: #3a4460;
+          color: var(--bdb-ink);
           margin: 0;
         }
         .today-empty-sub {
-          color: #2a3050;
+          color: var(--bdb-ink-soft);
           font-size: 0.95rem;
           max-width: 360px;
           margin: 0;
@@ -309,7 +321,7 @@ export default function TodayPage() {
           border-radius: 8px;
           padding: 14px 18px;
           font-size: 0.88rem;
-          color: #e88;
+          color: #8a3d50;
           font-family: "SFMono-Regular", Consolas, monospace;
           max-width: 600px;
         }
@@ -317,7 +329,7 @@ export default function TodayPage() {
         /* Footer */
         .today-footer {
           padding: 14px 32px;
-          border-top: 1px solid #1f2332;
+          border-top: 1px solid var(--bdb-line);
           display: flex;
           align-items: center;
           justify-content: space-between;
@@ -325,7 +337,7 @@ export default function TodayPage() {
         }
         .today-footer-text {
           font-size: 0.8rem;
-          color: #2a3050;
+          color: var(--bdb-ink-soft);
           font-weight: 700;
         }
 
@@ -342,21 +354,19 @@ export default function TodayPage() {
           <span className="today-date-display">
             {date ? formatDate(date) : "Loading…"}
           </span>
-          <a className="today-nav-link" href="/lessons">Past Days →</a>
+          <a className="today-nav-link" href="/lessons">Past Days</a>
         </header>
 
         {/* Main */}
         <div className="today-main">
           {loading && (
             <div className="today-empty">
-              <div className="today-empty-icon">📘</div>
               <p className="today-empty-title">Loading…</p>
             </div>
           )}
 
           {!loading && error && (
             <div className="today-empty">
-              <div className="today-empty-icon">⚠️</div>
               <p className="today-empty-title">Couldn't load lesson</p>
               <div className="today-error-note">{error}</div>
               {error.includes("NOTION_TOKEN") && (
@@ -369,7 +379,6 @@ export default function TodayPage() {
 
           {!loading && !error && !lesson && (
             <div className="today-empty">
-              <div className="today-empty-icon">📭</div>
               <p className="today-empty-title">No lesson published today</p>
               <p className="today-empty-sub">
                 Set a lesson's <em>Publish Workflow</em> to <strong>Published</strong> and its <em>Date</em> to today in Notion.
@@ -382,7 +391,7 @@ export default function TodayPage() {
               {/* Tag */}
               {lesson.module && (
                 <div className="today-lesson-tag">
-                  📘 {lesson.module}
+                  {lesson.module}
                 </div>
               )}
 
@@ -403,28 +412,26 @@ export default function TodayPage() {
                   </div>
                 )}
 
-                <div className="today-card">
-                  <p className="today-card-label">Warm-Up</p>
-                  {lesson.warmUpLink ? (
+                {lesson.warmUpLink && (
+                  <div className="today-card">
+                    <p className="today-card-label">Warm-Up</p>
                     <a
                       className="today-assignment-btn is-warmup"
                       href={lesson.warmUpLink}
                       rel="noopener noreferrer"
                       target="_blank"
                     >
-                      Start Warm-Up ↗
+                      Start Warm-Up
                     </a>
-                  ) : (
-                    <p className="today-card-content">No warm-up link has been added yet.</p>
-                  )}
-                </div>
-
-                {!lesson.assignmentLink && (
-                  <div className="today-card">
-                    <p className="today-card-label">Assignment</p>
-                    <p className="today-card-content">No assignment link has been added yet.</p>
                   </div>
                 )}
+
+                {workCategories.map((category) => (
+                  <div className={`today-card${category.label === "Required Paper Work" ? " highlight" : ""}`} key={category.label}>
+                    <p className="today-card-label">{category.label}</p>
+                    <p className="today-card-content">{category.body}</p>
+                  </div>
+                ))}
 
                 {lesson.assignmentLink && (
                   <div className="today-card">
@@ -435,7 +442,7 @@ export default function TodayPage() {
                       rel="noopener noreferrer"
                       target="_blank"
                     >
-                      Open Assignment ↗
+                      Open Assignment
                     </a>
                     {lesson.dueDate && (
                       <p className="today-due">Due {formatShortDate(lesson.dueDate)}</p>
@@ -452,7 +459,7 @@ export default function TodayPage() {
                       rel="noopener noreferrer"
                       target="_blank"
                     >
-                      Open Exit Ticket ↗
+                      Open Exit Ticket
                     </a>
                   </div>
                 )}
@@ -474,7 +481,7 @@ export default function TodayPage() {
                   </p>
                 </div>
                 <a className="today-join-link" href="/join">
-                  Join Session →
+                  Join Session
                 </a>
               </div>
             </>

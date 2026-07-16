@@ -12,6 +12,8 @@ const RESPONSE_SS_ID     = "1b4jxYJ6HzoxDkZLBabaPptOl568gMmrxxz6k4Goy5fY";
 
 const GRADE5_PDF_SOURCE = "My Drive/Saved from Chrome (1)/grade-5.pdf";
 const PERIOD_CHOICES = ["Period 1", "Period 2", "Period 3", "Period 4", "Period 5"];
+const BDM_WARMUP_IDENTITY_ITEM_TITLE = "Big Dog connection";
+const BDM_WARMUP_IDENTITY_PLACEHOLDER = "BDM_AUTH_USER_ID";
 
 // Fallback values for running generateWeekForms() directly from Apps Script.
 const WEEK_CONFIG = {
@@ -79,7 +81,7 @@ function createWarmupFormFromPdfBank_(weekConfig, dayIndex, requestedTopic) {
       weekFolderUrl: weekFolder.getUrl(),
       formId: formResult.form.getId(),
       editUrl: formResult.form.getEditUrl(),
-      publishedUrl: formResult.form.getPublishedUrl(),
+      publishedUrl: formResult.publishedUrl,
       responseSpreadsheetId: RESPONSE_SS_ID,
       responseSheetUrl: responseSpreadsheet.getUrl(),
       responseTabName: formResult.responseTabName,
@@ -93,7 +95,7 @@ function createWarmupFormFromPdfBank_(weekConfig, dayIndex, requestedTopic) {
     new Date(),
     title,
     formResult.form.getEditUrl(),
-    formResult.form.getPublishedUrl(),
+    formResult.publishedUrl,
     RESPONSE_SS_ID,
     weekFolderName,
     formResult.form.getId(),
@@ -108,7 +110,7 @@ function createWarmupFormFromPdfBank_(weekConfig, dayIndex, requestedTopic) {
     dailyTopic,
     reviewTopics: questionSet.reviewTopics,
     editUrl: formResult.form.getEditUrl(),
-    publishedUrl: formResult.form.getPublishedUrl(),
+    publishedUrl: formResult.publishedUrl,
     responseTabName: formResult.responseTabName,
     source: GRADE5_PDF_SOURCE,
     notionStatus: linkStatus,
@@ -163,14 +165,78 @@ function buildForm_(title, topic, questions, weekFolder, responseSpreadsheet, re
     }
   });
 
+  const identityItem = getOrCreateBigDogIdentityItem_(form);
+  publishWarmupForm_(form);
+  const publishedUrl = buildBigDogWarmupUrl_(form, identityItem);
+
   const beforeSheetIds = getSheetIdMap_(responseSpreadsheet);
   form.setDestination(FormApp.DestinationType.SPREADSHEET, responseSpreadsheet.getId());
   const renamedTabName = renameNewResponseSheet_(responseSpreadsheet, beforeSheetIds, responseTabName);
 
   return {
     form,
+    publishedUrl,
     responseTabName: renamedTabName
   };
+}
+
+function publishWarmupForm_(form) {
+  if (
+    typeof form.supportsAdvancedResponderPermissions === "function" &&
+    form.supportsAdvancedResponderPermissions()
+  ) {
+    form.setPublished(true);
+    return;
+  }
+  form.setAcceptingResponses(true);
+}
+
+function getOrCreateBigDogIdentityItem_(form) {
+  const textItems = form.getItems(FormApp.ItemType.TEXT);
+  let existing = null;
+  for (let i = 0; i < textItems.length; i++) {
+    if (textItems[i].getTitle() === BDM_WARMUP_IDENTITY_ITEM_TITLE) {
+      existing = textItems[i];
+      break;
+    }
+  }
+  const item = existing ? existing.asTextItem() : form.addTextItem();
+  item.setTitle(BDM_WARMUP_IDENTITY_ITEM_TITLE)
+    .setHelpText("This is filled in automatically so this Chromebook can enter the lesson after the warm-up. Do not change it.")
+    .setRequired(true);
+  return item;
+}
+
+function buildBigDogWarmupUrl_(form, identityItem) {
+  const response = form.createResponse();
+  response.withItemResponse(identityItem.createResponse(BDM_WARMUP_IDENTITY_PLACEHOLDER));
+  return response.toPrefilledUrl();
+}
+
+// Run this once for an already-published form, then paste the returned URL into
+// the lesson's Warm up link field. Newly generated forms do this automatically.
+function upgradePublishedWarmupForBigDog(formId) {
+  let safeFormId = String(formId || "").trim();
+  if (!safeFormId) {
+    const prompt = SpreadsheetApp.getUi().prompt(
+      "Connect an existing warm-up",
+      "Paste the form ID from its edit URL.",
+      SpreadsheetApp.getUi().ButtonSet.OK_CANCEL
+    );
+    if (prompt.getSelectedButton() !== SpreadsheetApp.getUi().Button.OK) return "";
+    safeFormId = String(prompt.getResponseText() || "").trim();
+  }
+  if (!safeFormId) throw new Error("A Google Form ID is required.");
+
+  const form = FormApp.openById(safeFormId);
+  const publishedUrl = buildBigDogWarmupUrl_(form, getOrCreateBigDogIdentityItem_(form));
+  Logger.log("Paste this URL into the lesson's Warm up link field: " + publishedUrl);
+  SpreadsheetApp.getUi().alert(
+    "Warm-up connected",
+    "The prefilled link is in the execution log. Paste it into the lesson's Warm up link field.",
+    SpreadsheetApp.getUi().ButtonSet.OK
+  );
+  return publishedUrl;
 }
 
 // Question selection
@@ -596,7 +662,7 @@ function getAvailableSheetName_(spreadsheet, targetName, currentSheetId) {
   const existing = spreadsheet.getSheetByName(targetName);
   if (!existing || existing.getSheetId() === currentSheetId) return targetName;
 
-  if (isSheetEmptyOrHeaderOnly_(existing)) {
+  if (isSheetEmptyOrHeaderOnly_(existing) && !existing.getFormUrl()) {
     spreadsheet.deleteSheet(existing);
     return targetName;
   }

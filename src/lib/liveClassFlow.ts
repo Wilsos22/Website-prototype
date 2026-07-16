@@ -1,5 +1,17 @@
 // Shared client-safe contracts for the teacher control runtime and student live flow.
 
+import type { ClassroomStageId } from "@/lib/classroomPilot";
+import type { LivePollKind } from "@/lib/liveFlowContract";
+
+export {
+  LIVE_RESPONSE_MODES,
+  liveAssignedToolRoute,
+  liveResponseModePollKind,
+  splitLiveFlowLines,
+  splitLiveFlowVocabulary,
+} from "@/lib/liveFlowContract";
+export type { LivePollKind, LiveResponseMode } from "@/lib/liveFlowContract";
+
 export const LIVE_FLOW_MODE = "live-flow";
 export const LIVE_FLOW_ROUTE = "/live-flow";
 export const STUDENT_SESSION_KEY = "bdm-student-session";
@@ -7,7 +19,6 @@ export const TEACHER_SESSION_KEY = "bdm-teacher-session";
 export const CLASS_MODE_EXIT_KEY = "bdm-class-mode-exited";
 
 export type DiscussionPhaseId = "think" | "marker" | "table" | "revise" | "share";
-export type LivePollKind = "short-answer" | "multiple-choice" | "fist-to-five";
 export const TEACHER_REMOTE_ACTIONS = [
   "next",
   "previous",
@@ -15,6 +26,8 @@ export const TEACHER_REMOTE_ACTIONS = [
   "add-30",
   "subtract-30",
   "reset-timer",
+  "show-board",
+  "hide-board",
   "play-warning",
   "play-countdown",
   "play-times-up",
@@ -119,14 +132,46 @@ export interface DiscussionPhaseSnapshot {
   keyVocabulary?: string[];
 }
 
+export interface LiveFlowSequenceStep {
+  stateId: string;
+  label: string;
+  description: string;
+  color: string;
+  semantic: ClassroomStageId;
+  durationSeconds: number;
+  question: string;
+  pollKind: LivePollKind | null;
+  choices: string[];
+  correctAnswer: string;
+  standard: string;
+  resourceUrl: string;
+  paperTask: string;
+  notionStepId: string | null;
+  notionLessonId: string | null;
+  lessonCode: string;
+  mainDisplay?: string;
+  paceDirections?: string;
+  studentAction?: string;
+  remoteActions?: string;
+  discussionStems?: string[];
+  vocabulary?: string[];
+  responseMode?: string;
+  workSpaceAvailable?: boolean;
+}
+
 export interface LiveClassFlowSnapshot {
-  version: 1;
+  version: 2;
   updatedAt: string;
+  transition?: {
+    token: string;
+    startedAt: string;
+  };
   state: {
     id: string;
     label: string;
     description: string;
     color: string;
+    semantic?: ClassroomStageId;
   } | null;
   phase: DiscussionPhaseSnapshot | null;
   timer: {
@@ -134,6 +179,7 @@ export interface LiveClassFlowSnapshot {
     secondsLeft: number;
     running: boolean;
     finished: boolean;
+    endsAt?: string | null;
   } | null;
   poll: {
     id: string;
@@ -149,16 +195,65 @@ export interface LiveClassFlowSnapshot {
   presentation: {
     title: string;
     body: string;
+    mainDisplay?: string;
     mode: "board" | "directions" | "resource" | "poll" | "tool";
     notionStepId: string | null;
+    boardOpen?: boolean;
+    paceDirections?: string;
+    studentAction?: string;
+    remoteActions?: string;
+    responseMode?: string;
+    workSpaceAvailable?: boolean;
+    discussionStems?: string[];
+    vocabulary?: string[];
   } | null;
   tool: LiveToolConfig | null;
+  lesson?: {
+    id: string | null;
+    code: string;
+    title: string;
+    learningIntention: string;
+    successCriteria: string;
+    selectedSuccessCriterion?: string;
+    classroomMode?: string;
+    discussionStems?: string[];
+    discussionVocabulary?: string[];
+    requiredPaperWork?: string;
+    requiredDigitalWork?: string;
+    optionalSupport?: string;
+    bigDogChallenge?: string;
+    dueAndTurnIn?: string;
+    helpPath?: string;
+  } | null;
+  sequence?: {
+    currentIndex: number;
+    totalSteps: number;
+    nextLabel: string | null;
+    nextDirections: string | null;
+    advanceMode: "manual" | "automatic";
+    steps?: LiveFlowSequenceStep[];
+  } | null;
+  paper?: {
+    task: string;
+  } | null;
+}
+
+export function liveTimerSeconds(
+  timer: LiveClassFlowSnapshot["timer"],
+  now = Date.now(),
+): number {
+  if (!timer) return 0;
+  if (!timer.running || !timer.endsAt) return Math.max(0, timer.secondsLeft);
+  const end = Date.parse(timer.endsAt);
+  if (!Number.isFinite(end)) return Math.max(0, timer.secondsLeft);
+  return Math.max(0, Math.ceil((end - now) / 1000));
 }
 
 export interface TeacherRemoteCommand {
   nonce: string;
   action: TeacherRemoteAction;
   issuedAt: string;
+  receivedAt?: string;
 }
 
 // A single thing Abbie says, broadcast to joined student screens. `nonce` is

@@ -8,6 +8,18 @@ import {
 
 export const dynamic = "force-dynamic";
 
+type JoinResolution = {
+  outcome: string;
+  join_id: string | null;
+  resolved_student_id: string | null;
+  resolved_display_name: string | null;
+  resolved_joined_at: string | null;
+};
+
+function isMissingJoinResolver(code?: string): boolean {
+  return code === "42883" || code === "PGRST202";
+}
+
 export async function POST(request: Request) {
   try {
     const student = await requireVerifiedStudent(request);
@@ -40,15 +52,48 @@ export async function POST(request: Request) {
       throw new StudentIdentityError("That code belongs to a different class.", 403, "wrong_period");
     }
 
-    const { error: joinError } = await db.from("session_joins").upsert(
-      {
-        session_id: session.id,
-        student_id: student.id,
-        display_name: student.fullName,
-      },
-      { onConflict: "session_id,student_id" },
-    );
-    if (joinError) throw new StudentIdentityError("The class session could not be joined.", 500, "join_save_failed");
+    const resolutionResult = await db.rpc("bdm_complete_verified_student_join", {
+      p_session_id: session.id,
+      p_student_id: student.id,
+      p_auth_user_id: student.authUserId,
+      p_display_name: student.fullName,
+    });
+
+    if (resolutionResult.error && isMissingJoinResolver(resolutionResult.error.code)) {
+      const { error: fallbackError } = await db.from("session_joins").upsert(
+        {
+          session_id: session.id,
+          student_id: student.id,
+          display_name: student.fullName,
+        },
+        { onConflict: "session_id,student_id" },
+      );
+      if (fallbackError) {
+        throw new StudentIdentityError("The class session could not be joined.", 500, "join_save_failed");
+      }
+    } else if (resolutionResult.error) {
+      throw new StudentIdentityError("The class session could not be joined.", 500, "join_save_failed");
+    } else {
+      const resolution = ((resolutionResult.data as JoinResolution[] | null) ?? [])[0];
+      if (!resolution || resolution.outcome !== "joined") {
+        const code = resolution?.outcome || "join_conflict";
+        void recordSecurityEvent({
+          eventType: "student_join",
+          outcome: code === "session_not_open" ? "denied" : "conflict",
+          authUserId: student.authUserId,
+          studentId: student.id,
+          sessionId: session.id,
+          details: { reason: code },
+        });
+        throw new StudentIdentityError(
+          code === "session_not_open"
+            ? "This class session is no longer open."
+            : "Your class join changed. Ask your teacher to try again.",
+          code === "session_not_open" ? 404 : 409,
+          code,
+        );
+      }
+    }
 
     void recordSecurityEvent({
       eventType: "student_join",

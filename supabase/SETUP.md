@@ -81,10 +81,15 @@ collects the verified respondent email. It does not require Google OAuth.
 1. In Supabase Auth Providers, enable Anonymous Sign-Ins.
 2. Confirm Vercel has `EVIDENCE_INGEST_KEY`.
 3. Set the Apps Script Property `BDM_EVIDENCE_KEY` to the same value.
-4. Run the updated Apps Script `installTimeTriggers()` once.
-5. Generate the pilot warm-up and confirm the Notion Form Link contains
-   `BDM_AUTH_USER_ID`.
-6. Add `NEXT_PUBLIC_WARMUP_IDENTITY_ENABLED=true` in Vercel only when the pilot
+4. Paste the current `warmup-generator.gs`, `warmup-notion-sync.gs`, and
+   `warmup-evidence.gs` files into the active Apps Script project.
+5. Run `repairAllWarmupTriggers()` once and confirm that the single remaining
+   form-submit trigger is the spreadsheet-level `syncSubmissionToExportSheet`.
+6. Generate the pilot warm-up and confirm the Notion Form Link contains
+   `BDM_AUTH_USER_ID`. For an already-published Form, run
+   `upgradePublishedWarmupForBigDog()` and replace its Notion link with the
+   returned prefilled URL.
+7. Add `NEXT_PUBLIC_WARMUP_IDENTITY_ENABLED=true` in Vercel only when the pilot
    code and updated warm-up script are ready to deploy together.
 
 The full pilot and rollback checklist is in

@@ -142,7 +142,7 @@ function buildDayFromNotionLesson_(safeConfig, dayIndex, lessons) {
     weekFolderUrl: weekFolder.getUrl(),
     formId: formResult.form.getId(),
     editUrl: formResult.form.getEditUrl(),
-    publishedUrl: formResult.form.getPublishedUrl(),
+    publishedUrl: formResult.publishedUrl,
     responseSpreadsheetId: RESPONSE_SS_ID,
     responseSheetUrl: responseSpreadsheet.getUrl(),
     responseTabName: formResult.responseTabName,
@@ -151,7 +151,7 @@ function buildDayFromNotionLesson_(safeConfig, dayIndex, lessons) {
   }], { ok: false, error: "Warm-up link export helper is not installed." });
 
   linkSheet.appendRow([
-    new Date(), title, formResult.form.getEditUrl(), formResult.form.getPublishedUrl(),
+    new Date(), title, formResult.form.getEditUrl(), formResult.publishedUrl,
     RESPONSE_SS_ID, weekFolderName, formResult.form.getId(), formResult.responseTabName,
     "Notion lesson + curated pool",
     linkStatus.ok ? linkStatus.action : "Link export warning: " + linkStatus.error,
@@ -164,7 +164,7 @@ function buildDayFromNotionLesson_(safeConfig, dayIndex, lessons) {
     dailyTopic: topic + (lesson.title && lesson.title !== topic ? " - " + lesson.title : ""),
     reviewTopics: ai.reviewTopics || [],
     editUrl: formResult.form.getEditUrl(),
-    publishedUrl: formResult.form.getPublishedUrl(),
+    publishedUrl: formResult.publishedUrl,
     responseTabName: formResult.responseTabName,
     source: "Q4/Q5 " +
       (isRetention ? "retention from " + (target.title || target.topic || targetDate) : "from today's lesson (no prior lesson found)") +
@@ -304,7 +304,7 @@ function getNotionLessonsForWeek_(startDate) {
   const start = getWarmupDayInfo_(startDate, 0).isoDate;
   const end = getWarmupDayInfo_(startDate, 4).isoDate;
   // Query back 3 weeks so a multi-day lesson whose date RANGE started before
-  // this week (e.g. Thu → Tue) is still found and expanded onto this week's days.
+  // this week (for example, Thu to Tue) is still found and expanded onto this week's days.
   const queryStart = bdmShiftIsoDate_(start, -21);
   const lessons = {};
   const errors = [];
@@ -500,7 +500,7 @@ function rotatePicks_(key, group, count) {
     for (let i = 0; i < group.length; i++) {
       if (used.indexOf(i) === -1) { idx = i; break; }
     }
-    if (idx === -1) { used = []; idx = 0; } // exhausted → start the rotation over
+    if (idx === -1) { used = []; idx = 0; } // exhausted, so start the rotation over
     used.push(idx);
     picks.push(group[idx]);
   }
