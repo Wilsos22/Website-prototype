@@ -2,7 +2,9 @@
 
 import { useEffect, useState, type CSSProperties } from "react";
 import InkBoard from "@/components/InkBoard";
+import LessonVisual from "@/components/LessonVisual";
 import { CLASSROOM_STAGE_THEMES, classroomStageTheme, discussionSupportsForLesson } from "@/lib/classroomPilot";
+import { resolveLessonVisual } from "@/lib/lessonVisuals";
 import { teacherApiRequest } from "@/lib/teacherApi";
 import { LIVE_FLOW_MODE, getStoredTeacherSessionId, liveTimerSeconds, type LiveClassFlowSnapshot } from "@/lib/liveClassFlow";
 
@@ -41,17 +43,6 @@ function requestedSessionId() {
   } catch {
     return null;
   }
-}
-
-function halftimeScenario(text: string) {
-  const match = text.match(/The\s+(.+?)\s+lead\s+the\s+(.+?)\s+(\d+)\s+(?:to|-)\s+(\d+)\s+at\s+halftime/i);
-  if (!match) return null;
-  return {
-    leadingTeam: match[1].trim(),
-    trailingTeam: match[2].trim(),
-    leadingScore: match[3],
-    trailingScore: match[4],
-  };
 }
 
 function discussionRounds(text: string) {
@@ -207,7 +198,23 @@ export default function ClassroomStagePage() {
   const liveToolUrl = flow ? toolUrl(flow) : null;
   const showBoardPanel = Boolean(session && presentation?.boardOpen && presentation.mode !== "board");
   const slideBody = presentation?.mainDisplay || presentation?.body || state?.description || "";
-  const score = theme.id === "scenario" ? halftimeScenario(slideBody) : null;
+  const activeSequenceStep = flow?.sequence?.steps?.[flow.sequence.currentIndex] || null;
+  const lessonVisual = flow ? resolveLessonVisual({
+    lessonCode: lesson?.code || activeSequenceStep?.lessonCode,
+    stateId: theme.id,
+    text: slideBody,
+    fallbackTexts: [
+      activeSequenceStep?.mainDisplay || "",
+      activeSequenceStep?.description || "",
+      presentation?.body || "",
+      activeSequenceStep?.question || "",
+    ],
+    contextSteps: flow.sequence?.steps?.map((step) => ({
+      stateId: step.semantic || step.stateId,
+      text: step.mainDisplay || step.description || step.question || step.paperTask,
+    })),
+    currentStepIndex: flow.sequence?.currentIndex,
+  }) : null;
   const configuredDiscussionSupports = discussionSupportsForLesson(lesson?.code);
   const sentenceStems = presentation?.discussionStems?.filter(Boolean).length
     ? presentation.discussionStems
@@ -263,6 +270,7 @@ export default function ClassroomStagePage() {
         .stage-resource, .stage-tool { position:absolute; inset:0; width:100%; height:100%; border:0; background:#fff; }
         .stage-resource-link { padding-top:clamp(34px,6vw,88px); }
         .stage-resource-link a { display:flex; min-height:72px; align-items:center; justify-content:center; border:2px solid var(--stage-accent); border-radius:14px; background:var(--stage-accent); color:#111813; padding:0 30px; text-decoration:none; font-size:1.25rem; font-weight:900; }
+        .stage-lesson-visual { position:absolute; inset:0; display:grid; place-items:center; padding:clamp(30px,5vw,72px); }
         .stage-poll { align-content:center; justify-items:center; gap:26px; padding-top:120px; }
         .stage-question { margin:0; max-width:24ch; color:#fff; font-size:clamp(2.2rem,5.4vw,5.4rem); line-height:1.05; letter-spacing:-0.025em; }
         .stage-response-count { margin:0; color:var(--stage-muted); font-size:clamp(1rem,2.2vw,1.5rem); font-weight:850; }
@@ -304,6 +312,7 @@ export default function ClassroomStagePage() {
         .stage-work.board-open .stage-directions,
         .stage-work.board-open .stage-poll,
         .stage-work.board-open .stage-resource-link,
+        .stage-work.board-open .stage-lesson-visual,
         .stage-work.board-open .stage-score-scene,
         .stage-work.board-open .stage-discussion,
         .stage-work.board-open .stage-independent { right:42%; }
@@ -407,17 +416,9 @@ export default function ClassroomStagePage() {
             <iframe className="stage-tool" src={liveToolUrl} title={flow.tool?.label || "Lesson tool"} />
           ) : presentation?.mode === "board" ? (
             <InkBoard room={session.id} interactive problem={presentation.body} />
-          ) : score ? (
-            <section className="stage-score-scene" aria-label="Halftime score problem">
-              <div className="stage-scoreboard" aria-label={`${score.leadingTeam} ${score.leadingScore}, ${score.trailingTeam} ${score.trailingScore} at halftime`}>
-                <p className="stage-scoreboard-label">Halftime</p>
-                <div className="stage-team"><span>{score.leadingTeam}</span><strong>{score.leadingScore}</strong></div>
-                <div className="stage-team"><span>{score.trailingTeam}</span><strong>{score.trailingScore}</strong></div>
-              </div>
-              <div className="stage-score-copy">
-                <h2>What could the final score be?</h2>
-                <p>{slideBody}</p>
-              </div>
+          ) : lessonVisual ? (
+            <section className="stage-lesson-visual">
+              <LessonVisual visual={lessonVisual} variant="projector" accent={theme.accent} />
             </section>
           ) : theme.id === "discussion" ? (
             <section className="stage-discussion" aria-label="Discussion prompt and supports">
