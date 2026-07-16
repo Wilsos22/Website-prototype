@@ -6,6 +6,7 @@ import ClassroomSpinner from "@/components/ClassroomSpinner";
 import { getSupabase } from "@/lib/supabase";
 import { SECURE_STUDENT_DATA, studentApiRequest } from "@/lib/studentApi";
 import { CLOSEOUT_DIRECTIONS } from "@/lib/classStates";
+import { normalizeDiscussionPhaseSnapshot } from "@/lib/discussionProtocol";
 import { publicSuccessCriterion } from "@/lib/successCriterion";
 import {
   LIVE_FLOW_MODE,
@@ -56,9 +57,9 @@ type DiscussionContent = {
 
 const DISCUSSION_CONTENT: Record<DiscussionPhaseId, DiscussionContent> = {
   think: {
-    title: "Thinking Time",
-    subtitle: "Silent — think on your own.",
-    directions: ["Do not talk.", "Do not type.", "Think about your first move."],
+    title: "Round 1 of 3: Think + Write",
+    subtitle: "Think quietly, then write your first idea.",
+    directions: ["Think on your own first.", "Write one idea or strategy.", "Mistakes are allowed; blank work is not."],
   },
   marker: {
     title: "Commit Your Thinking",
@@ -66,8 +67,8 @@ const DISCUSSION_CONTENT: Record<DiscussionPhaseId, DiscussionContent> = {
     directions: ["No group talk yet.", "Mistakes are allowed.", "Blank boards are not."],
   },
   table: {
-    title: "Discuss with Your Table",
-    subtitle: "Talk it through together.",
+    title: "Round 2 of 3: Discuss + Revise",
+    subtitle: "Talk it through, then strengthen your response.",
     sentenceStems: [
       "I started by…",
       "I noticed…",
@@ -89,8 +90,8 @@ const DISCUSSION_CONTENT: Record<DiscussionPhaseId, DiscussionContent> = {
     directions: ["Add, change, or correct something based on your discussion."],
   },
   share: {
-    title: "Share Out",
-    subtitle: "Listen and be ready to respond.",
+    title: "Round 3 of 3: Share",
+    subtitle: "Use the spinner, then listen and respond.",
     directions: [
       "Listen for strategy.",
       "Listen for mistakes.",
@@ -340,7 +341,7 @@ export default function LiveFlowPage() {
     router.replace("/");
   }
 
-  const phase = flow?.phase ?? null;
+  const phase = normalizeDiscussionPhaseSnapshot(flow?.phase);
   const activeSequenceStep = flow?.sequence?.steps?.[flow.sequence.currentIndex] || null;
   const expectedPollKind = flow?.state?.semantic === "discussion"
     ? null
@@ -364,12 +365,13 @@ export default function LiveFlowPage() {
   const discussion = phase ? DISCUSSION_CONTENT[phase.id] : null;
   const title = waitingForPoll
     ? "Get ready to respond"
-    : discussion?.title ?? flow?.state?.label ?? "Waiting for the teacher.";
+    : phase?.label ?? discussion?.title ?? flow?.state?.label ?? "Waiting for the teacher.";
   const subtitle = isCloseout
     ? CLOSEOUT_DIRECTIONS
     : waitingForPoll
     ? "Wait for your teacher. Your response box is opening."
-    : discussion?.subtitle
+    : phase?.subtitle
+      ?? discussion?.subtitle
       ?? studentSurfaceAction
       ?? flow?.state?.description
       ?? "";

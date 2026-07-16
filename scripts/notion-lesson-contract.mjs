@@ -99,6 +99,9 @@ global.fetch = async (input) => {
 
 process.env.NOTION_TOKEN = "test-token";
 const notion = require(path.join(root, ".tmp-mastery", "notionLessons.js"));
+assert.equal(notion.isExplicitlySkippedLesson("Yes"), true, "Skip=Yes must remove a lesson from app scheduling.");
+assert.equal(notion.isExplicitlySkippedLesson("No"), false, "Skip=No must keep a lesson available.");
+assert.equal(notion.isExplicitlySkippedLesson(""), false, "A blank legacy Skip value must remain available.");
 const lesson = await notion.getLessonByCode("TEST.CONTRACT");
 
 if (!lesson) throw new Error("The test lesson did not map.");

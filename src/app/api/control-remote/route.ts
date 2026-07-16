@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
 import { CLOSEOUT_DIRECTIONS, DEFAULT_STATES } from "@/lib/classStates";
 import { discussionSupportsForLesson, inferClassroomStage, usesDiscussionProtocol } from "@/lib/classroomPilot";
+import { discussionRoundCompletesState, normalizeDiscussionPhaseSnapshot } from "@/lib/discussionProtocol";
 import { getLessonByCode, type LessonData } from "@/lib/notionLessons";
 import { defaultPublicSurfaceModeForState } from "@/lib/lessonStepMetadata";
 import { normalizePublicLessonRoutineConfig } from "@/lib/lessonRoutineConfig";
@@ -16,6 +17,7 @@ import {
   pickRemoteSharerName,
   resolveLiveStepPollKind,
   resolveRemoteNextBehavior,
+  shouldRunFlowNavigationDestination,
   liveTimerSeconds,
   splitLiveFlowLines,
   splitLiveFlowVocabulary,
@@ -198,6 +200,7 @@ async function fullyHydrateFlow(flow: LiveClassFlowSnapshot): Promise<LiveClassF
   return {
     ...flow,
     version: 2,
+    phase: normalizeDiscussionPhaseSnapshot(flow.phase),
     presentation,
     lesson: publicLiveLessonSnapshot(contract.lesson),
     sequence: flow.sequence
@@ -274,8 +277,11 @@ async function navigateFlow(
       ? step.paperTask || step.question || step.description
       : step.question || step.description || step.paperTask);
   const nextStep = steps[targetIndex + 1] || null;
-  const continuePacing = flow.sequence.advanceMode === "automatic"
-    && Boolean(flow.timer?.running || flow.timer?.finished || flow.poll?.stage === "results");
+  const continuePacing = shouldRunFlowNavigationDestination(
+    flow.sequence.advanceMode,
+    flow,
+    flow.poll?.stage,
+  );
   const now = Date.now();
   const mode = resource
     ? "resource" as const
@@ -466,13 +472,14 @@ async function chooseSharerName(
 }
 
 function selectDiscussionSharer(flow: LiveClassFlowSnapshot, selectedName: string): LiveClassFlowSnapshot {
-  if (!flow.phase || flow.phase.id !== "share") {
+  const phase = normalizeDiscussionPhaseSnapshot(flow.phase);
+  if (!phase || phase.id !== "share") {
     throw new Error("Open the Share phase before choosing a sharer.");
   }
   return {
     ...flow,
     updatedAt: new Date().toISOString(),
-    phase: { ...flow.phase, selectedSharer: selectedName },
+    phase: { ...phase, selectedSharer: selectedName },
   };
 }
 
@@ -642,6 +649,12 @@ function automaticTransitionDue(flow: LiveClassFlowSnapshot, now: number): "resu
   const sequence = flow.sequence;
   if (!sequence || sequence.advanceMode !== "automatic") return null;
   if (flow.transition) return null;
+  const discussionPhase = normalizeDiscussionPhaseSnapshot(flow.phase);
+  if (
+    discussionPhase
+    && usesDiscussionProtocol(flow.state?.id, flow.state?.label || "")
+    && !discussionRoundCompletesState(discussionPhase.id)
+  ) return null;
   const hasNext = sequence.currentIndex + 1 < sequence.totalSteps;
 
   if (flow.poll?.stage === "results") {

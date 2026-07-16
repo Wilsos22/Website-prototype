@@ -24,12 +24,15 @@ Use Albert Sans with bold, direct hierarchy. The experience should feel inviting
 - First reveal the learning intention and one selected `I can` success criterion at the midlesson learning check.
 - Never show multiple success-criteria choices to students.
 - Make Chromebook type compact and readable rather than projector-sized.
-- The Chromebook arrival sequence is class code, `Code accepted`, assigned Google Form warm-up, then automatic lesson entry after submission.
+- The Chromebook arrival sequence is class code, `Code accepted`, student homepage, assigned Google Form warm-up, return to the homepage with solo challenge activities unlocked, then automatic live-lesson entry when the teacher advances beyond Warm-Up.
 - Do not show the join code after the student enters the lesson.
 - Warm-up review is a brief look at answers and frequently missed problems. Do not design a digital correction flow.
 - Use the beginning halftime score problem for the launch scoreboard. This is not the Google Form.
 - Discussion must include the current prompt, round number, sentence stems, and vocabulary.
 - Loading a lesson is a preview state. Pressing `Start lesson` turns on automatic pacing and starts the current timer.
+- The selected lesson's warm-up is available from the accepted-code homepage before `Start lesson`; student access never depends on the pacing timer.
+- Challenge activities unlock only after the assigned Google Form completes the current session's receipt; an identity link from a previous day is not enough.
+- Add a quiet `Warm-up not connecting? Ask for help` recovery beneath the normal automatic path. It is not a required approval step.
 - At zero, show `Time is up`, chime once, and advance to the next scheduled state after a brief transition.
 - A timed response check closes at zero, shows results briefly, and then advances.
 - Pause holds the current state and stops advancement. Resume continues from the remaining time. Stop ends the pacing run.

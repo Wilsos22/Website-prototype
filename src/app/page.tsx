@@ -7,10 +7,14 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
-import { clearClassModeExitMarker, markStudentTab, type StoredStudentSession } from "@/lib/liveClassFlow";
+import {
+  clearClassModeExitMarker,
+  clearStoredStudentSession,
+  markStudentTab,
+  type StoredStudentSession,
+} from "@/lib/liveClassFlow";
 import {
   ensureAnonymousStudentSession,
-  getStudentAuthUserId,
   personalizeWarmupLink,
   SECURE_STUDENT_DATA,
   StudentApiError,
@@ -18,7 +22,6 @@ import {
 } from "@/lib/studentApi";
 
 type ClaimedStudent = { id: string; name: string; email: string };
-type AdmissionRequest = { sessionId: string; requestCode: string };
 
 const REQUIRE_GOOGLE_AUTH = process.env.NEXT_PUBLIC_REQUIRE_STUDENT_GOOGLE_AUTH === "true";
 const WARMUP_IDENTITY = process.env.NEXT_PUBLIC_WARMUP_IDENTITY_ENABLED === "true";
@@ -34,8 +37,10 @@ export default function StudentLanding() {
   const [joining, setJoining] = useState(false);
   const [pendingCode, setPendingCode] = useState<string | null>(null);
   const [warmupHref, setWarmupHref] = useState<string | null>(null);
-  const [admissionRequest, setAdmissionRequest] = useState<AdmissionRequest | null>(null);
-  const [admissionError, setAdmissionError] = useState<string | null>(null);
+  const [warmupToken, setWarmupToken] = useState<string | null>(null);
+  const [identityReady, setIdentityReady] = useState(false);
+  const [helpRequestCode, setHelpRequestCode] = useState<string | null>(null);
+  const [requestingHelp, setRequestingHelp] = useState(false);
   const [authLoading, setAuthLoading] = useState(REQUIRE_GOOGLE_AUTH);
   const [student, setStudent] = useState<ClaimedStudent | null>(null);
 
@@ -47,15 +52,23 @@ export default function StudentLanding() {
           const pending = sessionStorage.getItem("bdm-pending-class-code");
           if (pending) {
             await ensureAnonymousStudentSession();
+            const link = await fetchWarmupLink(pending);
             setCode(pending);
             setPendingCode(pending);
-            await Promise.all([
-              loadWarmupLink(pending),
-              requestTeacherAdmission(pending),
-            ]);
+            setIdentityReady(false);
+            setWarmupToken(link.warmupToken);
+            if (!link.open) {
+              resetPendingSession("That session ended. Enter the new class code.");
+              return;
+            }
+            setWarmupHref(link.href);
           }
         } catch (error) {
-          setJoinErr(error instanceof Error ? error.message : "Secure student sign-in is unavailable.");
+          if (error instanceof StudentApiError && error.code === "session_not_open") {
+            resetPendingSession("That session ended. Enter the new class code.");
+          } else {
+            setJoinErr(error instanceof Error ? error.message : "Secure student sign-in is unavailable.");
+          }
         }
       })();
     }
@@ -88,48 +101,75 @@ export default function StudentLanding() {
     return () => { stopped = true; };
   }, [supabase]);
 
-  async function loadWarmupLink(classCode: string) {
-    const authUserId = await getStudentAuthUserId();
-    const response = await fetch("/api/student/session-code", {
+  async function fetchWarmupLink(classCode: string): Promise<{
+    open: boolean;
+    href: string | null;
+    warmupToken: string;
+  }> {
+    const data = await studentApiRequest<{
+      sessionId: string;
+      warmupToken: string;
+      warmUpLink: string | null;
+    }>("/api/student/warmup-start", {
       method: "POST",
-      headers: { "content-type": "application/json" },
       body: JSON.stringify({ code: classCode }),
     });
-    const data = await response.json().catch(() => ({})) as { open?: boolean; warmUpLink?: string | null };
     // A class code must resolve only to the lesson the teacher loaded into that
     // live session. Falling back to a date-based lesson can open an unrelated or
-    // superseded form when the teacher has not selected a lesson yet.
-    const link = data.open ? data.warmUpLink || null : null;
-    setWarmupHref(link ? personalizeWarmupLink(link, authUserId) : null);
+    // superseded form when the teacher has not selected a lesson yet. The same
+    // server call also rotates the one-time token if the teacher replaces the
+    // assigned Form.
+    const link = data.warmUpLink || null;
+    return {
+      open: true,
+      href: link ? personalizeWarmupLink(link, data.warmupToken) : null,
+      warmupToken: data.warmupToken,
+    };
   }
 
-  async function requestTeacherAdmission(classCode: string) {
-    setAdmissionError(null);
-    try {
-      const result = await studentApiRequest<{ request: AdmissionRequest }>("/api/student/admission-request", {
-        method: "POST",
-        body: JSON.stringify({ code: classCode }),
-      });
-      setAdmissionRequest(result.request);
-    } catch (error) {
-      setAdmissionError(error instanceof Error ? error.message : "Your teacher approval code could not be created.");
-    }
+  function resetPendingSession(message: string | null = null) {
+    setPendingCode(null);
+    setWarmupHref(null);
+    setWarmupToken(null);
+    setIdentityReady(false);
+    setHelpRequestCode(null);
+    clearStoredStudentSession();
+    try { sessionStorage.removeItem("bdm-pending-class-code"); } catch { /* ignore */ }
+    if (message) setJoinErr(message);
   }
 
   // The teacher may load the lesson after Chromebooks have already accepted
-  // the class code. Keep checking that specific live session until its warm-up
-  // resource is published; never substitute a date-based lesson.
+  // the class code. Keep checking that specific live session throughout Warm-Up
+  // so a replaced Form link appears without a refresh. Never substitute a
+  // date-based lesson.
   useEffect(() => {
-    if (!SECURE_STUDENT_DATA || !pendingCode || warmupHref) return;
+    if (!SECURE_STUDENT_DATA || !pendingCode) return;
     let stopped = false;
     let checking = false;
     const refreshWarmup = async () => {
       if (checking || stopped) return;
       checking = true;
       try {
-        await loadWarmupLink(pendingCode);
-      } catch {
-        // A temporary session lookup failure is retried while the code is pending.
+        const result = await fetchWarmupLink(pendingCode);
+        if (stopped) return;
+        if (!result.open) {
+          resetPendingSession("That session ended. Enter the new class code.");
+          return;
+        }
+        if (warmupToken && warmupToken !== result.warmupToken) {
+          clearStoredStudentSession();
+          setIdentityReady(false);
+          setHelpRequestCode(null);
+        }
+        setWarmupToken(result.warmupToken);
+        setWarmupHref(result.href);
+      } catch (error) {
+        if (error instanceof StudentApiError && error.code === "session_not_open") {
+          resetPendingSession("That session ended. Enter the new class code.");
+        } else if (error instanceof StudentApiError && error.code === "warmup_form_not_connected") {
+          setJoinErr(error.message);
+        }
+        // Other temporary lookup failures are retried while the code is pending.
       } finally {
         checking = false;
       }
@@ -142,9 +182,9 @@ export default function StudentLanding() {
       window.clearInterval(interval);
       window.removeEventListener("focus", refreshWarmup);
     };
-    // loadWarmupLink only writes the session-scoped URL for pendingCode.
+    // fetchWarmupLink reads and binds only the session-scoped URL for pendingCode.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingCode, warmupHref]);
+  }, [pendingCode, warmupToken]);
 
   async function signInWithGoogle() {
     setJoinErr(null);
@@ -168,39 +208,51 @@ export default function StudentLanding() {
     setJoinSess(null);
     setRoster([]);
     setJoinErr(null);
-    setAdmissionRequest(null);
-    setAdmissionError(null);
+    setPendingCode(null);
+    setWarmupHref(null);
+    setWarmupToken(null);
+    setIdentityReady(false);
+    setHelpRequestCode(null);
+    try {
+      localStorage.removeItem("bdm-student-session");
+      sessionStorage.removeItem("bdm-pending-class-code");
+    } catch { /* ignore */ }
   }
 
-  function finishJoin(result: { session: StoredStudentSession }) {
+  function saveVerifiedJoin(result: { session: StoredStudentSession }) {
     clearClassModeExitMarker();
     localStorage.setItem("bdm-student-name", result.session.name);
     localStorage.setItem("bdm-student-session", JSON.stringify(result.session));
-    sessionStorage.removeItem("bdm-pending-class-code");
-    setPendingCode(null);
-    setAdmissionRequest(null);
-    setAdmissionError(null);
+    if (result.session.syncKey) sessionStorage.setItem("bdm-pending-class-code", result.session.syncKey);
+    setIdentityReady(true);
     markStudentTab();
-    router.push("/lesson");
   }
 
   useEffect(() => {
-    if (!SECURE_STUDENT_DATA || !pendingCode) return;
+    if (!SECURE_STUDENT_DATA || !pendingCode || identityReady) return;
     let stopped = false;
     let checking = false;
     const check = async () => {
       if (checking || stopped) return;
       checking = true;
       try {
+        const status = await studentApiRequest<{ sessionId: string; complete: boolean }>(
+          "/api/student/warmup-status",
+          { method: "POST", body: JSON.stringify({ code: pendingCode }) },
+        );
+        if (!status.complete) return;
         const result = await studentApiRequest<{ session: StoredStudentSession }>(
           "/api/student/join",
           { method: "POST", body: JSON.stringify({ code: pendingCode }) },
         );
-        if (!stopped) finishJoin(result);
+        if (!stopped && result.session.sessionId === status.sessionId) saveVerifiedJoin(result);
       } catch (error) {
-        if (error instanceof StudentApiError && error.code !== "warmup_verification_required") {
-          setJoinErr(error.message);
-          setPendingCode(null);
+        const waitingForForm = error instanceof StudentApiError
+          && (error.code === "warmup_verification_required" || error.code === "warmup_not_complete");
+        if (!waitingForForm && error instanceof StudentApiError && error.code === "session_not_open") {
+          resetPendingSession("That session ended. Enter the new class code.");
+        } else if (!waitingForForm) {
+          setJoinErr(error instanceof Error ? error.message : "Warm-up verification could not be checked.");
         }
       } finally {
         checking = false;
@@ -210,9 +262,26 @@ export default function StudentLanding() {
     const interval = window.setInterval(check, 3000);
     window.addEventListener("focus", check);
     return () => { stopped = true; window.clearInterval(interval); window.removeEventListener("focus", check); };
-    // finishJoin only uses stable browser APIs and the Next router.
+    // saveVerifiedJoin only writes the verified session to stable browser storage.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingCode, router]);
+  }, [identityReady, pendingCode]);
+
+  async function requestTeacherHelp() {
+    if (!pendingCode || requestingHelp) return;
+    setRequestingHelp(true);
+    setJoinErr(null);
+    try {
+      const result = await studentApiRequest<{ request: { requestCode: string } }>(
+        "/api/student/admission-request",
+        { method: "POST", body: JSON.stringify({ code: pendingCode }) },
+      );
+      setHelpRequestCode(result.request.requestCode);
+    } catch (error) {
+      setJoinErr(error instanceof Error ? error.message : "Teacher help could not be requested.");
+    } finally {
+      setRequestingHelp(false);
+    }
+  }
 
   async function submitCode() {
     setJoinErr(null);
@@ -237,25 +306,25 @@ export default function StudentLanding() {
           return;
         }
         await ensureAnonymousStudentSession();
-        const result = await studentApiRequest<{
-          session: StoredStudentSession;
-        }>("/api/student/join", {
-          method: "POST",
-          body: JSON.stringify({ code: c }),
-        });
-        finishJoin(result);
-      } catch (error) {
-        if (error instanceof StudentApiError && error.code === "warmup_verification_required") {
-          sessionStorage.setItem("bdm-pending-class-code", c);
-          setPendingCode(c);
-          await Promise.all([
-            loadWarmupLink(c).catch(() => undefined),
-            requestTeacherAdmission(c),
-          ]);
-          setJoinErr(null);
-        } else {
-          setJoinErr(error instanceof Error ? error.message : "The class could not be joined.");
+        const link = await fetchWarmupLink(c);
+        clearStoredStudentSession();
+        sessionStorage.setItem("bdm-pending-class-code", c);
+        setCode(c);
+        setPendingCode(c);
+        setIdentityReady(false);
+        setWarmupToken(link.warmupToken);
+        setHelpRequestCode(null);
+        if (!link.open) {
+          resetPendingSession("That session ended. Enter the new class code.");
+          return;
         }
+        setWarmupHref(link.href);
+      } catch (error) {
+        sessionStorage.removeItem("bdm-pending-class-code");
+        setPendingCode(null);
+        setWarmupHref(null);
+        setWarmupToken(null);
+        setJoinErr(error instanceof Error ? error.message : "The class could not be joined.");
       } finally {
         setJoining(false);
       }
@@ -315,12 +384,18 @@ export default function StudentLanding() {
         .st-warmup-label { margin:0; color:var(--bdb-teal); font-size:0.72rem; font-weight:850; letter-spacing:0.1em; text-transform:uppercase; }
         .st-warmup-copy { margin:0; color:var(--bdb-ink-soft); font-size:0.94rem; font-weight:600; line-height:1.45; }
         .st-warmup-wait { margin:2px 0 0; color:var(--bdb-ink-faint); font-size:0.86rem; font-weight:700; }
-        .st-warmup-action { background:var(--bdb-teal); border-color:var(--bdb-teal); color:#fff; font-weight:800; }
-        .st-warmup-action:hover { border-color:var(--bdb-teal); color:#fff; filter:brightness(1.04); }
-        .st-request-box { margin-top:4px; border:1px solid color-mix(in srgb, var(--bdb-teal) 28%, var(--bdb-line)); border-radius:12px;
-          background:color-mix(in srgb, var(--bdb-teal) 7%, white); padding:12px 14px; display:grid; gap:3px; }
-        .st-request-label { margin:0; color:var(--bdb-ink-soft); font-size:0.7rem; font-weight:850; letter-spacing:0.08em; text-transform:uppercase; }
-        .st-request-code { margin:0; color:#0f5e5f; font-size:1.55rem; font-weight:900; letter-spacing:0.14em; line-height:1.15; }
+        .st-warmup-action { background:var(--bdb-amber); border-color:var(--bdb-amber); color:#3d2a12; font-weight:900;
+          box-shadow:0 14px 28px -18px rgba(252,175,56,0.9); }
+        .st-warmup-action:hover { border-color:var(--bdb-amber); color:#3d2a12; filter:brightness(1.03); }
+        .st-challenge-action { background:var(--bdb-teal); border-color:var(--bdb-teal); color:#fff; text-align:left; }
+        .st-challenge-action:hover { border-color:var(--bdb-teal); color:#fff; filter:brightness(1.03); }
+        .st-warmup-tools { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+        .st-link-btn { border:0; background:transparent; color:var(--bdb-ink-soft); padding:4px 0; font:inherit;
+          font-size:0.82rem; font-weight:750; text-decoration:underline; cursor:pointer; }
+        .st-help-code { margin:0; border:1px solid color-mix(in srgb, var(--bdb-amber) 58%, white); border-radius:10px;
+          background:color-mix(in srgb, var(--bdb-amber) 12%, white); color:var(--bdb-ink); padding:10px 12px;
+          font-size:0.86rem; font-weight:700; line-height:1.4; }
+        .st-help-code strong { letter-spacing:0.12em; font-size:1rem; }
 
         .st-namepick-label { font-size:0.78rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--bdb-ink-faint); margin:0 0 10px; }
         .st-names { display:flex; flex-wrap:wrap; gap:8px; }
@@ -353,32 +428,52 @@ export default function StudentLanding() {
         <img src="/big-dog-logo.svg" alt="Big Dog Math" />
       </div>
       <h1 className="st-hello">{name ? `Hey ${name}!` : "Welcome!"}</h1>
-      <p className="st-hello-sub">{pendingCode ? "Your class code is accepted. Wait for your teacher to load the lesson." : "Enter your class code to start today&apos;s lesson."}</p>
+      <p className="st-hello-sub">{pendingCode ? "Your class code is accepted. Start the warm-up, then return here." : "Enter your class code to start today's lesson."}</p>
 
       <div className="st-cards">
         <div className="st-join">
           {pendingCode ? (
             <div className="st-warmup">
               <p className="st-warmup-label">Code accepted</p>
-              <h2 className="st-join-h">{warmupHref ? "Start today&apos;s warm-up" : "Waiting for your teacher"}</h2>
+              <h2 className="st-join-h">{warmupHref ? "Start today's warm-up" : "Waiting for your teacher"}</h2>
               <p className="st-warmup-copy">
                 {warmupHref
-                  ? "Submit all five Google Form questions. Keep this tab open; it will move into the lesson when your response is confirmed."
+                  ? "Complete all five Google Form questions. This homepage stays open underneath so you can come right back."
                   : "Your teacher is selecting the lesson. The assigned warm-up will appear here when it is ready."}
               </p>
               {warmupHref ? (
                 <a className="st-explore st-warmup-action" href={warmupHref} target="_blank" rel="noopener noreferrer">
-                  Open today&apos;s warm-up
+                  Open today's warm-up
                 </a>
               ) : (
-                <p className="st-warmup-wait">You can also use the teacher approval code below while you wait.</p>
+                <p className="st-warmup-wait">Keep this page open. The assigned warm-up will appear automatically.</p>
               )}
-              <div className="st-request-box" role="status" aria-live="polite">
-                <p className="st-request-label">Teacher approval code</p>
-                <p className="st-request-code">{admissionRequest?.requestCode || "Preparing"}</p>
+              <p className="st-warmup-wait" role="status" aria-live="polite">
+                {identityReady
+                  ? "Warm-up connected. Choose a challenge while class gets ready."
+                  : "After you submit, return here. Big Dog will connect your response automatically."}
+              </p>
+              {joinErr && <div className="st-joinerr" role="alert">{joinErr}</div>}
+              {helpRequestCode && (
+                <p className="st-help-code" role="status">
+                  Tell your teacher this help code: <strong>{helpRequestCode}</strong>
+                </p>
+              )}
+              {identityReady && (
+                <a className="st-explore st-challenge-action" href="/practice">
+                  <span><b>Challenge activities</b><br />Choose any practice game and work to beat your score.</span>
+                </a>
+              )}
+              <div className="st-warmup-tools">
+                {!identityReady && !helpRequestCode && (
+                  <button className="st-link-btn" type="button" onClick={requestTeacherHelp} disabled={requestingHelp}>
+                    {requestingHelp ? "Requesting help" : "Warm-up not connecting? Ask for help"}
+                  </button>
+                )}
+                <button className="st-link-btn" type="button" onClick={() => resetPendingSession()}>
+                  Use a different code
+                </button>
               </div>
-              <p className="st-warmup-wait">Waiting for warm-up confirmation or teacher approval.</p>
-              {admissionError && <p className="st-joinerr" role="status" aria-live="polite">{admissionError}</p>}
             </div>
           ) : REQUIRE_GOOGLE_AUTH && authLoading ? (
             <p className="st-join-sub">Checking your school sign-in.</p>
@@ -428,9 +523,11 @@ export default function StudentLanding() {
           )}
         </div>
 
-        <a className="st-explore" href="/explore">
-          <span>Just looking around? <b>Explore the math tools</b></span>
-        </a>
+        {!pendingCode && (
+          <a className="st-explore" href="/explore">
+            <span>Just looking around? <b>Explore the math tools</b></span>
+          </a>
+        )}
       </div>
 
       <div className="st-foot">

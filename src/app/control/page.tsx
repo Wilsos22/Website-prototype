@@ -19,6 +19,10 @@ import LessonVisual from "@/components/LessonVisual";
 import { requestAbbieLine } from "@/lib/abbieBus";
 import { abbieDirectionForRemoteAction } from "@/lib/remoteDeck";
 import { discussionSupportsForLesson, inferClassroomStage, usesDiscussionProtocol } from "@/lib/classroomPilot";
+import {
+  createDiscussionRoundSnapshot,
+  normalizeDiscussionPhaseSnapshot,
+} from "@/lib/discussionProtocol";
 import { TeacherApiError, teacherApiRequest, teacherPost } from "@/lib/teacherApi";
 import {
   LIVE_FLOW_MODE,
@@ -29,6 +33,7 @@ import {
   isDiscussionRemoteAction,
   liveAssignedToolRoute,
   resolveLiveStepPollKind,
+  shouldRunNavigationDestination,
   liveTimerSeconds,
   splitLiveFlowLines,
   splitLiveFlowVocabulary,
@@ -1028,8 +1033,9 @@ export default function ControlPage() {
     }
     setBoardOpen(Boolean(flow.presentation?.boardOpen));
     setScoreboardStage(flow.presentation?.scoreboardStage || "halftime");
-    if (flow.phase && usesDiscussionProtocol(flow.state?.id, flow.state?.label || "")) {
-      setDiscussionFlow(flow.phase);
+    const normalizedDiscussionPhase = normalizeDiscussionPhaseSnapshot(flow.phase);
+    if (normalizedDiscussionPhase && usesDiscussionProtocol(flow.state?.id, flow.state?.label || "")) {
+      setDiscussionFlow(normalizedDiscussionPhase);
       setShowDiscussion(true);
     } else {
       setDiscussionFlow(null);
@@ -1156,17 +1162,7 @@ export default function ControlPage() {
     disarmTimer();
     setRunning(false);
     setFinished(false);
-    setDiscussionFlow({
-      id: "think",
-      label: "Think",
-      subtitle: "Think quietly for one minute.",
-      timed: true,
-      totalSeconds: 60,
-      secondsLeft: 60,
-      running: true,
-      finished: false,
-      media: null,
-    });
+    setDiscussionFlow(createDiscussionRoundSnapshot("think", running));
     setShowDiscussion(true);
   }, [activeItem, activeUsesDiscussionProtocol, autoAdvance, disarmTimer, running]);
 
@@ -1476,7 +1472,9 @@ export default function ControlPage() {
           semantic: activeSemantic,
         }
       : null;
-    const phase = activeUsesDiscussionProtocol && showDiscussion ? discussionFlow : null;
+    const phase = activeUsesDiscussionProtocol && showDiscussion
+      ? normalizeDiscussionPhaseSnapshot(discussionFlow)
+      : null;
     const poll = controlPoll?.stateId === activeInteractiveState
       ? {
           id: controlPoll.id,
@@ -1688,9 +1686,14 @@ export default function ControlPage() {
   }, []);
 
   // Keep student Chromebooks in sync with the existing /control state machine.
-  // The write is skipped unless the teacher explicitly selected Live Class Flow.
+  // A selected lesson may stage its paused warm-up while the session remains
+  // free, so entering the class code does not depend on Begin lesson or a timer.
   useEffect(() => {
-    if (previewSyncPaused || !supabase || teacherSession?.broadcast !== LIVE_FLOW_MODE) {
+    const canPublishLiveFlow = !previewSyncPaused && teacherSession?.broadcast === LIVE_FLOW_MODE;
+    const canStageWarmup = teacherSession?.broadcast === "free"
+      && Boolean(activeLessonContext)
+      && lineup.some((item) => item.stateId === "warmup" && Boolean(item.linkUrl));
+    if (!supabase || (!canPublishLiveFlow && !canStageWarmup)) {
       pendingLiveFlowSyncRef.current = null;
       return;
     }
@@ -1714,10 +1717,10 @@ export default function ControlPage() {
       expectedRevision: liveFlowSyncingRef.current ? undefined : serverFlowRevisionRef.current,
     };
     void flushLiveFlowUpdates();
-  }, [flushLiveFlowUpdates, liveFlowSignature, previewSyncPaused, serverHydrationGeneration, supabase, teacherSession?.broadcast, teacherSession?.id]);
+  }, [activeLessonContext, flushLiveFlowUpdates, lineup, liveFlowSignature, previewSyncPaused, serverHydrationGeneration, supabase, teacherSession?.broadcast, teacherSession?.id]);
 
   const handleDiscussionFlowChange = useCallback((snapshot: DiscussionPhaseSnapshot) => {
-    setDiscussionFlow(snapshot);
+    setDiscussionFlow(normalizeDiscussionPhaseSnapshot(snapshot));
   }, []);
 
   const handleDiscussionRemoteCommand = useCallback((command: TeacherRemoteCommand) => {
@@ -1809,7 +1812,7 @@ export default function ControlPage() {
     setActiveLessonContext(null);
     stopMusic();
     setShowLessons(false);
-    const previewMessage = `Previewed ${p.code || p.title || "saved sequence"}. Student and projector screens are unchanged until you start the sequence.`;
+    const previewMessage = `Previewed ${p.code || p.title || "saved sequence"}. This saved sequence stays private until you start it.`;
     setLessonMsg(previewMessage);
     setTodayMsg(previewMessage);
   }
@@ -1924,7 +1927,7 @@ export default function ControlPage() {
     const parts = [
       `Previewed “${lesson.title || "today's lesson"}”`,
       lessonSteps.length ? `${lessonSteps.length} timed steps added` : `${mapped.length} tool${mapped.length === 1 ? "" : "s"} added`,
-      "student and projector screens unchanged until start",
+      "warm-up staged for the open session; instructional and projector screens unchanged until start",
     ];
     const criterionValidationMessage = selectedSuccessCriterionValidationMessage(lesson.selectedSuccessCriterion);
     if (criterionValidationMessage) parts.push(`start blocked: ${criterionValidationMessage}`);
@@ -1980,7 +1983,7 @@ export default function ControlPage() {
         return false;
       }
       if (applyNotionLesson(data.lesson, options.confirmReplace ?? true)) {
-        setLessonMsg(`Previewed ${data.lesson.lessonCode || code} from Notion. Student and projector screens are unchanged until you start the lesson.`);
+        setLessonMsg(`Previewed ${data.lesson.lessonCode || code} from Notion. Its warm-up is staged on the student home page now; instructional and projector screens stay unchanged until you start the lesson.`);
         setNotionLessonCode("");
         if (options.run) setPendingRun(true);
         return true;
@@ -2098,7 +2101,7 @@ export default function ControlPage() {
         setLessonMsg(blockedMessage);
         setTodayMsg(blockedMessage);
       } else {
-        const previewMessage = "Preview loaded. Student and projector screens are unchanged until you start the lesson.";
+        const previewMessage = "Preview loaded. Its warm-up is staged on the student home page now; instructional and projector screens stay unchanged until you start the lesson.";
         setLessonMsg(previewMessage);
         setTodayMsg(previewMessage);
       }
@@ -2160,7 +2163,7 @@ export default function ControlPage() {
         setLessonMsg(blockedMessage);
         setTodayMsg(blockedMessage);
       } else {
-        const previewMessage = `Previewed ${preset.code || preset.title || "saved sequence"}. Student and projector screens are unchanged until you start the sequence.`;
+        const previewMessage = `Previewed ${preset.code || preset.title || "saved sequence"}. This saved sequence stays private until you start it.`;
         setLessonMsg(previewMessage);
         setTodayMsg(previewMessage);
       }
@@ -2172,7 +2175,7 @@ export default function ControlPage() {
   useEffect(() => {
     if (pendingRun && lineup.length > 0) {
       setPendingRun(false);
-      runSequence();
+      void runSequence();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingRun, lineup]);
@@ -2195,12 +2198,29 @@ export default function ControlPage() {
     if (willRun) startMusicFor(activeState.id);
     else if (musicRef.current) musicRef.current.pause();
   }
-  function runSequence() {
+  async function runSequence() {
     if (lineup.length === 0) return;
     if (activeLessonCriterionValidationMessage) {
       setPendingRun(false);
       setLessonMsg(activeLessonCriterionValidationMessage);
       setTodayMsg(activeLessonCriterionValidationMessage);
+      return;
+    }
+    if (!teacherSession || teacherSession.status !== "open") {
+      const message = "Start a live session before beginning lesson pacing.";
+      setLessonMsg(message);
+      setTodayMsg(message);
+      return;
+    }
+    try {
+      // Do not arm the classroom timer until the open session is connected to
+      // Live Class Flow. This keeps Chromebooks and both projectors in lockstep
+      // with the visible Start lesson control.
+      await switchSessionToLiveFlow(teacherSession);
+    } catch {
+      const message = "Lesson not started. Control could not connect the open session to Live Class Flow.";
+      setLessonMsg(message);
+      setTodayMsg(message);
       return;
     }
     const nextIndex = currentIndex >= 0 ? currentIndex : 0;
@@ -2242,7 +2262,12 @@ export default function ControlPage() {
     if (deltaSeconds > 0) setFinished(false);
   }
   function next() {
-    const keepRunning = running || autoAdvance;
+    const keepRunning = shouldRunNavigationDestination(
+      autoAdvance ? "automatic" : "manual",
+      activeUsesDiscussionProtocol ? discussionFlow?.running : running,
+      activeUsesDiscussionProtocol ? discussionFlow?.finished : finished,
+      controlPoll?.stage,
+    );
     setRunning(false);
     stopMusic();
     if (controlPoll?.stage === "responding") {
@@ -2264,11 +2289,30 @@ export default function ControlPage() {
   }
   function previous() {
     if (currentIndex <= 0) return;
-    const keepRunning = running;
+    const keepRunning = shouldRunNavigationDestination(
+      autoAdvance ? "automatic" : "manual",
+      activeUsesDiscussionProtocol ? discussionFlow?.running : running,
+      activeUsesDiscussionProtocol ? discussionFlow?.finished : finished,
+      controlPoll?.stage,
+    );
     if (controlPoll?.stage === "responding") closeActivePoll();
     setControlPoll(null);
     setPollAnswers([]);
     loadIndex(currentIndex - 1, keepRunning);
+  }
+
+  function completeDiscussion() {
+    setShowDiscussion(false);
+    setDiscussionFlow(null);
+    setDiscussionRemoteCommand(null);
+    if (currentIndex + 1 < lineup.length) {
+      loadIndex(currentIndex + 1, autoAdvance);
+      return;
+    }
+    setAutoAdvance(false);
+    setRunning(false);
+    setFinished(false);
+    setCurrentIndex(-1);
   }
 
   useEffect(() => {
@@ -2279,7 +2323,7 @@ export default function ControlPage() {
     if (isDiscussionRemoteAction(command.action) && !command.receivedAt) {
       if (!activeUsesDiscussionProtocol) return;
       if (!showDiscussion && teacherSession?.live_flow?.phase) {
-        setDiscussionFlow(teacherSession.live_flow.phase);
+        setDiscussionFlow(normalizeDiscussionPhaseSnapshot(teacherSession.live_flow.phase));
       }
       setShowDiscussion(true);
       setDiscussionRemoteCommand(command);
@@ -2358,8 +2402,9 @@ export default function ControlPage() {
       }
       setBoardOpen(Boolean(publishedFlow.presentation?.boardOpen));
       setScoreboardStage(publishedFlow.presentation?.scoreboardStage || "halftime");
-      if (publishedFlow.phase && usesDiscussionProtocol(publishedFlow.state?.id, publishedFlow.state?.label || "")) {
-        setDiscussionFlow(publishedFlow.phase);
+      const normalizedDiscussionPhase = normalizeDiscussionPhaseSnapshot(publishedFlow.phase);
+      if (normalizedDiscussionPhase && usesDiscussionProtocol(publishedFlow.state?.id, publishedFlow.state?.label || "")) {
+        setDiscussionFlow(normalizedDiscussionPhase);
         setShowDiscussion(true);
       } else {
         setDiscussionFlow(null);
@@ -3311,7 +3356,7 @@ export default function ControlPage() {
                   />
                   <button className="cx-btn pri" onClick={() => { void loadNotionLessonByCode(); }}>Load from Notion</button>
                 </div>
-                <p className="cx-hint">Loads a published Notion lesson into a private preview. Student and projector screens do not change until you start it.</p>
+                <p className="cx-hint">Loads a published Notion lesson and stages its warm-up for the open session. Instructional and projector screens do not change until you start it.</p>
                 {lessonMsg && <p className="cx-lessons-msg">{lessonMsg}</p>}
               </div>
 
@@ -3360,6 +3405,8 @@ export default function ControlPage() {
             <DiscussionProtocol
               onClose={closeDiscussion}
               onFlowChange={handleDiscussionFlowChange}
+              onComplete={completeDiscussion}
+              automaticPacing={autoAdvance}
               initialFlow={discussionFlow}
               remoteCommand={discussionRemoteCommand}
               onRemoteCommandHandled={handleDiscussionRemoteCommand}

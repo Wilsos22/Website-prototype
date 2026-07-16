@@ -182,21 +182,21 @@ export default function SessionPage() {
     if (!periodId) return;
     setError(null);
     const code = makeCode();
-    // Start held on the lesson page so joined students are locked in from the
-    // moment they join (not free to wander) until you pick a tool or release them.
-    let data: { id: string };
+    // Start in free mode so students can complete the assigned warm-up from the
+    // homepage before Begin lesson starts synchronized pacing.
+    let data: { id: string; broadcast: string | null };
     try {
-      const result = await teacherPost<{ session: { id: string } }>("/api/teacher/session", { action: "start", periodId, joinCode: code });
+      const result = await teacherPost<{ session: { id: string; broadcast: string | null } }>("/api/teacher/session", { action: "start", periodId, joinCode: code });
       data = result.session;
     } catch (actionError) { setError(actionError instanceof Error ? actionError.message : "Session could not be started."); return; }
     const periodName = periods.find((p) => p.id === periodId)?.name || "";
     const roster = await teacherApiRequest<{ students: RosterStudent[] }>("/api/teacher/roster");
     setRosterStudents(roster.students);
     setRosterCount(roster.students.filter((student) => student.periodId === periodId).length);
-    const sessionId = (data as { id: string }).id;
+    const sessionId = data.id;
     saveTeacherSession(sessionId, code, periodName);
     setSession({ id: sessionId, code, periodName, periodId });
-    setJoins([]); setAdmissionRequests([]); setBroadcast("/lesson");
+    setJoins([]); setAdmissionRequests([]); setBroadcast(data.broadcast || "free");
   }
   async function end() {
     if (!session || ending) return;

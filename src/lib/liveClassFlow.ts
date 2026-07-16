@@ -4,6 +4,7 @@ import type { ClassroomStageId } from "@/lib/classroomPilot";
 import type { LivePollKind } from "@/lib/liveFlowContract";
 import type { PublicLessonRoutineConfig } from "@/lib/lessonRoutineConfig";
 import type { PublicSurfaceMode } from "@/lib/lessonStepMetadata";
+import type { DiscussionPhaseSnapshot } from "@/lib/discussionProtocol";
 
 export {
   LIVE_RESPONSE_MODES,
@@ -14,10 +15,13 @@ export {
   pickRemoteSharerName,
   resolveLiveStepPollKind,
   resolveRemoteNextBehavior,
+  shouldRunFlowNavigationDestination,
+  shouldRunNavigationDestination,
   splitLiveFlowLines,
   splitLiveFlowVocabulary,
 } from "@/lib/liveFlowContract";
 export type { LivePollKind, LiveResponseMode } from "@/lib/liveFlowContract";
+export type { DiscussionPhaseId, DiscussionPhaseSnapshot } from "@/lib/discussionProtocol";
 
 export const LIVE_FLOW_MODE = "live-flow";
 export const LIVE_FLOW_ROUTE = "/live-flow";
@@ -26,7 +30,6 @@ export const TEACHER_SESSION_KEY = "bdm-teacher-session";
 export const CLASS_MODE_EXIT_KEY = "bdm-class-mode-exited";
 export const REMOTE_COMMAND_STALE_MS = 15_000;
 
-export type DiscussionPhaseId = "think" | "marker" | "table" | "revise" | "share";
 export const DISCUSSION_REMOTE_ACTIONS = [
   "discussion-think",
   "discussion-write",
@@ -145,24 +148,6 @@ export type LiveToolConfig =
       prompt: string;
       config: { expression: string };
     };
-
-export interface DiscussionPhaseSnapshot {
-  id: DiscussionPhaseId;
-  label: string;
-  subtitle: string;
-  timed: boolean;
-  totalSeconds: number | null;
-  secondsLeft: number | null;
-  running: boolean;
-  finished: boolean;
-  media: {
-    url: string;
-    type: "image" | "video" | "embed";
-  } | null;
-  sentenceStems?: string[];
-  keyVocabulary?: string[];
-  selectedSharer?: string | null;
-}
 
 export interface LiveFlowSequenceStep {
   stateId: string;

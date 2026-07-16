@@ -4,6 +4,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import ClassroomSpinner from "@/components/ClassroomSpinner";
 import { CLOSEOUT_DIRECTIONS } from "@/lib/classStates";
 import { CLASSROOM_STAGE_THEMES, classroomStageTheme, discussionSupportsForLesson } from "@/lib/classroomPilot";
+import { normalizeDiscussionPhaseSnapshot } from "@/lib/discussionProtocol";
 import { publicSuccessCriterion } from "@/lib/successCriterion";
 import { teacherApiRequest } from "@/lib/teacherApi";
 import { LIVE_FLOW_MODE, getStoredTeacherSessionId, liveTimerSeconds, type LiveClassFlowSnapshot } from "@/lib/liveClassFlow";
@@ -119,7 +120,7 @@ export default function PaceSupportPage() {
   const spinnerSyncScope = `${flow?.sequence?.currentIndex ?? -1}:${flow?.presentation?.notionStepId || state?.id || "spinner"}`;
   const routineConfig = flow?.presentation?.routineConfig || null;
   const poll = flow?.poll ?? null;
-  const phase = flow?.phase ?? null;
+  const phase = normalizeDiscussionPhaseSnapshot(flow?.phase);
   const isLearningCheck = theme.id === "learning-check";
   const isDiscussion = theme.id === "discussion" || Boolean(phase);
   const configuredDiscussionSupports = discussionSupportsForLesson(flow?.lesson?.code);

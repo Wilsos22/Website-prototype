@@ -181,11 +181,10 @@ export async function POST(request: Request) {
       });
     }
 
-    const { data: student, error: studentError } = await db
+    const { data: periodStudents, error: studentError } = await db
       .from("students")
       .select("id,period_id,full_name,email,auth_user_id")
-      .ilike("email", studentEmail)
-      .maybeSingle();
+      .eq("period_id", session.period_id);
     if (studentError) {
       return admissionFailure({
         status: 500,
@@ -195,11 +194,15 @@ export async function POST(request: Request) {
         sessionId,
       });
     }
-    if (!student || student.period_id !== session.period_id || !student.email) {
+    const studentMatches = (periodStudents ?? []).filter(
+      (candidate) => text(candidate.email, 320).toLowerCase() === studentEmail,
+    );
+    const student = studentMatches.length === 1 ? studentMatches[0] : null;
+    if (!student || !student.email) {
       return admissionFailure({
         status: 403,
         message: "Choose a student from this session's roster.",
-        reason: "roster_period_mismatch",
+        reason: studentMatches.length > 1 ? "duplicate_roster_email" : "roster_period_mismatch",
         outcome: "denied",
         sessionId,
         studentId: student?.id ?? null,
@@ -323,7 +326,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const resolutionResult = await db.rpc("bdm_admit_student_join_request", {
+    const resolutionResult = await db.rpc("bdm_admit_student_join_request_with_warmup", {
       p_session_id: sessionId,
       p_request_code: requestCode,
       p_student_id: student.id,
@@ -409,7 +412,7 @@ export async function POST(request: Request) {
 
     const { data, error: insertError } = await db
       .from("sessions")
-      .insert({ period_id: periodId, assignment_id: assignmentId, join_code: joinCode, status: "open", broadcast: "/lesson" })
+      .insert({ period_id: periodId, assignment_id: assignmentId, join_code: joinCode, status: "open", broadcast: "free" })
       .select("id,period_id,assignment_id,join_code,status,started_at,broadcast")
       .single();
     if (insertError) return Response.json({ error: insertError.message }, { status: 500 });

@@ -1,8 +1,53 @@
 import { publicSuccessCriterion } from "./successCriterion";
+import { usesDiscussionProtocol } from "./classroomPilot";
+import { normalizeDiscussionPhaseSnapshot, type DiscussionPhaseSnapshot } from "./discussionProtocol";
 
 export type LivePollKind = "short-answer" | "multiple-choice" | "fist-to-five";
 
 export type RemoteNextBehavior = "reveal-results" | "advance";
+
+export function shouldRunNavigationDestination(
+  advanceMode: "manual" | "automatic" | null | undefined,
+  timerRunning: boolean | null | undefined,
+  timerFinished: boolean | null | undefined,
+  pollStage: "responding" | "results" | null | undefined,
+): boolean {
+  if (timerRunning) return true;
+  return advanceMode === "automatic" && (Boolean(timerFinished) || pollStage === "results");
+}
+
+type NavigationFlowClock = {
+  state?: {
+    id?: string | null;
+    label?: string | null;
+  } | null;
+  timer?: {
+    running?: boolean | null;
+    finished?: boolean | null;
+  } | null;
+  phase?: DiscussionPhaseSnapshot | null;
+};
+
+/**
+ * Resolve pacing across normal timers and Discussion's round timer.
+ * Discussion intentionally disarms the main timer, so navigation must read the
+ * active round or an iPad Next/Back would accidentally pause automatic pacing.
+ */
+export function shouldRunFlowNavigationDestination(
+  advanceMode: "manual" | "automatic" | null | undefined,
+  flow: NavigationFlowClock,
+  pollStage: "responding" | "results" | null | undefined,
+): boolean {
+  const phase = usesDiscussionProtocol(flow.state?.id || "", flow.state?.label || "")
+    ? normalizeDiscussionPhaseSnapshot(flow.phase)
+    : null;
+  return shouldRunNavigationDestination(
+    advanceMode,
+    phase?.running ?? flow.timer?.running,
+    phase?.finished ?? flow.timer?.finished,
+    pollStage,
+  );
+}
 
 export function resolveRemoteNextBehavior(
   stateId: string | null | undefined,

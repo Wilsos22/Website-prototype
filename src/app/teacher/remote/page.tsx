@@ -6,13 +6,19 @@ import {
   canRevealM2T1L1FinalScore,
   liveTimerSeconds,
   resolveRemoteNextBehavior,
-  type DiscussionPhaseId,
+  shouldRunFlowNavigationDestination,
   type LiveClassFlowSnapshot,
   type LiveFlowSequenceStep,
   type TeacherRemoteAction,
   type TeacherRemoteCommand,
 } from "@/lib/liveClassFlow";
 import { CLASSROOM_STAGE_THEMES, classroomStageTheme, usesDiscussionProtocol } from "@/lib/classroomPilot";
+import {
+  DISCUSSION_ROUNDS,
+  discussionRoundForPhase,
+  discussionRoundIndex,
+  normalizeDiscussionPhaseSnapshot,
+} from "@/lib/discussionProtocol";
 import type { LessonRoutineConfig } from "@/lib/lessonRoutineConfig";
 import { defaultPublicSurfaceModeForState } from "@/lib/lessonStepMetadata";
 import type { LessonStepData } from "@/lib/notionLessons";
@@ -39,21 +45,12 @@ const TIMER_BUTTONS: readonly RemoteDeckButton[] = [
   { action: "reset-timer", label: "Reset timer", detail: "Restart this stage", tone: "neutral" },
 ];
 
-const DISCUSSION_PHASE_BUTTONS: readonly RemoteDeckButton[] = [
-  { action: "discussion-think", label: "Think", detail: "One minute of quiet thinking", tone: "orange" },
-  { action: "discussion-write", label: "Write", detail: "Record one idea or strategy", tone: "orange" },
-  { action: "discussion-discuss", label: "Discuss", detail: "Use the stems and vocabulary", tone: "orange" },
-  { action: "discussion-revise", label: "Revise", detail: "Strengthen the response", tone: "orange" },
-  { action: "discussion-share", label: "Share", detail: "Choose and hear a response", tone: "orange" },
-];
-
-const DISCUSSION_ACTION_BY_PHASE: Record<DiscussionPhaseId, TeacherRemoteAction> = {
-  think: "discussion-think",
-  marker: "discussion-write",
-  table: "discussion-discuss",
-  revise: "discussion-revise",
-  share: "discussion-share",
-};
+const DISCUSSION_PHASE_BUTTONS: readonly RemoteDeckButton[] = DISCUSSION_ROUNDS.map((round) => ({
+  action: round.remoteAction,
+  label: round.buttonLabel,
+  detail: round.subtitle,
+  tone: "orange",
+}));
 
 interface RemoteSession {
   id: string;
@@ -158,8 +155,11 @@ function optimisticNavigation(
   const step: LiveFlowSequenceStep | undefined = steps[targetIndex];
   if (!step) return flow;
   const nextStep = steps[targetIndex + 1] || null;
-  const keepRunning = sequence.advanceMode === "automatic"
-    && Boolean(flow.timer?.running || flow.timer?.finished || flow.poll?.stage === "results");
+  const keepRunning = shouldRunFlowNavigationDestination(
+    sequence.advanceMode,
+    flow,
+    flow.poll?.stage,
+  );
   const totalSeconds = Math.max(0, step.durationSeconds);
 
   return {
@@ -661,7 +661,7 @@ export default function TeacherRemotePage() {
       || usesDiscussionProtocol(flow.state.id, flow.state.label)
     )
   );
-  const discussionPhase = isDiscussionState ? flow?.phase ?? null : null;
+  const discussionPhase = isDiscussionState ? normalizeDiscussionPhaseSnapshot(flow?.phase) : null;
   const learningCheckAwaitingReveal = Boolean(
     flow?.poll
     && resolveRemoteNextBehavior(flow.state?.id, flow.state?.semantic, flow.poll.stage) === "reveal-results",
@@ -688,31 +688,29 @@ export default function TeacherRemotePage() {
         tone: "gold",
       }
     : null;
-  const discussionPhaseIndex = discussionPhase
-    ? (["think", "marker", "table", "revise", "share"] as DiscussionPhaseId[]).indexOf(discussionPhase.id)
-    : -1;
-  const activeDiscussionAction = discussionPhase ? DISCUSSION_ACTION_BY_PHASE[discussionPhase.id] : null;
+  const discussionPhaseIndex = discussionPhase ? discussionRoundIndex(discussionPhase.id) : -1;
+  const activeDiscussionAction = discussionPhase ? discussionRoundForPhase(discussionPhase.id).remoteAction : null;
   const discussionControlButtons: Array<{ button: RemoteDeckButton; disabled: boolean }> = [
     {
-      button: { action: "discussion-previous", label: "Previous phase", detail: "Go back one part", tone: "neutral" },
+      button: { action: "discussion-previous", label: "Previous round", detail: "Go back one round", tone: "neutral" },
       disabled: discussionPhaseIndex <= 0,
     },
     {
       button: {
         action: "discussion-toggle",
-        label: discussionPhase?.running ? "Pause phase" : "Start or resume",
-        detail: "Control this phase timer",
+        label: discussionPhase?.running ? "Pause round" : "Start or resume",
+        detail: "Control this round timer",
         tone: "timer",
       },
       disabled: !discussionPhase?.timed,
     },
     {
-      button: { action: "discussion-restart", label: "Restart phase", detail: "Reset this phase timer", tone: "gold" },
+      button: { action: "discussion-restart", label: "Restart round", detail: "Reset this round timer", tone: "gold" },
       disabled: !discussionPhase?.timed,
     },
     {
-      button: { action: "discussion-next", label: "Next phase", detail: "Move to the next part", tone: "next" },
-      disabled: discussionPhaseIndex < 0 || discussionPhaseIndex >= 4,
+      button: { action: "discussion-next", label: "Next round", detail: "Move to the next round", tone: "next" },
+      disabled: discussionPhaseIndex < 0 || discussionPhaseIndex >= DISCUSSION_ROUNDS.length - 1,
     },
   ];
   const spinnerStateId = isSpinnerStateId(flow?.state?.id) ? flow.state.id : null;
@@ -915,7 +913,7 @@ export default function TeacherRemotePage() {
         .deck-section-note { margin:0; color:#756d62; font-size:0.7rem; font-weight:700; text-align:right; }
         .deck-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
         .deck-grid.stages { grid-template-columns:repeat(4,minmax(0,1fr)); }
-        .deck-grid.discussion-phases { grid-template-columns:repeat(5,minmax(0,1fr)); }
+        .deck-grid.discussion-phases { grid-template-columns:repeat(3,minmax(0,1fr)); }
         .deck-grid.discussion-controls { grid-template-columns:repeat(4,minmax(0,1fr)); }
         .deck-grid.spinner-control { grid-template-columns:1fr; }
         .discussion-selection { display:grid; gap:5px; border:1px solid #bba9dd; border-left:5px solid #8b5cf6; border-radius:12px; background:#f5efff; padding:11px 13px; }
@@ -1070,7 +1068,7 @@ export default function TeacherRemotePage() {
                       <h2 className="deck-section-title" id="stage-controls-title">Current state controls</h2>
                       <p className="deck-section-note">
                         {isDiscussionState
-                          ? "Use the routine controls below for each phase. Next state ends the discussion."
+                          ? "Use the routine controls below for each round. Next state ends the discussion."
                           : flow?.poll?.stage === "results" && flow.poll.awaitingTeacherAdvance
                             ? "Results are showing. Tap Next state when ready."
                             : flow?.poll?.stage === "results" && sequence?.advanceMode === "automatic"
@@ -1129,8 +1127,8 @@ export default function TeacherRemotePage() {
                         <h2 className="deck-section-title" id="discussion-controls-title">Discussion routine</h2>
                         <p className="deck-section-note">
                           {discussionPhase
-                            ? `${discussionPhase.label}. ${discussionPhase.running ? "Timer running." : discussionPhase.finished ? "Time is up." : discussionPhase.timed ? "Ready or paused." : "Use the class spinner to share."}`
-                            : "Choose Think to open the five-part routine."}
+                            ? `${discussionPhase.label}. ${discussionPhase.running ? "Timer running." : discussionPhase.finished ? "Time is up." : "Ready or paused."}`
+                            : "Choose Round 1 to open the three-round routine."}
                         </p>
                       </div>
                       <div className="deck-grid discussion-phases">

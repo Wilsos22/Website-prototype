@@ -4,7 +4,7 @@ Status: Frozen target for the first front-to-back classroom pilot
 
 Pilot lesson: Math 6 M2.T1.L1, Day 1
 
-Updated: July 14, 2026
+Updated: July 16, 2026
 
 ## Purpose and source rules
 
@@ -48,14 +48,17 @@ The second projector keeps the room oriented.
 
 ### Student Chromebook
 
-Route: `/` for arrival, then `/lesson` or the active synchronized lesson surface.
+Route: `/` for arrival and the student homepage, then the active synchronized lesson surface when the teacher advances beyond Warm-Up.
 
 - Use a warm cream ground with the current semantic accent.
 - Use compact, readable Chromebook typography. Do not use projector-scale text.
 - Keep the lesson timer compact in the top frame instead of placing a large timer in the work area.
 - Emphasize exactly one current action.
-- Arrival order is class code, code accepted, assigned Google Form warm-up, automatic lesson entry after verified submission.
-- Do not show the join code after the student is in the lesson.
+- Arrival order is class code, code accepted, assigned Google Form warm-up, return to the homepage with solo challenge activities unlocked, then automatic live-lesson entry when the teacher advances beyond Warm-Up.
+- Do not require individual teacher approval in the normal warm-up path.
+- Unlock challenge activities and live-lesson entry only after a completion receipt for this exact class session. A Chromebook identity linked on an earlier day is not today's warm-up completion.
+- If automatic Form verification fails for one student, offer an explicit `Ask for help` recovery. Do not place that approval step in the normal whole-class path.
+- Do not show the join code after it is accepted.
 - Do not create a native warm-up form.
 - During warm-up review, students look at answers and frequently missed problems. They do not digitally correct or resubmit warm-up work.
 - During paper-first work, show directions, every required paper problem number, due and turn-in information, the help path, and an optional assigned manipulative. Do not reproduce paper problem text.
@@ -86,7 +89,7 @@ The dark `/control` page remains the laptop operator and setup surface. It is no
 
 | Order | Phase | Minutes | Palette | Current-slide purpose |
 | --- | --- | ---: | --- | --- |
-| 1 | Warm-up | 5 | Evergreen | Student enters the code and opens the assigned verified Google Form. Projectors show only warm-up directions and time. |
+| 1 | Warm-up | 5 | Evergreen | Student enters the code, opens the assigned verified Google Form from the homepage, then may use solo challenge activities while waiting. Projectors show only warm-up directions and time. |
 | 2 | Review | 4 | Evergreen | Briefly reveal answers and frequently missed problems; no digital corrections. |
 | 3 | Launch | 4 | Scenario-owned | Show the beginning halftime score problem and establish the story, quantities, and question. |
 | 4 | Concrete | 5 | Forest | Build the ratio relationship with the assigned concrete model. |
@@ -94,9 +97,9 @@ The dark `/control` page remains the laptop operator and setup surface. It is no
 | 6 | Abstract | 5 | Indigo | Connect the representation to notation and reasoning. |
 | 7 | Midlesson learning check | 3 | Plum and gold | First show the learning intention and one selected `I can` success criterion, then collect Fist-to-Five. |
 | 8 | Discussion | 6 | Burnt orange | Run three two-minute rounds with visible sentence stems and vocabulary. |
-| 9 | Independent paper work | 14 | Navy | Complete the full crafted paper set with directions, help path, and optional assigned manipulative. |
+| 9 | Independent paper work | 14 | Navy | Complete today's required portion of the crafted paper set with directions, help path, and optional assigned manipulative. The two daily pages complete the full set. |
 | 10 | Exit ticket | 3 | Burgundy | Open the assigned exit ticket and show submission state. |
-| 11 | Closeout | 1 | Warm gold | Confirm required work, turn-in status, and the next class action. |
+| 11 | Closeout | 1 | Warm gold | Put away classroom supplies, clean the work area, and reset the room. |
 
 Total: 55 minutes.
 
@@ -136,20 +139,24 @@ Projector surfaces use dark tonal fields and soft glow. Chromebook surfaces stay
 ### Discussion
 
 - Show the current discussion prompt, round number, sentence stems, and key vocabulary.
-- Keep each round to two minutes.
+- Run exactly three two-minute rounds: Round 1 is Think then Write, Round 2 is Discuss then Revise, and Round 3 is Share with the student spinner available.
+- In automatic pacing, each round advances at zero and Round 3 advances to the next lesson state. In manual pacing, zero holds until the teacher advances.
 - Do not add unrelated lesson metadata to the slide.
 
 ### Independent work and closeout
 
-- The full crafted paper set is required and includes one optional Big Dog Challenge.
+- The full crafted paper set is required across the two daily lesson pages. Day 1 assigns problems 1-4 and Day 2 assigns problems 5-8 after the error-analysis organizer.
+- Each daily assignment includes one optional Big Dog Challenge after that day's required work.
 - The teacher grades paper manually and later enters results and challenge points.
 - Scanning and automated paper grading are outside this pilot.
-- Today and closeout may show `Required Paper Work`, `Required Digital Work`, `Optional Support`, and `Challenge`.
+- Today may show `Required Paper Work`, `Required Digital Work`, `Optional Support`, and `Challenge`.
 - Hide empty categories. Show games and tools only when deployed or assigned.
+- Closeout does not add a new academic response or repeat turn-in directions. It only directs students to put away classroom supplies, clean the work area, and reset the room.
 
 ## Timer, navigation, and draft behavior
 
 - Loading or previewing a lesson does not start it.
+- Selecting a lesson stages its assigned warm-up on the open session immediately. Students can enter the code and begin the Form while lesson pacing is still paused.
 - Pressing `Start lesson` enables automatic pacing and starts the current state's timer.
 - At zero, chime once, briefly show `Time is up`, and advance to the next scheduled state.
 - A timed response check closes at zero, shows results briefly, and then advances.
@@ -165,6 +172,7 @@ Projector surfaces use dark tonal fields and soft glow. Chromebook surfaces stay
 ## Session and privacy behavior
 
 - Every surface is tied to an explicit session ID.
+- Every warm-up completion is tied to an opaque token for one student auth identity and one session. An old Form tab cannot complete a new session's receipt.
 - An older open session is never selected silently.
 - Starting, managing, and ending a session must produce one consistent session state on Teacher Home, Control, Remote, and student join.
 - Ending the session is available from both the laptop control flow and the private Remote, with confirmation.
@@ -198,6 +206,7 @@ The pilot passes only when all of these are observed in one new M2.T1.L1 session
 - The midlesson check introduces one `I can` success criterion.
 - The halftime launch uses the approved beginning-score layout.
 - Discussion includes sentence stems and vocabulary.
+- Discussion shows three two-minute rounds in order: Think and Write, Discuss and Revise, then Share with the student spinner.
 - The projector timer stays in its top frame, has no toolbar, and shows only current directions on the Pace screen.
 - Start lesson carries the class through the timed sequence; Pause holds it, and Resume continues it.
 - Opening the iPad work space adds a board beside the current problem, and closing it restores the unchanged view.

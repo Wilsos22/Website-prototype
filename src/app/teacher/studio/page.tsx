@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import LessonVisual from "@/components/LessonVisual";
 import { BANK_GROUPS, CLOSEOUT_DIRECTIONS, DEFAULT_STATES, classStateStepDefaults } from "@/lib/classStates";
 import { classroomStageTheme, discussionSupportsForLesson, usesDiscussionProtocol } from "@/lib/classroomPilot";
+import { DISCUSSION_ROUNDS } from "@/lib/discussionProtocol";
 import {
   lessonStoryImageMarkup,
   lessonStoryImages,
@@ -791,6 +792,8 @@ export default function LessonScreenStudioPage() {
   const galleryWalkConfig = draft?.routineConfig?.kind === "gallery-walk" ? draft.routineConfig : null;
   const smallGroupConfig = draft?.routineConfig?.kind === "small-group" ? draft.routineConfig : null;
   const timer = draft ? formatTimer(draft.duration) : "--:--";
+  const previewTimer = isDiscussion ? "02:00" : timer;
+  const previewDiscussionRound = DISCUSSION_ROUNDS[0];
   const configuredDiscussionSupports = discussionSupportsForLesson(lesson?.lessonCode);
   const discussionStemsEditorText = draft?.discussionStems
     || lesson?.discussionStems
@@ -1394,7 +1397,7 @@ export default function LessonScreenStudioPage() {
               <section className="studio-screen studio-main-screen" aria-label="Main projector preview">
                 <div className="studio-main-top">
                   <span className="studio-phase">{stepLabel(selectedStep)}</span>
-                  <span className="studio-screen-time">{timer}</span>
+                  <span className="studio-screen-time">{previewTimer}</span>
                 </div>
                 {showLessonVisual ? (
                   <LessonVisual visual={showLessonVisual} variant="studio" accent={theme.accent} />
@@ -1447,7 +1450,7 @@ export default function LessonScreenStudioPage() {
                   </div>
                 ) : (
                   <div>
-                    {isDiscussion && <p className="studio-round">Think - 1 minute</p>}
+                    {isDiscussion && <p className="studio-round">{previewDiscussionRound.label}</p>}
                     <div className="studio-main-copy">{mainBody}</div>
                   </div>
                 )}
@@ -1471,7 +1474,7 @@ export default function LessonScreenStudioPage() {
                           </>
                         )
                         : <h2 className="studio-pace-direction">{paceBody}</h2>}
-                    <div className="studio-pace-time">{timer}</div>
+                    <div className="studio-pace-time">{previewTimer}</div>
                     {isDiscussion && stems[0] && <div className="studio-support-line">{stems[0]}</div>}
                     {isDiscussion && vocabulary.length > 0 && (
                       <div className="studio-vocab">{vocabulary.map((word) => <span key={word}>{word}</span>)}</div>
@@ -1485,12 +1488,12 @@ export default function LessonScreenStudioPage() {
                     <div className="studio-student-top">
                       <span className="studio-student-dot" />
                       <span>{stepLabel(selectedStep)}</span>
-                      <span className="studio-student-time">{timer}</span>
+                      <span className="studio-student-time">{previewTimer}</span>
                     </div>
                     <div className="studio-student-body">
                       {publicSurfacesLinked && (isReaderSpinner || isIpadKidSpinner) ? publicSpinnerPreview(true) : (
                         <>
-                          {isDiscussion && <p className="studio-student-round">Think quietly</p>}
+                          {isDiscussion && <p className="studio-student-round">{previewDiscussionRound.label}</p>}
                           <p className="studio-student-action">{studentBody}</p>
                           {effectiveResponseKind ? (
                             <div className="studio-response-preview" aria-label={`${effectiveResponseKind} response preview`}>
@@ -1555,15 +1558,13 @@ export default function LessonScreenStudioPage() {
                     <div className="studio-remote-controls" aria-hidden="true">
                       {isDiscussion ? (
                         <>
-                          <span className="studio-remote-key active">Think</span>
-                          <span className="studio-remote-key">Write</span>
-                          <span className="studio-remote-key">Discuss</span>
-                          <span className="studio-remote-key">Revise</span>
-                          <span className="studio-remote-key">Share</span>
-                          <span className="studio-remote-key">Previous phase</span>
+                          {DISCUSSION_ROUNDS.map((round, index) => (
+                            <span className={`studio-remote-key${index === 0 ? " active" : ""}`} key={round.id}>{round.buttonLabel}</span>
+                          ))}
+                          <span className="studio-remote-key">Previous round</span>
                           <span className="studio-remote-key">Start or resume</span>
-                          <span className="studio-remote-key">Restart phase</span>
-                          <span className="studio-remote-key">Next phase</span>
+                          <span className="studio-remote-key">Restart round</span>
+                          <span className="studio-remote-key">Next round</span>
                           <span className="studio-remote-key">Choose sharer</span>
                         </>
                       ) : (

@@ -6,6 +6,7 @@ import InkBoard from "@/components/InkBoard";
 import LessonVisual from "@/components/LessonVisual";
 import { CLOSEOUT_DIRECTIONS } from "@/lib/classStates";
 import { CLASSROOM_STAGE_THEMES, classroomStageTheme, discussionSupportsForLesson } from "@/lib/classroomPilot";
+import { normalizeDiscussionPhaseSnapshot } from "@/lib/discussionProtocol";
 import { resolveLessonVisual } from "@/lib/lessonVisuals";
 import { publicSuccessCriterion } from "@/lib/successCriterion";
 import { teacherApiRequest } from "@/lib/teacherApi";
@@ -192,7 +193,7 @@ export default function ClassroomStagePage() {
   const resource = flow?.resource ?? null;
   const presentation = flow?.presentation ?? null;
   const lesson = flow?.lesson ?? null;
-  const phase = flow?.phase ?? null;
+  const phase = normalizeDiscussionPhaseSnapshot(flow?.phase);
   const theme = state?.semantic
     ? CLASSROOM_STAGE_THEMES[state.semantic]
     : classroomStageTheme(state?.id, state?.label);
