@@ -21,6 +21,7 @@ import { inferClassroomStage } from "@/lib/classroomPilot";
 import { TeacherApiError, teacherApiRequest, teacherPost } from "@/lib/teacherApi";
 import {
   LIVE_FLOW_MODE,
+  REMOTE_COMMAND_STALE_MS,
   clearStoredTeacherSession,
   getStoredTeacherSessionId,
   liveAssignedToolRoute,
@@ -191,6 +192,7 @@ interface PollLaunchConfig {
 const LS_BANK = "bdm-control-bank-v2";
 const LS_LINEUP = "bdm-control-lineup-v1";
 const PERIOD_MIN = 55;
+const REMOTE_RECEIPT_RETRY_MS = 600;
 
 const DEFAULT_TOOL_SETUP: ToolSetupValues = {
   prompt: "",
@@ -592,6 +594,8 @@ export default function ControlPage() {
   const autoOpenedStepRef = useRef<Set<string>>(new Set());
   const openingStepRef = useRef<string | null>(null);
   const lastRemoteCommandRef = useRef<string | null>(null);
+  const pendingRemoteReceiptRef = useRef<{ sessionId: string; command: TeacherRemoteCommand } | null>(null);
+  const remoteReceiptInFlightRef = useRef(false);
   const hydratedSessionRef = useRef<string | null>(null);
   const pendingLiveFlowSyncRef = useRef<{
     sessionId: string;
@@ -615,6 +619,45 @@ export default function ControlPage() {
     hydrationGenerationRef.current += 1;
     setServerHydrationGeneration(hydrationGenerationRef.current);
   }, []);
+
+  const flushRemoteReceipt = useCallback(async () => {
+    const pending = pendingRemoteReceiptRef.current;
+    if (!pending || remoteReceiptInFlightRef.current) return;
+    const issuedAt = Date.parse(pending.command.issuedAt);
+    if (Number.isFinite(issuedAt) && Date.now() - issuedAt >= REMOTE_COMMAND_STALE_MS) {
+      pendingRemoteReceiptRef.current = null;
+      return;
+    }
+
+    remoteReceiptInFlightRef.current = true;
+    try {
+      await teacherPost("/api/teacher/session", {
+        action: "update",
+        sessionId: pending.sessionId,
+        remoteCommand: pending.command,
+        expectedRemoteCommandNonce: pending.command.nonce,
+      });
+      if (pendingRemoteReceiptRef.current?.command.nonce === pending.command.nonce) {
+        pendingRemoteReceiptRef.current = null;
+      }
+    } catch (error) {
+      if (error instanceof TeacherApiError && error.status === 409) {
+        if (pendingRemoteReceiptRef.current?.command.nonce === pending.command.nonce) {
+          pendingRemoteReceiptRef.current = null;
+        }
+        return;
+      }
+      // Leave the receipt queued. The short retry loop below keeps a transient
+      // classroom-network failure from permanently blocking the Remote.
+    } finally {
+      remoteReceiptInFlightRef.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => { void flushRemoteReceipt(); }, REMOTE_RECEIPT_RETRY_MS);
+    return () => window.clearInterval(interval);
+  }, [flushRemoteReceipt]);
 
   const armTimer = useCallback((seconds: number) => {
     const safeSeconds = Math.max(0, seconds);
@@ -705,6 +748,7 @@ export default function ControlPage() {
   // even on a different teacher device or before Live Class Flow is selected.
   useEffect(() => {
     let stopped = false;
+    let checking = false;
     const setCurrentTeacherSession = (next: TeacherSessionRow | null) => {
       if (serverFlowSessionRef.current !== next?.id) {
         serverFlowSessionRef.current = next?.id || null;
@@ -724,9 +768,11 @@ export default function ControlPage() {
     };
 
     const findTeacherSession = async () => {
+      if (checking) return;
+      checking = true;
       try {
         const storedSessionId = getStoredTeacherSessionId();
-        const result = await teacherApiRequest<{ sessions: TeacherSessionRow[] }>("/api/teacher/session");
+        const result = await teacherApiRequest<{ sessions: TeacherSessionRow[] }>("/api/teacher/session?latestOpen=1");
         if (stopped) return;
         const openSession = result.sessions.find((candidate) => candidate.status === "open") ?? null;
         if (storedSessionId && storedSessionId !== openSession?.id) clearStoredTeacherSession(storedSessionId);
@@ -735,11 +781,13 @@ export default function ControlPage() {
       } catch {
         // Preserve the last confirmed session and retry. A temporary network or
         // auth failure must not be mistaken for a successful "no session" result.
+      } finally {
+        checking = false;
       }
     };
 
     void findTeacherSession();
-    const interval = window.setInterval(findTeacherSession, 750);
+    const interval = window.setInterval(findTeacherSession, 400);
     return () => {
       stopped = true;
       window.clearInterval(interval);
@@ -1394,9 +1442,8 @@ export default function ControlPage() {
                   : "directions" as const,
           notionStepId: activeItem?.notionStepId || null,
           boardOpen,
-          paceDirections: activeItem?.paceDirections || activeItem?.studentDirections || activeState.desc,
-          studentAction: activeItem?.studentAction || activeItem?.studentDirections || activeState.desc,
-          remoteActions: activeItem?.remoteActions || activeItem?.paceDirections || activeItem?.studentDirections || activeState.desc,
+          paceDirections: activeItem?.paceDirections || activeState.paceAction || activeItem?.studentDirections || activeState.desc,
+          studentAction: activeItem?.studentAction || activeState.studentAction || activeItem?.studentDirections || activeState.desc,
           responseMode: activeItem?.responseMode || "",
           workSpaceAvailable: activeItem?.workSpaceAvailable,
           discussionStems,
@@ -1448,7 +1495,7 @@ export default function ControlPage() {
           currentIndex,
           totalSteps: lineup.length,
           nextLabel: nextItem?.title || nextState?.label || null,
-          nextDirections: nextItem?.remoteActions || nextItem?.paceDirections || nextItem?.studentDirections || nextState?.desc || null,
+          nextDirections: nextItem?.paceDirections || nextItem?.studentDirections || nextState?.desc || null,
           advanceMode: autoAdvance ? "automatic" as const : "manual" as const,
           steps: lineup.map((item) => {
             const itemState = bank.find((candidate) => candidate.id === item.stateId);
@@ -1470,9 +1517,8 @@ export default function ControlPage() {
               notionLessonId: item.notionLessonId || null,
               lessonCode: item.lessonCode || activeLessonContext?.code || "",
               mainDisplay: item.mainDisplay || "",
-              paceDirections: item.paceDirections || item.studentDirections || itemState?.desc || "",
-              studentAction: item.studentAction || item.studentDirections || itemState?.desc || "",
-              remoteActions: item.remoteActions || item.paceDirections || item.studentDirections || itemState?.desc || "",
+              paceDirections: item.paceDirections || itemState?.paceAction || item.studentDirections || itemState?.desc || "",
+              studentAction: item.studentAction || itemState?.studentAction || item.studentDirections || itemState?.desc || "",
               discussionStems: item.stateId === "discussion"
                 ? splitLiveFlowLines(item.discussionStems || activeLessonContext?.discussionStems)
                 : [],
@@ -2189,15 +2235,15 @@ export default function ControlPage() {
       if (direction) requestAbbieLine(direction);
     }
     if (teacherSession) {
-      void teacherPost("/api/teacher/session", {
-        action: "update",
+      pendingRemoteReceiptRef.current = {
         sessionId: teacherSession.id,
-        remoteCommand: { ...command, receivedAt: new Date().toISOString() },
-      }).catch(() => { /* the Remote will keep showing the command as sent */ });
+        command: { ...command, receivedAt: new Date().toISOString() },
+      };
+      void flushRemoteReceipt();
     }
     // These controls intentionally operate on the current state-machine snapshot.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teacherSession?.remote_command?.nonce]);
+  }, [teacherSession?.remote_command?.nonce, flushRemoteReceipt]);
   function editMinutes(id: string, minutes: number) {
     const clamped = Math.max(1, Math.min(120, Math.round(minutes) || 1));
     persistBank(bank.map((s) => (s.id === id ? { ...s, minutes: clamped } : s)));

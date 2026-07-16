@@ -35,26 +35,36 @@ export default function PaceSupportPage() {
 
   useEffect(() => {
     let stopped = false;
+    let checking = false;
+    const requested = requestedSessionId();
     const load = async () => {
-      const result = await teacherApiRequest<{ sessions: PaceSession[] }>("/api/teacher/session")
-        .catch(() => ({ sessions: [] }));
-      const liveSessions = result.sessions.filter((candidate) => candidate.status === "open" && candidate.broadcast === LIVE_FLOW_MODE);
-      const requested = requestedSessionId();
-      const selected = requested
-        ? liveSessions.find((candidate) => candidate.id === requested) ?? null
-        : liveSessions.length === 1 ? liveSessions[0] : null;
-      if (!stopped) {
-        setSession(selected);
-        setSessionMessage(selected
-          ? "Connected to the confirmed class session."
-          : liveSessions.length > 1
-            ? "Choose the intended session from the private teacher Remote."
-            : "Start Live Class Flow or open this projector from the private teacher Remote.");
-        setLoading(false);
+      if (checking) return;
+      checking = true;
+      try {
+        const endpoint = requested
+          ? `/api/teacher/session?liveSessionId=${encodeURIComponent(requested)}`
+          : "/api/teacher/session";
+        const result = await teacherApiRequest<{ sessions: PaceSession[] }>(endpoint)
+          .catch(() => ({ sessions: [] }));
+        const liveSessions = result.sessions.filter((candidate) => candidate.status === "open" && candidate.broadcast === LIVE_FLOW_MODE);
+        const selected = requested
+          ? liveSessions.find((candidate) => candidate.id === requested) ?? null
+          : liveSessions.length === 1 ? liveSessions[0] : null;
+        if (!stopped) {
+          setSession(selected);
+          setSessionMessage(selected
+            ? "Connected to the confirmed class session."
+            : liveSessions.length > 1
+              ? "Choose the intended session from the private teacher Remote."
+              : "Start Live Class Flow or open this projector from the private teacher Remote.");
+          setLoading(false);
+        }
+      } finally {
+        checking = false;
       }
     };
     void load();
-    const interval = window.setInterval(load, 1000);
+    const interval = window.setInterval(load, requested ? 500 : 1000);
     return () => {
       stopped = true;
       window.clearInterval(interval);

@@ -6,6 +6,7 @@ import { DEFAULT_STATES } from "@/lib/classStates";
 import { classroomStageTheme } from "@/lib/classroomPilot";
 import { resolveLessonVisual } from "@/lib/lessonVisuals";
 import { liveAssignedToolRoute } from "@/lib/liveFlowContract";
+import { speakerNoteItems } from "@/lib/speakerNotes";
 import { TeacherApiError, teacherApiRequest } from "@/lib/teacherApi";
 
 interface PublishedLesson {
@@ -607,10 +608,12 @@ export default function LessonScreenStudioPage() {
     { text: stateDefinition?.desc, source: "state template" },
   ]);
   const paceText = resolveSurfaceText(draft?.paceDirections || "", [
+    { text: stateDefinition?.paceAction, source: "short state action" },
     { text: selectedStep?.studentDirections, source: "Student Directions" },
     { text: stateDefinition?.desc, source: "state template" },
   ]);
   const studentText = resolveSurfaceText(draft?.studentAction || "", [
+    { text: stateDefinition?.studentAction, source: "short state action" },
     { text: selectedStep?.studentDirections, source: "Student Directions" },
     { text: stateDefinition?.desc, source: "state template" },
   ]);
@@ -635,6 +638,7 @@ export default function LessonScreenStudioPage() {
   const paceBody = selectedStep && draft ? paceEditorText || "Add the current directions." : "Current directions";
   const studentBody = selectedStep && draft ? studentEditorText || "Add one current student action." : "Current student action";
   const remoteBody = selectedStep && draft ? remoteEditorText || "Add private teacher actions." : "Private teacher actions";
+  const remoteSpeakerNotes = speakerNoteItems(remoteBody);
   const mainScreenUsesStructuredLayout = isLearningCheck || (isIndependent && paperSections.length > 0);
   const lessonVisual = selectedStep && draft ? resolveLessonVisual({
     lessonCode: lesson?.lessonCode,
@@ -794,7 +798,9 @@ export default function LessonScreenStudioPage() {
         .studio-remote-wrap { margin-top:17px; border-top:1px solid #ddd4c6; padding-top:17px; }
         .studio-remote { min-height:150px; display:grid; grid-template-columns:minmax(0,1.35fr) minmax(180px,0.7fr); gap:22px; border:1px solid #d9d0c2; border-radius:11px; background:linear-gradient(145deg,#eee8dc,#f8f4ec); padding:14px; }
         .studio-remote-title { margin:0 0 8px; color:#655e53; font-size:0.58rem; font-weight:900; letter-spacing:0.12em; text-transform:uppercase; }
-        .studio-remote-copy { margin:0; color:var(--bdb-ink); font-size:0.78rem; font-weight:750; line-height:1.4; white-space:pre-wrap; }
+        .studio-speaker-notes { display:grid; gap:5px; margin:0; padding-left:1.1rem; color:var(--bdb-ink); font-size:0.76rem; font-weight:750; line-height:1.38; }
+        .studio-speaker-notes li { padding-left:2px; }
+        .studio-speaker-notes li::marker { color:var(--studio-accent); }
         .studio-remote-controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
         .studio-remote-key { min-height:34px; display:inline-flex; align-items:center; justify-content:center; border:1px solid #d7cec0; border-radius:7px; background:white; padding:0 13px; color:var(--bdb-ink); font-size:0.66rem; font-weight:850; }
         .studio-remote-key.active { border-color:var(--studio-accent); background:color-mix(in srgb,var(--studio-accent) 12%,white); }
@@ -1005,8 +1011,10 @@ export default function LessonScreenStudioPage() {
                 <p className="studio-preview-label">iPad Remote - private</p>
                 <section className="studio-remote" aria-label="Private iPad Remote preview">
                   <div>
-                    <p className="studio-remote-title">This state</p>
-                    <p className="studio-remote-copy">{remoteBody}</p>
+                    <p className="studio-remote-title">Speaker notes</p>
+                    <ul className="studio-speaker-notes" aria-label="Private speaker notes">
+                      {remoteSpeakerNotes.map((note, index) => <li key={`${index}-${note}`}>{note}</li>)}
+                    </ul>
                     <div className="studio-remote-controls" aria-hidden="true">
                       {isDiscussion ? (
                         <>

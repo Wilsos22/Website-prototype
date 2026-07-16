@@ -17,6 +17,7 @@ export const LIVE_FLOW_ROUTE = "/live-flow";
 export const STUDENT_SESSION_KEY = "bdm-student-session";
 export const TEACHER_SESSION_KEY = "bdm-teacher-session";
 export const CLASS_MODE_EXIT_KEY = "bdm-class-mode-exited";
+export const REMOTE_COMMAND_STALE_MS = 15_000;
 
 export type DiscussionPhaseId = "think" | "marker" | "table" | "revise" | "share";
 export const TEACHER_REMOTE_ACTIONS = [

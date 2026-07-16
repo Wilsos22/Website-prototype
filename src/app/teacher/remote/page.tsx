@@ -1,8 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { liveTimerSeconds, type LiveClassFlowSnapshot, type TeacherRemoteAction, type TeacherRemoteCommand } from "@/lib/liveClassFlow";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  REMOTE_COMMAND_STALE_MS,
+  liveTimerSeconds,
+  type LiveClassFlowSnapshot,
+  type LiveFlowSequenceStep,
+  type TeacherRemoteAction,
+  type TeacherRemoteCommand,
+} from "@/lib/liveClassFlow";
+import type { LessonStepData } from "@/lib/notionLessons";
 import { ABBIE_REMOTE_BUTTONS, SOUND_REMOTE_BUTTONS, type RemoteDeckButton } from "@/lib/remoteDeck";
+import { speakerNoteItems } from "@/lib/speakerNotes";
 
 const REMOTE_SESSION_KEY = "bdm-remote-session";
 
@@ -51,6 +60,133 @@ function formatStartedAt(value: string) {
     : `Started ${date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
 }
 
+function optimisticTimer(
+  flow: LiveClassFlowSnapshot,
+  action: TeacherRemoteAction,
+  now: number,
+): LiveClassFlowSnapshot {
+  if (!flow.timer) return flow;
+  const totalSeconds = Math.max(0, flow.timer.totalSeconds);
+  let secondsLeft = liveTimerSeconds(flow.timer, now);
+  let running = flow.timer.running;
+  let finished = flow.timer.finished;
+  let endsAt: string | null = flow.timer.endsAt || null;
+
+  if (action === "toggle-timer") {
+    if (running) {
+      running = false;
+      finished = secondsLeft <= 0;
+      endsAt = null;
+    } else {
+      if (secondsLeft <= 0) secondsLeft = totalSeconds;
+      running = secondsLeft > 0;
+      finished = false;
+      endsAt = running ? new Date(now + secondsLeft * 1000).toISOString() : null;
+    }
+  } else if (action === "reset-timer") {
+    secondsLeft = totalSeconds;
+    running = false;
+    finished = false;
+    endsAt = null;
+  } else {
+    secondsLeft = Math.max(0, secondsLeft + (action === "add-30" ? 30 : -30));
+    finished = secondsLeft <= 0;
+    if (finished) running = false;
+    endsAt = running ? new Date(now + secondsLeft * 1000).toISOString() : null;
+  }
+
+  return {
+    ...flow,
+    updatedAt: new Date(now).toISOString(),
+    timer: { totalSeconds, secondsLeft, running, finished, endsAt },
+    sequence: flow.sequence && action === "toggle-timer" && running
+      ? { ...flow.sequence, advanceMode: "automatic" }
+      : flow.sequence,
+  };
+}
+
+function optimisticNavigation(
+  flow: LiveClassFlowSnapshot,
+  direction: 1 | -1,
+  now: number,
+): LiveClassFlowSnapshot {
+  const sequence = flow.sequence;
+  const steps = sequence?.steps;
+  if (!sequence || !steps?.length) return flow;
+  const targetIndex = sequence.currentIndex + direction;
+  const step: LiveFlowSequenceStep | undefined = steps[targetIndex];
+  if (!step) return flow;
+  const nextStep = steps[targetIndex + 1] || null;
+  const keepRunning = sequence.advanceMode === "automatic"
+    && Boolean(flow.timer?.running || flow.timer?.finished || flow.poll?.stage === "results");
+  const totalSeconds = Math.max(0, step.durationSeconds);
+
+  return {
+    ...flow,
+    updatedAt: new Date(now).toISOString(),
+    state: {
+      id: step.stateId,
+      label: step.label,
+      description: step.description,
+      color: step.color,
+      semantic: step.semantic,
+    },
+    phase: null,
+    timer: {
+      totalSeconds,
+      secondsLeft: totalSeconds,
+      running: keepRunning,
+      finished: false,
+      endsAt: keepRunning ? new Date(now + totalSeconds * 1000).toISOString() : null,
+    },
+    poll: null,
+    resource: step.resourceUrl ? { label: "Open Lesson Resource", url: step.resourceUrl } : null,
+    presentation: {
+      title: step.label,
+      body: step.mainDisplay || step.question || step.description || step.paperTask,
+      mainDisplay: step.mainDisplay || "",
+      mode: step.resourceUrl ? "resource" : "directions",
+      notionStepId: step.notionStepId,
+      boardOpen: false,
+      paceDirections: step.paceDirections || step.description,
+      studentAction: step.studentAction || step.description,
+      responseMode: step.responseMode || "",
+      workSpaceAvailable: step.workSpaceAvailable,
+      discussionStems: step.discussionStems || [],
+      vocabulary: step.vocabulary || [],
+    },
+    tool: null,
+    sequence: {
+      ...sequence,
+      currentIndex: targetIndex,
+      nextLabel: nextStep?.label || null,
+      nextDirections: nextStep?.paceDirections || nextStep?.description || null,
+    },
+    paper: step.paperTask ? { task: step.paperTask } : null,
+  };
+}
+
+function optimisticRemoteFlow(
+  flow: LiveClassFlowSnapshot,
+  action: TeacherRemoteAction,
+): LiveClassFlowSnapshot {
+  const now = Date.now();
+  if (["toggle-timer", "add-30", "subtract-30", "reset-timer"].includes(action)) {
+    return optimisticTimer(flow, action, now);
+  }
+  if (action === "next" || action === "previous") {
+    return optimisticNavigation(flow, action === "next" ? 1 : -1, now);
+  }
+  if ((action === "show-board" || action === "hide-board") && flow.presentation) {
+    return {
+      ...flow,
+      updatedAt: new Date(now).toISOString(),
+      presentation: { ...flow.presentation, boardOpen: action === "show-board" },
+    };
+  }
+  return flow;
+}
+
 function DeckKey({ button, busy, disabled, onSend }: DeckKeyProps) {
   return (
     <button
@@ -74,25 +210,35 @@ export default function TeacherRemotePage() {
   const [pendingCommand, setPendingCommand] = useState<{ nonce: string; label: string } | null>(null);
   const [lastReceipt, setLastReceipt] = useState<string | null>(null);
   const [pollAnswers, setPollAnswers] = useState<PollAnswer[]>([]);
+  const [privateLessonSteps, setPrivateLessonSteps] = useState<LessonStepData[]>([]);
   const [boardPanelOpen, setBoardPanelOpen] = useState(false);
   const [endingSession, setEndingSession] = useState(false);
+  const commandInFlightRef = useRef(false);
+  const refreshInFlightRef = useRef(false);
+  const refreshEpochRef = useRef(0);
 
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
       const requestedSessionId = params.get("session")?.trim();
       const storedSessionId = localStorage.getItem(REMOTE_SESSION_KEY)?.trim();
+      refreshEpochRef.current += 1;
       setSelectedSessionId(requestedSessionId || storedSessionId || null);
     } catch {
+      refreshEpochRef.current += 1;
       setSelectedSessionId(null);
     }
   }, []);
 
   const refresh = useCallback(async () => {
+    if (commandInFlightRef.current || refreshInFlightRef.current) return;
+    const requestEpoch = refreshEpochRef.current;
+    refreshInFlightRef.current = true;
     try {
       const query = selectedSessionId ? `?sessionId=${encodeURIComponent(selectedSessionId)}` : "";
       const response = await fetch(`/api/control-remote${query}`, { cache: "no-store" });
       const data = await response.json() as { sessions?: RemoteSession[]; session?: RemoteSession | null; error?: string };
+      if (requestEpoch !== refreshEpochRef.current) return;
       if (!response.ok || data.error) {
         setSession(null);
         setStatus(data.error || "Remote is unavailable.");
@@ -115,13 +261,24 @@ export default function TeacherRemotePage() {
         return;
       }
       setSession(data.session);
-      if (pendingCommand && data.session.remoteCommand?.nonce === pendingCommand.nonce) {
-        setStatus(data.session.remoteCommand.receivedAt
-          ? `Received by classroom: ${pendingCommand.label}`
-          : `Sent to classroom: ${pendingCommand.label}. Waiting for receipt.`);
-        if (data.session.remoteCommand.receivedAt) {
+      if (pendingCommand) {
+        const remoteCommand = data.session.remoteCommand;
+        if (remoteCommand?.nonce !== pendingCommand.nonce) {
+          setPendingCommand(null);
+          setStatus(`The classroom did not confirm ${pendingCommand.label}. Tap it again.`);
+        } else if (remoteCommand.receivedAt) {
           setLastReceipt(pendingCommand.label);
           setPendingCommand(null);
+          setStatus(`Received by classroom: ${pendingCommand.label}`);
+        } else {
+          const issuedAt = Date.parse(remoteCommand.issuedAt);
+          const stale = !Number.isFinite(issuedAt) || Date.now() - issuedAt >= REMOTE_COMMAND_STALE_MS;
+          if (stale) {
+            setPendingCommand(null);
+            setStatus(`The classroom did not confirm ${pendingCommand.label}. Tap it again.`);
+          } else {
+            setStatus(`Sent to classroom: ${pendingCommand.label}. Waiting for receipt.`);
+          }
         }
       } else if (!pendingCommand) {
         setStatus(lastReceipt
@@ -129,15 +286,19 @@ export default function TeacherRemotePage() {
           : "Connected to the confirmed Live Class Flow session.");
       }
     } catch {
-      setStatus("Disconnected. Trying to reach the classroom controller again.");
+      if (requestEpoch === refreshEpochRef.current) {
+        setStatus("Disconnected. Trying to reach the classroom controller again.");
+      }
+    } finally {
+      refreshInFlightRef.current = false;
     }
   }, [lastReceipt, pendingCommand, selectedSessionId]);
 
   useEffect(() => {
     void refresh();
-    const interval = window.setInterval(refresh, 1200);
+    const interval = window.setInterval(refresh, selectedSessionId ? 500 : 1200);
     return () => window.clearInterval(interval);
-  }, [refresh]);
+  }, [refresh, selectedSessionId]);
 
   useEffect(() => {
     if (!lastReceipt) return;
@@ -169,7 +330,32 @@ export default function TeacherRemotePage() {
     };
   }, [pollId]);
 
+  const privateLessonId = session?.liveFlow?.lesson?.id?.trim() || "";
+  const privateLessonCode = session?.liveFlow?.lesson?.code?.trim() || "";
+  useEffect(() => {
+    if (!privateLessonId && !privateLessonCode) {
+      setPrivateLessonSteps([]);
+      return;
+    }
+    let stopped = false;
+    setPrivateLessonSteps([]);
+    const params = privateLessonId
+      ? `id=${encodeURIComponent(privateLessonId)}`
+      : `code=${encodeURIComponent(privateLessonCode)}`;
+    void (async () => {
+      try {
+        const response = await fetch(`/api/teacher/lesson?${params}`, { cache: "no-store" });
+        const data = await response.json() as { lesson?: { steps?: LessonStepData[] }; error?: string };
+        if (!stopped) setPrivateLessonSteps(response.ok ? data.lesson?.steps || [] : []);
+      } catch {
+        if (!stopped) setPrivateLessonSteps([]);
+      }
+    })();
+    return () => { stopped = true; };
+  }, [privateLessonCode, privateLessonId]);
+
   const chooseSession = useCallback((sessionId: string) => {
+    refreshEpochRef.current += 1;
     setSelectedSessionId(sessionId);
     setSession(null);
     setPendingCommand(null);
@@ -180,6 +366,7 @@ export default function TeacherRemotePage() {
   }, []);
 
   const changeSession = useCallback(() => {
+    refreshEpochRef.current += 1;
     setSelectedSessionId(null);
     setSession(null);
     setPendingCommand(null);
@@ -192,6 +379,7 @@ export default function TeacherRemotePage() {
   const endSession = useCallback(async () => {
     if (!session || endingSession) return;
     if (!window.confirm("End this session for every connected student?")) return;
+    refreshEpochRef.current += 1;
     setEndingSession(true);
     setStatus("Ending the confirmed class session.");
     try {
@@ -217,10 +405,16 @@ export default function TeacherRemotePage() {
   }, [endingSession, session]);
 
   const send = useCallback(async (button: RemoteDeckButton) => {
-    if (!session || busy) return;
+    if (!session || busy || pendingCommand || commandInFlightRef.current) return;
+    const confirmedSession = session;
+    refreshEpochRef.current += 1;
+    commandInFlightRef.current = true;
     setBusy(button.action);
     setLastReceipt(null);
     setStatus(`Sending to classroom: ${button.label}`);
+    setSession((current) => current?.liveFlow
+      ? { ...current, liveFlow: optimisticRemoteFlow(current.liveFlow, button.action) }
+      : current);
     try {
       const response = await fetch("/api/control-remote", {
         method: "POST",
@@ -229,6 +423,7 @@ export default function TeacherRemotePage() {
       });
       const data = await response.json() as { command?: TeacherRemoteCommand; liveFlow?: LiveClassFlowSnapshot; error?: string };
       if (!response.ok || !data.command) {
+        setSession(confirmedSession);
         setStatus(data.error || "Command failed.");
       } else if (data.command.receivedAt) {
         if (data.liveFlow) setSession((current) => current ? { ...current, liveFlow: data.liveFlow || null, remoteCommand: data.command || null } : current);
@@ -240,19 +435,27 @@ export default function TeacherRemotePage() {
         setStatus(`Sent to classroom: ${button.label}. Waiting for receipt.`);
       }
     } catch {
+      setSession(confirmedSession);
       setStatus("Command failed. Check the classroom connection.");
     } finally {
-      window.setTimeout(() => setBusy(null), 850);
+      commandInFlightRef.current = false;
+      setBusy(null);
     }
-  }, [busy, session]);
+  }, [busy, pendingCommand, session]);
 
   const setWritingMode = useCallback(async (open: boolean) => {
-    if (!session || busy) return;
+    if (!session || busy || pendingCommand || commandInFlightRef.current) return;
+    const confirmedSession = session;
+    refreshEpochRef.current += 1;
     const action: TeacherRemoteAction = open ? "show-board" : "hide-board";
     const label = open ? "Open work space" : "Close work space";
+    commandInFlightRef.current = true;
     setBusy(action);
     setLastReceipt(null);
     setStatus(`Sending to classroom: ${label}`);
+    setSession((current) => current?.liveFlow
+      ? { ...current, liveFlow: optimisticRemoteFlow(current.liveFlow, action) }
+      : current);
     try {
       const response = await fetch("/api/control-remote", {
         method: "POST",
@@ -261,6 +464,7 @@ export default function TeacherRemotePage() {
       });
       const data = await response.json() as { command?: TeacherRemoteCommand; liveFlow?: LiveClassFlowSnapshot; error?: string };
       if (!response.ok || !data.command) {
+        setSession(confirmedSession);
         setStatus(data.error || "Command failed.");
       } else if (data.command.receivedAt) {
         if (data.liveFlow) setSession((current) => current ? { ...current, liveFlow: data.liveFlow || null, remoteCommand: data.command || null } : current);
@@ -274,11 +478,13 @@ export default function TeacherRemotePage() {
         setBoardPanelOpen(open);
       }
     } catch {
+      setSession(confirmedSession);
       setStatus("Command failed. Check the classroom connection.");
     } finally {
-      window.setTimeout(() => setBusy(null), 850);
+      commandInFlightRef.current = false;
+      setBusy(null);
     }
-  }, [busy, session]);
+  }, [busy, pendingCommand, session]);
 
   useEffect(() => {
     setBoardPanelOpen(Boolean(session?.liveFlow?.presentation?.boardOpen));
@@ -290,7 +496,27 @@ export default function TeacherRemotePage() {
   const timerFinished = Boolean(timer?.finished || (timer?.running && timerSeconds <= 0));
   const sequence = flow?.sequence ?? null;
   const lesson = flow?.lesson ?? null;
-  const controlsDisabled = !session || Boolean(busy);
+  const privateLessonStep = useMemo(() => {
+    if (!privateLessonSteps.length) return null;
+    const notionStepId = flow?.presentation?.notionStepId || "";
+    if (notionStepId) {
+      const matchingStep = privateLessonSteps.find((step) => step.id === notionStepId);
+      if (matchingStep) return matchingStep;
+    }
+    if (sequence && privateLessonSteps[sequence.currentIndex]) return privateLessonSteps[sequence.currentIndex];
+    return privateLessonSteps.find((step) => step.stateId === flow?.state?.id) || null;
+  }, [flow?.presentation?.notionStepId, flow?.state?.id, privateLessonSteps, sequence]);
+  const currentSpeakerNotes = speakerNoteItems(
+    privateLessonStep?.remoteActions
+      || privateLessonStep?.teacherNotes
+      || privateLessonStep?.paceDirections
+      || privateLessonStep?.studentDirections
+      || flow?.presentation?.remoteActions
+      || flow?.presentation?.paceDirections
+      || flow?.state?.description
+      || "The classroom computer has not published directions yet.",
+  );
+  const controlsDisabled = !session || Boolean(busy) || Boolean(pendingCommand);
   const stageLinks = useMemo(() => {
     const query = session ? `?session=${encodeURIComponent(session.id)}` : "";
     return {
@@ -347,7 +573,10 @@ export default function TeacherRemotePage() {
         .current-card { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:18px; border:1px solid #2b364d; border-left:5px solid #14b8a6; border-radius:16px; background:#151b28; padding:16px; }
         .current-label { margin:0 0 5px; color:#5eead4; font-size:0.68rem; font-weight:900; letter-spacing:0.12em; text-transform:uppercase; }
         .current-title { margin:0; font-size:clamp(1.35rem,4vw,2rem); line-height:1.05; }
-        .current-directions { margin:8px 0 0; color:#cbd5e1; line-height:1.4; font-weight:700; white-space:pre-wrap; }
+        .current-notes-label { margin:10px 0 0; color:#94a3b8; font-size:0.66rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
+        .current-directions { display:grid; gap:5px; margin:5px 0 0; padding-left:1.15rem; color:#cbd5e1; font-size:0.9rem; line-height:1.38; font-weight:700; }
+        .current-directions li { padding-left:2px; }
+        .current-directions li::marker { color:#5eead4; }
         .current-next { margin:12px 0 0; color:#94a3b8; font-size:0.82rem; font-weight:750; }
         .current-time { align-self:center; color:#fff; font-size:clamp(2.6rem,9vw,4.5rem); font-weight:900; line-height:0.9; font-variant-numeric:tabular-nums; letter-spacing:-0.04em; }
         .current-time.finished { color:#fda4af; }
@@ -431,7 +660,10 @@ export default function TeacherRemotePage() {
               <div>
                 <p className="current-label">{lesson?.code || "Live lesson"} · {sequence ? `Step ${sequence.currentIndex + 1} of ${sequence.totalSteps}` : "Current step"}</p>
                 <h2 className="current-title">{flow?.state?.label || "Waiting for a lesson step"}</h2>
-                <p className="current-directions">{flow?.presentation?.remoteActions || flow?.presentation?.paceDirections || flow?.state?.description || "The classroom computer has not published directions yet."}</p>
+                <p className="current-notes-label">Speaker notes</p>
+                <ul className="current-directions" aria-label="Private speaker notes">
+                  {currentSpeakerNotes.map((note, index) => <li key={`${index}-${note}`}>{note}</li>)}
+                </ul>
                 <p className="current-next"><strong>Next:</strong> {sequence?.nextLabel || "Lesson closeout"}{sequence?.nextDirections ? ` - ${sequence.nextDirections}` : ""}</p>
               </div>
               <div className={`current-time ${timerFinished ? "finished" : ""}`}>{timer ? formatTime(timerSeconds) : "--:--"}</div>

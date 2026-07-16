@@ -4,8 +4,18 @@ import {
   StudentIdentityError,
   studentIdentityResponse,
 } from "@/lib/studentIdentity";
+import type { LiveClassFlowSnapshot } from "@/lib/liveClassFlow";
 
 export const dynamic = "force-dynamic";
+
+function studentSafeLiveFlow(flow: LiveClassFlowSnapshot | null): LiveClassFlowSnapshot | null {
+  if (!flow) return null;
+  const presentation = flow.presentation
+    ? (({ remoteActions: _privateRemoteActions, ...publicPresentation }) => publicPresentation)(flow.presentation)
+    : null;
+  const { transition: _privateTransition, ...publicFlow } = flow;
+  return { ...publicFlow, presentation, sequence: null };
+}
 
 export async function GET(request: Request) {
   try {
@@ -44,8 +54,13 @@ export async function GET(request: Request) {
       .maybeSingle();
     if (pollError) throw new StudentIdentityError("The live question could not be loaded.", 500, "poll_lookup_failed");
 
+    const safeSession = {
+      ...session,
+      live_flow: studentSafeLiveFlow(session.live_flow as LiveClassFlowSnapshot | null),
+    };
+
     return Response.json(
-      { session, poll: poll ?? null },
+      { session: safeSession, poll: poll ?? null },
       { headers: { "cache-control": "no-store" } },
     );
   } catch (error) {

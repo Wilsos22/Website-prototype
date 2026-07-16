@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 type SessionAction =
   | { action: "start"; periodId?: unknown; joinCode?: unknown; assignmentId?: unknown }
-  | { action: "update"; sessionId?: unknown; broadcast?: unknown; liveFlow?: unknown; expectedLiveFlowUpdatedAt?: unknown; abbie?: unknown; remoteCommand?: unknown }
+  | { action: "update"; sessionId?: unknown; broadcast?: unknown; liveFlow?: unknown; expectedLiveFlowUpdatedAt?: unknown; abbie?: unknown; remoteCommand?: unknown; expectedRemoteCommandNonce?: unknown }
   | { action: "admit"; sessionId?: unknown; requestCode?: unknown; studentEmail?: unknown }
   | { action: "close"; sessionId?: unknown };
 
@@ -51,7 +51,25 @@ async function admissionFailure(input: {
 export async function GET(request: Request) {
   const db = getSupabaseAdmin();
   if (!db) return Response.json({ error: "Database not configured." }, { status: 503 });
-  const sessionId = new URL(request.url).searchParams.get("sessionId") || "";
+  const searchParams = new URL(request.url).searchParams;
+  const sessionId = searchParams.get("sessionId") || "";
+  const liveSessionId = searchParams.get("liveSessionId") || "";
+  const latestOpen = searchParams.get("latestOpen") === "1";
+
+  // Projectors and the live host only need the current session row. Keep this
+  // path intentionally small because those classroom surfaces poll frequently.
+  if (liveSessionId || latestOpen) {
+    let query = db
+      .from("sessions")
+      .select("id,period_id,assignment_id,join_code,status,started_at,ended_at,broadcast,live_flow,abbie,remote_command")
+      .eq("status", "open");
+    query = liveSessionId
+      ? query.eq("id", liveSessionId)
+      : query.order("started_at", { ascending: false }).limit(1);
+    const { data, error } = await query;
+    if (error) return Response.json({ error: error.message }, { status: 500 });
+    return Response.json({ sessions: data ?? [] }, { headers: { "cache-control": "no-store" } });
+  }
 
   if (!sessionId) {
     const { data, error } = await db
@@ -426,12 +444,22 @@ export async function POST(request: Request) {
         ? update.filter("live_flow->>updatedAt", "eq", expectedRevision)
         : update.is("live_flow", null);
     }
+    const checksRemoteCommandNonce = "remoteCommand" in body && "expectedRemoteCommandNonce" in body;
+    if (checksRemoteCommandNonce) {
+      const expectedNonce = text(body.expectedRemoteCommandNonce, 80);
+      update = expectedNonce
+        ? update.filter("remote_command->>nonce", "eq", expectedNonce)
+        : update.is("remote_command", null);
+    }
     const { data, error: updateError } = await update
       .select("id,status,broadcast,live_flow,abbie,remote_command")
       .maybeSingle();
     if (updateError) return Response.json({ error: updateError.message }, { status: 500 });
     if (!data && checksLiveFlowRevision) {
       return Response.json({ error: "The live lesson changed on another teacher device. Control is reconnecting to the newer state." }, { status: 409 });
+    }
+    if (!data && checksRemoteCommandNonce) {
+      return Response.json({ error: "A newer classroom command replaced this receipt." }, { status: 409 });
     }
     if (!data) return Response.json({ error: "Open session not found." }, { status: 404 });
     return Response.json({ session: data });

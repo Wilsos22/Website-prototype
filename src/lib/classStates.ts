@@ -8,20 +8,22 @@ export interface ClassState {
   minutes: number;
   color: string;
   desc: string;
+  paceAction?: string;
+  studentAction?: string;
 }
 
 export const DEFAULT_STATES: ClassState[] = [
-  { id: "warmup", label: "Warm-Up", minutes: 5, color: "#35785a", desc: "Open the assigned warm-up. Complete all five questions on your own." },
-  { id: "review", label: "Review", minutes: 4, color: "#35785a", desc: "Review the answers and the problems the class missed most often." },
-  { id: "launch", label: "Lesson Launch", minutes: 4, color: "#a86735", desc: "Make sense of the scenario, quantities, and question." },
-  { id: "concrete", label: "Concrete", minutes: 5, color: "#3f7d50", desc: "Build the relationship with the assigned concrete model." },
-  { id: "representational", label: "Representational", minutes: 5, color: "#357f7d", desc: "Connect the concrete model to a diagram or representation." },
-  { id: "abstract", label: "Abstract", minutes: 5, color: "#4f5da8", desc: "Connect the representation to notation and reasoning." },
-  { id: "learning-check", label: "Learning Check", minutes: 3, color: "#6f3f78", desc: "Revisit the goal and show your understanding from 0 to 5." },
-  { id: "discussion", label: "Discussion", minutes: 6, color: "#9d4c2f", desc: "Complete three two-minute discussion cycles and revise your reasoning." },
-  { id: "independent", label: "Independent Paper Work", minutes: 14, color: "#36557f", desc: "Complete the full required paper set and use the help path if needed." },
-  { id: "exit", label: "Exit Ticket", minutes: 3, color: "#8a3d50", desc: "Complete and submit the assigned exit ticket on your own." },
-  { id: "closeout", label: "Closeout", minutes: 1, color: "#8a6b2f", desc: "Confirm your turn-in status and the next class action." },
+  { id: "warmup", label: "Warm-Up", minutes: 5, color: "#35785a", desc: "Open the assigned warm-up. Complete all five questions on your own.", paceAction: "Start today's warm-up.", studentAction: "Open the warm-up and begin." },
+  { id: "review", label: "Review", minutes: 4, color: "#35785a", desc: "Review the answers and the problems the class missed most often.", paceAction: "Let's check the answers together.", studentAction: "Look up and check your thinking." },
+  { id: "launch", label: "Lesson Launch", minutes: 4, color: "#a86735", desc: "Make sense of the scenario, quantities, and question.", paceAction: "Study the problem. What do you notice?", studentAction: "Write one thing you notice." },
+  { id: "concrete", label: "Concrete", minutes: 5, color: "#3f7d50", desc: "Build the relationship with the assigned concrete model.", paceAction: "Build the relationship with your materials.", studentAction: "Build the model with your materials." },
+  { id: "representational", label: "Representational", minutes: 5, color: "#357f7d", desc: "Connect the concrete model to a diagram or representation.", paceAction: "Show the same idea with a model.", studentAction: "Build or draw the same relationship." },
+  { id: "abstract", label: "Abstract", minutes: 5, color: "#4f5da8", desc: "Connect the representation to notation and reasoning.", paceAction: "Write the relationship with math.", studentAction: "Write the relationship with math." },
+  { id: "learning-check", label: "Learning Check", minutes: 3, color: "#6f3f78", desc: "Revisit the goal and show your understanding from 0 to 5.", paceAction: "Show where you are right now.", studentAction: "Choose your honest 0 to 5." },
+  { id: "discussion", label: "Discussion", minutes: 6, color: "#9d4c2f", desc: "Complete three two-minute discussion cycles and revise your reasoning.", paceAction: "Use a stem to share your thinking.", studentAction: "Explain your idea with a sentence stem." },
+  { id: "independent", label: "Independent Paper Work", minutes: 14, color: "#36557f", desc: "Complete the full required paper set and use the help path if needed.", paceAction: "Start the required paper set.", studentAction: "Work through your paper set." },
+  { id: "exit", label: "Exit Ticket", minutes: 3, color: "#8a3d50", desc: "Complete and submit the assigned exit ticket on your own.", paceAction: "Show what you know.", studentAction: "Complete and submit your exit ticket." },
+  { id: "closeout", label: "Closeout", minutes: 1, color: "#8a6b2f", desc: "Confirm your turn-in status and the next class action.", paceAction: "Turn in your work, then reset your space.", studentAction: "Check what's due before you go." },
   { id: "i-do", label: "Direct Instruction (I do)", minutes: 4, color: "#a86735", desc: "Watch and take notes. I'll model each step." },
   { id: "we-do", label: "Guided Practice (We do)", minutes: 5, color: "#357f7d", desc: "We'll solve these together — try each step with me." },
   { id: "question", label: "Question", minutes: 2, color: "#8b5cf6", desc: "Respond to the question before the timer ends." },

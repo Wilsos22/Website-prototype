@@ -4,6 +4,7 @@ import { inferClassroomStage } from "@/lib/classroomPilot";
 import { getLessonByCode, type LessonData } from "@/lib/notionLessons";
 import {
   LIVE_FLOW_MODE,
+  REMOTE_COMMAND_STALE_MS,
   TEACHER_REMOTE_ACTIONS,
   liveAssignedToolRoute,
   liveResponseModePollKind,
@@ -44,15 +45,18 @@ interface HydratedFlowContract {
   lesson: LiveClassFlowSnapshot["lesson"];
 }
 
-async function openSessions() {
+async function openSessions(sessionId = "") {
   const db = getSupabaseAdmin();
   if (!db) return { db: null, sessions: [] as RemoteSessionRow[], error: "Database not configured." };
-  const { data, error } = await db
+  let query = db
     .from("sessions")
     .select("id,join_code,remote_command,started_at,live_flow")
     .eq("status", "open")
-    .eq("broadcast", LIVE_FLOW_MODE)
-    .order("started_at", { ascending: false });
+    .eq("broadcast", LIVE_FLOW_MODE);
+  query = sessionId
+    ? query.eq("id", sessionId)
+    : query.order("started_at", { ascending: false });
+  const { data, error } = await query;
   return { db, sessions: (data ?? []) as RemoteSessionRow[], error: error?.message || null };
 }
 
@@ -92,9 +96,8 @@ function stepsFromLesson(lesson: LessonData): LiveFlowSequenceStep[] {
       notionLessonId: lesson.id || null,
       lessonCode: lesson.lessonCode || "",
       mainDisplay: step.mainDisplay || "",
-      paceDirections: step.paceDirections || step.studentDirections || state?.desc || "",
-      studentAction: step.studentAction || step.studentDirections || state?.desc || "",
-      remoteActions: step.remoteActions || step.paceDirections || step.studentDirections || state?.desc || "",
+      paceDirections: step.paceDirections || state?.paceAction || step.studentDirections || state?.desc || "",
+      studentAction: step.studentAction || state?.studentAction || step.studentDirections || state?.desc || "",
       discussionStems: step.stateId === "discussion"
         ? splitLiveFlowLines(step.discussionStems || lesson.discussionStems)
         : [],
@@ -143,12 +146,23 @@ async function hydrateFlowContract(flow: LiveClassFlowSnapshot): Promise<Hydrate
 
 async function fullyHydrateFlow(flow: LiveClassFlowSnapshot): Promise<LiveClassFlowSnapshot> {
   const contract = await hydrateFlowContract(flow);
+  const publicSteps = contract.steps.map(({ remoteActions: _privateRemoteActions, ...step }) => step);
+  const nextPublicStep = flow.sequence ? publicSteps[flow.sequence.currentIndex + 1] : null;
+  const presentation = flow.presentation
+    ? (({ remoteActions: _privateRemoteActions, ...publicPresentation }) => publicPresentation)(flow.presentation)
+    : null;
   return {
     ...flow,
     version: 2,
+    presentation,
     lesson: contract.lesson,
     sequence: flow.sequence
-      ? { ...flow.sequence, totalSteps: contract.steps.length, steps: contract.steps }
+      ? {
+          ...flow.sequence,
+          totalSteps: publicSteps.length,
+          nextDirections: nextPublicStep?.paceDirections || nextPublicStep?.description || null,
+          steps: publicSteps,
+        }
       : flow.sequence,
   };
 }
@@ -257,7 +271,6 @@ async function navigateFlow(
         boardOpen: false,
         paceDirections: step.paceDirections || step.description,
         studentAction: step.studentAction || step.description,
-        remoteActions: step.remoteActions || step.paceDirections || step.description,
         responseMode: step.responseMode || "",
         workSpaceAvailable: step.workSpaceAvailable,
         discussionStems: step.discussionStems || [],
@@ -268,9 +281,9 @@ async function navigateFlow(
         currentIndex: targetIndex,
         totalSteps: steps.length,
         nextLabel: nextStep?.label || null,
-        nextDirections: nextStep?.remoteActions || nextStep?.paceDirections || nextStep?.description || null,
+        nextDirections: nextStep?.paceDirections || nextStep?.description || null,
         advanceMode: flow.sequence.advanceMode,
-        steps,
+        steps: steps.map(({ remoteActions: _privateRemoteActions, ...publicStep }) => publicStep),
       },
       paper: step.paperTask ? { task: step.paperTask } : null,
     },
@@ -359,6 +372,9 @@ async function claimRemoteFlow(
   update = flow.updatedAt
     ? update.filter("live_flow->>updatedAt", "eq", flow.updatedAt)
     : update.is("live_flow", null);
+  update = session.remote_command?.nonce
+    ? update.filter("remote_command->>nonce", "eq", session.remote_command.nonce)
+    : update.is("remote_command", null);
   const { data, error } = await update
     .select("id,join_code,remote_command,started_at,live_flow")
     .maybeSingle();
@@ -379,16 +395,56 @@ async function persistClaimedFlow(
   }
   const finalFlow = await fullyHydrateFlow(liveFlow);
   delete finalFlow.transition;
-  const { data, error } = await db
+  let update = db
     .from("sessions")
     .update({ live_flow: finalFlow, remote_command: command })
     .eq("id", claimedSession.id)
     .eq("status", "open")
-    .filter("live_flow->>updatedAt", "eq", claimedSession.live_flow.updatedAt)
+    .filter("live_flow->>updatedAt", "eq", claimedSession.live_flow.updatedAt);
+  update = claimedSession.remote_command?.nonce
+    ? update.filter("remote_command->>nonce", "eq", claimedSession.remote_command.nonce)
+    : update.is("remote_command", null);
+  const { data, error } = await update
     .select("live_flow")
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data?.live_flow) throw new Error("The lesson changed while the Remote action was finishing. Try again.");
+  return data.live_flow as LiveClassFlowSnapshot;
+}
+
+async function persistDirectFlow(
+  db: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  session: RemoteSessionRow,
+  liveFlow: LiveClassFlowSnapshot,
+  command: TeacherRemoteCommand,
+): Promise<LiveClassFlowSnapshot> {
+  const currentFlow = session.live_flow;
+  if (!currentFlow) throw new Error("Load a lesson before using the Remote.");
+  if (currentFlow.transition) {
+    const startedAt = Date.parse(currentFlow.transition.startedAt);
+    if (Number.isFinite(startedAt) && Date.now() - startedAt < REMOTE_TRANSITION_TIMEOUT_MS) {
+      throw new Error("Another Remote action is still finishing. Try again.");
+    }
+  }
+
+  const finalFlow = await fullyHydrateFlow(liveFlow);
+  delete finalFlow.transition;
+  let update = db
+    .from("sessions")
+    .update({ live_flow: finalFlow, remote_command: command })
+    .eq("id", session.id)
+    .eq("status", "open");
+  update = currentFlow.updatedAt
+    ? update.filter("live_flow->>updatedAt", "eq", currentFlow.updatedAt)
+    : update.is("live_flow", null);
+  update = session.remote_command?.nonce
+    ? update.filter("remote_command->>nonce", "eq", session.remote_command.nonce)
+    : update.is("remote_command", null);
+  const { data, error } = await update
+    .select("live_flow")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data?.live_flow) throw new Error("The lesson changed before this Remote action arrived. Try again.");
   return data.live_flow as LiveClassFlowSnapshot;
 }
 
@@ -524,10 +580,10 @@ async function applyLazyAutomaticTransition(
 }
 
 export async function GET(request: Request) {
-  const result = await openSessions();
+  const requestedSessionId = new URL(request.url).searchParams.get("sessionId") || "";
+  const result = await openSessions(requestedSessionId);
   if (!result.db) return Response.json({ connected: false, error: result.error }, { status: 503 });
   if (result.error) return Response.json({ connected: false, error: result.error }, { status: 500 });
-  const requestedSessionId = new URL(request.url).searchParams.get("sessionId") || "";
   let requestedSession = requestedSessionId
     ? result.sessions.find((session) => session.id === requestedSessionId) ?? null
     : null;
@@ -540,9 +596,6 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const result = await openSessions();
-  if (!result.db) return Response.json({ error: result.error }, { status: 503 });
-  if (result.error) return Response.json({ error: result.error }, { status: 500 });
   let body: { action?: string; sessionId?: string };
   try {
     body = await request.json();
@@ -551,10 +604,20 @@ export async function POST(request: Request) {
   }
   const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
   if (!sessionId) return Response.json({ error: "Confirm a class session before sending a command." }, { status: 400 });
-  const session = result.sessions.find((candidate) => candidate.id === sessionId) ?? null;
-  if (!session) return Response.json({ error: "The selected Live Class Flow session is not open." }, { status: 404 });
   if (!body.action || !ACTIONS.has(body.action as TeacherRemoteAction)) {
     return Response.json({ error: "Unknown remote action." }, { status: 400 });
+  }
+  const result = await openSessions(sessionId);
+  if (!result.db) return Response.json({ error: result.error }, { status: 503 });
+  if (result.error) return Response.json({ error: result.error }, { status: 500 });
+  const session = result.sessions.find((candidate) => candidate.id === sessionId) ?? null;
+  if (!session) return Response.json({ error: "The selected Live Class Flow session is not open." }, { status: 404 });
+  if (session.remote_command && !session.remote_command.receivedAt) {
+    const issuedAt = Date.parse(session.remote_command.issuedAt);
+    const stillDelivering = Number.isFinite(issuedAt) && Date.now() - issuedAt < REMOTE_COMMAND_STALE_MS;
+    if (stillDelivering) {
+      return Response.json({ error: "The previous classroom command is still being delivered." }, { status: 409 });
+    }
   }
   const command: TeacherRemoteCommand = {
     nonce: crypto.randomUUID(),
@@ -568,7 +631,7 @@ export async function POST(request: Request) {
   let claimToken: string | null = null;
   let createdPollId: string | null = null;
   try {
-    if (action === "next" || action === "previous" || DIRECT_TIMER_ACTIONS.has(action) || DIRECT_BOARD_ACTIONS.has(action)) {
+    if (action === "next" || action === "previous") {
       const claim = await claimRemoteFlow(result.db, workingSession);
       workingSession = claim.session;
       liveFlow = workingSession.live_flow;
@@ -604,20 +667,33 @@ export async function POST(request: Request) {
   }
 
   if (handledDirectly) {
-    if (!claimToken || !liveFlow) return Response.json({ error: "The Remote action did not secure the live lesson state." }, { status: 409 });
+    if (!liveFlow) return Response.json({ error: "The Remote action did not secure the live lesson state." }, { status: 409 });
     command.receivedAt = new Date().toISOString();
     try {
-      liveFlow = await persistClaimedFlow(result.db, workingSession, claimToken, liveFlow, command);
+      liveFlow = claimToken
+        ? await persistClaimedFlow(result.db, workingSession, claimToken, liveFlow, command)
+        : await persistDirectFlow(result.db, workingSession, liveFlow, command);
     } catch (error) {
       await closePollById(result.db, createdPollId);
-      await releaseRemoteFlowClaim(result.db, workingSession, claimToken, session.live_flow);
+      if (claimToken) await releaseRemoteFlowClaim(result.db, workingSession, claimToken, session.live_flow);
       return Response.json({ error: error instanceof Error ? error.message : "The Remote action could not be saved." }, { status: 409 });
     }
-    await closeOpenPolls(result.db, session.id, liveFlow.poll?.id || null);
+    if (claimToken) await closeOpenPolls(result.db, session.id, liveFlow.poll?.id || null);
     return Response.json({ ok: true, command, liveFlow });
   }
 
-  const { error } = await result.db.from("sessions").update({ remote_command: command }).eq("id", session.id);
+  let commandUpdate = result.db
+    .from("sessions")
+    .update({ remote_command: command })
+    .eq("id", session.id)
+    .eq("status", "open");
+  commandUpdate = session.remote_command?.nonce
+    ? commandUpdate.filter("remote_command->>nonce", "eq", session.remote_command.nonce)
+    : commandUpdate.is("remote_command", null);
+  const { data, error } = await commandUpdate
+    .select("remote_command")
+    .maybeSingle();
   if (error) return Response.json({ error: error.message }, { status: 500 });
+  if (!data) return Response.json({ error: "Another classroom command arrived first. Tap again." }, { status: 409 });
   return Response.json({ ok: true, command });
 }
