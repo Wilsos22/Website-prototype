@@ -11,6 +11,15 @@ Snapshot (2026-07-16):
 Student home/join · Lesson page (Notion-fed) · Manipulative tools suite ·
 Live polls (stuck-poll trap fixed) · Class mode broadcast · Challenge games ·
 Today's boards · Control panel · Session controls · Rosters ·
+**BRUH, the live team review game** (7/16 — ran in class and ran well. Replaces
+the 46-slide Canva deck + buzzer receiver: the board itself shows who is in, who
+is locked out and who is right. Teacher tool only; students arrive by broadcast.
+`/teacher/bruh` setup with saved banks + 9 presets (270 questions, each
+double-verified), `/teacher/bruh/board` projector, `/teacher/bruh/remote` iPad,
+`/teacher/bruh/scoreboard` second screen, `/bruh` student. Server-authoritative
+round clock and grading; units are required when the answer names one. Tables are
+server-only. Deliberately does NOT feed the proficiency spine — it is about
+teamwork and effort, not assessment) ·
 **Weekly classroom display** (7/16 — separately launched projector display with
 five weekday themes and four 20-second screens: Notion-fed learning intention,
 success criteria, weekly topics with the current day highlighted, and the bell
@@ -60,15 +69,6 @@ cross-day memory note in the console woven into her context; personality tuned
 to complaining-teen, less Red Bull, shorter replies)
 
 ## In progress
-- **BRUH (live team review game)** — code shipped; waiting on Steele to run
-  `supabase/bruh.sql` in the SQL editor, then an end-to-end run in class.
-  Replaces the 46-slide Canva deck + buzzer receiver: the board itself shows who
-  is in, who is locked out and who is right. Teacher tool only (students reach it
-  by broadcast). `/teacher/bruh` setup with saved question banks + 9 preset topic
-  banks (240 questions, each double-verified), `/teacher/bruh/board` projector,
-  `/teacher/bruh/remote` iPad, `/teacher/bruh/scoreboard` second screen, `/bruh`
-  student. Server-authoritative round clock and grading. Deliberately does not
-  feed the proficiency spine.
 - **Week builder** — code shipped (warmup-pools-data.gs + warmup-week-builder.gs +
   sidebar button); waiting on Steele's Apps Script paste-in. Builds the week from
   published Notion lessons: pool-backed Q4/Q5 (verified tags), AI openers only.
@@ -89,7 +89,7 @@ Infinite Campus push · Scan/OCR checkpoint pipeline · Google student sign-in
 (CCSD OAuth question first)
 
 ## Steele's open setup items
-0. Run `supabase/bruh.sql` in the Supabase SQL editor to switch BRUH on.
+0. (done) supabase/bruh.sql has been applied - BRUH is live.
 1. Reseed mock fixtures (`seed2_part_1…4`, `iready_seed2`) → verify colored bars.
 2. Add `Misconception Plans` text property to the Lessons DB; author `tag :: move` lines.
 3. Vercel envs: `NOTION_ROSTER_DB_ID`, `CRON_SECRET`, later `EVIDENCE_INGEST_KEY`;
