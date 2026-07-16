@@ -1463,13 +1463,17 @@ export default function ControlPage() {
   }, [activeUsesDiscussionProtocol, showDiscussion]);
 
   const liveFlowSignature = useMemo(() => {
+    const activeSemantic = activeState
+      ? inferClassroomStage(activeState.id, activeItem?.title || activeState.label)
+      : null;
+    const activeIsIndependent = activeSemantic === "independent";
     const state = activeState
       ? {
           id: activeState.id,
           label: activeItem?.title || activeState.label,
           description: activeItem?.studentDirections || activeState.desc,
           color: activeState.color,
-          semantic: inferClassroomStage(activeState.id, activeItem?.title || activeState.label),
+          semantic: activeSemantic,
         }
       : null;
     const phase = activeUsesDiscussionProtocol && showDiscussion ? discussionFlow : null;
@@ -1494,14 +1498,14 @@ export default function ControlPage() {
           url: activeItem.linkUrl,
         }
       : null;
-    const structuredWork = activeState?.id === "independent"
+    const structuredWork = activeIsIndependent
       ? lessonWorkSummary(activeLessonContext)
       : "";
     const presentationBody = activeState?.id === "closeout"
       ? CLOSEOUT_DIRECTIONS
       : activeItem?.mainDisplay
-      || (activeState?.id === "independent"
-        ? structuredWork || activeItem?.paperTask || activeItem?.question || activeItem?.studentDirections || activeState.desc
+      || (activeIsIndependent
+        ? structuredWork || activeItem?.paperTask || activeItem?.question || activeItem?.studentDirections || activeState?.desc || ""
         : activeItem?.question || activeItem?.studentDirections || activeItem?.paperTask || activeState?.desc || "");
     const configuredDiscussionSupports = discussionSupportsForLesson(activeLessonContext?.code);
     const discussionStems = activeUsesDiscussionProtocol
@@ -1634,7 +1638,7 @@ export default function ControlPage() {
         }
       : null;
     const activePaperTask = activeItem?.paperTask
-      || (activeState?.id === "independent" ? activeLessonContext?.requiredPaperWork : "")
+      || (activeIsIndependent ? activeLessonContext?.requiredPaperWork : "")
       || "";
     const paper = activePaperTask ? { task: activePaperTask } : null;
 

@@ -72,6 +72,14 @@ if (contract.liveIndependentSupportItems("review", {
 }).length !== 0) {
   throw new Error("Independent Chromebook supports must stay hidden outside the Independent state.");
 }
+const legacyIndependentLesson = {
+  selectedSuccessCriterion: "I can explain my strategy.",
+  helpPath: "Use the worked example, then ask a neighbor.",
+};
+if (JSON.stringify(contract.liveIndependentSupportItems("you-do", legacyIndependentLesson))
+  !== JSON.stringify(contract.liveIndependentSupportItems("independent", legacyIndependentLesson))) {
+  throw new Error("Legacy You do states must retain the Independent Chromebook support cards.");
+}
 
 const invalidCriterionSupports = contract.liveIndependentSupportItems("independent", {
   selectedSuccessCriterion: "I can model a ratio.\nI can explain a ratio.",

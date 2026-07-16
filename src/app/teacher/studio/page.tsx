@@ -823,9 +823,11 @@ export default function LessonScreenStudioPage() {
     { text: draft?.paceDirections, source: "Pace Directions" },
     { text: selectedStep?.studentDirections, source: "Student Directions" },
   ]);
-  const mainEditorText = Object.prototype.hasOwnProperty.call(surfaceEditBuffers, "mainDisplay")
-    ? surfaceEditBuffers.mainDisplay || ""
-    : mainText.text;
+  const mainEditorText = isCloseout
+    ? CLOSEOUT_DIRECTIONS
+    : Object.prototype.hasOwnProperty.call(surfaceEditBuffers, "mainDisplay")
+      ? surfaceEditBuffers.mainDisplay || ""
+      : mainText.text;
   const configuredStoryImages = lessonStoryImages(mainEditorText);
 
   function addStoryImage(url: string, alt: string) {
@@ -856,12 +858,16 @@ export default function LessonScreenStudioPage() {
     updateSurfaceField("mainDisplay", removeLessonStoryImage(mainEditorText, url), mainText);
     setStoryImageMessage("Image removed from the private preview. Save to Notion to keep the change.");
   }
-  const paceEditorText = Object.prototype.hasOwnProperty.call(surfaceEditBuffers, "paceDirections")
-    ? surfaceEditBuffers.paceDirections || ""
-    : paceText.text;
-  const studentEditorText = Object.prototype.hasOwnProperty.call(surfaceEditBuffers, "studentAction")
-    ? surfaceEditBuffers.studentAction || ""
-    : studentText.text;
+  const paceEditorText = isCloseout
+    ? CLOSEOUT_DIRECTIONS
+    : Object.prototype.hasOwnProperty.call(surfaceEditBuffers, "paceDirections")
+      ? surfaceEditBuffers.paceDirections || ""
+      : paceText.text;
+  const studentEditorText = isCloseout
+    ? CLOSEOUT_DIRECTIONS
+    : Object.prototype.hasOwnProperty.call(surfaceEditBuffers, "studentAction")
+      ? surfaceEditBuffers.studentAction || ""
+      : studentText.text;
   const remoteEditorText = Object.prototype.hasOwnProperty.call(surfaceEditBuffers, "remoteActions")
     ? surfaceEditBuffers.remoteActions || ""
     : remoteText.text;
@@ -1185,6 +1191,7 @@ export default function LessonScreenStudioPage() {
         .studio-vocab span { border-radius:999px; background:var(--studio-accent); color:var(--studio-base); padding:5px 10px; font-size:0.64rem; font-weight:900; }
         .studio-student-screen { border:1px solid #ddd4c5; background:radial-gradient(circle at 84% 12%,color-mix(in srgb,var(--studio-accent) 11%,transparent),transparent 40%),#fbf7ee; color:var(--bdb-ink); }
         .studio-student-top { height:38px; display:flex; align-items:center; gap:8px; border-bottom:1px solid #e5dccd; background:rgba(255,255,255,0.54); padding:0 12px; font-size:0.65rem; font-weight:800; }
+        .studio-student-time { margin-left:auto; color:var(--bdb-ink); font-size:0.72rem; font-variant-numeric:tabular-nums; font-weight:900; }
         .studio-student-dot { width:9px; height:9px; border-radius:2px; background:var(--studio-accent); }
         .studio-student-body { min-height:205px; display:grid; align-content:center; justify-items:center; gap:14px; padding:22px; text-align:center; }
         .studio-student-round { margin:0; color:color-mix(in srgb,var(--studio-accent) 78%,#7a2c18); font-size:0.64rem; font-weight:900; letter-spacing:0.11em; text-transform:uppercase; }
@@ -1475,7 +1482,11 @@ export default function LessonScreenStudioPage() {
                 <div>
                   <p className="studio-preview-label">Student Chromebook - public</p>
                   <section className="studio-screen studio-student-screen" aria-label="Student Chromebook preview">
-                    <div className="studio-student-top"><span className="studio-student-dot" />{stepLabel(selectedStep)}</div>
+                    <div className="studio-student-top">
+                      <span className="studio-student-dot" />
+                      <span>{stepLabel(selectedStep)}</span>
+                      <span className="studio-student-time">{timer}</span>
+                    </div>
                     <div className="studio-student-body">
                       {publicSurfacesLinked && (isReaderSpinner || isIpadKidSpinner) ? publicSpinnerPreview(true) : (
                         <>
@@ -1501,8 +1512,14 @@ export default function LessonScreenStudioPage() {
                                 </>
                               )}
                             </div>
-                          ) : (selectedStep.stateId === "warmup" || selectedStep.stateId === "exit") && assignedResourceLink ? (
-                            <div className="studio-form-action">Open assigned Google Form</div>
+                          ) : assignedResourceLink ? (
+                            <div className={selectedStep.stateId === "warmup" || selectedStep.stateId === "exit" ? "studio-form-action" : "studio-student-support"}>
+                              {selectedStep.stateId === "warmup" || selectedStep.stateId === "exit"
+                                ? "Open assigned Google Form"
+                                : isAssignedTool
+                                  ? "Open assigned tool"
+                                  : "Open lesson resource"}
+                            </div>
                           ) : isDiscussion && stems[0] ? (
                             <div className="studio-student-support">{stems[0]}</div>
                           ) : isAssignedTool && hasAssignedToolResource ? (
@@ -1693,7 +1710,11 @@ export default function LessonScreenStudioPage() {
                 </div>
                 {storyImageMessage ? <p className="studio-story-message" role="status">{storyImageMessage}</p> : null}
               </section>
-              {mainScreenUsesStructuredLayout ? (
+              {isCloseout ? (
+                <div className="studio-source-row">
+                  <p className="studio-source-note">Closeout stays cleanup-only on every public screen.</p>
+                </div>
+              ) : mainScreenUsesStructuredLayout ? (
                 <div className="studio-source-row">
                   <p className="studio-source-note">This state uses the structured layout shown in the Main projector preview.</p>
                 </div>
@@ -1718,7 +1739,7 @@ export default function LessonScreenStudioPage() {
                   onChange={(event) => updateSurfaceField("paceDirections", event.target.value, paceText)}
                 />
               </label>
-              {paceText.source && (
+              {!isCloseout && paceText.source && (
                 <div className="studio-source-row">
                   <p className="studio-source-note">{paceText.isOverride ? "Custom screen-specific text." : `Using ${paceText.source}. Edit this box to create a screen-specific version.`}</p>
                   {paceText.isOverride && paceText.inheritedText && (
@@ -1739,7 +1760,7 @@ export default function LessonScreenStudioPage() {
                   onChange={(event) => updateSurfaceField("studentAction", event.target.value, studentText)}
                 />
               </label>
-              {studentText.source && (
+              {!isCloseout && studentText.source && (
                 <div className="studio-source-row">
                   <p className="studio-source-note">{studentText.isOverride ? "Custom screen-specific text." : `Using ${studentText.source}. Edit this box to create a screen-specific version.`}</p>
                   {studentText.isOverride && studentText.inheritedText && (

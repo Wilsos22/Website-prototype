@@ -112,7 +112,7 @@ export function liveIndependentSupportItems(
   stateId: string | undefined,
   lesson: LiveIndependentSupportLesson | null | undefined,
 ): LiveIndependentSupportItem[] {
-  if (stateId !== "independent") return [];
+  if (stateId !== "independent" && stateId !== "you-do") return [];
 
   return [
     { label: "Today's goal", body: publicSuccessCriterion(lesson?.selectedSuccessCriterion) },

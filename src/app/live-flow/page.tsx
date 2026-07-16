@@ -460,7 +460,8 @@ export default function LiveFlowPage() {
         .lf-page { min-height:100vh; display:grid; place-items:center; box-sizing:border-box; overflow:hidden; background:radial-gradient(circle at 18% 12%,color-mix(in srgb,var(--lf-accent) 12%,transparent),transparent 34%),var(--bdb-ground); color:var(--bdb-ink); font-family:var(--bdb-font); padding:clamp(20px,5vw,72px); }
         .lf-exit { position:fixed; top:16px; right:16px; z-index:5; min-height:42px; border:1px solid var(--bdb-line); border-radius:10px; background:#fff; color:var(--bdb-ink); padding:0 14px; font:inherit; font-size:0.74rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; cursor:pointer; box-shadow:var(--bdb-shadow-sm); }
         .lf-exit:hover, .lf-exit:focus-visible { border-color:var(--lf-accent); outline:none; }
-        .lf-shell { width:min(100%,960px); text-align:center; display:grid; justify-items:center; gap:clamp(20px,3.6vw,38px); }
+        .lf-shell { width:min(100%,960px); text-align:center; display:grid; justify-items:center; gap:clamp(16px,2.8vw,30px); }
+        .lf-topbar { width:100%; min-height:46px; box-sizing:border-box; display:flex; align-items:center; justify-content:space-between; gap:18px; border-bottom:1px solid var(--bdb-line); padding:0 2px 10px; }
         .lf-spinner-shell { position:relative; width:min(100%,960px); height:min(72vh,620px); overflow:hidden; border:1px solid var(--bdb-line); border-radius:16px; background:#fff; box-shadow:var(--bdb-shadow); }
         .lf-spinner-shell .classroom-spinner { background:radial-gradient(circle at 50% 42%,color-mix(in srgb,var(--lf-accent) 12%,transparent),transparent 58%),var(--bdb-ground); }
         .lf-spinner-shell .classroom-spinner-card { border-color:var(--bdb-line); border-top-color:var(--lf-accent); background:#fff; box-shadow:var(--bdb-shadow-sm); }
@@ -470,17 +471,17 @@ export default function LiveFlowPage() {
         .lf-spinner-shell .classroom-spinner-window.landed { border-color:var(--lf-accent); box-shadow:0 0 0 3px color-mix(in srgb,var(--lf-accent) 24%,transparent) inset; }
         .lf-spinner-shell .classroom-spinner-status { color:var(--bdb-ink-soft); }
         .lf-brand { margin:0; color:var(--lf-accent); font-size:0.76rem; font-weight:900; letter-spacing:0.14em; text-transform:uppercase; }
-        .lf-title { margin:0; max-width:26ch; color:var(--bdb-ink); font-size:clamp(1.8rem,4.4vw,3.4rem); line-height:1.08; font-weight:900; letter-spacing:0; }
-        .lf-subtitle { margin:0; max-width:42ch; color:var(--bdb-ink-soft); font-size:clamp(1rem,2vw,1.3rem); line-height:1.42; font-weight:700; }
+        .lf-title { margin:0; max-width:28ch; color:var(--bdb-ink); font-size:clamp(1.55rem,3.4vw,2.7rem); line-height:1.1; font-weight:900; letter-spacing:0; }
+        .lf-subtitle { margin:0; max-width:46ch; color:var(--bdb-ink-soft); font-size:clamp(0.95rem,1.8vw,1.18rem); line-height:1.42; font-weight:700; }
         .lf-share { width:min(100%,620px); display:grid; gap:6px; border:1px solid var(--bdb-line); border-left:6px solid var(--lf-accent); border-radius:12px; background:#fff; padding:16px 20px; text-align:left; box-shadow:var(--bdb-shadow-sm); }
         .lf-share span { color:var(--lf-accent); font-size:0.72rem; font-weight:900; letter-spacing:0.12em; text-transform:uppercase; }
         .lf-share strong { color:var(--bdb-ink); font-size:clamp(1.8rem,4.8vw,3.2rem); line-height:1; font-weight:950; }
         .lf-media-wrap { width:min(100%,760px); display:grid; place-items:center; }
         .lf-media { width:min(100%,720px); max-height:38vh; border:1px solid var(--bdb-line); border-radius:12px; background:#fff; object-fit:contain; box-shadow:var(--bdb-shadow); }
         .lf-media.embed { aspect-ratio:16 / 9; height:auto; }
-        .lf-timer { display:grid; justify-items:center; gap:10px; }
-        .lf-time { color:var(--bdb-ink); font-size:clamp(3.6rem,10vw,7rem); font-variant-numeric:tabular-nums; font-weight:900; line-height:0.9; letter-spacing:0; }
-        .lf-status { color:var(--lf-accent); font-size:0.78rem; font-weight:900; letter-spacing:0.13em; text-transform:uppercase; }
+        .lf-timer { display:flex; align-items:center; justify-content:flex-end; gap:10px; white-space:nowrap; }
+        .lf-time { color:var(--bdb-ink); font-size:clamp(1.15rem,2.5vw,1.65rem); font-variant-numeric:tabular-nums; font-weight:900; line-height:1; letter-spacing:0; }
+        .lf-status { color:var(--lf-accent); font-size:0.66rem; font-weight:900; letter-spacing:0.11em; text-transform:uppercase; }
         .lf-directions { width:min(100%,720px); display:grid; gap:10px; margin:0; padding:0; list-style:none; }
         .lf-direction { border:1px solid var(--bdb-line); border-left:5px solid var(--lf-accent); background:#fff; color:var(--bdb-ink); padding:clamp(13px,2vw,18px) clamp(17px,3vw,26px); text-align:left; font-size:clamp(1rem,1.8vw,1.22rem); font-weight:800; line-height:1.4; box-shadow:var(--bdb-shadow-sm); }
         .lf-supports { width:min(100%,1000px); display:grid; grid-template-columns:minmax(0,1.35fr) minmax(230px,0.75fr); gap:14px; text-align:left; }
@@ -533,6 +534,8 @@ export default function LiveFlowPage() {
         @media (max-width:760px) { .lf-supports, .lf-independent-supports { grid-template-columns:1fr; } }
         @media (max-width:600px) {
           .lf-page { padding:84px 18px 26px; }
+          .lf-topbar { gap:10px; }
+          .lf-status { display:none; }
           .lf-connection { top:68px; left:18px; right:18px; transform:none; box-sizing:border-box; text-align:center; }
         }
       `}</style>
@@ -541,7 +544,15 @@ export default function LiveFlowPage() {
       {connectionState === "reconnecting" ? <div className="lf-connection" role="status">Reconnecting. Your draft is safe.</div> : null}
 
       <section className="lf-shell" aria-live="polite">
-        <p className="lf-brand">Big Dog Math</p>
+        <header className="lf-topbar">
+          <p className="lf-brand">Big Dog Math</p>
+          {showTimer && timer ? (
+            <div className="lf-timer" aria-label="Current lesson timer">
+              <div className="lf-status">{status}</div>
+              <div className="lf-time">{formatTime(activeTimerSeconds)}</div>
+            </div>
+          ) : null}
+        </header>
         {loading ? (
           <p className="lf-loading">Connecting to class…</p>
         ) : !flow?.state ? (
@@ -597,12 +608,6 @@ export default function LiveFlowPage() {
                 ) : (
                   <img className="lf-media" src={phaseMedia.url} alt="" />
                 )}
-              </div>
-            )}
-            {showTimer && timer && (
-              <div className="lf-timer">
-                <div className="lf-time">{formatTime(activeTimerSeconds)}</div>
-                <div className="lf-status">{status}</div>
               </div>
             )}
             {!activePoll && resource && (

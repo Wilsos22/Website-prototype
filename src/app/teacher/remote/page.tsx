@@ -12,7 +12,7 @@ import {
   type TeacherRemoteAction,
   type TeacherRemoteCommand,
 } from "@/lib/liveClassFlow";
-import { usesDiscussionProtocol } from "@/lib/classroomPilot";
+import { CLASSROOM_STAGE_THEMES, classroomStageTheme, usesDiscussionProtocol } from "@/lib/classroomPilot";
 import type { LessonRoutineConfig } from "@/lib/lessonRoutineConfig";
 import { defaultPublicSurfaceModeForState } from "@/lib/lessonStepMetadata";
 import type { LessonStepData } from "@/lib/notionLessons";
@@ -80,6 +80,13 @@ interface DeckKeyProps {
   disabled: boolean;
   onSend: (button: RemoteDeckButton) => void;
   active?: boolean;
+}
+
+interface SurfaceMirrorProps {
+  label: string;
+  body: string;
+  meta: string;
+  tone: "dark" | "cream";
 }
 
 function formatTime(totalSeconds: number) {
@@ -256,6 +263,19 @@ function DeckKey({ button, busy, disabled, onSend, active = false }: DeckKeyProp
       <span className="deck-key-label">{busy === button.action ? "Sending" : button.label}</span>
       <span className="deck-key-detail">{button.detail}</span>
     </button>
+  );
+}
+
+function SurfaceMirror({ label, body, meta, tone }: SurfaceMirrorProps) {
+  return (
+    <article className={`surface-mirror ${tone}`} aria-label={`${label} preview`}>
+      <header className="surface-mirror-head">
+        <span className="surface-mirror-dot" aria-hidden="true" />
+        <strong>{label}</strong>
+        <span>{meta}</span>
+      </header>
+      <p>{body}</p>
+    </article>
   );
 }
 
@@ -728,9 +748,60 @@ export default function TeacherRemotePage() {
       pace: `/teacher/pace${query}`,
     };
   }, [session]);
+  const remoteTheme = flow?.state?.semantic
+    ? CLASSROOM_STAGE_THEMES[flow.state.semantic]
+    : classroomStageTheme(flow?.state?.id, flow?.state?.label);
   const remoteStyle = {
-    "--remote-accent": flow?.state?.color || "#d59a55",
+    "--remote-accent": flow?.state?.color || remoteTheme.accent,
+    "--remote-base": remoteTheme.projectorBase,
+    "--remote-panel": remoteTheme.projectorPanel,
   } as CSSProperties;
+  const publicSurfacesLinked = flow?.presentation?.publicSurfaceMode === "linked";
+  const isLearningCheckState = flow?.state?.id === "learning-check"
+    || flow?.state?.semantic === "learning-check";
+  const mainMirrorText = spinnerStateId === "learning-target-readers"
+    ? "Learning intention and success criterion readers"
+    : spinnerStateId === "ipad-kid"
+      ? "This week\'s iPad Kid"
+      : launchScoreboardAvailable
+        ? finalScoreShowing ? "Final score: 60 to 40" : "Halftime score: 30 to 20"
+        : isLearningCheckState
+          ? "Learning intention and one success criterion"
+          : flow?.presentation?.mainDisplay
+            || flow?.presentation?.body
+            || flow?.state?.description
+            || "Waiting for the current lesson screen";
+  const paceMirrorText = publicSurfacesLinked
+    ? mainMirrorText
+    : isLearningCheckState
+      ? flow?.poll?.stage === "results" ? "Anonymous Fist-to-Five bars" : "Answer on your Chromebook"
+      : isDiscussionState
+        ? `${discussionPhase?.label || "Discussion"}: sentence stems and vocabulary`
+        : flow?.presentation?.paceDirections
+          || flow?.state?.description
+          || "Waiting for current directions";
+  const studentMirrorText = publicSurfacesLinked
+    ? mainMirrorText
+    : flow?.poll?.stage === "responding"
+      ? flow.poll.question
+      : isDiscussionState
+        ? discussionPhase?.subtitle || flow?.presentation?.studentAction || "Use the current sentence stem"
+        : flow?.presentation?.studentAction
+          || flow?.state?.description
+          || "Waiting for the current action";
+  const currentPhaseLabel = discussionPhase
+    ? `${flow?.state?.label || "Discussion"}: ${discussionPhase.label}`
+    : flow?.state?.label || "Lesson ready";
+  const connectionNeedsAttention = status.startsWith("Disconnected")
+    || status.includes("did not confirm")
+    || status.includes("failed");
+  const connectionInFlight = Boolean(busy || pendingCommand);
+  const connectionLabel = connectionNeedsAttention
+    ? "Reconnecting"
+    : connectionInFlight
+      ? "Syncing"
+      : "Classroom connected";
+  const mirrorMeta = timer ? formatTime(timerSeconds) : "Ready";
 
   if (boardPanelOpen && session) {
     return (
@@ -776,23 +847,41 @@ export default function TeacherRemotePage() {
   return (
     <main className="remote-page" style={remoteStyle}>
       <style>{`
-        .remote-page { min-height:100dvh; box-sizing:border-box; display:grid; place-items:center; overflow:hidden; background:radial-gradient(circle at 18% 12%,color-mix(in srgb,var(--remote-accent) 12%,transparent),transparent 32%),linear-gradient(145deg,#e9e3d8,#dcd4c7); color:#28241e; font-family:var(--bdb-font); padding:12px; }
-        .remote-shell { width:min(100%,1194px); height:min(834px,calc(100dvh - 24px)); min-height:0; display:flex; flex-direction:column; overflow:hidden; border:1px solid #d5cdbf; border-radius:26px; background:#fbf6ea; box-shadow:0 24px 58px rgba(60,47,31,0.2); }
-        .remote-head { min-height:70px; flex:none; display:flex; align-items:center; gap:12px; border-bottom:1px solid #ddd5c8; background:#fff; padding:10px 18px; }
+        .remote-page { min-height:100dvh; box-sizing:border-box; display:grid; place-items:center; overflow:hidden; background:radial-gradient(circle at 18% 12%,color-mix(in srgb,var(--remote-accent) 12%,transparent),transparent 32%),linear-gradient(145deg,#e9e3d8,#dcd4c7); color:#28241e; font-family:var(--bdb-font); padding:8px; }
+        .remote-shell { width:min(100%,1194px); height:min(834px,calc(100dvh - 16px)); min-height:0; display:flex; flex-direction:column; overflow:hidden; border:1px solid #d5cdbf; border-radius:26px; background:#fbf6ea; box-shadow:0 24px 58px rgba(60,47,31,0.2); }
+        .remote-head { min-height:60px; flex:none; display:flex; align-items:center; gap:10px; border-bottom:1px solid #ddd5c8; background:#fff; padding:8px 14px; }
         .remote-brand { min-width:0; display:flex; align-items:center; gap:11px; }
-        .remote-mark { width:38px; height:38px; flex:none; display:grid; place-items:center; border-radius:11px; background:#28241e; color:#fff; font-size:0.72rem; font-weight:950; letter-spacing:0.04em; }
+        .remote-mark { width:36px; height:36px; flex:none; display:grid; place-items:center; border-radius:10px; background:#28241e; color:#fff; font-size:0.7rem; font-weight:950; letter-spacing:0.04em; }
         .remote-brand-copy { min-width:0; }
         .remote-kicker { margin:0 0 2px; color:color-mix(in srgb,var(--remote-accent) 64%,#28241e); font-size:0.62rem; font-weight:900; letter-spacing:0.13em; text-transform:uppercase; }
-        .remote-title { margin:0; color:#28241e; font-size:clamp(1.05rem,2vw,1.35rem); line-height:1; font-weight:900; }
-        .remote-subtitle { margin:4px 0 0; color:#756d62; font-size:0.72rem; font-weight:700; }
-        .remote-code { min-width:0; display:grid; grid-template-columns:auto auto; align-items:center; gap:2px 8px; margin-left:auto; border:1px solid #d8d0c3; border-radius:999px; background:#f7f1e6; padding:7px 12px; text-align:left; }
-        .remote-code small { color:#756d62; font-size:0.58rem; font-weight:900; letter-spacing:0.09em; text-transform:uppercase; }
-        .remote-code strong { grid-row:1 / 3; grid-column:2; color:#28241e; font-size:1rem; letter-spacing:0.1em; }
-        .remote-code span { color:#8a8175; font-size:0.62rem; font-weight:750; }
-        .remote-status { flex:none; margin:0; border-bottom:1px solid #e0d8cb; border-left:5px solid var(--remote-accent); background:#f7f1e6; color:#5f584f; padding:9px 18px; font-size:0.76rem; line-height:1.35; font-weight:780; }
-        .remote-workspace { flex:1; min-height:0; display:grid; grid-template-columns:minmax(286px,0.38fr) minmax(0,0.62fr); }
-        .remote-context { min-height:0; display:grid; align-content:start; gap:12px; overflow:auto; border-right:1px solid #dcd3c5; background:#f3eddf; padding:14px; scrollbar-color:#bdb3a4 transparent; }
+        .remote-title { margin:0; color:#28241e; font-size:clamp(1rem,1.7vw,1.2rem); line-height:1; font-weight:900; }
+        .remote-subtitle { margin:3px 0 0; color:#756d62; font-size:0.68rem; font-weight:700; }
+        .remote-phase-chip { min-width:0; max-width:350px; display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:8px; margin-left:auto; border:1px solid color-mix(in srgb,var(--remote-accent) 42%,#d8d0c3); border-radius:999px; background:color-mix(in srgb,var(--remote-accent) 10%,#f7f1e6); padding:7px 11px; }
+        .remote-phase-dot { width:9px; height:9px; border-radius:3px; background:var(--remote-accent); }
+        .remote-phase-chip strong { overflow:hidden; color:#28241e; text-overflow:ellipsis; white-space:nowrap; font-size:0.74rem; font-weight:900; }
+        .remote-phase-time { color:#28241e; font-size:1.05rem; font-weight:950; font-variant-numeric:tabular-nums; letter-spacing:-0.03em; }
+        .remote-phase-time.finished { color:#9d3544; }
+        .remote-phase-time.finished { color:#9d3544; }
+        .remote-connection { min-height:34px; display:grid; grid-template-columns:auto auto; align-items:center; gap:1px 7px; border-radius:999px; background:#e8f5ed; color:#255e41; padding:5px 11px; }
+        .remote-connection.attention { background:#fff0d7; color:#78531b; }
+        .remote-connection-dot { grid-row:1 / 3; width:8px; height:8px; border-radius:50%; background:#2f9e6f; }
+        .remote-connection.attention .remote-connection-dot { background:#c78b24; }
+        .remote-connection strong { font-size:0.68rem; font-weight:900; line-height:1.1; }
+        .remote-connection span { color:currentColor; opacity:0.72; font-size:0.57rem; font-weight:800; line-height:1.1; }
+        .remote-status { flex:none; min-height:30px; margin:0; border-bottom:1px solid #e0d8cb; border-left:4px solid var(--remote-accent); background:#f7f1e6; color:#5f584f; padding:6px 14px; font-size:0.7rem; line-height:1.25; font-weight:780; }
+        .remote-workspace { flex:1; min-height:0; display:grid; grid-template-columns:314px minmax(0,1fr); }
+        .remote-mirrors { min-height:0; display:grid; grid-template-rows:auto repeat(3,minmax(0,1fr)); gap:10px; overflow:hidden; border-right:1px solid #dcd3c5; background:#f3eddf; padding:14px; }
+        .mirror-rail-label { margin:0; color:#8a8175; font-size:0.62rem; font-weight:900; letter-spacing:0.12em; text-transform:uppercase; }
+        .surface-mirror { min-height:0; display:flex; flex-direction:column; overflow:hidden; border:1px solid #d8d0c3; border-radius:12px; background:#fff; box-shadow:0 7px 18px rgba(73,57,36,0.07); }
+        .surface-mirror-head { min-height:29px; flex:none; display:flex; align-items:center; gap:7px; border-bottom:1px solid #e2dacd; background:#fff; padding:5px 9px; }
+        .surface-mirror-dot { width:8px; height:8px; flex:none; border-radius:2px; background:var(--remote-accent); }
+        .surface-mirror-head strong { color:#5f584f; font-size:0.64rem; font-weight:900; }
+        .surface-mirror-head span:last-child { margin-left:auto; color:#8a8175; font-size:0.58rem; font-weight:850; font-variant-numeric:tabular-nums; }
+        .surface-mirror > p { flex:1; display:-webkit-box; align-content:center; overflow:hidden; margin:0; padding:10px 11px; color:#f5efe5; text-align:left; text-overflow:ellipsis; -webkit-box-orient:vertical; -webkit-line-clamp:4; font-size:0.76rem; line-height:1.3; font-weight:800; background:radial-gradient(circle at 20% 12%,color-mix(in srgb,var(--remote-accent) 15%,transparent),transparent 45%),var(--remote-base); }
+        .surface-mirror.cream > p { color:#28241e; background:radial-gradient(circle at 84% 14%,color-mix(in srgb,var(--remote-accent) 12%,transparent),transparent 45%),#fbf6ea; }
         .remote-controls { min-height:0; display:grid; align-content:start; gap:12px; overflow:auto; background:#fbf6ea; padding:14px 16px 18px; scrollbar-color:#bdb3a4 transparent; }
+        .remote-primary-stack { display:grid; gap:12px; }
+        .remote-secondary { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(230px,0.85fr); gap:12px; align-items:start; }
         .remote-shell > .deck-section { margin:18px; overflow:auto; }
         .session-list { display:grid; gap:10px; }
         .session-choice { width:100%; min-height:72px; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center; border:1px solid #d8d0c3; border-radius:13px; background:#fff; color:#28241e; padding:14px 16px; font:inherit; text-align:left; cursor:pointer; box-shadow:0 7px 18px rgba(73,57,36,0.07); }
@@ -800,17 +889,15 @@ export default function TeacherRemotePage() {
         .session-choice strong { display:block; color:#28241e; font-size:1rem; }
         .session-choice span { display:block; margin-top:3px; color:#756d62; font-size:0.78rem; font-weight:700; }
         .session-use { color:color-mix(in srgb,var(--remote-accent) 68%,#28241e) !important; font-size:0.72rem !important; font-weight:900 !important; letter-spacing:0.08em; text-transform:uppercase; }
-        .current-card { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:14px; border:1px solid #d8d0c3; border-top:5px solid var(--remote-accent); border-radius:15px; background:#fff; padding:14px; box-shadow:0 8px 22px rgba(73,57,36,0.08); }
+        .current-card { min-width:0; border:1px solid #d8d0c3; border-top:5px solid var(--remote-accent); border-radius:15px; background:#fff; padding:14px; box-shadow:0 8px 22px rgba(73,57,36,0.08); }
         .current-label { margin:0 0 5px; color:color-mix(in srgb,var(--remote-accent) 66%,#28241e); font-size:0.64rem; font-weight:900; letter-spacing:0.11em; text-transform:uppercase; }
-        .current-title { margin:0; color:#28241e; font-size:clamp(1.25rem,3.1vw,1.85rem); line-height:1.06; font-weight:900; }
+        .current-title { margin:0; color:#28241e; font-size:clamp(1.05rem,2.1vw,1.4rem); line-height:1.08; font-weight:900; }
         .current-notes-label { margin:11px 0 0; color:#756d62; font-size:0.62rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
-        .current-directions { display:grid; gap:6px; margin:6px 0 0; padding-left:1.1rem; color:#4f4941; font-size:0.86rem; line-height:1.38; font-weight:720; }
+        .current-directions { display:grid; gap:5px; margin:6px 0 0; padding-left:1.05rem; color:#4f4941; font-size:0.79rem; line-height:1.36; font-weight:720; }
         .current-directions li { padding-left:2px; }
         .current-directions li::marker { color:var(--remote-accent); }
         .current-next { margin:12px 0 0; color:#756d62; font-size:0.78rem; line-height:1.35; font-weight:740; }
         .current-live-note { display:inline-flex; margin:10px 0 0; border:1px solid #ddbd76; border-radius:999px; background:#fff4d7; color:#674b0f; padding:7px 10px; font-size:0.7rem; font-weight:900; }
-        .current-time { align-self:start; border:1px solid color-mix(in srgb,var(--remote-accent) 45%,#d8d0c3); border-radius:999px; background:color-mix(in srgb,var(--remote-accent) 12%,#fff); color:#28241e; padding:8px 11px; font-size:clamp(1.65rem,4.2vw,2.65rem); font-weight:900; line-height:0.9; font-variant-numeric:tabular-nums; letter-spacing:-0.04em; }
-        .current-time.finished { border-color:#d97b85; background:#fff0f1; color:#9d3544; }
         .private-plan { display:grid; gap:10px; border:1px solid #bfcfe3; border-left:5px solid #4d8df6; border-radius:15px; background:#f4f8ff; padding:13px; }
         .private-plan-head { display:grid; gap:3px; }
         .private-plan-title { margin:0; color:#355f9e; font-size:0.7rem; font-weight:900; letter-spacing:0.11em; text-transform:uppercase; }
@@ -821,7 +908,7 @@ export default function TeacherRemotePage() {
         .private-plan-body { margin:0; color:#374457; font-size:0.79rem; font-weight:720; line-height:1.38; white-space:pre-wrap; }
         .private-plan-materials { margin:0; padding-left:1.1rem; color:#445267; font-size:0.78rem; line-height:1.4; }
         .deck-section { display:grid; gap:10px; border:1px solid #d8d0c3; border-radius:15px; background:#fff; padding:13px; box-shadow:0 7px 18px rgba(73,57,36,0.06); }
-        .remote-controls > .deck-section:first-child { border-top:5px solid var(--remote-accent); }
+        .remote-primary-stack > .deck-section:first-child { border-top:5px solid var(--remote-accent); }
         .deck-section.compact-private { box-shadow:none; }
         .deck-section-head { display:flex; justify-content:space-between; align-items:baseline; gap:12px; }
         .deck-section-title { margin:0; color:#28241e; font-size:0.7rem; font-weight:900; letter-spacing:0.11em; text-transform:uppercase; }
@@ -855,36 +942,59 @@ export default function TeacherRemotePage() {
         .response-name { font-weight:900; }
         .response-answer { color:#635c53; overflow-wrap:anywhere; }
         .response-empty { margin:0; color:#756d62; font-size:0.8rem; font-weight:700; }
-        .remote-links { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+        .remote-links { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
         .remote-link, .remote-change, .remote-end { display:flex; min-height:50px; align-items:center; justify-content:center; border:1px solid #d5cdbf; border-radius:11px; background:#fff; color:#39342d; padding:0 11px; text-align:center; text-decoration:none; font:inherit; font-size:0.78rem; font-weight:850; cursor:pointer; }
         .remote-link:hover, .remote-change:hover { border-color:var(--remote-accent); }
         .remote-link:focus-visible, .remote-change:focus-visible, .remote-end:focus-visible { outline:3px solid color-mix(in srgb,var(--remote-accent) 36%,transparent); outline-offset:2px; }
         .remote-change { color:#6e5211; }
         .remote-end { flex:none; min-width:118px; margin-left:2px; border-color:#d88d94; background:#fff5f5; color:#963b49; }
         .remote-end:disabled { opacity:0.5; cursor:not-allowed; }
+        .remote-utilities { overflow:hidden; border:1px solid #d8d0c3; border-radius:15px; background:#fff; box-shadow:0 7px 18px rgba(73,57,36,0.06); }
+        .remote-utilities > summary { min-height:56px; box-sizing:border-box; display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:12px; padding:10px 13px; color:#28241e; cursor:pointer; list-style:none; font-size:0.76rem; font-weight:900; }
+        .remote-utilities > summary::-webkit-details-marker { display:none; }
+        .remote-utilities > summary::after { content:"Open"; border:1px solid #d5cdbf; border-radius:999px; background:#f7f1e6; padding:5px 9px; color:#756d62; font-size:0.62rem; letter-spacing:0.08em; text-transform:uppercase; }
+        .remote-utilities[open] > summary::after { content:"Close"; }
+        .remote-utilities > summary:focus-visible { outline:3px solid color-mix(in srgb,var(--remote-accent) 36%,transparent); outline-offset:-3px; }
+        .remote-utilities-copy { min-width:0; display:grid; gap:2px; }
+        .remote-utilities-copy strong { color:#28241e; font-size:0.72rem; letter-spacing:0.11em; text-transform:uppercase; }
+        .remote-utilities-copy span { color:#756d62; font-size:0.68rem; font-weight:720; }
+        .remote-utilities-body { display:grid; grid-template-columns:1fr 1fr; gap:12px; border-top:1px solid #e1d9cc; padding:12px; background:#f7f1e6; }
+        .remote-utilities-body .deck-section { box-shadow:none; }
+        .remote-utilities-body .remote-links { grid-column:1 / -1; }
         @media (max-width:920px) {
-          .remote-page { place-items:start center; overflow:auto; }
-          .remote-shell { height:auto; min-height:calc(100dvh - 24px); overflow:hidden; }
-          .remote-workspace { grid-template-columns:1fr; }
-          .remote-context { overflow:visible; border-right:0; border-bottom:1px solid #dcd3c5; }
-          .remote-controls { overflow:visible; }
+          .remote-page { place-items:start center; }
+          .remote-shell { height:calc(100dvh - 16px); }
+          .remote-head { min-height:58px; }
+          .remote-workspace { grid-template-columns:1fr; grid-template-rows:auto minmax(0,1fr); }
+          .remote-mirrors { grid-template-columns:repeat(3,minmax(0,1fr)); grid-template-rows:auto minmax(76px,94px); gap:8px; border-right:0; border-bottom:1px solid #dcd3c5; padding:9px 12px 10px; }
+          .mirror-rail-label { grid-column:1 / -1; }
+          .surface-mirror > p { -webkit-line-clamp:2; padding:8px 9px; font-size:0.68rem; }
+          .surface-mirror-head { min-height:25px; padding:4px 7px; }
+          .surface-mirror-head span:last-child { display:none; }
+          .remote-controls { overflow:auto; padding:12px; }
+          .remote-secondary { grid-template-columns:1fr 1fr; }
         }
         @media (max-width:680px) {
           .remote-page { padding:0; }
-          .remote-shell { min-height:100dvh; border:0; border-radius:0; }
-          .remote-head { align-items:flex-start; flex-wrap:wrap; padding:10px 12px; }
-          .remote-brand { flex:1 1 220px; }
+          .remote-shell { width:100%; height:100dvh; min-height:100dvh; border:0; border-radius:0; }
+          .remote-head { align-items:center; flex-wrap:wrap; padding:8px 10px; }
+          .remote-brand { flex:1 1 180px; }
           .remote-subtitle { display:none; }
-          .remote-code { order:3; width:100%; box-sizing:border-box; border-radius:11px; }
-          .remote-end { min-width:104px; }
-          .remote-status { padding:8px 12px; }
-          .remote-context, .remote-controls { padding:12px; }
+          .remote-phase-chip { order:4; width:100%; max-width:none; box-sizing:border-box; margin-left:0; }
+          .remote-connection { display:none; }
+          .remote-end { min-width:100px; min-height:48px; }
+          .remote-status { min-height:28px; padding:6px 10px; }
+          .remote-mirrors { grid-template-rows:auto minmax(66px,78px); padding:8px; }
+          .surface-mirror-head { min-height:22px; }
+          .surface-mirror-head strong { font-size:0.58rem; }
+          .surface-mirror > p { -webkit-line-clamp:2; padding:6px 7px; font-size:0.61rem; }
+          .remote-controls { padding:10px; }
           .deck-grid, .deck-grid.stages { grid-template-columns:repeat(2,minmax(0,1fr)); }
           .deck-grid.discussion-phases, .deck-grid.discussion-controls { grid-template-columns:repeat(2,minmax(0,1fr)); }
           .deck-grid.discussion-phases .deck-key:last-child { grid-column:1 / -1; }
           .deck-grid.stages .deck-key.timer { grid-column:1 / -1; grid-row:1; }
-          .current-card { grid-template-columns:1fr; }
-          .current-time { justify-self:start; }
+          .remote-secondary, .remote-utilities-body { grid-template-columns:1fr; }
+          .remote-utilities-body .remote-links { grid-column:auto; }
           .remote-links { grid-template-columns:1fr; }
           .deck-section-head { display:block; }
           .deck-section-note { margin-top:4px; text-align:left; }
@@ -903,10 +1013,17 @@ export default function TeacherRemotePage() {
             </div>
           </div>
           {session ? (
-            <div className="remote-code">
-              <small>Confirmed class</small>
-              <strong>{session.joinCode || "No code"}</strong>
-              <span>{formatStartedAt(session.startedAt)}</span>
+            <div className="remote-phase-chip" aria-label={`Current state: ${currentPhaseLabel}. ${mirrorMeta} remaining.`}>
+              <span className="remote-phase-dot" aria-hidden="true" />
+              <strong>{currentPhaseLabel}</strong>
+              <span className={`remote-phase-time${timerFinished ? " finished" : ""}`}>{mirrorMeta}</span>
+            </div>
+          ) : null}
+          {session ? (
+            <div className={`remote-connection${connectionNeedsAttention ? " attention" : ""}`} role="status" aria-label={`${connectionLabel}. Confirmed class ${session.joinCode || "without a join code"}.`}>
+              <span className="remote-connection-dot" aria-hidden="true" />
+              <strong>{connectionLabel}</strong>
+              <span>Class {session.joinCode || "confirmed"}</span>
             </div>
           ) : null}
           {session ? (
@@ -939,9 +1056,132 @@ export default function TeacherRemotePage() {
         ) : (
           <>
             <div className="remote-workspace">
-              <aside className="remote-context" aria-label="Private lesson context">
-                <section className="current-card" aria-label="Current classroom state">
-                  <div>
+              <aside className="remote-mirrors" aria-label="Public screen mirrors">
+                <p className="mirror-rail-label">Public screen mirrors</p>
+                <SurfaceMirror label="Main" body={mainMirrorText} meta={mirrorMeta} tone="dark" />
+                <SurfaceMirror label="Pace" body={paceMirrorText} meta={mirrorMeta} tone="dark" />
+                <SurfaceMirror label="Student" body={studentMirrorText} meta="Synced" tone="cream" />
+              </aside>
+
+              <section className="remote-controls" aria-label="Classroom controls">
+                <div className="remote-primary-stack">
+                  <section className="deck-section" aria-labelledby="stage-controls-title">
+                    <div className="deck-section-head">
+                      <h2 className="deck-section-title" id="stage-controls-title">Current state controls</h2>
+                      <p className="deck-section-note">
+                        {isDiscussionState
+                          ? "Use the routine controls below for each phase. Next state ends the discussion."
+                          : flow?.poll?.stage === "results" && flow.poll.awaitingTeacherAdvance
+                            ? "Results are showing. Tap Next state when ready."
+                            : flow?.poll?.stage === "results" && sequence?.advanceMode === "automatic"
+                              ? "Results are showing. The next stage will advance automatically."
+                              : timer?.running
+                                ? "Automatic pacing is running. Pause the timer to hold this stage."
+                                : sequence?.advanceMode === "automatic"
+                                  ? "Pacing is paused. Resume when the room is ready."
+                                  : "Automatic pacing is off. Start when the room is ready."}
+                      </p>
+                    </div>
+                    <div className="deck-grid stages">
+                      {stageControlButtons.filter((button) => !(isDiscussionState && button.action === "toggle-timer")).map((button) => (
+                        <DeckKey
+                          key={button.action}
+                          button={button}
+                          busy={busy}
+                          disabled={controlsDisabled}
+                          onSend={send}
+                        />
+                      ))}
+                      <DeckKey
+                        button={{ action: "show-board", label: "Write on screen", detail: "Open the side whiteboard", tone: "blue" }}
+                        busy={busy}
+                        disabled={controlsDisabled || !flow?.presentation}
+                        onSend={() => { void setWritingMode(true); }}
+                      />
+                    </div>
+                    {spinnerButton ? (
+                      <div className="deck-grid spinner-control">
+                        <DeckKey button={spinnerButton} busy={busy} disabled={controlsDisabled} onSend={send} />
+                      </div>
+                    ) : null}
+                    {scoreboardButton ? (
+                      <div className="deck-grid spinner-control">
+                        <DeckKey
+                          button={scoreboardButton}
+                          busy={busy}
+                          disabled={controlsDisabled || finalScoreShowing}
+                          onSend={send}
+                        />
+                      </div>
+                    ) : null}
+                    {!isDiscussionState ? (
+                      <div className="deck-grid">
+                        {TIMER_BUTTONS.map((button) => (
+                          <DeckKey key={button.action} button={button} busy={busy} disabled={controlsDisabled} onSend={send} />
+                        ))}
+                      </div>
+                    ) : null}
+                  </section>
+
+                  {isDiscussionState ? (
+                    <section className="deck-section" aria-labelledby="discussion-controls-title">
+                      <div className="deck-section-head">
+                        <h2 className="deck-section-title" id="discussion-controls-title">Discussion routine</h2>
+                        <p className="deck-section-note">
+                          {discussionPhase
+                            ? `${discussionPhase.label}. ${discussionPhase.running ? "Timer running." : discussionPhase.finished ? "Time is up." : discussionPhase.timed ? "Ready or paused." : "Use the class spinner to share."}`
+                            : "Choose Think to open the five-part routine."}
+                        </p>
+                      </div>
+                      <div className="deck-grid discussion-phases">
+                        {DISCUSSION_PHASE_BUTTONS.map((button) => (
+                          <DeckKey
+                            key={button.action}
+                            button={button}
+                            busy={busy}
+                            disabled={controlsDisabled}
+                            active={button.action === activeDiscussionAction}
+                            onSend={send}
+                          />
+                        ))}
+                      </div>
+                      <div className="deck-grid discussion-controls">
+                        {discussionControlButtons.map(({ button, disabled }) => (
+                          <DeckKey
+                            key={button.action}
+                            button={button}
+                            busy={busy}
+                            disabled={controlsDisabled || disabled}
+                            onSend={send}
+                          />
+                        ))}
+                      </div>
+                      {discussionPhase?.id === "share" ? (
+                        <>
+                          {discussionPhase.selectedSharer ? (
+                            <div className="discussion-selection"><span>Ready to share</span><strong>{discussionPhase.selectedSharer}</strong></div>
+                          ) : null}
+                          <div className="deck-grid spinner-control">
+                            <DeckKey
+                              button={{
+                                action: "discussion-pick-sharer",
+                                label: discussionPhase.selectedSharer ? "Choose another sharer" : "Choose sharer",
+                                detail: "Choose from joined students first",
+                                tone: "purple",
+                              }}
+                              busy={busy}
+                              disabled={controlsDisabled}
+                              onSend={send}
+                            />
+                          </div>
+                        </>
+                      ) : null}
+                    </section>
+                  ) : null}
+                </div>
+
+                <div className="remote-secondary" aria-label="Private lesson context">
+                  <section className="current-card" aria-label="Speaker notes">
                     <p className="current-label">{lesson?.code || "Live lesson"} · {sequence ? `Step ${sequence.currentIndex + 1} of ${sequence.totalSteps}` : "Current step"}</p>
                     <h2 className="current-title">{flow?.state?.label || "Waiting for a lesson step"}</h2>
                     <p className="current-notes-label">Speaker notes</p>
@@ -952,9 +1192,27 @@ export default function TeacherRemotePage() {
                       <p className="current-live-note">{finalScoreShowing ? "Final score 60 to 40 is showing" : "Halftime score 30 to 20 is showing"}</p>
                     ) : null}
                     <p className="current-next"><strong>Next:</strong> {sequence?.nextLabel || "Lesson closeout"}{sequence?.nextDirections ? ` - ${sequence.nextDirections}` : ""}</p>
-                  </div>
-                  <div className={`current-time ${timerFinished ? "finished" : ""}`}>{timer ? formatTime(timerSeconds) : "--:--"}</div>
-                </section>
+                  </section>
+
+                  <section className="deck-section compact-private" aria-labelledby="response-title">
+                    <div className="deck-section-head">
+                      <h2 className="deck-section-title" id="response-title">Private response data</h2>
+                      <p className="deck-section-note">{flow?.poll ? `${pollAnswers.length} response${pollAnswers.length === 1 ? "" : "s"}` : "No live response is open"}</p>
+                    </div>
+                    {flow?.poll ? (
+                      pollAnswers.length ? (
+                        <ul className="response-list">
+                          {pollAnswers.map((answer) => (
+                            <li className="response-row" key={answer.id}>
+                              <span className="response-name">{answer.display_name || "Student"}</span>
+                              <span className="response-answer">{answer.answer || "No answer"}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : <p className="response-empty">Waiting for responses.</p>
+                    ) : <p className="response-empty">Student names and individual answers stay on this private screen.</p>}
+                  </section>
+                </div>
 
                 {privateSmallGroupPlan ? (
                   <section className="private-plan" aria-labelledby="private-small-group-title">
@@ -986,167 +1244,42 @@ export default function TeacherRemotePage() {
                   </section>
                 ) : null}
 
-                <section className="deck-section compact-private" aria-labelledby="response-title">
-                  <div className="deck-section-head">
-                    <h2 className="deck-section-title" id="response-title">Private response data</h2>
-                    <p className="deck-section-note">{flow?.poll ? `${pollAnswers.length} response${pollAnswers.length === 1 ? "" : "s"}` : "No live response is open"}</p>
-                  </div>
-                  {flow?.poll ? (
-                    pollAnswers.length ? (
-                      <ul className="response-list">
-                        {pollAnswers.map((answer) => (
-                          <li className="response-row" key={answer.id}>
-                            <span className="response-name">{answer.display_name || "Student"}</span>
-                            <span className="response-answer">{answer.answer || "No answer"}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : <p className="response-empty">Waiting for responses.</p>
-                  ) : <p className="response-empty">Student names and individual answers stay on this private screen.</p>}
-                </section>
-              </aside>
+                <details className="remote-utilities">
+                  <summary>
+                    <span className="remote-utilities-copy">
+                      <strong>Utilities</strong>
+                      <span>Abbie, sound cues, projector links, and session switching</span>
+                    </span>
+                  </summary>
+                  <div className="remote-utilities-body">
+                    <section className="deck-section" aria-labelledby="abbie-controls-title">
+                      <div className="deck-section-head">
+                        <h2 className="deck-section-title" id="abbie-controls-title">Abbie AI</h2>
+                        <p className="deck-section-note">Speaks from the classroom computer.</p>
+                      </div>
+                      <div className="deck-grid">
+                        {ABBIE_REMOTE_BUTTONS.map((button) => <DeckKey key={button.action} button={button} busy={busy} disabled={controlsDisabled} onSend={send} />)}
+                      </div>
+                    </section>
 
-              <section className="remote-controls" aria-label="Classroom controls">
+                    <section className="deck-section" aria-labelledby="sound-controls-title">
+                      <div className="deck-section-head">
+                        <h2 className="deck-section-title" id="sound-controls-title">Sound effects</h2>
+                        <p className="deck-section-note">Uploaded or built-in cues.</p>
+                      </div>
+                      <div className="deck-grid">
+                        {SOUND_REMOTE_BUTTONS.map((button) => <DeckKey key={button.action} button={button} busy={busy} disabled={controlsDisabled} onSend={send} />)}
+                      </div>
+                    </section>
 
-                <section className="deck-section" aria-labelledby="stage-controls-title">
-              <div className="deck-section-head">
-                <h2 className="deck-section-title" id="stage-controls-title">Lesson stages</h2>
-                <p className="deck-section-note">
-                  {isDiscussionState
-                    ? "Use the routine controls below for each phase. Next state ends the discussion."
-                    : flow?.poll?.stage === "results" && flow.poll.awaitingTeacherAdvance
-                    ? "Results are showing. Tap Next state when ready."
-                    : flow?.poll?.stage === "results" && sequence?.advanceMode === "automatic"
-                    ? "Results are showing. The next stage will advance automatically."
-                    : timer?.running
-                      ? "Automatic pacing is running. Pause the timer to hold this stage."
-                      : sequence?.advanceMode === "automatic"
-                        ? "Pacing is paused. Resume when the room is ready."
-                        : "Automatic pacing is off. Start when the room is ready."}
-                </p>
-              </div>
-              <div className="deck-grid stages">
-                {stageControlButtons.filter((button) => !(isDiscussionState && button.action === "toggle-timer")).map((button) => (
-                  <DeckKey
-                    key={button.action}
-                    button={button}
-                    busy={busy}
-                    disabled={controlsDisabled}
-                    onSend={send}
-                  />
-                ))}
-                <DeckKey
-                  button={{ action: "show-board", label: "Write on screen", detail: "Open the side whiteboard", tone: "blue" }}
-                  busy={busy}
-                  disabled={controlsDisabled || !flow?.presentation}
-                  onSend={() => { void setWritingMode(true); }}
-                />
-              </div>
-              {spinnerButton ? (
-                <div className="deck-grid spinner-control">
-                  <DeckKey button={spinnerButton} busy={busy} disabled={controlsDisabled} onSend={send} />
-                </div>
-              ) : null}
-              {scoreboardButton ? (
-                <div className="deck-grid spinner-control">
-                  <DeckKey
-                    button={scoreboardButton}
-                    busy={busy}
-                    disabled={controlsDisabled || finalScoreShowing}
-                    onSend={send}
-                  />
-                </div>
-              ) : null}
-              {!isDiscussionState ? (
-                <div className="deck-grid">
-                  {TIMER_BUTTONS.map((button) => (
-                    <DeckKey key={button.action} button={button} busy={busy} disabled={controlsDisabled} onSend={send} />
-                  ))}
-                </div>
-              ) : null}
-            </section>
-
-            {isDiscussionState ? (
-              <section className="deck-section" aria-labelledby="discussion-controls-title">
-                <div className="deck-section-head">
-                  <h2 className="deck-section-title" id="discussion-controls-title">Discussion routine</h2>
-                  <p className="deck-section-note">
-                    {discussionPhase
-                      ? `${discussionPhase.label}. ${discussionPhase.running ? "Timer running." : discussionPhase.finished ? "Time is up." : discussionPhase.timed ? "Ready or paused." : "Use the class spinner to share."}`
-                      : "Choose Think to open the five-part routine."}
-                  </p>
-                </div>
-                <div className="deck-grid discussion-phases">
-                  {DISCUSSION_PHASE_BUTTONS.map((button) => (
-                    <DeckKey
-                      key={button.action}
-                      button={button}
-                      busy={busy}
-                      disabled={controlsDisabled}
-                      active={button.action === activeDiscussionAction}
-                      onSend={send}
-                    />
-                  ))}
-                </div>
-                <div className="deck-grid discussion-controls">
-                  {discussionControlButtons.map(({ button, disabled }) => (
-                    <DeckKey
-                      key={button.action}
-                      button={button}
-                      busy={busy}
-                      disabled={controlsDisabled || disabled}
-                      onSend={send}
-                    />
-                  ))}
-                </div>
-                {discussionPhase?.id === "share" ? (
-                  <>
-                    {discussionPhase.selectedSharer ? (
-                      <div className="discussion-selection"><span>Ready to share</span><strong>{discussionPhase.selectedSharer}</strong></div>
-                    ) : null}
-                    <div className="deck-grid spinner-control">
-                      <DeckKey
-                        button={{
-                          action: "discussion-pick-sharer",
-                          label: discussionPhase.selectedSharer ? "Choose another sharer" : "Choose sharer",
-                          detail: "Choose from joined students first",
-                          tone: "purple",
-                        }}
-                        busy={busy}
-                        disabled={controlsDisabled}
-                        onSend={send}
-                      />
+                    <div className="remote-links">
+                      <a className="remote-link" href={stageLinks.present} target="_blank" rel="noreferrer">Open main projector</a>
+                      <a className="remote-link" href={stageLinks.pace} target="_blank" rel="noreferrer">Open Pace + Support</a>
+                      <a className="remote-link" href="/teacher/audio">Manage audio library</a>
+                      <button className="remote-change" type="button" onClick={changeSession}>Change session</button>
                     </div>
-                  </>
-                ) : null}
-              </section>
-            ) : null}
-
-            <section className="deck-section" aria-labelledby="abbie-controls-title">
-              <div className="deck-section-head">
-                <h2 className="deck-section-title" id="abbie-controls-title">Abbie AI</h2>
-                <p className="deck-section-note">Abbie speaks from the classroom computer and appears on student screens.</p>
-              </div>
-              <div className="deck-grid">
-                {ABBIE_REMOTE_BUTTONS.map((button) => <DeckKey key={button.action} button={button} busy={busy} disabled={controlsDisabled} onSend={send} />)}
-              </div>
-            </section>
-
-            <section className="deck-section" aria-labelledby="sound-controls-title">
-              <div className="deck-section-head">
-                <h2 className="deck-section-title" id="sound-controls-title">Sound effects</h2>
-                <p className="deck-section-note">Uses uploaded Control sounds or the built-in tones.</p>
-              </div>
-              <div className="deck-grid">
-                {SOUND_REMOTE_BUTTONS.map((button) => <DeckKey key={button.action} button={button} busy={busy} disabled={controlsDisabled} onSend={send} />)}
-              </div>
-            </section>
-
-            <div className="remote-links">
-              <a className="remote-link" href={stageLinks.present} target="_blank" rel="noreferrer">Open main projector</a>
-              <a className="remote-link" href={stageLinks.pace} target="_blank" rel="noreferrer">Open Pace + Support</a>
-              <button className="remote-change" type="button" onClick={changeSession}>Change session</button>
-            </div>
+                  </div>
+                </details>
               </section>
             </div>
           </>

@@ -52,6 +52,7 @@ Route: `/` for arrival, then `/lesson` or the active synchronized lesson surface
 
 - Use a warm cream ground with the current semantic accent.
 - Use compact, readable Chromebook typography. Do not use projector-scale text.
+- Keep the lesson timer compact in the top frame instead of placing a large timer in the work area.
 - Emphasize exactly one current action.
 - Arrival order is class code, code accepted, assigned Google Form warm-up, automatic lesson entry after verified submission.
 - Do not show the join code after the student is in the lesson.
@@ -68,6 +69,10 @@ Route: `/teacher/remote`
 The iPad is both the private controller and the teacher's writing surface.
 
 - Require the teacher to select and confirm the intended session by lesson, join code, and start time.
+- Keep a stable header with the current phase, compact timer, connection state, and End session.
+- In landscape, keep compact Main, Pace, and Student mirrors in a 314-pixel rail. In portrait, move the same three mirrors into one compact row above the controls.
+- Put only the current state's navigation, timer, whiteboard, spinner, scoreboard, or discussion controls first. Speaker notes and private response data are secondary.
+- Keep Abbie, sound cues, projector links, the audio library, and session switching inside collapsed Utilities until the teacher asks for them.
 - Show current state, time, directions, next state, and private aggregate or student-level data as appropriate.
 - Provide Back, Next state, start or pause, add time, remove time, reset, approved sound controls, and End session.
 - Starting the lesson turns on automatic pacing. Pause holds the current state; resume continues the timed sequence.
