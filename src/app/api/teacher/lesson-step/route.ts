@@ -1,4 +1,5 @@
 import {
+  createPublishedLessonStep,
   getPublishedLessonStep,
   LessonStepApiError,
   updatePublishedLessonStep,
@@ -37,6 +38,28 @@ export async function GET(request: Request) {
   try {
     const step = await getPublishedLessonStep(params.get("lessonId"), params.get("stepId"));
     return Response.json({ step }, { headers: noStoreHeaders() });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+export async function POST(request: Request) {
+  const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+  if (!body) {
+    return Response.json(
+      { error: "Send a valid JSON lesson-step request.", code: "INVALID_JSON" },
+      { status: 400, headers: noStoreHeaders() },
+    );
+  }
+
+  try {
+    const step = await createPublishedLessonStep({
+      lessonId: body.lessonId,
+      insertAfterStepId: body.insertAfterStepId,
+      stateId: body.stateId,
+      mutationToken: body.mutationToken,
+    });
+    return Response.json({ step }, { status: 201, headers: noStoreHeaders() });
   } catch (error) {
     return errorResponse(error);
   }

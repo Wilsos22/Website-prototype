@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import LessonVisual from "@/components/LessonVisual";
-import { DEFAULT_STATES } from "@/lib/classStates";
+import { BANK_GROUPS, DEFAULT_STATES, classStateStepDefaults } from "@/lib/classStates";
 import { classroomStageTheme } from "@/lib/classroomPilot";
 import { resolveLessonVisual } from "@/lib/lessonVisuals";
 import { liveAssignedToolRoute } from "@/lib/liveFlowContract";
@@ -100,6 +100,12 @@ type EditableField = keyof StepDraft;
 type SurfaceField = "mainDisplay" | "paceDirections" | "studentAction" | "remoteActions";
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "conflict" | "error";
 type ConnectionState = "online" | "offline" | "reconnecting";
+type SequenceChangeState = "idle" | "adding" | "replacing";
+
+interface AddMutationIntent {
+  key: string;
+  token: string;
+}
 
 const STATE_BY_ID = new Map(DEFAULT_STATES.map((state) => [state.id, state]));
 const RESPONSE_MODES = [
@@ -251,10 +257,14 @@ export default function LessonScreenStudioPage() {
   const [lessonLoading, setLessonLoading] = useState(false);
   const [stepLoading, setStepLoading] = useState(false);
   const [conflictStep, setConflictStep] = useState<LessonStepRecord | null>(null);
+  const [catalogStateId, setCatalogStateId] = useState("learning-target-readers");
+  const [sequenceChangeState, setSequenceChangeState] = useState<SequenceChangeState>("idle");
   const lessonRequestRef = useRef(0);
   const stepRequestRef = useRef(0);
   const activeSelectionRef = useRef({ lessonId: "", stepId: "" });
   const lastEditedTimeRef = useRef<string | null>(null);
+  const skipStepLoadRef = useRef("");
+  const addMutationRef = useRef<AddMutationIntent | null>(null);
 
   const selectedStep = useMemo(
     () => lesson?.steps.find((step) => step.id === selectedStepId) ?? null,
@@ -411,6 +421,10 @@ export default function LessonScreenStudioPage() {
   useEffect(() => {
     const step = lesson?.steps.find((item) => item.id === selectedStepId);
     if (!step) return;
+    if (skipStepLoadRef.current === step.id) {
+      skipStepLoadRef.current = "";
+      return;
+    }
     void loadStepRevision(step);
   }, [lesson?.id, loadStepRevision, selectedStepId]);
 
@@ -592,9 +606,131 @@ export default function LessonScreenStudioPage() {
     }
   }
 
+  async function addCatalogState() {
+    const state = STATE_BY_ID.get(catalogStateId);
+    if (!lesson || !state || isDirty || sequenceChangeState !== "idle" || connectionState !== "online") return;
+    const insertAfterStepId = selectedStep?.id || null;
+    const intentKey = `${lesson.id}:${insertAfterStepId || "first"}:${state.id}`;
+    const mutationToken = addMutationRef.current?.key === intentKey
+      ? addMutationRef.current.token
+      : crypto.randomUUID();
+    addMutationRef.current = { key: intentKey, token: mutationToken };
+    setSequenceChangeState("adding");
+    setMessage(`Adding ${state.label} to the Notion lesson.`);
+    try {
+      const result = await teacherApiRequest<{ step: LessonStepRecord }>("/api/teacher/lesson-step", {
+        method: "POST",
+        body: JSON.stringify({ lessonId: lesson.id, insertAfterStepId, stateId: state.id, mutationToken }),
+      });
+      addMutationRef.current = null;
+      setLesson((current) => {
+        if (!current) return current;
+        const nextSteps = [...current.steps];
+        const anchorIndex = insertAfterStepId
+          ? nextSteps.findIndex((step) => step.id === insertAfterStepId)
+          : -1;
+        nextSteps.splice(anchorIndex + 1, 0, result.step);
+        return { ...current, steps: nextSteps };
+      });
+      void refreshSequenceAfterWrite(lesson.id, result.step);
+      const nextDraft = draftFromStep(result.step);
+      skipStepLoadRef.current = result.step.id;
+      setSelectedStepId(result.step.id);
+      setCanonicalDraft(nextDraft);
+      setDraft(nextDraft);
+      setSurfaceEditBuffers({});
+      lastEditedTimeRef.current = result.step.lastEditedTime;
+      setLastEditedTime(result.step.lastEditedTime);
+      setConflictStep(null);
+      setSaveState("saved");
+      setMessage(`Added ${state.label} to Notion. No live classroom screen was changed.`);
+    } catch (error) {
+      setSaveState("error");
+      setMessage(error instanceof Error ? error.message : "The lesson state could not be added to Notion.");
+    } finally {
+      setSequenceChangeState("idle");
+    }
+  }
+
+  async function replaceWithCatalogState() {
+    const state = STATE_BY_ID.get(catalogStateId);
+    if (
+      !lesson
+      || !selectedStep
+      || !state
+      || !lastEditedTime
+      || isDirty
+      || selectedStep.stateId === state.id
+      || sequenceChangeState !== "idle"
+      || connectionState !== "online"
+    ) return;
+    if (!window.confirm(`Replace "${stepLabel(selectedStep)}" with "${state.label}"? The old state's screen-specific content will be reset to the new state template.`)) return;
+
+    setSequenceChangeState("replacing");
+    setMessage(`Replacing this lesson state with ${state.label} in Notion.`);
+    try {
+      const result = await teacherApiRequest<{ step: LessonStepRecord }>(
+        `/api/teacher/lesson-step?lessonId=${encodeURIComponent(lesson.id)}&stepId=${encodeURIComponent(selectedStep.id)}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            lessonId: lesson.id,
+            stepId: selectedStep.id,
+            expectedLastEditedTime: lastEditedTime,
+            changes: classStateStepDefaults(state),
+          }),
+        },
+      );
+      const nextDraft = draftFromStep(result.step);
+      setLesson((current) => current ? {
+        ...current,
+        steps: current.steps.map((step) => step.id === result.step.id ? { ...step, ...result.step } : step),
+      } : current);
+      void refreshSequenceAfterWrite(lesson.id, result.step);
+      setCanonicalDraft(nextDraft);
+      setDraft(nextDraft);
+      setSurfaceEditBuffers({});
+      lastEditedTimeRef.current = result.step.lastEditedTime;
+      setLastEditedTime(result.step.lastEditedTime);
+      setConflictStep(null);
+      setSaveState("saved");
+      setMessage(`Replaced the state with ${state.label} in Notion. No live classroom screen was changed.`);
+    } catch (error) {
+      if (error instanceof TeacherApiError && error.status === 409) setSaveState("conflict");
+      else setSaveState("error");
+      setMessage(error instanceof Error ? error.message : "The lesson state could not be replaced in Notion.");
+    } finally {
+      setSequenceChangeState("idle");
+    }
+  }
+
+  async function refreshSequenceAfterWrite(lessonId: string, writtenStep: LessonStepRecord) {
+    try {
+      const result = await teacherApiRequest<{ lesson: StudioLesson | null }>(
+        `/api/teacher/lesson?id=${encodeURIComponent(lessonId)}`,
+      );
+      const refreshedLesson = result.lesson;
+      if (!refreshedLesson) return;
+      setLesson((current) => {
+        if (!current || current.id !== lessonId) return current;
+        return {
+          ...refreshedLesson,
+          steps: refreshedLesson.steps.map((step) => step.id === writtenStep.id
+            ? { ...step, ...writtenStep }
+            : step),
+        };
+      });
+    } catch {
+      // The write is already durable. A normal lesson refresh will reconcile the sidebar.
+    }
+  }
+
   const stateDefinition = selectedStep ? STATE_BY_ID.get(selectedStep.stateId) : null;
   const theme = selectedStep ? classroomStageTheme(selectedStep.stateId, selectedStep.title) : classroomStageTheme("launch");
   const isLearningCheck = theme.id === "learning-check";
+  const isReaderSpinner = selectedStep?.stateId === "learning-target-readers";
+  const isIpadKidSpinner = selectedStep?.stateId === "ipad-kid";
+  const showsLessonTargets = isReaderSpinner || isLearningCheck;
   const isDiscussion = theme.id === "discussion";
   const isIndependent = theme.id === "independent" || theme.id === "closeout";
   const timer = draft ? formatTimer(draft.duration) : "--:--";
@@ -618,6 +754,7 @@ export default function LessonScreenStudioPage() {
     { text: stateDefinition?.desc, source: "state template" },
   ]);
   const remoteText = resolveSurfaceText(draft?.remoteActions || "", [
+    { text: stateDefinition?.remoteAction, source: "private state action" },
     { text: selectedStep?.teacherNotes, source: "Teacher Notes" },
     { text: draft?.paceDirections, source: "Pace Directions" },
     { text: selectedStep?.studentDirections, source: "Student Directions" },
@@ -639,7 +776,7 @@ export default function LessonScreenStudioPage() {
   const studentBody = selectedStep && draft ? studentEditorText || "Add one current student action." : "Current student action";
   const remoteBody = selectedStep && draft ? remoteEditorText || "Add private teacher actions." : "Private teacher actions";
   const remoteSpeakerNotes = speakerNoteItems(remoteBody);
-  const mainScreenUsesStructuredLayout = isLearningCheck || (isIndependent && paperSections.length > 0);
+  const mainScreenUsesStructuredLayout = showsLessonTargets || isIpadKidSpinner || (isIndependent && paperSections.length > 0);
   const lessonVisual = selectedStep && draft ? resolveLessonVisual({
     lessonCode: lesson?.lessonCode,
     stateId: theme.id,
@@ -686,7 +823,7 @@ export default function LessonScreenStudioPage() {
   const studioResourceSurfaceWins = hasConfiguredResourceSurface
     && !studioPollSurfaceWins
     && (isAssignedTool || !draft?.mainDisplay);
-  const showLessonVisual = !studioPollSurfaceWins && !studioResourceSurfaceWins
+  const showLessonVisual = !isReaderSpinner && !isIpadKidSpinner && !studioPollSurfaceWins && !studioResourceSurfaceWins
     ? lessonVisual
     : null;
   const previewStyle = {
@@ -717,6 +854,71 @@ export default function LessonScreenStudioPage() {
               ? "Needs attention"
               : "Not changed";
   const statusClass = connectionState === "online" ? saveState : connectionState;
+  const lessonTotalMinutes = (lesson?.steps || []).reduce((sum, step) => sum + Math.max(1, step.duration || 1), 0);
+  const catalogState = STATE_BY_ID.get(catalogStateId) || null;
+  const sequenceControlsDisabled = sequenceChangeState !== "idle"
+    || saveState === "saving"
+    || isDirty
+    || connectionState !== "online"
+    || lessonLoading
+    || stepLoading;
+  const sequencePicker = lesson ? (
+    <div className="studio-sequence-picker">
+      <label className="studio-picker-label" htmlFor="studio-catalog-state">Potential state</label>
+      <select
+        id="studio-catalog-state"
+        className="studio-picker-select"
+        value={catalogStateId}
+        disabled={sequenceChangeState !== "idle"}
+        onChange={(event) => setCatalogStateId(event.target.value)}
+      >
+        {BANK_GROUPS.map((group) => (
+          <optgroup label={group.label} key={group.id}>
+            {group.stateIds.map((stateId) => {
+              const state = STATE_BY_ID.get(stateId);
+              return state ? (
+                <option value={state.id} key={state.id}>
+                  {state.label}{state.scheduleHint ? ` - ${state.scheduleHint}` : ""}
+                </option>
+              ) : null;
+            })}
+          </optgroup>
+        ))}
+      </select>
+      {catalogState && (
+        <div className="studio-picker-description">
+          <span className="studio-picker-dot" style={{ background: catalogState.color }} />
+          <span>{catalogState.minutes} min</span>
+          {catalogState.scheduleHint && <span className="studio-picker-schedule">{catalogState.scheduleHint} routine</span>}
+          <p>{catalogState.desc}</p>
+        </div>
+      )}
+      {isDirty && <p className="studio-picker-warning">Save or discard the current text changes before changing the sequence.</p>}
+      <div className="studio-picker-actions">
+        <button
+          className="studio-picker-button primary"
+          type="button"
+          disabled={sequenceControlsDisabled}
+          onClick={() => { void addCatalogState(); }}
+        >
+          {sequenceChangeState === "adding" ? "Adding" : selectedStep ? "Add after this state" : "Add first state"}
+        </button>
+        <button
+          className="studio-picker-button"
+          type="button"
+          disabled={sequenceControlsDisabled || !selectedStep || catalogStateId === selectedStep.stateId}
+          onClick={() => { void replaceWithCatalogState(); }}
+        >
+          {sequenceChangeState === "replacing"
+            ? "Replacing"
+            : selectedStep && catalogStateId === selectedStep.stateId
+              ? "Already this state"
+              : "Replace this state"}
+        </button>
+      </div>
+      <p className="studio-picker-note">Changes save to Notion. They do not change an active classroom session.</p>
+    </div>
+  ) : null;
 
   return (
     <main className="studio-page" style={previewStyle}>
@@ -748,9 +950,13 @@ export default function LessonScreenStudioPage() {
         .studio-states { min-width:0; overflow-y:auto; border-right:1px solid #dcd4c6; padding:18px; background:color-mix(in srgb,var(--bdb-ground) 96%,white); }
         .studio-kicker { margin:0 3px 17px; color:#645d54; font-size:0.64rem; font-weight:850; letter-spacing:0.14em; text-transform:uppercase; }
         .studio-kicker span { margin-left:8px; color:var(--bdb-ink); }
+        .studio-kicker .studio-total { float:right; margin-left:0; color:#645d54; letter-spacing:0.04em; }
+        .studio-kicker .studio-total.over { color:#a8431b; }
         .studio-state-list { overflow:hidden; border:1px solid #dcd4c6; border-radius:9px; background:#fbf8f2; }
+        .studio-state-shell { border-bottom:1px solid #ded7ca; }
+        .studio-state-shell:last-child { border-bottom:0; }
         .studio-state { width:100%; min-height:58px; display:grid; grid-template-columns:25px minmax(0,1fr) auto; align-items:center; gap:6px; border:0; border-bottom:1px solid #ded7ca; background:transparent; color:var(--bdb-ink); padding:8px 12px; text-align:left; cursor:pointer; }
-        .studio-state:last-child { border-bottom:0; }
+        .studio-state-shell > .studio-state { border-bottom:0; }
         .studio-state:hover { background:#f3ecdf; }
         .studio-state:focus-visible { outline:3px solid var(--studio-accent); outline-offset:-3px; }
         .studio-state:disabled { cursor:wait; opacity:0.7; }
@@ -758,6 +964,25 @@ export default function LessonScreenStudioPage() {
         .studio-state-num { font-size:0.84rem; font-weight:700; }
         .studio-state-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:0.78rem; font-weight:800; }
         .studio-state-time { font-size:0.64rem; font-weight:700; opacity:0.75; }
+        .studio-sequence-toggle { border-top:1px solid #ded7ca; background:#f5efe4; }
+        .studio-sequence-toggle.empty { border-top:0; }
+        .studio-sequence-toggle > summary { cursor:pointer; list-style:none; padding:10px 12px; color:#5f574d; font-size:0.7rem; font-weight:850; }
+        .studio-sequence-toggle > summary::-webkit-details-marker { display:none; }
+        .studio-sequence-toggle > summary::before { content:"+"; display:inline-grid; width:18px; height:18px; margin-right:7px; place-items:center; border:1px solid #bcb2a3; border-radius:5px; background:#fbf8f2; }
+        .studio-sequence-toggle[open] > summary::before { content:"-"; }
+        .studio-sequence-picker { display:grid; gap:9px; border-top:1px solid #ded7ca; padding:11px; }
+        .studio-picker-label { color:#6b6257; font-size:0.62rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
+        .studio-picker-select { width:100%; min-width:0; border:1px solid #cfc5b6; border-radius:7px; background:#fff; color:var(--bdb-ink); padding:9px 7px; font-size:0.72rem; font-weight:750; }
+        .studio-picker-description { display:grid; grid-template-columns:auto auto 1fr; align-items:center; gap:6px; color:#6d6458; font-size:0.64rem; font-weight:800; }
+        .studio-picker-description p { grid-column:1 / -1; margin:2px 0 0; font-size:0.68rem; font-weight:650; line-height:1.35; }
+        .studio-picker-dot { width:9px; height:9px; border-radius:3px; }
+        .studio-picker-schedule { justify-self:end; border-radius:999px; background:#e8d9b5; color:#68501d; padding:3px 6px; }
+        .studio-picker-warning { margin:0; color:#8f341f; font-size:0.67rem; font-weight:750; line-height:1.35; }
+        .studio-picker-actions { display:grid; grid-template-columns:1fr; gap:7px; }
+        .studio-picker-button { min-height:36px; border:1px solid #74695d; border-radius:7px; background:#fff; color:var(--bdb-ink); padding:6px 8px; font-size:0.68rem; font-weight:850; cursor:pointer; }
+        .studio-picker-button.primary { border-color:#bf3e1f; background:#d34a24; color:#fff; }
+        .studio-picker-button:disabled { cursor:not-allowed; opacity:0.45; }
+        .studio-picker-note { margin:0; color:#83796d; font-size:0.62rem; line-height:1.35; }
         .studio-preview { min-width:0; overflow-y:auto; padding:17px 18px 28px; }
         .studio-private-banner { display:flex; align-items:center; justify-content:center; min-height:31px; margin-bottom:13px; border:1px solid #d8cfbf; border-radius:8px; background:#f5efe3; color:#655e53; font-size:0.72rem; font-weight:750; }
         .studio-preview-label { margin:0 0 7px 2px; color:#655e53; font-size:0.63rem; font-weight:850; letter-spacing:0.12em; text-transform:uppercase; }
@@ -773,6 +998,12 @@ export default function LessonScreenStudioPage() {
         .studio-target { display:grid; gap:10px; max-width:760px; }
         .studio-target-intention { color:var(--studio-muted-dark); font-size:clamp(0.9rem,1.5vw,1.18rem); font-weight:700; }
         .studio-target-criterion { color:white; font-size:clamp(1.4rem,2.5vw,2.2rem); font-weight:900; }
+        .studio-spinner-preview { width:100%; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; text-align:left; }
+        .studio-spinner-preview.single { max-width:420px; grid-template-columns:1fr; }
+        .studio-spinner-reel { min-width:0; display:grid; grid-template-rows:auto minmax(70px,1fr) auto; gap:9px; border:1px solid var(--studio-line-dark); border-top:4px solid var(--studio-accent); border-radius:10px; background:color-mix(in srgb,var(--studio-panel) 90%,transparent); padding:13px; }
+        .studio-spinner-reel p { margin:0; color:var(--studio-accent); font-size:0.58rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
+        .studio-spinner-reel strong { align-self:center; color:#fff; font-size:0.88rem; line-height:1.25; }
+        .studio-spinner-reel span { overflow:hidden; border:1px solid var(--studio-line-dark); border-radius:8px; background:var(--studio-base); padding:11px; color:#fff; text-align:center; text-overflow:ellipsis; white-space:nowrap; font-size:1.05rem; font-weight:900; }
         .studio-paper-grid { width:100%; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; text-align:left; }
         .studio-paper-item { border:1px solid var(--studio-line-dark); border-left:4px solid var(--studio-accent); border-radius:8px; background:color-mix(in srgb,var(--studio-panel) 90%,transparent); padding:11px 13px; }
         .studio-paper-label { margin:0 0 5px; color:var(--studio-accent); font-size:0.58rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
@@ -913,21 +1144,37 @@ export default function LessonScreenStudioPage() {
 
       <div className="studio-grid">
         <aside className="studio-states" aria-label="Lesson states">
-          <p className="studio-kicker">Lesson states <span>{lesson?.steps.length || 0}</span></p>
+          <p className="studio-kicker">
+            Lesson states <span>{lesson?.steps.length || 0}</span>
+            {lesson ? <span className={`studio-total${lessonTotalMinutes > 55 ? " over" : ""}`}>{lessonTotalMinutes} min</span> : null}
+          </p>
           <div className="studio-state-list">
             {(lesson?.steps || []).map((step, index) => (
-              <button
-                className={`studio-state${step.id === selectedStepId ? " selected" : ""}`}
-                type="button"
-                key={step.id}
-                disabled={saveState === "saving"}
-                onClick={() => chooseStep(step.id)}
-              >
-                <span className="studio-state-num">{index + 1}</span>
-                <span className="studio-state-name">{stepLabel(step)}</span>
-                <span className="studio-state-time">{Math.max(1, step.duration || 1)} min</span>
-              </button>
+              <div className="studio-state-shell" key={step.id}>
+                <button
+                  className={`studio-state${step.id === selectedStepId ? " selected" : ""}`}
+                  type="button"
+                  disabled={saveState === "saving" || sequenceChangeState !== "idle"}
+                  onClick={() => chooseStep(step.id)}
+                >
+                  <span className="studio-state-num">{index + 1}</span>
+                  <span className="studio-state-name">{stepLabel(step)}</span>
+                  <span className="studio-state-time">{Math.max(1, step.duration || 1)} min</span>
+                </button>
+                {step.id === selectedStepId && (
+                  <details className="studio-sequence-toggle">
+                    <summary>Replace or add a state</summary>
+                    {sequencePicker}
+                  </details>
+                )}
+              </div>
             ))}
+            {lesson && lesson.steps.length === 0 && (
+              <details className="studio-sequence-toggle empty" open>
+                <summary>Add the first state</summary>
+                {sequencePicker}
+              </details>
+            )}
           </div>
         </aside>
 
@@ -945,6 +1192,27 @@ export default function LessonScreenStudioPage() {
                 </div>
                 {showLessonVisual ? (
                   <LessonVisual visual={showLessonVisual} variant="studio" accent={theme.accent} />
+                ) : isReaderSpinner ? (
+                  <div className="studio-spinner-preview">
+                    {[
+                      { label: "Learning Intention", target: lesson.learningIntention || "Add the Learning Intention in Notion." },
+                      { label: "Success Criteria", target: selectedCriterion },
+                    ].map((reel) => (
+                      <article className="studio-spinner-reel" key={reel.label}>
+                        <p>{reel.label}</p>
+                        <strong>{reel.target}</strong>
+                        <span>Student name</span>
+                      </article>
+                    ))}
+                  </div>
+                ) : isIpadKidSpinner ? (
+                  <div className="studio-spinner-preview single">
+                    <article className="studio-spinner-reel">
+                      <p>iPad Kid</p>
+                      <strong>This week&apos;s classroom role</strong>
+                      <span>Student name</span>
+                    </article>
+                  </div>
                 ) : isLearningCheck ? (
                   <div className="studio-target">
                     {lesson.learningIntention && <div className="studio-target-intention">{lesson.learningIntention}</div>}
@@ -1074,7 +1342,7 @@ export default function LessonScreenStudioPage() {
               State ID "{selectedStep.stateId || "blank"}" is not in the classroom state bank. Fix the State ID in Notion before running this lesson.
             </div>
           )}
-          {isLearningCheck && lesson && selectedCriteria.length !== 1 && (
+          {showsLessonTargets && lesson && selectedCriteria.length !== 1 && (
             <div className="studio-alert error" role="alert">
               {selectedCriteria.length === 0
                 ? "This lesson needs one Selected Success Criterion in Notion before the learning check is ready."

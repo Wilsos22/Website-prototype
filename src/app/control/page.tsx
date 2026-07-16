@@ -2133,6 +2133,7 @@ export default function ControlPage() {
     const command = teacherSession?.remote_command;
     if (!command || command.nonce === lastRemoteCommandRef.current) return;
     lastRemoteCommandRef.current = command.nonce;
+    if (command.action === "spin-spinner") return;
     if (command.receivedAt && teacherSession?.live_flow) {
       const publishedFlow = teacherSession.live_flow;
       const publishedTimer = publishedFlow.timer;

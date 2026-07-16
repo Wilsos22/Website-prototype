@@ -4,6 +4,7 @@ export type ClassroomStageId =
   | "concrete"
   | "representational"
   | "abstract"
+  | "lesson-targets"
   | "learning-check"
   | "discussion"
   | "independent"
@@ -112,6 +113,16 @@ export const CLASSROOM_STAGE_THEMES: Record<ClassroomStageId, ClassroomStageThem
     projectorMuted: "#b8c0e2",
     projectorGlow: "rgba(86, 101, 190, 0.34)",
   },
+  "lesson-targets": {
+    id: "lesson-targets",
+    label: "Learning intention and success criteria",
+    accent: "#d2a74f",
+    projectorBase: "#241329",
+    projectorPanel: "#321a38",
+    projectorLine: "#68446d",
+    projectorMuted: "#d4bdd8",
+    projectorGlow: "rgba(130, 68, 140, 0.34)",
+  },
   "learning-check": {
     id: "learning-check",
     label: "Learning check",
@@ -166,6 +177,8 @@ export const CLASSROOM_STAGE_THEMES: Record<ClassroomStageId, ClassroomStageThem
 
 export function inferClassroomStage(stateId: string | null | undefined, label = ""): ClassroomStageId {
   const value = `${stateId || ""} ${label}`.toLowerCase();
+  if (value.includes("learning-target") || value.includes("learning intention + success criteria")) return "lesson-targets";
+  if (value.includes("ipad-kid") || value.includes("ipad kid")) return "evergreen";
   if (value.includes("warm") || value.includes("review")) return "evergreen";
   if (value.includes("learning-check") || value.includes("midlesson") || value.includes("fist") || value.includes("poll")) return "learning-check";
   if (value.includes("represent")) return "representational";

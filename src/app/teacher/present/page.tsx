@@ -1,20 +1,29 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties } from "react";
+import ClassroomSpinner from "@/components/ClassroomSpinner";
 import InkBoard from "@/components/InkBoard";
 import LessonVisual from "@/components/LessonVisual";
 import { CLASSROOM_STAGE_THEMES, classroomStageTheme, discussionSupportsForLesson } from "@/lib/classroomPilot";
 import { resolveLessonVisual } from "@/lib/lessonVisuals";
 import { teacherApiRequest } from "@/lib/teacherApi";
-import { LIVE_FLOW_MODE, getStoredTeacherSessionId, liveTimerSeconds, type LiveClassFlowSnapshot } from "@/lib/liveClassFlow";
+import {
+  LIVE_FLOW_MODE,
+  getStoredTeacherSessionId,
+  liveTimerSeconds,
+  type LiveClassFlowSnapshot,
+  type TeacherRemoteCommand,
+} from "@/lib/liveClassFlow";
 
 interface StageSession {
   id: string;
+  period_id: string;
   status: string;
   join_code: string | null;
   started_at: string;
   broadcast: string | null;
   live_flow: LiveClassFlowSnapshot | null;
+  remote_command: TeacherRemoteCommand | null;
 }
 
 interface PollAnswer {
@@ -197,7 +206,9 @@ export default function ClassroomStagePage() {
   const theme = state?.semantic
     ? CLASSROOM_STAGE_THEMES[state.semantic]
     : classroomStageTheme(state?.id, state?.label);
-  const showLessonTargets = theme.id === "learning-check";
+  const showReaderSpinner = state?.id === "learning-target-readers";
+  const showIpadKidSpinner = state?.id === "ipad-kid";
+  const showLessonTargets = theme.id === "lesson-targets" || theme.id === "learning-check";
   const embeddedResourceUrl = resource?.url.includes("docs.google.com/forms")
     ? `${resource.url}${resource.url.includes("?") ? "&" : "?"}embedded=true`
     : null;
@@ -385,7 +396,7 @@ export default function ClassroomStagePage() {
         </div>
 
         <section className={`stage-work${showBoardPanel ? " board-open" : ""}`}>
-          {showLessonTargets && !resource ? (
+          {showLessonTargets && !resource && !showReaderSpinner ? (
             <aside className="stage-success" aria-label="Success criteria">
               <p className="stage-success-label">Success criteria</p>
               <p className="stage-success-text">{lesson?.selectedSuccessCriterion || lesson?.successCriteria || "Success criteria will appear when the lesson is loaded."}</p>
@@ -395,6 +406,22 @@ export default function ClassroomStagePage() {
             <div className="stage-empty"><div><h1>Connecting to the classroom</h1><p>{sessionMessage}</p></div></div>
           ) : !session || !flow || !state ? (
             <div className="stage-empty"><div><h1>Ready for class</h1><p>{sessionMessage}</p></div></div>
+          ) : showReaderSpinner ? (
+            <ClassroomSpinner
+              mode="readers"
+              sessionId={session.id}
+              periodId={session.period_id}
+              learningIntention={lesson?.learningIntention}
+              successCriterion={lesson?.selectedSuccessCriterion || lesson?.successCriteria}
+              remoteCommand={session.remote_command}
+            />
+          ) : showIpadKidSpinner ? (
+            <ClassroomSpinner
+              mode="ipad"
+              sessionId={session.id}
+              periodId={session.period_id}
+              remoteCommand={session.remote_command}
+            />
           ) : showPollPanel && poll ? (
             <div className="stage-poll">
               {showLessonTargets && lesson?.learningIntention ? <p className="stage-learning">{lesson.learningIntention}</p> : null}

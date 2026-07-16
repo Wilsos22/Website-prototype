@@ -14,6 +14,12 @@ import { ABBIE_REMOTE_BUTTONS, SOUND_REMOTE_BUTTONS, type RemoteDeckButton } fro
 import { speakerNoteItems } from "@/lib/speakerNotes";
 
 const REMOTE_SESSION_KEY = "bdm-remote-session";
+const SPINNER_STATE_IDS = ["learning-target-readers", "ipad-kid"] as const;
+type SpinnerStateId = (typeof SPINNER_STATE_IDS)[number];
+
+function isSpinnerStateId(value: unknown): value is SpinnerStateId {
+  return typeof value === "string" && SPINNER_STATE_IDS.some((stateId) => stateId === value);
+}
 
 const STAGE_BUTTONS: readonly RemoteDeckButton[] = [
   { action: "previous", label: "Back", detail: "Previous stage", tone: "neutral" },
@@ -207,8 +213,14 @@ export default function TeacherRemotePage() {
   const [session, setSession] = useState<RemoteSession | null>(null);
   const [status, setStatus] = useState("Choose the class session this Remote should control.");
   const [busy, setBusy] = useState<TeacherRemoteAction | null>(null);
-  const [pendingCommand, setPendingCommand] = useState<{ nonce: string; label: string } | null>(null);
+  const [pendingCommand, setPendingCommand] = useState<{
+    nonce: string;
+    label: string;
+    action: TeacherRemoteAction;
+    spinnerStateKey: string | null;
+  } | null>(null);
   const [lastReceipt, setLastReceipt] = useState<string | null>(null);
+  const [completedSpinnerStateKey, setCompletedSpinnerStateKey] = useState<string | null>(null);
   const [pollAnswers, setPollAnswers] = useState<PollAnswer[]>([]);
   const [privateLessonSteps, setPrivateLessonSteps] = useState<LessonStepData[]>([]);
   const [boardPanelOpen, setBoardPanelOpen] = useState(false);
@@ -267,6 +279,9 @@ export default function TeacherRemotePage() {
           setPendingCommand(null);
           setStatus(`The classroom did not confirm ${pendingCommand.label}. Tap it again.`);
         } else if (remoteCommand.receivedAt) {
+          if (pendingCommand.action === "spin-spinner" && pendingCommand.spinnerStateKey) {
+            setCompletedSpinnerStateKey(pendingCommand.spinnerStateKey);
+          }
           setLastReceipt(pendingCommand.label);
           setPendingCommand(null);
           setStatus(`Received by classroom: ${pendingCommand.label}`);
@@ -407,6 +422,12 @@ export default function TeacherRemotePage() {
   const send = useCallback(async (button: RemoteDeckButton) => {
     if (!session || busy || pendingCommand || commandInFlightRef.current) return;
     const confirmedSession = session;
+    const expectedStateId = button.action === "spin-spinner" && isSpinnerStateId(session.liveFlow?.state?.id)
+      ? session.liveFlow.state.id
+      : null;
+    const spinnerStateKey = expectedStateId
+      ? `${session.id}:${expectedStateId}:${session.liveFlow?.sequence?.currentIndex ?? -1}`
+      : null;
     refreshEpochRef.current += 1;
     commandInFlightRef.current = true;
     setBusy(button.action);
@@ -419,7 +440,14 @@ export default function TeacherRemotePage() {
       const response = await fetch("/api/control-remote", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: button.action, sessionId: session.id }),
+        body: JSON.stringify({
+          action: button.action,
+          sessionId: session.id,
+          ...(expectedStateId ? {
+            expectedStateId,
+            expectedSequenceIndex: session.liveFlow?.sequence?.currentIndex,
+          } : {}),
+        }),
       });
       const data = await response.json() as { command?: TeacherRemoteCommand; liveFlow?: LiveClassFlowSnapshot; error?: string };
       if (!response.ok || !data.command) {
@@ -427,11 +455,19 @@ export default function TeacherRemotePage() {
         setStatus(data.error || "Command failed.");
       } else if (data.command.receivedAt) {
         if (data.liveFlow) setSession((current) => current ? { ...current, liveFlow: data.liveFlow || null, remoteCommand: data.command || null } : current);
+        if (button.action === "spin-spinner" && spinnerStateKey) {
+          setCompletedSpinnerStateKey(spinnerStateKey);
+        }
         setPendingCommand(null);
         setLastReceipt(button.label);
         setStatus(`Received by classroom: ${button.label}`);
       } else {
-        setPendingCommand({ nonce: data.command.nonce, label: button.label });
+        setPendingCommand({
+          nonce: data.command.nonce,
+          label: button.label,
+          action: button.action,
+          spinnerStateKey,
+        });
         setStatus(`Sent to classroom: ${button.label}. Waiting for receipt.`);
       }
     } catch {
@@ -473,7 +509,7 @@ export default function TeacherRemotePage() {
         setStatus(`Received by classroom: ${label}`);
         setBoardPanelOpen(open);
       } else {
-        setPendingCommand({ nonce: data.command.nonce, label });
+        setPendingCommand({ nonce: data.command.nonce, label, action, spinnerStateKey: null });
         setStatus(`Sent to classroom: ${label}. Waiting for receipt.`);
         setBoardPanelOpen(open);
       }
@@ -517,6 +553,32 @@ export default function TeacherRemotePage() {
       || "The classroom computer has not published directions yet.",
   );
   const controlsDisabled = !session || Boolean(busy) || Boolean(pendingCommand);
+  const spinnerStateId = isSpinnerStateId(flow?.state?.id) ? flow.state.id : null;
+  const spinnerStateKey = session && spinnerStateId
+    ? `${session.id}:${spinnerStateId}:${sequence?.currentIndex ?? -1}`
+    : null;
+  useEffect(() => {
+    const command = session?.remoteCommand;
+    if (
+      spinnerStateKey
+      && spinnerStateId
+      && command?.action === "spin-spinner"
+      && command.stateId === spinnerStateId
+      && command.receivedAt
+    ) {
+      setCompletedSpinnerStateKey(spinnerStateKey);
+    }
+  }, [session?.remoteCommand, spinnerStateId, spinnerStateKey]);
+  const spinnerButton: RemoteDeckButton | null = spinnerStateId && spinnerStateKey
+    ? {
+        action: "spin-spinner",
+        label: completedSpinnerStateKey === spinnerStateKey ? "Re-spin" : "Spin",
+        detail: spinnerStateId === "learning-target-readers"
+          ? "Choose today's two readers"
+          : "Choose this week\'s iPad Kid",
+        tone: spinnerStateId === "learning-target-readers" ? "purple" : "green",
+      }
+    : null;
   const stageLinks = useMemo(() => {
     const query = session ? `?session=${encodeURIComponent(session.id)}` : "";
     return {
@@ -585,6 +647,7 @@ export default function TeacherRemotePage() {
         .deck-section-title { margin:0; color:#f8fafc; font-size:0.76rem; font-weight:900; letter-spacing:0.12em; text-transform:uppercase; }
         .deck-section-note { margin:0; color:#94a3b8; font-size:0.75rem; font-weight:700; text-align:right; }
         .deck-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+        .deck-grid.spinner-control { grid-template-columns:1fr; }
         .deck-key { min-height:92px; display:grid; align-content:center; gap:5px; border:1px solid #35415a; border-bottom-width:4px; border-radius:14px; background:#171d2a; color:#f8fafc; padding:12px; font:inherit; text-align:left; cursor:pointer; touch-action:manipulation; box-shadow:0 8px 18px rgba(0,0,0,0.2); }
         .deck-key:active:not(:disabled) { transform:translateY(2px); border-bottom-width:2px; }
         .deck-key:disabled { opacity:0.42; cursor:not-allowed; }
@@ -685,6 +748,11 @@ export default function TeacherRemotePage() {
               <div className="deck-grid stages">
                 {STAGE_BUTTONS.map((button) => <DeckKey key={button.action} button={button} busy={busy} disabled={controlsDisabled} onSend={send} />)}
               </div>
+              {spinnerButton ? (
+                <div className="deck-grid spinner-control">
+                  <DeckKey button={spinnerButton} busy={busy} disabled={controlsDisabled} onSend={send} />
+                </div>
+              ) : null}
               <div className="deck-grid">
                 {TIMER_BUTTONS.map((button) => <DeckKey key={button.action} button={button} busy={busy} disabled={controlsDisabled} onSend={send} />)}
               </div>

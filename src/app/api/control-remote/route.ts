@@ -23,6 +23,7 @@ export const dynamic = "force-dynamic";
 const ACTIONS = new Set<string>(TEACHER_REMOTE_ACTIONS);
 const DIRECT_TIMER_ACTIONS = new Set<TeacherRemoteAction>(["toggle-timer", "add-30", "subtract-30", "reset-timer"]);
 const DIRECT_BOARD_ACTIONS = new Set<TeacherRemoteAction>(["show-board", "hide-board"]);
+const SPINNER_STATE_IDS = new Set(["learning-target-readers", "ipad-kid"]);
 const REMOTE_TRANSITION_TIMEOUT_MS = 10_000;
 const AUTO_ADVANCE_HOLD_MS = 2_600;
 const POLL_RESULTS_HOLD_MS = 6_000;
@@ -596,7 +597,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  let body: { action?: string; sessionId?: string };
+  let body: { action?: string; sessionId?: string; expectedStateId?: string; expectedSequenceIndex?: number };
   try {
     body = await request.json();
   } catch {
@@ -612,6 +613,29 @@ export async function POST(request: Request) {
   if (result.error) return Response.json({ error: result.error }, { status: 500 });
   const session = result.sessions.find((candidate) => candidate.id === sessionId) ?? null;
   if (!session) return Response.json({ error: "The selected Live Class Flow session is not open." }, { status: 404 });
+  const action = body.action as TeacherRemoteAction;
+  let spinnerStateId: string | null = null;
+  if (action === "spin-spinner") {
+    const expectedStateId = typeof body.expectedStateId === "string" ? body.expectedStateId.trim() : "";
+    const expectedSequenceIndex = typeof body.expectedSequenceIndex === "number" && Number.isInteger(body.expectedSequenceIndex)
+      ? body.expectedSequenceIndex
+      : null;
+    const currentStateId = session.live_flow?.state?.id || "";
+    const currentSequenceIndex = session.live_flow?.sequence?.currentIndex ?? null;
+    if (!expectedStateId || !SPINNER_STATE_IDS.has(expectedStateId)) {
+      return Response.json({ error: "Open a spinner lesson state before using this control." }, { status: 409 });
+    }
+    if (
+      !SPINNER_STATE_IDS.has(currentStateId)
+      || currentStateId !== expectedStateId
+      || currentSequenceIndex === null
+      || currentSequenceIndex !== expectedSequenceIndex
+      || !session.live_flow?.updatedAt
+    ) {
+      return Response.json({ error: "The lesson moved before the spinner command arrived. Use the current state controls." }, { status: 409 });
+    }
+    spinnerStateId = currentStateId;
+  }
   if (session.remote_command && !session.remote_command.receivedAt) {
     const issuedAt = Date.parse(session.remote_command.issuedAt);
     const stillDelivering = Number.isFinite(issuedAt) && Date.now() - issuedAt < REMOTE_COMMAND_STALE_MS;
@@ -621,10 +645,10 @@ export async function POST(request: Request) {
   }
   const command: TeacherRemoteCommand = {
     nonce: crypto.randomUUID(),
-    action: body.action as TeacherRemoteAction,
+    action,
     issuedAt: new Date().toISOString(),
+    ...(spinnerStateId ? { stateId: spinnerStateId } : {}),
   };
-  const action = command.action;
   let workingSession = session;
   let liveFlow = workingSession.live_flow;
   let handledDirectly = false;
@@ -687,6 +711,9 @@ export async function POST(request: Request) {
     .update({ remote_command: command })
     .eq("id", session.id)
     .eq("status", "open");
+  if (action === "spin-spinner" && session.live_flow?.updatedAt) {
+    commandUpdate = commandUpdate.filter("live_flow->>updatedAt", "eq", session.live_flow.updatedAt);
+  }
   commandUpdate = session.remote_command?.nonce
     ? commandUpdate.filter("remote_command->>nonce", "eq", session.remote_command.nonce)
     : commandUpdate.is("remote_command", null);
@@ -694,6 +721,12 @@ export async function POST(request: Request) {
     .select("remote_command")
     .maybeSingle();
   if (error) return Response.json({ error: error.message }, { status: 500 });
-  if (!data) return Response.json({ error: "Another classroom command arrived first. Tap again." }, { status: 409 });
+  if (!data) {
+    return Response.json({
+      error: action === "spin-spinner"
+        ? "The lesson state changed before the spinner command arrived. Use the current state controls."
+        : "Another classroom command arrived first. Tap again.",
+    }, { status: 409 });
+  }
   return Response.json({ ok: true, command });
 }

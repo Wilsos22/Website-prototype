@@ -29,6 +29,7 @@ export const TEACHER_REMOTE_ACTIONS = [
   "reset-timer",
   "show-board",
   "hide-board",
+  "spin-spinner",
   "play-warning",
   "play-countdown",
   "play-times-up",
@@ -255,6 +256,7 @@ export interface TeacherRemoteCommand {
   action: TeacherRemoteAction;
   issuedAt: string;
   receivedAt?: string;
+  stateId?: string;
 }
 
 // A single thing Abbie says, broadcast to joined student screens. `nonce` is

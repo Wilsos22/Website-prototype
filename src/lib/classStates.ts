@@ -10,11 +10,15 @@ export interface ClassState {
   desc: string;
   paceAction?: string;
   studentAction?: string;
+  remoteAction?: string;
+  scheduleHint?: "Monday";
 }
 
 export const DEFAULT_STATES: ClassState[] = [
   { id: "warmup", label: "Warm-Up", minutes: 5, color: "#35785a", desc: "Open the assigned warm-up. Complete all five questions on your own.", paceAction: "Start today's warm-up.", studentAction: "Open the warm-up and begin." },
   { id: "review", label: "Review", minutes: 4, color: "#35785a", desc: "Review the answers and the problems the class missed most often.", paceAction: "Let's check the answers together.", studentAction: "Look up and check your thinking." },
+  { id: "learning-target-readers", label: "Learning Intention + Success Criteria", minutes: 1, color: "#d2a74f", desc: "Meet today's readers, then listen for the learning intention and success criterion.", paceAction: "Meet today's readers.", studentAction: "Look up and listen to today's readers.", remoteAction: "Use the main panel to spin or re-spin the two readers." },
+  { id: "ipad-kid", label: "iPad Kid Spinner", minutes: 1, color: "#6fbd91", desc: "Spin to choose this week's iPad Kid.", paceAction: "Let's choose this week's iPad Kid.", studentAction: "Look up for this week's class role.", remoteAction: "Use the main panel to spin or re-spin the iPad Kid.", scheduleHint: "Monday" },
   { id: "launch", label: "Lesson Launch", minutes: 4, color: "#a86735", desc: "Make sense of the scenario, quantities, and question.", paceAction: "Study the problem. What do you notice?", studentAction: "Write one thing you notice." },
   { id: "concrete", label: "Concrete", minutes: 5, color: "#3f7d50", desc: "Build the relationship with the assigned concrete model.", paceAction: "Build the relationship with your materials.", studentAction: "Build the model with your materials." },
   { id: "representational", label: "Representational", minutes: 5, color: "#357f7d", desc: "Connect the concrete model to a diagram or representation.", paceAction: "Show the same idea with a model.", studentAction: "Build or draw the same relationship." },
@@ -61,7 +65,13 @@ export const BANK_GROUPS = [
     id: "class",
     label: "Class States",
     hint: "Room routines and teacher-led lesson flow",
-    stateIds: ["warmup", "review", "launch", "concrete", "representational", "abstract", "learning-check", "discussion", "independent", "exit", "closeout", "i-do", "we-do", "you-do", "partner", "cleanup", "break"],
+    stateIds: ["warmup", "review", "learning-target-readers", "launch", "concrete", "representational", "abstract", "learning-check", "discussion", "independent", "exit", "closeout", "i-do", "we-do", "you-do", "partner", "cleanup", "break"],
+  },
+  {
+    id: "routines",
+    label: "Class Routines",
+    hint: "Optional routines that belong on selected lesson days",
+    stateIds: ["ipad-kid"],
   },
   {
     id: "feedback",
@@ -82,3 +92,78 @@ export const BANK_GROUPS = [
     stateIds: ["tool-whiteboard", "tool-number-line", "tool-percent-bar", "tool-fraction-bars", "tool-algebra-tiles", "tool-area-model", "tool-distributive-area", "tool-area-explorer", "tool-group-bars", "tool-coordinate-grid", "tool-multiplication", "manip"],
   },
 ] as const;
+
+export interface ClassStateStepDefaults {
+  title: string;
+  stateId: string;
+  duration: number;
+  studentDirections: string;
+  teacherNotes: string;
+  paperTask: string;
+  tool: string;
+  question: string;
+  pollKind: "" | "short-answer" | "multiple-choice" | "fist-to-five";
+  choices: string[];
+  correctAnswer: string;
+  advance: "Automatic";
+  required: true;
+  linkUrl: string;
+  mainDisplay: string;
+  paceDirections: string;
+  studentAction: string;
+  remoteActions: string;
+  discussionStems: string;
+  vocabulary: string;
+  responseMode: "None" | "Google Form" | "Paper" | "Short Answer" | "Fist to Five" | "Assigned Tool";
+  workSpaceAvailable: boolean;
+}
+
+export function classStateStepDefaults(state: ClassState): ClassStateStepDefaults {
+  const isWarmupOrExit = state.id === "warmup" || state.id === "exit";
+  const isLearningCheck = state.id === "learning-check";
+  const isQuestion = state.id === "question";
+  const isPoll = state.id === "poll";
+  const isPaper = state.id === "independent" || state.id === "you-do";
+  const isAssignedTool = state.id.startsWith("tool-")
+    && !["tool-game", "tool-exit-ticket", "tool-checkpoint"].includes(state.id);
+  const responseMode = isWarmupOrExit
+    ? "Google Form"
+    : isLearningCheck || isPoll
+      ? "Fist to Five"
+      : isQuestion
+        ? "Short Answer"
+        : isPaper
+          ? "Paper"
+          : isAssignedTool
+            ? "Assigned Tool"
+            : "None";
+
+  return {
+    title: state.label,
+    stateId: state.id,
+    duration: state.minutes,
+    studentDirections: state.desc,
+    teacherNotes: state.remoteAction || "",
+    paperTask: "",
+    tool: isAssignedTool ? state.label : "",
+    question: isLearningCheck || isPoll
+      ? "How well do you understand this right now?"
+      : isQuestion
+        ? state.desc
+        : "",
+    pollKind: isLearningCheck || isPoll ? "fist-to-five" : isQuestion ? "short-answer" : "",
+    choices: isLearningCheck || isPoll ? ["0", "1", "2", "3", "4", "5"] : [],
+    correctAnswer: "",
+    advance: "Automatic",
+    required: true,
+    linkUrl: "",
+    mainDisplay: "",
+    paceDirections: "",
+    studentAction: "",
+    remoteActions: state.remoteAction || "",
+    discussionStems: "",
+    vocabulary: "",
+    responseMode,
+    workSpaceAvailable: false,
+  };
+}
