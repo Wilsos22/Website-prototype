@@ -20,15 +20,26 @@ import type { BruhState, BruhTeamState } from "@/lib/bruhState";
 
 const POLL_MS = 1000;
 const DIGITS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
-// Array order is DISPLAY order (sign, hundreds, tens, ones) so the readout spells
-// the number. Stop order is driven purely by dur, which is why the hundreds reel
-// sits second from the left but is the last one still moving.
+// Array order is DISPLAY order (sign, hundreds, tens, ones) so the readout
+// spells the number. Stop order is driven purely by dur:
+//
+//   ones 1.9s -> tens 2.7s -> hundreds 4.3s -> sign 6.6s
+//
+// The digits land first, so the room learns the SIZE of the card and then has
+// to sweat whether it is a plus or a minus. The housing flashes green/red the
+// whole time and decelerates like a picker wheel onto the real colour exactly
+// as the sign reel stops.
+const SIGN_MS = 6600;
 const REELS = [
-  { key: "sign" as const, symbols: ["+", "−"], loops: 22, dur: 1100 },
+  { key: "sign" as const, symbols: ["+", "−"], loops: 90, dur: SIGN_MS },
   { key: "hun" as const, symbols: DIGITS, loops: 24, dur: 4300 },
   { key: "ten" as const, symbols: DIGITS, loops: 15, dur: 2700 },
   { key: "one" as const, symbols: DIGITS, loops: 11, dur: 1900 },
 ];
+// A draw that finished this long ago is never re-animated - it is just shown
+// landed. Covers a board reload mid-reward, and a backgrounded tab whose
+// timers were throttled.
+const DRAW_SETTLED_MS = SIGN_MS + 4000;
 
 function fmtClock(s: number): string {
   if (s < 0) s = 0;
@@ -49,6 +60,7 @@ export default function BruhBoardPage() {
   const [revealOrder, setRevealOrder] = useState<string[]>([]);
   const [spotHot, setSpotHot] = useState<string | null>(null);
   const [drawing, setDrawing] = useState(false);
+  const [flash, setFlash] = useState<"gain" | "loss" | null>(null);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const clearTimers = () => { timersRef.current.forEach(clearTimeout); timersRef.current = []; };
@@ -163,19 +175,58 @@ export default function BruhBoardPage() {
   // ---- the draw -----------------------------------------------------------
   const reward = (round?.reward ?? null) as (BruhReward & { appliedAt?: string }) | null;
   const targets = reward ? reelTargets(reward) : null;
+  const finalKind: "gain" | "loss" | null = targets ? (targets.sign === 0 ? "gain" : "loss") : null;
+  // Identity of THIS draw. The reward object is re-created by every poll, so
+  // depending on the object itself re-ran the animation once a second and the
+  // "Back to board" button never appeared.
+  const drawKey = reward && round ? `${round.id}:${reward.key}:${reward.appliedAt ?? ""}` : "";
 
   useEffect(() => {
-    if (!reward) return;
+    if (!drawKey || !finalKind) { setDrawing(false); setFlash(null); return; }
+
+    // A draw that already settled (board reloaded, or the tab was backgrounded
+    // and its timers throttled) is shown landed rather than replayed.
+    const age = reward?.appliedAt ? serverNow() - Date.parse(reward.appliedAt) : 0;
+    if (age > DRAW_SETTLED_MS) { setDrawing(false); setFlash(finalKind); return; }
+
     setDrawing(true);
+    setFlash("gain");
     soundRef.current?.play("spin", { loop: true });
-    const last = Math.max(...REELS.map((r) => r.dur));
-    const t = setTimeout(() => {
+
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    // Picker-wheel flash: alternate green/red, stretching the interval as it
+    // goes, landing on the true colour as the sign reel stops.
+    let t = 0;
+    const step = () => {
+      if (t >= SIGN_MS) {
+        setFlash(finalKind);
+        setDrawing(false);
+        soundRef.current?.stop("spin");
+        soundRef.current?.play(reward?.sound ?? (finalKind === "gain" ? "gain" : "loss"));
+        return;
+      }
+      setFlash((prev) => (prev === "gain" ? "loss" : "gain"));
+      const d = 55 + Math.pow(t / SIGN_MS, 2.6) * 700;
+      t += d;
+      timers.push(setTimeout(step, d));
+    };
+    step();
+
+    // Belt and braces: whatever the animation does, the draw is landed by now,
+    // so the teacher always gets a way back to the board.
+    timers.push(setTimeout(() => {
+      setFlash(finalKind);
       setDrawing(false);
       soundRef.current?.stop("spin");
-      soundRef.current?.play(reward.sound ?? (reward.kind === "gain" ? "gain" : "loss"));
-    }, last + 120);
-    return () => clearTimeout(t);
-  }, [reward?.appliedAt, reward]);
+    }, SIGN_MS + 1500));
+
+    return () => { timers.forEach(clearTimeout); soundRef.current?.stop("spin"); };
+    // serverNow/reward are read once at the start of a draw; drawKey is the
+    // only thing that should retrigger it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawKey, finalKind]);
+
+  const slotLanded = !!reward && !drawing;
 
   const B = round ? bigQ(round.prompt) : null;
   const leader = useMemo(() => [...teams].sort((a, b) => b.score - a.score)[0] ?? null, [teams]);
@@ -200,6 +251,13 @@ export default function BruhBoardPage() {
           <span className="br-dot" />
           {phase === "answering" ? "Answers open" : phase === "reveal" ? "Reveal" : phase === "explain" ? "On the board" : phase === "reward" ? "Reward" : "Board"}
         </div>
+        {/* Always available. Whatever the round is doing, one tap returns to the
+            board - the teacher is never stranded mid-animation. */}
+        {round && phase !== "done" && (
+          <button className="br-link" onClick={() => void act({ action: "end-round", roundId: round.id })}>
+            Back to board
+          </button>
+        )}
         <a className="br-link" href={`/teacher/bruh/scoreboard?game=${encodeURIComponent(gameId)}`}>Scoreboard</a>
       </header>
 
@@ -373,12 +431,17 @@ export default function BruhBoardPage() {
         {phase === "reward" && round && (
           <div className="br-reward">
             <p className="br-eyebrow">{teams.find((t) => t.id === round.picked_team_id)?.name} &mdash; pull it</p>
-            <div className="br-slot" data-kind={!reward ? "cycle" : targets?.sign === 0 ? "gain" : "loss"} data-spin={drawing}>
+            <div
+              className="br-slot"
+              data-kind={!reward ? "cycle" : (flash ?? "cycle")}
+              data-landed={slotLanded}
+              data-spin={drawing}
+            >
               {REELS.map((r) => (
-                <Reel key={r.key} plan={r} target={targets ? targets[r.key] : null} spinning={drawing} />
+                <Reel key={r.key} plan={r} target={targets ? targets[r.key] : null} drawKey={drawKey} />
               ))}
             </div>
-            {reward && !drawing && (
+            {reward && slotLanded && (
               <div className="br-rule" data-kind={reward.kind}>
                 <b>{reward.title}</b><span>{reward.desc}</span>
               </div>
@@ -386,7 +449,7 @@ export default function BruhBoardPage() {
             <div className="br-row">
               {!reward ? (
                 <button className="br-btn primary lg" onClick={() => void act({ action: "draw", roundId: round.id })}>Pull</button>
-              ) : !drawing ? (
+              ) : slotLanded ? (
                 <button className="br-btn primary lg" onClick={() => void act({ action: "end-round", roundId: round.id })}>Back to board</button>
               ) : null}
             </div>
@@ -405,27 +468,34 @@ export default function BruhBoardPage() {
 
 // ---------------------------------------------------------------------------
 
-function Reel({ plan, target, spinning }: {
+/** One reel. Locks itself when its own duration elapses, not when the whole
+ *  draw finishes, so the digits settle one at a time. */
+function Reel({ plan, target, drawKey }: {
   plan: (typeof REELS)[number];
   target: number | null;
-  spinning: boolean;
+  drawKey: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [locked, setLocked] = useState(false);
+
   useEffect(() => {
     const el = ref.current;
-    if (!el || target === null) return;
+    if (!el || target === null) { setLocked(false); return; }
     const total = plan.loops * plan.symbols.length + target;
     el.style.transition = "none";
     el.style.transform = "translateY(0)";
     void el.offsetHeight;
     el.style.transition = `transform ${plan.dur}ms cubic-bezier(.17,.67,.2,1)`;
     el.style.transform = `translateY(-${total}em)`;
-  }, [target, plan]);
+    setLocked(false);
+    const t = setTimeout(() => setLocked(true), plan.dur);
+    return () => clearTimeout(t);
+  }, [target, plan, drawKey]);
 
   const total = target === null ? plan.symbols.length : plan.loops * plan.symbols.length + target;
   const cells = Array.from({ length: total + 1 }, (_, i) => plan.symbols[i % plan.symbols.length]);
   return (
-    <div className="br-reel" data-reel={plan.key} data-locked={target !== null && !spinning}>
+    <div className="br-reel" data-reel={plan.key} data-locked={locked}>
       <div className="br-strip" ref={ref}>
         {cells.map((c, i) => <span key={i}>{c}</span>)}
       </div>
@@ -472,7 +542,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         .br-dot { width:6px; height:6px; border-radius:50%; background:currentColor; }
         .br-air[data-live="true"] .br-dot { animation:brPulse 1.1s ease-in-out infinite; }
         @keyframes brPulse { 50% { opacity:0.25; } }
-        .br-link { font-size:10px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:#a9b6bd; text-decoration:none; border:1px solid #22313a; border-radius:7px; padding:8px 13px; }
+        .br-link { font-family:inherit; cursor:pointer; font-size:10px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:#a9b6bd; text-decoration:none; border:1px solid #22313a; border-radius:7px; padding:8px 13px; }
         .br-link:hover { color:#f4efe4; border-color:#64757e; }
 
         .br-view { position:relative; overflow:hidden; display:flex; flex-direction:column; min-height:0; }
@@ -571,14 +641,22 @@ function Shell({ children }: { children: React.ReactNode }) {
         @keyframes brChip { from { opacity:0; transform:translateY(12px) scale(.85); } }
 
         .br-reward { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:26px; padding:30px; min-height:0; }
-        .br-slot { display:flex; align-items:center; gap:6px; padding:24px 34px; border-radius:14px; background:#0b1014; border:2px solid #22313a; box-shadow:inset 0 6px 34px rgba(0,0,0,.6); font-size:clamp(56px,9.5vw,150px); font-weight:900; line-height:1; letter-spacing:-0.04em; font-variant-numeric:tabular-nums; transition:border-color .35s, box-shadow .35s; }
+        /* The housing flashes while the reels turn (data-kind toggles), and only
+           commits to a colour once data-landed goes true. The digits stay cream
+           throughout, so nothing is "highlighted" before the sign lands. */
+        .br-slot { display:flex; align-items:center; gap:6px; padding:24px 34px; border-radius:14px; background:#0b1014; border:2px solid #22313a; box-shadow:inset 0 6px 34px rgba(0,0,0,.6); font-size:clamp(56px,9.5vw,150px); font-weight:900; line-height:1; letter-spacing:-0.04em; font-variant-numeric:tabular-nums; transition:border-color .09s linear, box-shadow .09s linear; }
         .br-slot[data-kind="gain"] { border-color:#2f9e6f; box-shadow:inset 0 6px 34px rgba(0,0,0,.6), 0 0 44px rgba(47,158,111,.3); }
         .br-slot[data-kind="loss"] { border-color:#f95335; box-shadow:inset 0 6px 34px rgba(0,0,0,.6), 0 0 44px rgba(249,83,53,.3); }
+        /* Once it lands the colour settles rather than snaps, and glows harder. */
+        .br-slot[data-landed="true"] { transition:border-color .4s, box-shadow .4s; }
+        .br-slot[data-landed="true"][data-kind="gain"] { box-shadow:inset 0 6px 34px rgba(0,0,0,.6), 0 0 66px rgba(47,158,111,.45); animation:brLand .5s cubic-bezier(.2,1.4,.3,1); }
+        .br-slot[data-landed="true"][data-kind="loss"] { box-shadow:inset 0 6px 34px rgba(0,0,0,.6), 0 0 66px rgba(249,83,53,.45); animation:brLand .5s cubic-bezier(.2,1.4,.3,1); }
+        @keyframes brLand { 35% { transform:scale(1.045); } }
         .br-reel { height:1em; width:.66em; overflow:hidden; position:relative; color:#64757e; transition:color .25s; }
         .br-reel[data-reel="sign"] { width:.62em; }
         .br-reel[data-locked="true"] { color:#f4efe4; }
-        .br-slot[data-kind="gain"] .br-reel[data-locked="true"] { color:#4fd396; }
-        .br-slot[data-kind="loss"] .br-reel[data-locked="true"] { color:#f95335; }
+        .br-slot[data-landed="true"][data-kind="gain"] .br-reel[data-locked="true"] { color:#4fd396; }
+        .br-slot[data-landed="true"][data-kind="loss"] .br-reel[data-locked="true"] { color:#f95335; }
         .br-slot[data-spin="true"] .br-reel:not([data-locked="true"])::after { content:""; position:absolute; inset:0; background:linear-gradient(#0b1014, transparent 22%, transparent 78%, #0b1014); pointer-events:none; }
         .br-strip { display:flex; flex-direction:column; will-change:transform; }
         .br-strip > span { display:block; height:1em; line-height:1em; text-align:center; }
