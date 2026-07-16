@@ -47,12 +47,21 @@ export default function RightNowPage() {
 
   // Today's lesson plans from Notion ("Misconception Plans" property).
   useEffect(() => {
-    fetch("/api/today", { cache: "no-store" }).then((r) => r.json()).then((d) => {
-      if (d?.lesson?.misconceptionPlans) {
-        setPlans(parsePlans(d.lesson.misconceptionPlans));
-        setLessonTitle(d.lesson.title || "");
+    void (async () => {
+      try {
+        const publicResponse = await fetch("/api/today", { cache: "no-store" });
+        const current = await publicResponse.json() as { lesson?: { id?: string } | null };
+        if (!publicResponse.ok || !current.lesson?.id) return;
+        const { lesson } = await teacherApiRequest<{
+          lesson: { title?: string; misconceptionPlans?: string };
+        }>(`/api/teacher/lesson?id=${encodeURIComponent(current.lesson.id)}`);
+        if (!lesson.misconceptionPlans) return;
+        setPlans(parsePlans(lesson.misconceptionPlans));
+        setLessonTitle(lesson.title || "");
+      } catch {
+        // Prepared plans are optional; live grouping still works without them.
       }
-    }).catch(() => { /* plans are optional */ });
+    })();
   }, []);
 
   useEffect(() => {

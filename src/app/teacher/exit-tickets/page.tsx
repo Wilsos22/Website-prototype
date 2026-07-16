@@ -83,12 +83,7 @@ export default function TeacherExitTicketsPage() {
 
     const loadSchedule = async () => {
       try {
-        const response = await fetch("/api/lessons", { cache: "no-store" });
-        const result = await response.json().catch(() => ({})) as {
-          lessons?: PublishedLessonSummary[];
-          error?: string;
-        };
-        if (!response.ok) throw new Error(result.error || "Published lessons could not be loaded.");
+        const result = await teacherApiRequest<{ lessons: PublishedLessonSummary[] }>("/api/teacher/lessons");
         const linked = (result.lessons || []).flatMap((lesson) => {
           const exitTicketLink = safeHttpUrl(lesson.exitTicketLink || "");
           return exitTicketLink ? [{ ...lesson, exitTicketLink }] : [];

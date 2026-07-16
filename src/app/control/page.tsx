@@ -1771,14 +1771,17 @@ export default function ControlPage() {
     setTodayMsg("Loading today's lesson from Notion…");
     try {
       const res = await fetch("/api/today", { cache: "no-store" });
-      const data = (await res.json()) as { lesson?: TodayLesson | null; error?: string };
+      const data = (await res.json()) as { lesson?: Pick<TodayLesson, "id"> | null; error?: string };
       if (!res.ok || data.error) throw new Error(data.error || "Couldn't load today's lesson.");
       if (!data.lesson) {
         setTodayMsg("No lesson is published in Notion for today.");
         window.setTimeout(() => setTodayMsg(null), 6000);
         return;
       }
-      applyNotionLesson(data.lesson);
+      const teacherLesson = await teacherApiRequest<{ lesson: TodayLesson }>(
+        `/api/teacher/lesson?id=${encodeURIComponent(data.lesson.id)}`,
+      );
+      applyNotionLesson(teacherLesson.lesson);
     } catch (error) {
       setTodayMsg(error instanceof Error ? error.message : "Couldn't reach Notion — check the connection and try again.");
       window.setTimeout(() => setTodayMsg(null), 6000);

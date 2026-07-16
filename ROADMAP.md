@@ -5,12 +5,16 @@
 `56ee55bb-c067-4613-8f3b-6d5810a82ced`). Steele checks things off there; agents
 should update BOTH that database and this mirror when a feature ships.
 
-Snapshot (2026-07-04):
+Snapshot (2026-07-15):
 
-## Live ✅
+## Live
 Student home/join · Lesson page (Notion-fed) · Manipulative tools suite ·
 Live polls (stuck-poll trap fixed) · Class mode broadcast · Challenge games ·
 Today's boards · Control panel · Session controls · Rosters ·
+**Lesson Screen Studio** (7/15 — one private editing surface for every lesson
+state with synchronized Main, Pace + Support, Student Chromebook, and iPad
+Remote previews; guarded Notion saves with revision conflicts; no active-session
+mutation) ·
 **Notion roster sync** (needs `NOTION_ROSTER_DB_ID` + `CRON_SECRET` envs) ·
 Teacher login (6-month device cookie; PIN gate removed) · Warm-up analytics ·
 Checkpoint delivery · iPad ink → board · Abbie³ (voice + Stream Deck) ·
@@ -26,7 +30,7 @@ taps + persistent highlight, first-move question, inverse-drop animation, zero
 pair "= 0" pop that vanishes, term auto-drops, student computes the other
 side, inverse-ops key, level-switch fanfare, x on either side in Level Up!,
 celebration + in-a-row counter; Regular/Level Up! naming here + GEMS) ·
-**Growth view** (Right Now is now "🌱 Growth", linked from teacher nav + home;
+**Growth view** (Right Now is now "Growth", linked from teacher nav + home;
 /teacher/growth redirects) · **Claude-sharpened next moves** (7/6 —
 /api/live/next-move + per-archetype "Sharpen this move" button on each Growth
 cluster; archetype-aware, tool-grounded, reuses ANTHROPIC_API_KEY, template fallback) ·
@@ -51,13 +55,13 @@ on the spinner has her call the pick; shared abbieBus, no new setup) ·
 cross-day memory note in the console woven into her context; personality tuned
 to complaining-teen, less Red Bull, shorter replies)
 
-## In progress 🔨
+## In progress
 - **Week builder** — code shipped (warmup-pools-data.gs + warmup-week-builder.gs +
   sidebar button); waiting on Steele's Apps Script paste-in. Builds the week from
   published Notion lessons: pool-backed Q4/Q5 (verified tags), AI openers only.
 - Warm-up → spine bridge — live and verified (Evidence post 200, 7/4)
 
-## Planned 🧭
+## Planned
 - **Abbie everywhere** — DONE (Area=Abbie): console + mic, student-screen
   broadcast, Ask-Abbie queue, contextual reactions, and bits all shipped 7/7-8.
   Later, optional: server-side cross-day memory (auto-summarized) instead of the
@@ -67,7 +71,7 @@ to complaining-teen, less Red Bull, shorter replies)
 - Reskin remaining tools; vertical draggable control sequence
 - Abbie lesson-sequence phases 2–5 (auto-built spinner/misconception/flashback/exit)
 
-## Parked ⏸
+## Parked
 Infinite Campus push · Scan/OCR checkpoint pipeline · Google student sign-in
 (CCSD OAuth question first)
 

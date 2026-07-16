@@ -39,10 +39,11 @@ const LEARN: LinkItem[] = [
 
 // Manage the class.
 const MANAGE: LinkItem[] = [
+  { href: "/teacher/studio", label: "Screen studio", letter: "S", color: "#cf6b42", desc: "Preview and edit every lesson screen" },
   { href: "/roster", label: "Rosters", letter: "R", color: "#50a3a4", desc: "Periods and students" },
   { href: "/teacher/parent-outreach", label: "Parent outreach", letter: "@", color: "#f95335", desc: "Draft notes home — nudges and praise" },
   { href: "/teacher/checkpoint-upload", label: "Upload checkpoints", letter: "U", color: "#fcaf38", desc: "Import checkpoint CSVs" },
-  { href: "/builder", label: "Sequence builder", letter: "B", color: "#674a40", desc: "Build a class flow" },
+  { href: "/builder", label: "Sequence builder", letter: "B", color: "#674a40", desc: "Build a timed state lineup" },
 ];
 
 // Teaching tools, grouped by math strand. Move any tool between groups freely —
@@ -194,9 +195,7 @@ export default function TeacherHome() {
     let cancelled = false;
     void (async () => {
       try {
-        const response = await fetch("/api/lessons", { cache: "no-store" });
-        const result = await response.json().catch(() => ({})) as { lessons?: PublishedLesson[]; error?: string };
-        if (!response.ok || result.error) throw new Error(result.error || "Published lessons could not be loaded.");
+        const result = await teacherApiRequest<{ lessons: PublishedLesson[] }>("/api/teacher/lessons");
         if (!cancelled) {
           setPublishedLessons(usablePublishedLessons(result.lessons ?? []));
           setPublishedLessonsError(null);
@@ -487,7 +486,7 @@ export default function TeacherHome() {
             <div className="bd-lesson-find-head">
               <div className="bd-lesson-find-copy">
                 <h2 id="bd-lesson-finder-title">Find a published lesson</h2>
-                <p>Linked Notion Lesson Steps fill each screen. Review the formatted sequence or begin it.</p>
+                <p>Linked Notion Lesson Steps fill each screen. Edit the three public views or begin the lesson.</p>
               </div>
               <label className="bd-lesson-search">
                 Find by date, code, or title
@@ -520,7 +519,7 @@ export default function TeacherHome() {
                         <span className="bd-lesson-code">{lesson.lessonCode}</span>
                         <p className="bd-lesson-title" title={lesson.title}>{lesson.title || "Untitled lesson"}</p>
                         <div className="bd-lesson-actions">
-                          <Link className="bd-btn" href={`/control?notionLessonId=${encodedId}`}>Review</Link>
+                          <Link className="bd-btn" href={`/teacher/studio?lessonId=${encodedId}`}>Edit screens</Link>
                           <Link className="bd-btn p" href={`/control?notionLessonId=${encodedId}&run=1`}>Begin lesson</Link>
                         </div>
                       </div>

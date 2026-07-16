@@ -1,5 +1,6 @@
 // Returns today's published lesson from the Math 6 Lessons Notion database.
 import { getTodayLesson } from "@/lib/notionLessons";
+import { toPublicLessonData } from "@/lib/publicLessonData";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -28,9 +29,9 @@ export async function GET() {
       return Response.json({ lesson: null, date: today });
     }
 
-    return Response.json({ lesson, date: today });
+    return Response.json({ lesson: toPublicLessonData(lesson), date: today });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return Response.json({ error: message }, { status: 500 });
+    console.error("The public current-day lesson could not be loaded.", err);
+    return Response.json({ error: "Today's lesson could not be loaded." }, { status: 500 });
   }
 }
