@@ -2,11 +2,30 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import LessonVisual from "@/components/LessonVisual";
-import { BANK_GROUPS, DEFAULT_STATES, classStateStepDefaults } from "@/lib/classStates";
-import { classroomStageTheme } from "@/lib/classroomPilot";
-import { resolveLessonVisual } from "@/lib/lessonVisuals";
-import { liveAssignedToolRoute } from "@/lib/liveFlowContract";
+import { BANK_GROUPS, CLOSEOUT_DIRECTIONS, DEFAULT_STATES, classStateStepDefaults } from "@/lib/classStates";
+import { classroomStageTheme, discussionSupportsForLesson, usesDiscussionProtocol } from "@/lib/classroomPilot";
+import {
+  lessonStoryImageMarkup,
+  lessonStoryImages,
+  removeLessonStoryImage,
+  resolveLessonVisual,
+} from "@/lib/lessonVisuals";
+import { liveAssignedToolRoute, liveIndependentSupportItems, resolveLiveStepPollKind } from "@/lib/liveFlowContract";
+import {
+  defaultLessonRoutineConfig,
+  validateLessonRoutineConfig,
+  type LessonRoutineConfig,
+  type PublicLessonRoutineConfig,
+} from "@/lib/lessonRoutineConfig";
+import {
+  defaultPublicSurfaceModeForState,
+  type PublicSurfaceMode,
+} from "@/lib/lessonStepMetadata";
 import { speakerNoteItems } from "@/lib/speakerNotes";
+import {
+  inspectSelectedSuccessCriterion,
+  publicSuccessCriterion,
+} from "@/lib/successCriterion";
 import { TeacherApiError, teacherApiRequest } from "@/lib/teacherApi";
 
 interface PublishedLesson {
@@ -33,6 +52,8 @@ interface LessonStep {
   correctAnswer: string;
   standard: string;
   aiContext: string;
+  publicSurfaceMode?: PublicSurfaceMode;
+  routineConfig?: LessonRoutineConfig | PublicLessonRoutineConfig | null;
   advance: string;
   required: boolean;
   linkUrl: string;
@@ -87,6 +108,8 @@ interface StepDraft {
   linkUrl: string;
   responseMode: string;
   workSpaceAvailable: boolean;
+  publicSurfaceMode: PublicSurfaceMode;
+  routineConfig: LessonRoutineConfig | null;
 }
 
 interface SurfaceTextResolution {
@@ -135,7 +158,26 @@ const EDITABLE_FIELDS: EditableField[] = [
   "linkUrl",
   "responseMode",
   "workSpaceAvailable",
+  "publicSurfaceMode",
+  "routineConfig",
 ];
+
+function fullRoutineConfigForStep(step: LessonStep): LessonRoutineConfig | null {
+  const config = step.routineConfig;
+  if (config?.kind === "gallery-walk" && "materials" in config) return config;
+  if (config?.kind === "small-group" && "teacherPlan" in config) return config;
+  return defaultLessonRoutineConfig(step.stateId);
+}
+
+function lessonRoutineValidationMessage(config: LessonRoutineConfig | null): string | null {
+  if (!config) return null;
+  try {
+    validateLessonRoutineConfig(config);
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error.message : "Finish this lesson routine configuration before saving.";
+  }
+}
 
 function draftFromStep(step: LessonStep): StepDraft {
   return {
@@ -153,6 +195,8 @@ function draftFromStep(step: LessonStep): StepDraft {
     linkUrl: step.linkUrl || "",
     responseMode: step.responseMode || "",
     workSpaceAvailable: Boolean(step.workSpaceAvailable),
+    publicSurfaceMode: step.publicSurfaceMode || defaultPublicSurfaceModeForState(step.stateId),
+    routineConfig: fullRoutineConfigForStep(step),
   };
 }
 
@@ -259,6 +303,8 @@ export default function LessonScreenStudioPage() {
   const [conflictStep, setConflictStep] = useState<LessonStepRecord | null>(null);
   const [catalogStateId, setCatalogStateId] = useState("learning-target-readers");
   const [sequenceChangeState, setSequenceChangeState] = useState<SequenceChangeState>("idle");
+  const [storyImageUrl, setStoryImageUrl] = useState("");
+  const [storyImageMessage, setStoryImageMessage] = useState("");
   const lessonRequestRef = useRef(0);
   const stepRequestRef = useRef(0);
   const activeSelectionRef = useRef({ lessonId: "", stepId: "" });
@@ -283,6 +329,8 @@ export default function LessonScreenStudioPage() {
 
   useEffect(() => {
     setSurfaceEditBuffers({});
+    setStoryImageUrl("");
+    setStoryImageMessage("");
   }, [selectedLessonId, selectedStepId]);
 
   useEffect(() => {
@@ -677,7 +725,12 @@ export default function LessonScreenStudioPage() {
             lessonId: lesson.id,
             stepId: selectedStep.id,
             expectedLastEditedTime: lastEditedTime,
-            changes: classStateStepDefaults(state),
+            changes: {
+              ...classStateStepDefaults(state),
+              aiContext: "",
+              publicSurfaceMode: defaultPublicSurfaceModeForState(state.id),
+              routineConfig: defaultLessonRoutineConfig(state.id),
+            },
           }),
         },
       );
@@ -731,11 +784,22 @@ export default function LessonScreenStudioPage() {
   const isReaderSpinner = selectedStep?.stateId === "learning-target-readers";
   const isIpadKidSpinner = selectedStep?.stateId === "ipad-kid";
   const showsLessonTargets = isReaderSpinner || isLearningCheck;
-  const isDiscussion = theme.id === "discussion";
-  const isIndependent = theme.id === "independent" || theme.id === "closeout";
+  const isDiscussion = usesDiscussionProtocol(selectedStep?.stateId, selectedStep?.title);
+  const isIndependent = theme.id === "independent";
+  const isCloseout = theme.id === "closeout";
+  const publicSurfacesLinked = draft?.publicSurfaceMode === "linked";
+  const galleryWalkConfig = draft?.routineConfig?.kind === "gallery-walk" ? draft.routineConfig : null;
+  const smallGroupConfig = draft?.routineConfig?.kind === "small-group" ? draft.routineConfig : null;
   const timer = draft ? formatTimer(draft.duration) : "--:--";
-  const stems = splitLines(draft?.discussionStems || lesson?.discussionStems).slice(0, 4);
-  const vocabulary = splitVocabulary(draft?.vocabulary || lesson?.discussionVocabulary).slice(0, 6);
+  const configuredDiscussionSupports = discussionSupportsForLesson(lesson?.lessonCode);
+  const discussionStemsEditorText = draft?.discussionStems
+    || lesson?.discussionStems
+    || configuredDiscussionSupports.sentenceStems.join("\n");
+  const vocabularyEditorText = draft?.vocabulary
+    || lesson?.discussionVocabulary
+    || configuredDiscussionSupports.keyVocabulary.join("\n");
+  const stems = splitLines(discussionStemsEditorText).slice(0, 4);
+  const vocabulary = splitVocabulary(vocabularyEditorText).slice(0, 6);
   const paperSections = lesson && selectedStep && draft ? workSections(lesson, selectedStep, draft) : [];
   const mainText = resolveSurfaceText(draft?.mainDisplay || "", [
     { text: draft?.question, source: "Question" },
@@ -762,6 +826,36 @@ export default function LessonScreenStudioPage() {
   const mainEditorText = Object.prototype.hasOwnProperty.call(surfaceEditBuffers, "mainDisplay")
     ? surfaceEditBuffers.mainDisplay || ""
     : mainText.text;
+  const configuredStoryImages = lessonStoryImages(mainEditorText);
+
+  function addStoryImage(url: string, alt: string) {
+    const trimmedUrl = url.trim();
+    if (!isHttpUrl(trimmedUrl)) {
+      setStoryImageMessage("Paste a public image address that starts with http or https.");
+      return;
+    }
+    if (configuredStoryImages.some((image) => image.url === trimmedUrl)) {
+      setStoryImageMessage("That image is already part of this story slide.");
+      return;
+    }
+    if (configuredStoryImages.length >= 3) {
+      setStoryImageMessage("Use no more than three images in one story slide.");
+      return;
+    }
+    const nextText = `${lessonStoryImageMarkup(trimmedUrl, alt)}\n${mainEditorText}`.trim();
+    if (nextText.length > 2000) {
+      setStoryImageMessage("The image address would make Main Display longer than Notion allows.");
+      return;
+    }
+    updateSurfaceField("mainDisplay", nextText, mainText);
+    setStoryImageUrl("");
+    setStoryImageMessage("Image added to the private preview. Save to Notion when the slide is ready.");
+  }
+
+  function removeStoryImage(url: string) {
+    updateSurfaceField("mainDisplay", removeLessonStoryImage(mainEditorText, url), mainText);
+    setStoryImageMessage("Image removed from the private preview. Save to Notion to keep the change.");
+  }
   const paceEditorText = Object.prototype.hasOwnProperty.call(surfaceEditBuffers, "paceDirections")
     ? surfaceEditBuffers.paceDirections || ""
     : paceText.text;
@@ -771,12 +865,38 @@ export default function LessonScreenStudioPage() {
   const remoteEditorText = Object.prototype.hasOwnProperty.call(surfaceEditBuffers, "remoteActions")
     ? surfaceEditBuffers.remoteActions || ""
     : remoteText.text;
-  const mainBody = selectedStep && draft ? mainEditorText || "Add the main projector prompt." : "Choose a lesson state.";
-  const paceBody = selectedStep && draft ? paceEditorText || "Add the current directions." : "Current directions";
-  const studentBody = selectedStep && draft ? studentEditorText || "Add one current student action." : "Current student action";
+  const mainBody = isCloseout
+    ? CLOSEOUT_DIRECTIONS
+    : galleryWalkConfig
+      ? galleryWalkConfig.observationPrompt
+      : smallGroupConfig
+        ? smallGroupConfig.publicTask
+        : selectedStep && draft ? mainEditorText || "Add the main projector prompt." : "Choose a lesson state.";
+  const paceBody = isCloseout
+    ? CLOSEOUT_DIRECTIONS
+    : publicSurfacesLinked
+      ? mainBody
+      : galleryWalkConfig
+        ? galleryWalkConfig.movementDirections
+        : smallGroupConfig
+          ? `Work with your group. Rotate every ${smallGroupConfig.rotationMinutes} minutes.`
+          : selectedStep && draft ? paceEditorText || "Add the current directions." : "Current directions";
+  const studentBody = isCloseout
+    ? CLOSEOUT_DIRECTIONS
+    : publicSurfacesLinked
+      ? mainBody
+      : galleryWalkConfig
+        ? galleryWalkConfig.recordPrompt
+        : smallGroupConfig
+          ? smallGroupConfig.publicTask
+          : selectedStep && draft ? studentEditorText || "Add one current student action." : "Current student action";
   const remoteBody = selectedStep && draft ? remoteEditorText || "Add private teacher actions." : "Private teacher actions";
   const remoteSpeakerNotes = speakerNoteItems(remoteBody);
-  const mainScreenUsesStructuredLayout = showsLessonTargets || isIpadKidSpinner || (isIndependent && paperSections.length > 0);
+  const mainScreenUsesStructuredLayout = showsLessonTargets
+    || isIpadKidSpinner
+    || Boolean(galleryWalkConfig || smallGroupConfig)
+    || (isIndependent && paperSections.length > 0);
+  const canUseStoryImages = theme.id === "scenario" && !mainScreenUsesStructuredLayout;
   const lessonVisual = selectedStep && draft ? resolveLessonVisual({
     lessonCode: lesson?.lessonCode,
     stateId: theme.id,
@@ -790,12 +910,19 @@ export default function LessonScreenStudioPage() {
   }) : null;
   const normalizedResponseMode = draft?.responseMode.trim().toLowerCase() || "";
   const normalizedChoices = normalizeChoices(draft?.choices);
-  const responseModeNeedsQuestion = normalizedResponseMode === "short answer" || normalizedResponseMode === "multiple choice";
+  const effectiveResponseKind = isDiscussion
+    ? null
+    : resolveLiveStepPollKind(
+        draft?.responseMode,
+        selectedStep?.pollKind,
+        selectedStep?.stateId,
+      );
+  const responseModeNeedsQuestion = Boolean(effectiveResponseKind);
   const responseValidationMessage = responseModeNeedsQuestion && !draft?.question.trim()
-    ? `${draft?.responseMode || "This response mode"} requires a question.`
-    : normalizedResponseMode === "multiple choice" && normalizedChoices.length < 2
+    ? `${draft?.responseMode || selectedStep?.pollKind || "This response mode"} requires a question.`
+    : effectiveResponseKind === "multiple-choice" && normalizedChoices.length < 2
       ? "Multiple Choice requires at least two choices."
-      : normalizedResponseMode === "multiple choice"
+      : effectiveResponseKind === "multiple-choice"
         && new Set(normalizedChoices.map((choice) => choice.toLowerCase())).size !== normalizedChoices.length
         ? "Multiple Choice choices must be different."
         : null;
@@ -806,18 +933,21 @@ export default function LessonScreenStudioPage() {
   const assignedToolValidationMessage = isAssignedTool && !hasAssignedToolResource
     ? "Assigned Tool requires a recognized Big Dog Math tool name or a valid resource link."
     : null;
-  const hasStepValidationError = Boolean(responseValidationMessage || assignedToolValidationMessage);
+  const routineValidationMessage = lessonRoutineValidationMessage(draft?.routineConfig || null);
+  const criterionInspection = inspectSelectedSuccessCriterion(lesson?.selectedSuccessCriterion);
+  const criterionValidationMessage = lesson ? criterionInspection.message : null;
+  const hasStepValidationError = Boolean(
+    criterionValidationMessage
+    || responseValidationMessage
+    || assignedToolValidationMessage
+    || routineValidationMessage,
+  );
   const assignedResourceLink = selectedStep && draft
     ? draft.linkUrl
       || (selectedStep.stateId === "warmup" ? lesson?.warmUpLink : "")
       || (selectedStep.stateId === "exit" ? lesson?.exitTicketLink : "")
     : "";
-  const hasConfiguredPollSurface = Boolean(
-    selectedStep?.pollKind
-    || normalizedResponseMode === "short answer"
-    || normalizedResponseMode === "multiple choice"
-    || normalizedResponseMode === "fist to five",
-  );
+  const hasConfiguredPollSurface = Boolean(effectiveResponseKind);
   const studioPollSurfaceWins = hasConfiguredPollSurface && (isLearningCheck || !draft?.mainDisplay);
   const hasConfiguredResourceSurface = Boolean(assignedResourceLink || (isAssignedTool && hasAssignedToolResource));
   const studioResourceSurfaceWins = hasConfiguredResourceSurface
@@ -834,8 +964,8 @@ export default function LessonScreenStudioPage() {
     "--studio-muted-dark": theme.projectorMuted,
     "--studio-glow": theme.projectorGlow,
   } as CSSProperties;
-  const selectedCriteria = splitLines(lesson?.selectedSuccessCriterion);
-  const selectedCriterion = selectedCriteria[0] || "Choose one I can statement in Notion.";
+  const selectedCriterion = publicSuccessCriterion(lesson?.selectedSuccessCriterion);
+  const studentIndependentSupports = liveIndependentSupportItems(selectedStep?.stateId, lesson);
   const statusLabel = connectionState === "offline"
     ? "Offline - draft safe"
     : connectionState === "reconnecting"
@@ -861,7 +991,8 @@ export default function LessonScreenStudioPage() {
     || isDirty
     || connectionState !== "online"
     || lessonLoading
-    || stepLoading;
+    || stepLoading
+    || Boolean(criterionValidationMessage);
   const sequencePicker = lesson ? (
     <div className="studio-sequence-picker">
       <label className="studio-picker-label" htmlFor="studio-catalog-state">Potential state</label>
@@ -919,6 +1050,27 @@ export default function LessonScreenStudioPage() {
       <p className="studio-picker-note">Changes save to Notion. They do not change an active classroom session.</p>
     </div>
   ) : null;
+
+  function publicSpinnerPreview(compact = false) {
+    if (!lesson || (!isReaderSpinner && !isIpadKidSpinner)) return null;
+    const reels = isReaderSpinner
+      ? [
+          { label: "Learning Intention", target: lesson.learningIntention || "Add the Learning Intention in Notion." },
+          { label: "Success Criterion", target: selectedCriterion },
+        ]
+      : [{ label: "iPad Kid", target: "This week's classroom role" }];
+    return (
+      <div className={`studio-spinner-preview${isIpadKidSpinner ? " single" : ""}${compact ? " compact" : ""}`}>
+        {reels.map((reel) => (
+          <article className="studio-spinner-reel" key={reel.label}>
+            <p>{reel.label}</p>
+            <strong>{reel.target}</strong>
+            <span>Student name</span>
+          </article>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <main className="studio-page" style={previewStyle}>
@@ -1000,6 +1152,10 @@ export default function LessonScreenStudioPage() {
         .studio-target-criterion { color:white; font-size:clamp(1.4rem,2.5vw,2.2rem); font-weight:900; }
         .studio-spinner-preview { width:100%; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; text-align:left; }
         .studio-spinner-preview.single { max-width:420px; grid-template-columns:1fr; }
+        .studio-spinner-preview.compact { max-width:100%; gap:6px; }
+        .studio-spinner-preview.compact .studio-spinner-reel { grid-template-rows:auto minmax(34px,auto) auto; gap:5px; border-radius:7px; padding:7px; }
+        .studio-spinner-preview.compact .studio-spinner-reel strong { font-size:0.58rem; }
+        .studio-spinner-preview.compact .studio-spinner-reel span { padding:6px; font-size:0.68rem; }
         .studio-spinner-reel { min-width:0; display:grid; grid-template-rows:auto minmax(70px,1fr) auto; gap:9px; border:1px solid var(--studio-line-dark); border-top:4px solid var(--studio-accent); border-radius:10px; background:color-mix(in srgb,var(--studio-panel) 90%,transparent); padding:13px; }
         .studio-spinner-reel p { margin:0; color:var(--studio-accent); font-size:0.58rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
         .studio-spinner-reel strong { align-self:center; color:#fff; font-size:0.88rem; line-height:1.25; }
@@ -1008,11 +1164,22 @@ export default function LessonScreenStudioPage() {
         .studio-paper-item { border:1px solid var(--studio-line-dark); border-left:4px solid var(--studio-accent); border-radius:8px; background:color-mix(in srgb,var(--studio-panel) 90%,transparent); padding:11px 13px; }
         .studio-paper-label { margin:0 0 5px; color:var(--studio-accent); font-size:0.58rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
         .studio-paper-body { margin:0; color:white; font-size:0.82rem; font-weight:700; line-height:1.35; white-space:pre-wrap; }
+        .studio-routine-grid { width:100%; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; text-align:left; }
+        .studio-routine-grid.small-group { max-width:850px; grid-template-columns:minmax(180px,0.7fr) minmax(0,1.6fr); }
+        .studio-routine-card { display:grid; align-content:center; gap:7px; border:1px solid var(--studio-line-dark); border-top:4px solid var(--studio-accent); border-radius:9px; background:color-mix(in srgb,var(--studio-panel) 90%,transparent); padding:12px 14px; }
+        .studio-routine-card.feature { grid-column:1 / -1; grid-template-columns:1fr auto; align-items:end; }
+        .studio-routine-card.task { min-height:140px; }
+        .studio-routine-card p { margin:0; color:var(--studio-accent); font-size:0.58rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
+        .studio-routine-card strong { color:#fff; font-size:1.05rem; }
+        .studio-routine-card span { color:#fff; font-size:0.78rem; font-weight:720; line-height:1.35; }
         .studio-lower { display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-top:15px; }
         .studio-pace-screen, .studio-student-screen { min-height:245px; }
         .studio-pace-screen { display:grid; align-content:center; justify-items:center; gap:11px; padding:27px; text-align:center; }
         .studio-pace-direction { max-width:24ch; margin:0; color:white; font-size:clamp(1.1rem,2vw,1.55rem); font-weight:850; line-height:1.18; text-wrap:balance; }
         .studio-pace-time { color:var(--studio-accent); font-size:clamp(2.8rem,5.2vw,4.4rem); font-weight:900; line-height:0.9; font-variant-numeric:tabular-nums; letter-spacing:-0.05em; }
+        .studio-pace-bars { width:min(100%,330px); height:86px; display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); align-items:end; gap:7px; }
+        .studio-pace-bar { display:grid; grid-template-rows:minmax(0,1fr) auto; gap:4px; height:100%; align-items:end; color:#fff; font-size:0.62rem; font-weight:900; }
+        .studio-pace-bar i { display:block; width:100%; border-radius:5px 5px 2px 2px; background:var(--studio-accent); opacity:0.84; }
         .studio-support-line { max-width:100%; border:1px solid var(--studio-line-dark); border-radius:7px; background:color-mix(in srgb,var(--studio-panel) 90%,transparent); padding:8px 13px; color:white; font-size:0.74rem; font-weight:750; }
         .studio-vocab { display:flex; flex-wrap:wrap; justify-content:center; gap:7px; }
         .studio-vocab span { border-radius:999px; background:var(--studio-accent); color:var(--studio-base); padding:5px 10px; font-size:0.64rem; font-weight:900; }
@@ -1023,8 +1190,18 @@ export default function LessonScreenStudioPage() {
         .studio-student-round { margin:0; color:color-mix(in srgb,var(--studio-accent) 78%,#7a2c18); font-size:0.64rem; font-weight:900; letter-spacing:0.11em; text-transform:uppercase; }
         .studio-student-action { max-width:33ch; margin:0; color:var(--bdb-ink); font-size:clamp(0.95rem,1.7vw,1.22rem); font-weight:850; line-height:1.25; white-space:pre-wrap; text-wrap:balance; }
         .studio-student-support { max-width:100%; border:1px solid #d9cebc; border-radius:999px; background:#efe7d8; padding:7px 13px; color:#3e3931; font-size:0.7rem; font-weight:800; }
+        .studio-student-support-grid { width:100%; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; text-align:left; }
+        .studio-student-support-card { border:1px solid #d9cebc; border-top:3px solid var(--studio-accent); border-radius:7px; background:#fff; padding:8px; }
+        .studio-student-support-card strong { display:block; margin-bottom:3px; color:color-mix(in srgb,var(--studio-accent) 72%,#4b4033); font-size:0.55rem; letter-spacing:0.08em; text-transform:uppercase; }
+        .studio-student-support-card span { color:#4c453c; font-size:0.63rem; font-weight:750; line-height:1.3; }
         .studio-fist { display:grid; grid-template-columns:repeat(6,30px); gap:5px; }
         .studio-fist span { display:grid; place-items:center; aspect-ratio:1; border:1px solid #d8cebd; border-radius:7px; background:white; font-size:0.72rem; font-weight:850; }
+        .studio-response-preview { width:min(100%,430px); display:grid; gap:8px; }
+        .studio-response-question { margin:0; color:#5f574d; font-size:0.76rem; font-weight:750; line-height:1.35; }
+        .studio-response-input { min-height:54px; border:1px solid #d8cebd; border-radius:8px; background:#fff; padding:10px; color:#80776b; text-align:left; font-size:0.72rem; font-weight:700; }
+        .studio-response-send { justify-self:end; border-radius:7px; background:var(--studio-accent); color:var(--studio-base); padding:8px 13px; font-size:0.68rem; font-weight:900; }
+        .studio-response-choices { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; }
+        .studio-response-choice { border:1px solid #d8cebd; border-radius:8px; background:#fff; padding:8px 10px; color:#3f3931; font-size:0.7rem; font-weight:800; text-align:left; }
         .studio-form-action { border:1px solid color-mix(in srgb,var(--studio-accent) 55%,#c8bda9); border-radius:8px; background:var(--studio-accent); color:var(--studio-base); padding:9px 15px; font-size:0.72rem; font-weight:900; }
         .studio-remote-wrap { margin-top:17px; border-top:1px solid #ddd4c6; padding-top:17px; }
         .studio-remote { min-height:150px; display:grid; grid-template-columns:minmax(0,1.35fr) minmax(180px,0.7fr); gap:22px; border:1px solid #d9d0c2; border-radius:11px; background:linear-gradient(145deg,#eee8dc,#f8f4ec); padding:14px; }
@@ -1037,6 +1214,10 @@ export default function LessonScreenStudioPage() {
         .studio-remote-key.active { border-color:var(--studio-accent); background:color-mix(in srgb,var(--studio-accent) 12%,white); }
         .studio-remote-private { display:grid; align-content:center; gap:9px; border-left:1px solid #ddd4c6; padding-left:22px; }
         .studio-private-note { margin:0; color:#6a6258; font-size:0.69rem; font-weight:700; line-height:1.4; }
+        .studio-private-plan { display:grid; gap:7px; margin:0; }
+        .studio-private-plan div { display:grid; gap:2px; }
+        .studio-private-plan dt { color:var(--studio-accent); font-size:0.56rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
+        .studio-private-plan dd { margin:0; color:#5f574d; font-size:0.66rem; font-weight:720; line-height:1.3; }
         .studio-editor { min-width:0; overflow-y:auto; border-left:1px solid #dcd4c6; background:color-mix(in srgb,var(--bdb-ground) 96%,white); padding:18px 26px 34px; }
         .studio-editor h1 { margin:0; font-size:1.42rem; line-height:1.05; font-weight:850; letter-spacing:-0.03em; }
         .studio-editor-intro { margin:9px 0 18px; color:var(--bdb-ink-soft); font-size:0.78rem; line-height:1.45; }
@@ -1048,6 +1229,19 @@ export default function LessonScreenStudioPage() {
         .studio-fields { min-width:0; margin:0; border:0; padding:0; }
         .studio-label { display:flex; justify-content:space-between; gap:10px; color:#6a6258; font-size:0.62rem; font-weight:850; letter-spacing:0.08em; text-transform:uppercase; }
         .studio-count { color:#9a9184; font-weight:650; letter-spacing:0; text-transform:none; }
+        .studio-story-tools { display:grid; gap:10px; margin-top:10px; border:1px solid #d8cfc1; border-radius:9px; background:#fffaf0; padding:11px; }
+        .studio-story-head { display:flex; align-items:start; justify-content:space-between; gap:12px; }
+        .studio-story-title { margin:0; color:#5e5549; font-size:0.68rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; }
+        .studio-story-note { max-width:58ch; margin:4px 0 0; color:#766e63; font-size:0.68rem; line-height:1.35; }
+        .studio-story-head > span { flex:none; border-radius:999px; background:#e9dfce; color:#5f574d; padding:4px 8px; font-size:0.62rem; font-weight:900; }
+        .studio-story-list { display:grid; gap:7px; }
+        .studio-story-item { display:grid; grid-template-columns:64px minmax(0,1fr) auto; align-items:center; gap:9px; border:1px solid #ded4c5; border-radius:7px; background:#fff; padding:6px; }
+        .studio-story-item img { display:block; width:64px; aspect-ratio:16 / 9; border-radius:5px; object-fit:cover; }
+        .studio-story-item span { min-width:0; overflow:hidden; color:#5e574e; text-overflow:ellipsis; white-space:nowrap; font-size:0.68rem; font-weight:750; }
+        .studio-story-item button { min-height:32px; border:1px solid #c9bdaa; border-radius:6px; background:#fff; color:#7b392c; padding:0 9px; font-size:0.64rem; font-weight:850; cursor:pointer; }
+        .studio-story-actions { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:7px; align-items:center; }
+        .studio-story-actions .studio-source-action { min-height:40px; }
+        .studio-story-message { margin:0; color:#695f52; font-size:0.67rem; font-weight:700; line-height:1.35; }
         .studio-source-row { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:6px; }
         .studio-source-note { margin:0; color:#766e63; font-size:0.68rem; font-weight:650; line-height:1.35; }
         .studio-source-action { min-height:44px; flex:0 0 auto; border:1px solid #b99a60; border-radius:7px; background:#fffaf0; color:#72551c; padding:0 11px; font-size:0.68rem; font-weight:800; cursor:pointer; }
@@ -1060,6 +1254,9 @@ export default function LessonScreenStudioPage() {
         .studio-duration { width:102px; }
         .studio-check { display:flex; align-items:flex-start; gap:9px; color:var(--bdb-ink); font-size:0.76rem; font-weight:700; line-height:1.4; }
         .studio-check input { margin-top:2px; accent-color:var(--studio-accent); }
+        .studio-link-toggle { margin-top:15px; border:1px solid #d8cfc1; border-radius:8px; background:#fffaf0; padding:11px; }
+        .studio-link-toggle small { display:block; margin-top:3px; color:#766e63; font-size:0.66rem; font-weight:650; }
+        .studio-field-row { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
         .studio-editor-section { margin-top:22px; border-top:1px solid #ddd4c6; padding-top:18px; }
         .studio-editor-section h2 { margin:0 0 5px; font-size:0.76rem; font-weight:900; letter-spacing:0.09em; text-transform:uppercase; }
         .studio-editor-section p { margin:0 0 12px; color:var(--bdb-ink-soft); font-size:0.72rem; line-height:1.4; }
@@ -1095,6 +1292,8 @@ export default function LessonScreenStudioPage() {
           .studio-paper-grid, .studio-lower, .studio-remote { grid-template-columns:1fr; }
           .studio-remote-private { border-left:0; border-top:1px solid #ddd4c6; padding:14px 0 0; }
           .studio-editor { padding:20px 16px 100px; }
+          .studio-story-actions { grid-template-columns:1fr 1fr; }
+          .studio-story-actions .studio-input { grid-column:1 / -1; }
           .studio-editor-actions { position:fixed; inset:auto 0 0; z-index:12; margin:0; border-top:1px solid #d7cec0; background:var(--bdb-ground); padding:10px 14px; }
         }
       `}</style>
@@ -1192,31 +1391,43 @@ export default function LessonScreenStudioPage() {
                 </div>
                 {showLessonVisual ? (
                   <LessonVisual visual={showLessonVisual} variant="studio" accent={theme.accent} />
-                ) : isReaderSpinner ? (
-                  <div className="studio-spinner-preview">
-                    {[
-                      { label: "Learning Intention", target: lesson.learningIntention || "Add the Learning Intention in Notion." },
-                      { label: "Success Criteria", target: selectedCriterion },
-                    ].map((reel) => (
-                      <article className="studio-spinner-reel" key={reel.label}>
-                        <p>{reel.label}</p>
-                        <strong>{reel.target}</strong>
-                        <span>Student name</span>
-                      </article>
-                    ))}
-                  </div>
-                ) : isIpadKidSpinner ? (
-                  <div className="studio-spinner-preview single">
-                    <article className="studio-spinner-reel">
-                      <p>iPad Kid</p>
-                      <strong>This week&apos;s classroom role</strong>
-                      <span>Student name</span>
-                    </article>
-                  </div>
+                ) : isReaderSpinner || isIpadKidSpinner ? (
+                  publicSpinnerPreview()
                 ) : isLearningCheck ? (
                   <div className="studio-target">
                     {lesson.learningIntention && <div className="studio-target-intention">{lesson.learningIntention}</div>}
                     <div className="studio-target-criterion">{selectedCriterion}</div>
+                  </div>
+                ) : galleryWalkConfig ? (
+                  <div className="studio-routine-grid">
+                    <article className="studio-routine-card feature">
+                      <p>Gallery Walk</p>
+                      <strong>{galleryWalkConfig.stationCount} stations</strong>
+                      <span>{galleryWalkConfig.rotationMinutes} minutes at each station</span>
+                    </article>
+                    <article className="studio-routine-card">
+                      <p>Notice</p>
+                      <span>{galleryWalkConfig.observationPrompt}</span>
+                    </article>
+                    <article className="studio-routine-card">
+                      <p>Record</p>
+                      <span>{galleryWalkConfig.recordPrompt}</span>
+                    </article>
+                    <article className="studio-routine-card">
+                      <p>Move</p>
+                      <span>{galleryWalkConfig.movementDirections}</span>
+                    </article>
+                  </div>
+                ) : smallGroupConfig ? (
+                  <div className="studio-routine-grid small-group">
+                    <article className="studio-routine-card feature">
+                      <p>Small Group Rotations</p>
+                      <strong>{smallGroupConfig.rotationMinutes} minute rotations</strong>
+                    </article>
+                    <article className="studio-routine-card task">
+                      <p>Group task</p>
+                      <span>{smallGroupConfig.publicTask}</span>
+                    </article>
                   </div>
                 ) : isIndependent && paperSections.length > 0 ? (
                   <div className="studio-paper-grid">
@@ -1229,7 +1440,7 @@ export default function LessonScreenStudioPage() {
                   </div>
                 ) : (
                   <div>
-                    {isDiscussion && <p className="studio-round">Round 1 of 3</p>}
+                    {isDiscussion && <p className="studio-round">Think - 1 minute</p>}
                     <div className="studio-main-copy">{mainBody}</div>
                   </div>
                 )}
@@ -1239,7 +1450,20 @@ export default function LessonScreenStudioPage() {
                 <div>
                   <p className="studio-preview-label">Pace + Support - public</p>
                   <section className="studio-screen studio-pace-screen" aria-label="Pace and Support preview">
-                    <h2 className="studio-pace-direction">{paceBody}</h2>
+                    {publicSurfacesLinked && (isReaderSpinner || isIpadKidSpinner)
+                      ? publicSpinnerPreview(true)
+                      : isLearningCheck
+                        ? (
+                          <>
+                            <h2 className="studio-pace-direction">Anonymous Fist-to-Five bars after reveal</h2>
+                            <div className="studio-pace-bars" aria-label="Anonymous result-bar preview">
+                              {[24, 38, 52, 76, 92, 64].map((height, value) => (
+                                <span className="studio-pace-bar" key={value}><i style={{ height: `${height}%` }} />{value}</span>
+                              ))}
+                            </div>
+                          </>
+                        )
+                        : <h2 className="studio-pace-direction">{paceBody}</h2>}
                     <div className="studio-pace-time">{timer}</div>
                     {isDiscussion && stems[0] && <div className="studio-support-line">{stems[0]}</div>}
                     {isDiscussion && vocabulary.length > 0 && (
@@ -1253,23 +1477,51 @@ export default function LessonScreenStudioPage() {
                   <section className="studio-screen studio-student-screen" aria-label="Student Chromebook preview">
                     <div className="studio-student-top"><span className="studio-student-dot" />{stepLabel(selectedStep)}</div>
                     <div className="studio-student-body">
-                      {isDiscussion && <p className="studio-student-round">Round 1 of 3</p>}
-                      <p className="studio-student-action">{studentBody}</p>
-                      {isLearningCheck ? (
-                        <div className="studio-fist" aria-label="Fist to Five preview">
-                          {[0, 1, 2, 3, 4, 5].map((value) => <span key={value}>{value}</span>)}
-                        </div>
-                      ) : (selectedStep.stateId === "warmup" || selectedStep.stateId === "exit") && assignedResourceLink ? (
-                        <div className="studio-form-action">Open assigned Google Form</div>
-                      ) : isDiscussion && stems[0] ? (
-                        <div className="studio-student-support">{stems[0]}</div>
-                      ) : isAssignedTool && hasAssignedToolResource ? (
-                        <div className="studio-student-support">
-                          {assignedToolRoute ? `Assigned tool: ${draft.tool.trim()}` : "Open assigned resource"}
-                        </div>
-                      ) : isIndependent && lesson.optionalSupport ? (
-                        <div className="studio-student-support">Optional support: {lesson.optionalSupport}</div>
-                      ) : null}
+                      {publicSurfacesLinked && (isReaderSpinner || isIpadKidSpinner) ? publicSpinnerPreview(true) : (
+                        <>
+                          {isDiscussion && <p className="studio-student-round">Think quietly</p>}
+                          <p className="studio-student-action">{studentBody}</p>
+                          {effectiveResponseKind ? (
+                            <div className="studio-response-preview" aria-label={`${effectiveResponseKind} response preview`}>
+                              {draft.question.trim() && draft.question.trim() !== studentBody.trim() ? (
+                                <p className="studio-response-question">{draft.question}</p>
+                              ) : null}
+                              {effectiveResponseKind === "fist-to-five" ? (
+                                <div className="studio-fist" aria-label="Fist to Five preview">
+                                  {[0, 1, 2, 3, 4, 5].map((value) => <span key={value}>{value}</span>)}
+                                </div>
+                              ) : effectiveResponseKind === "multiple-choice" ? (
+                                <div className="studio-response-choices">
+                                  {normalizedChoices.map((choice) => <span className="studio-response-choice" key={choice}>{choice}</span>)}
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="studio-response-input">Type your response</div>
+                                  <span className="studio-response-send">Send response</span>
+                                </>
+                              )}
+                            </div>
+                          ) : (selectedStep.stateId === "warmup" || selectedStep.stateId === "exit") && assignedResourceLink ? (
+                            <div className="studio-form-action">Open assigned Google Form</div>
+                          ) : isDiscussion && stems[0] ? (
+                            <div className="studio-student-support">{stems[0]}</div>
+                          ) : isAssignedTool && hasAssignedToolResource ? (
+                            <div className="studio-student-support">
+                              {assignedToolRoute ? `Assigned tool: ${draft.tool.trim()}` : "Open assigned resource"}
+                            </div>
+                          ) : null}
+                          {studentIndependentSupports.length > 0 ? (
+                            <div className="studio-student-support-grid">
+                              {studentIndependentSupports.map((item) => (
+                                <div className="studio-student-support-card" key={item.label}>
+                                  <strong>{item.label}</strong>
+                                  <span>{item.body}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                        </>
+                      )}
                     </div>
                   </section>
                 </div>
@@ -1286,27 +1538,41 @@ export default function LessonScreenStudioPage() {
                     <div className="studio-remote-controls" aria-hidden="true">
                       {isDiscussion ? (
                         <>
-                          <span className="studio-remote-key active">Round 1</span>
-                          <span className="studio-remote-key">Round 2</span>
-                          <span className="studio-remote-key">Round 3</span>
-                          <span className="studio-remote-key">Restart round</span>
-                          <span className="studio-remote-key">-0:30</span>
-                          <span className="studio-remote-key">Pause</span>
-                          <span className="studio-remote-key">+0:30</span>
+                          <span className="studio-remote-key active">Think</span>
+                          <span className="studio-remote-key">Write</span>
+                          <span className="studio-remote-key">Discuss</span>
+                          <span className="studio-remote-key">Revise</span>
+                          <span className="studio-remote-key">Share</span>
+                          <span className="studio-remote-key">Previous phase</span>
+                          <span className="studio-remote-key">Start or resume</span>
+                          <span className="studio-remote-key">Restart phase</span>
+                          <span className="studio-remote-key">Next phase</span>
+                          <span className="studio-remote-key">Choose sharer</span>
                         </>
                       ) : (
                         <>
                           <span className="studio-remote-key">Back</span>
                           <span className="studio-remote-key active">Pause</span>
                           <span className="studio-remote-key">Next</span>
-                          {draft.workSpaceAvailable && <span className="studio-remote-key">Open work space</span>}
+                          <span className="studio-remote-key">Write on screen</span>
                         </>
                       )}
                     </div>
                   </div>
                   <aside className="studio-remote-private">
                     <p className="studio-remote-title">Private teacher surface</p>
-                    <p className="studio-private-note">The Remote layout stays the same. Only these state-specific actions and private data change.</p>
+                    {smallGroupConfig ? (
+                      <dl className="studio-private-plan">
+                        <div><dt>Pull</dt><dd>{smallGroupConfig.teacherPlan.pull}</dd></div>
+                        <div><dt>Focus</dt><dd>{smallGroupConfig.teacherPlan.focus}</dd></div>
+                        <div><dt>Activity</dt><dd>{smallGroupConfig.teacherPlan.activity}</dd></div>
+                        <div><dt>Check</dt><dd>{smallGroupConfig.teacherPlan.check}</dd></div>
+                      </dl>
+                    ) : galleryWalkConfig ? (
+                      <p className="studio-private-note">Materials: {galleryWalkConfig.materials.join(", ") || "Add materials below."}</p>
+                    ) : (
+                      <p className="studio-private-note">The Remote layout stays the same. Only these state-specific actions and private data change.</p>
+                    )}
                   </aside>
                 </section>
               </div>
@@ -1342,15 +1608,14 @@ export default function LessonScreenStudioPage() {
               State ID "{selectedStep.stateId || "blank"}" is not in the classroom state bank. Fix the State ID in Notion before running this lesson.
             </div>
           )}
-          {showsLessonTargets && lesson && selectedCriteria.length !== 1 && (
+          {criterionValidationMessage && (
             <div className="studio-alert error" role="alert">
-              {selectedCriteria.length === 0
-                ? "This lesson needs one Selected Success Criterion in Notion before the learning check is ready."
-                : "Selected Success Criterion contains multiple statements. Choose exactly one I can statement in Notion."}
+              {criterionValidationMessage} Studio will not save lesson states, add or replace states, or start this lesson until it is fixed.
             </div>
           )}
           {responseValidationMessage && <div className="studio-alert error" role="alert">{responseValidationMessage}</div>}
           {assignedToolValidationMessage && <div className="studio-alert error" role="alert">{assignedToolValidationMessage}</div>}
+          {routineValidationMessage && <div className="studio-alert error" role="alert">{routineValidationMessage}</div>}
 
           {selectedStep && draft ? (
             <fieldset className="studio-fields" disabled={stepLoading || saveState === "saving"}>
@@ -1366,11 +1631,23 @@ export default function LessonScreenStudioPage() {
                 />
               </label>
 
+              <label className="studio-check studio-link-toggle">
+                <input
+                  type="checkbox"
+                  checked={draft.publicSurfaceMode === "linked"}
+                  onChange={(event) => updateDraft("publicSurfaceMode", event.target.checked ? "linked" : "split")}
+                />
+                <span>
+                  Show the main focus on all three public screens.
+                  <small>Student response boxes and assigned resources still take priority on Chromebooks.</small>
+                </span>
+              </label>
+
               <label className="studio-field">
                 <span className="studio-label">Main Display (projector prompt)<span className="studio-count">{mainEditorText.length}</span></span>
                 <textarea
                   className="studio-input large"
-                  disabled={mainScreenUsesStructuredLayout}
+                  disabled={mainScreenUsesStructuredLayout || isCloseout}
                   maxLength={2000}
                   value={mainEditorText}
                   onFocus={() => beginSurfaceEdit("mainDisplay", mainEditorText)}
@@ -1378,6 +1655,44 @@ export default function LessonScreenStudioPage() {
                   onChange={(event) => updateSurfaceField("mainDisplay", event.target.value, mainText)}
                 />
               </label>
+              <section className="studio-story-tools" aria-label="Lesson story images" hidden={!canUseStoryImages}>
+                <div className="studio-story-head">
+                  <div>
+                    <p className="studio-story-title">Launch story images</p>
+                    <p className="studio-story-note">Add up to three images for the lesson launch. The scoreboard and prompt stay visible.</p>
+                  </div>
+                  <span>{configuredStoryImages.length} / 3</span>
+                </div>
+                {configuredStoryImages.length > 0 ? (
+                  <div className="studio-story-list">
+                    {configuredStoryImages.map((image) => (
+                      <div className="studio-story-item" key={image.url}>
+                        <img src={image.url} alt={image.alt} />
+                        <span>{image.alt}</span>
+                        <button type="button" onClick={() => removeStoryImage(image.url)}>Remove</button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="studio-story-actions">
+                  <input
+                    className="studio-input"
+                    type="url"
+                    value={storyImageUrl}
+                    placeholder="Paste a public image address"
+                    onChange={(event) => setStoryImageUrl(event.target.value)}
+                  />
+                  <button
+                    className="studio-source-action"
+                    type="button"
+                    disabled={!storyImageUrl.trim() || configuredStoryImages.length >= 3}
+                    onClick={() => addStoryImage(storyImageUrl, "Lesson story image")}
+                  >
+                    Add address
+                  </button>
+                </div>
+                {storyImageMessage ? <p className="studio-story-message" role="status">{storyImageMessage}</p> : null}
+              </section>
               {mainScreenUsesStructuredLayout ? (
                 <div className="studio-source-row">
                   <p className="studio-source-note">This state uses the structured layout shown in the Main projector preview.</p>
@@ -1395,6 +1710,7 @@ export default function LessonScreenStudioPage() {
                 <span className="studio-label">Pace Directions<span className="studio-count">{paceEditorText.length}</span></span>
                 <textarea
                   className="studio-input"
+                  disabled={isCloseout}
                   maxLength={2000}
                   value={paceEditorText}
                   onFocus={() => beginSurfaceEdit("paceDirections", paceEditorText)}
@@ -1415,6 +1731,7 @@ export default function LessonScreenStudioPage() {
                 <span className="studio-label">Student Action (Chromebook)<span className="studio-count">{studentEditorText.length}</span></span>
                 <textarea
                   className="studio-input"
+                  disabled={isCloseout}
                   maxLength={2000}
                   value={studentEditorText}
                   onFocus={() => beginSurfaceEdit("studentAction", studentEditorText)}
@@ -1458,10 +1775,7 @@ export default function LessonScreenStudioPage() {
                 </div>
               )}
 
-              <label className="studio-field studio-check">
-                <input type="checkbox" checked={draft.workSpaceAvailable} onChange={(event) => updateDraft("workSpaceAvailable", event.target.checked)} />
-                Work space can be opened from the private Remote
-              </label>
+              <p className="studio-source-note">Write on screen is always available from the private Remote and opens beside the current main-projector content.</p>
 
               {isDiscussion && (
                 <div className="studio-editor-section">
@@ -1469,24 +1783,86 @@ export default function LessonScreenStudioPage() {
                   <p>Sentence stems and vocabulary appear on the support and student previews.</p>
                   <label className="studio-field">
                     <span className="studio-label">Sentence Stems<span className="studio-count">{splitLines(draft.discussionStems).length}</span></span>
-                    <textarea className="studio-input" maxLength={2000} value={draft.discussionStems} onChange={(event) => updateDraft("discussionStems", event.target.value)} />
+                    <textarea className="studio-input" maxLength={2000} value={discussionStemsEditorText} onChange={(event) => updateDraft("discussionStems", event.target.value)} />
                   </label>
                   <label className="studio-field">
                     <span className="studio-label">Vocabulary (key terms)<span className="studio-count">{splitVocabulary(draft.vocabulary).length}</span></span>
-                    <textarea className="studio-input" maxLength={2000} value={draft.vocabulary} onChange={(event) => updateDraft("vocabulary", event.target.value)} />
+                    <textarea className="studio-input" maxLength={2000} value={vocabularyEditorText} onChange={(event) => updateDraft("vocabulary", event.target.value)} />
                   </label>
                 </div>
               )}
 
-              {(selectedStep.pollKind || draft.question || responseModeNeedsQuestion) && (
+              {galleryWalkConfig && (
+                <div className="studio-editor-section">
+                  <h2>Gallery Walk configuration</h2>
+                  <p>Set the movement and thinking routine once. The three public screens format it for their own roles.</p>
+                  <div className="studio-field-row">
+                    <label className="studio-field">
+                      <span className="studio-label">Stations</span>
+                      <input className="studio-input" type="number" min={1} max={20} value={galleryWalkConfig.stationCount} onChange={(event) => updateDraft("routineConfig", { ...galleryWalkConfig, stationCount: Math.max(1, Math.min(20, Number(event.target.value) || 1)) })} />
+                    </label>
+                    <label className="studio-field">
+                      <span className="studio-label">Minutes per rotation</span>
+                      <input className="studio-input" type="number" min={0.5} max={60} step={0.5} value={galleryWalkConfig.rotationMinutes} onChange={(event) => updateDraft("routineConfig", { ...galleryWalkConfig, rotationMinutes: Math.max(0.5, Math.min(60, Number(event.target.value) || 0.5)) })} />
+                    </label>
+                  </div>
+                  {([
+                    ["movementDirections", "Movement directions"],
+                    ["observationPrompt", "What to notice"],
+                    ["recordPrompt", "What to record"],
+                    ["sharePrompt", "Share-out prompt"],
+                  ] as const).map(([field, label]) => (
+                    <label className="studio-field" key={field}>
+                      <span className="studio-label">{label}</span>
+                      <textarea className="studio-input" maxLength={800} value={galleryWalkConfig[field]} onChange={(event) => updateDraft("routineConfig", { ...galleryWalkConfig, [field]: event.target.value })} />
+                    </label>
+                  ))}
+                  <label className="studio-field">
+                    <span className="studio-label">Materials (one per line)</span>
+                    <textarea className="studio-input" maxLength={2000} value={galleryWalkConfig.materials.join("\n")} onChange={(event) => updateDraft("routineConfig", { ...galleryWalkConfig, materials: splitLines(event.target.value) })} />
+                  </label>
+                </div>
+              )}
+
+              {smallGroupConfig && (
+                <div className="studio-editor-section">
+                  <h2>Small Group configuration</h2>
+                  <p>The group task is public. Pull, focus, activity, check, and materials stay on the private teacher Remote.</p>
+                  <label className="studio-field">
+                    <span className="studio-label">Minutes per rotation</span>
+                    <input className="studio-input studio-duration" type="number" min={0.5} max={60} step={0.5} value={smallGroupConfig.rotationMinutes} onChange={(event) => updateDraft("routineConfig", { ...smallGroupConfig, rotationMinutes: Math.max(0.5, Math.min(60, Number(event.target.value) || 0.5)) })} />
+                  </label>
+                  <label className="studio-field">
+                    <span className="studio-label">Public group task</span>
+                    <textarea className="studio-input" maxLength={800} value={smallGroupConfig.publicTask} onChange={(event) => updateDraft("routineConfig", { ...smallGroupConfig, publicTask: event.target.value })} />
+                  </label>
+                  {([
+                    ["pull", "Private pull plan"],
+                    ["focus", "Private focus"],
+                    ["activity", "Private activity"],
+                    ["check", "Private check"],
+                  ] as const).map(([field, label]) => (
+                    <label className="studio-field" key={field}>
+                      <span className="studio-label">{label}</span>
+                      <textarea className="studio-input" maxLength={800} value={smallGroupConfig.teacherPlan[field]} onChange={(event) => updateDraft("routineConfig", { ...smallGroupConfig, teacherPlan: { ...smallGroupConfig.teacherPlan, [field]: event.target.value } })} />
+                    </label>
+                  ))}
+                  <label className="studio-field">
+                    <span className="studio-label">Private materials (one per line)</span>
+                    <textarea className="studio-input" maxLength={2000} value={smallGroupConfig.teacherPlan.materials.join("\n")} onChange={(event) => updateDraft("routineConfig", { ...smallGroupConfig, teacherPlan: { ...smallGroupConfig.teacherPlan, materials: splitLines(event.target.value) } })} />
+                  </label>
+                </div>
+              )}
+
+              {(effectiveResponseKind || draft.question || responseModeNeedsQuestion) && (
                 <div className="studio-editor-section">
                   <h2>Response prompt</h2>
-                  <p>{selectedStep.pollKind ? `Response type: ${selectedStep.pollKind}` : "This prompt is used by the selected lesson state."}</p>
+                  <p>{effectiveResponseKind ? `Response type: ${effectiveResponseKind}` : "This prompt is used by the selected lesson state."}</p>
                   <label className="studio-field">
                     <span className="studio-label">Question<span className="studio-count">{draft.question.length}</span></span>
                     <textarea className="studio-input" maxLength={2000} value={draft.question} onChange={(event) => updateDraft("question", event.target.value)} />
                   </label>
-                  {normalizedResponseMode === "multiple choice" && (
+                  {effectiveResponseKind === "multiple-choice" && (
                     <label className="studio-field">
                       <span className="studio-label">Choices (one per line)<span className="studio-count">{normalizedChoices.length}</span></span>
                       <textarea

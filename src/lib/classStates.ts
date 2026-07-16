@@ -14,20 +14,24 @@ export interface ClassState {
   scheduleHint?: "Monday";
 }
 
+export const CLOSEOUT_DIRECTIONS = "Put away your supplies, clean your area, and reset the room.";
+
 export const DEFAULT_STATES: ClassState[] = [
   { id: "warmup", label: "Warm-Up", minutes: 5, color: "#35785a", desc: "Open the assigned warm-up. Complete all five questions on your own.", paceAction: "Start today's warm-up.", studentAction: "Open the warm-up and begin." },
   { id: "review", label: "Review", minutes: 4, color: "#35785a", desc: "Review the answers and the problems the class missed most often.", paceAction: "Let's check the answers together.", studentAction: "Look up and check your thinking." },
-  { id: "learning-target-readers", label: "Learning Intention + Success Criteria", minutes: 1, color: "#d2a74f", desc: "Meet today's readers, then listen for the learning intention and success criterion.", paceAction: "Meet today's readers.", studentAction: "Look up and listen to today's readers.", remoteAction: "Use the main panel to spin or re-spin the two readers." },
+  { id: "learning-target-readers", label: "Learning Intention + Success Criterion", minutes: 1, color: "#d2a74f", desc: "Meet today's readers, then listen for the learning intention and success criterion.", paceAction: "Meet today's readers.", studentAction: "Look up and listen to today's readers.", remoteAction: "Use the main panel to spin or re-spin the two readers." },
   { id: "ipad-kid", label: "iPad Kid Spinner", minutes: 1, color: "#6fbd91", desc: "Spin to choose this week's iPad Kid.", paceAction: "Let's choose this week's iPad Kid.", studentAction: "Look up for this week's class role.", remoteAction: "Use the main panel to spin or re-spin the iPad Kid.", scheduleHint: "Monday" },
   { id: "launch", label: "Lesson Launch", minutes: 4, color: "#a86735", desc: "Make sense of the scenario, quantities, and question.", paceAction: "Study the problem. What do you notice?", studentAction: "Write one thing you notice." },
   { id: "concrete", label: "Concrete", minutes: 5, color: "#3f7d50", desc: "Build the relationship with the assigned concrete model.", paceAction: "Build the relationship with your materials.", studentAction: "Build the model with your materials." },
   { id: "representational", label: "Representational", minutes: 5, color: "#357f7d", desc: "Connect the concrete model to a diagram or representation.", paceAction: "Show the same idea with a model.", studentAction: "Build or draw the same relationship." },
   { id: "abstract", label: "Abstract", minutes: 5, color: "#4f5da8", desc: "Connect the representation to notation and reasoning.", paceAction: "Write the relationship with math.", studentAction: "Write the relationship with math." },
   { id: "learning-check", label: "Learning Check", minutes: 3, color: "#6f3f78", desc: "Revisit the goal and show your understanding from 0 to 5.", paceAction: "Show where you are right now.", studentAction: "Choose your honest 0 to 5." },
-  { id: "discussion", label: "Discussion", minutes: 6, color: "#9d4c2f", desc: "Complete three two-minute discussion cycles and revise your reasoning.", paceAction: "Use a stem to share your thinking.", studentAction: "Explain your idea with a sentence stem." },
+  { id: "discussion", label: "Discussion", minutes: 6, color: "#9d4c2f", desc: "Think, write, discuss, revise, then share.", paceAction: "Follow the current discussion phase.", studentAction: "Think first. Write something. Then discuss and revise.", remoteAction: "Run Think, Write, Discuss, Revise, and Share. Use the spinner for Share." },
+  { id: "gallery-walk", label: "Gallery Walk", minutes: 12, color: "#9d4c2f", desc: "Study each station, record one useful observation, and move when the timer sounds.", paceAction: "Observe, record, then rotate.", studentAction: "Record one observation at each station.", remoteAction: "Run the rotations, monitor movement, and choose the final share-out." },
+  { id: "small-group", label: "Small Group Rotations", minutes: 16, color: "#357f7d", desc: "Complete the assigned group task while the teacher meets with a focused group.", paceAction: "Work with your group and show your thinking.", studentAction: "Complete the group task on paper.", remoteAction: "Use the private pull, focus, activity, and check plan. Keep student names off public screens." },
   { id: "independent", label: "Independent Paper Work", minutes: 14, color: "#36557f", desc: "Complete the full required paper set and use the help path if needed.", paceAction: "Start the required paper set.", studentAction: "Work through your paper set." },
   { id: "exit", label: "Exit Ticket", minutes: 3, color: "#8a3d50", desc: "Complete and submit the assigned exit ticket on your own.", paceAction: "Show what you know.", studentAction: "Complete and submit your exit ticket." },
-  { id: "closeout", label: "Closeout", minutes: 1, color: "#8a6b2f", desc: "Confirm your turn-in status and the next class action.", paceAction: "Turn in your work, then reset your space.", studentAction: "Check what's due before you go." },
+  { id: "closeout", label: "Closeout", minutes: 1, color: "#8a6b2f", desc: CLOSEOUT_DIRECTIONS, paceAction: CLOSEOUT_DIRECTIONS, studentAction: CLOSEOUT_DIRECTIONS, remoteAction: "Scan the room, then end the session when supplies are away and areas are clean." },
   { id: "i-do", label: "Direct Instruction (I do)", minutes: 4, color: "#a86735", desc: "Watch and take notes. I'll model each step." },
   { id: "we-do", label: "Guided Practice (We do)", minutes: 5, color: "#357f7d", desc: "We'll solve these together — try each step with me." },
   { id: "question", label: "Question", minutes: 2, color: "#8b5cf6", desc: "Respond to the question before the timer ends." },
@@ -72,6 +76,12 @@ export const BANK_GROUPS = [
     label: "Class Routines",
     hint: "Optional routines that belong on selected lesson days",
     stateIds: ["ipad-kid"],
+  },
+  {
+    id: "collaboration",
+    label: "Collaborative Routines",
+    hint: "Structured movement, gallery review, and teacher-led small groups",
+    stateIds: ["gallery-walk", "small-group"],
   },
   {
     id: "feedback",
@@ -124,6 +134,7 @@ export function classStateStepDefaults(state: ClassState): ClassStateStepDefault
   const isQuestion = state.id === "question";
   const isPoll = state.id === "poll";
   const isPaper = state.id === "independent" || state.id === "you-do";
+  const isDiscussion = state.id === "discussion";
   const isAssignedTool = state.id.startsWith("tool-")
     && !["tool-game", "tool-exit-ticket", "tool-checkpoint"].includes(state.id);
   const responseMode = isWarmupOrExit
@@ -161,8 +172,10 @@ export function classStateStepDefaults(state: ClassState): ClassStateStepDefault
     paceDirections: "",
     studentAction: "",
     remoteActions: state.remoteAction || "",
-    discussionStems: "",
-    vocabulary: "",
+    discussionStems: isDiscussion
+      ? "I agree with ___ because...\nI disagree because...\nMy evidence is...\nI changed my thinking because..."
+      : "",
+    vocabulary: isDiscussion ? "strategy\nevidence\njustify\nrepresent\nrevise" : "",
     responseMode,
     workSpaceAvailable: false,
   };

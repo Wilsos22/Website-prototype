@@ -10,12 +10,16 @@
     "test:mastery": "tsc src/lib/mastery.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2020 --skipLibCheck && node scripts/mastery-golden.mjs",
     "test:grouping": "tsc src/lib/grouping.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2021 --skipLibCheck && node scripts/grouping-golden.mjs",
     "test:warmup": "tsc src/lib/warmupEngine.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2021 --skipLibCheck && node scripts/warmup-golden.mjs",
-    "test:live-flow-contract": "tsc src/lib/liveFlowContract.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2021 --skipLibCheck && node scripts/live-flow-contract.mjs",
+    "test:live-flow-contract": "tsc src/lib/liveFlowContract.ts src/lib/classroomPilot.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2021 --skipLibCheck && node scripts/live-flow-contract.mjs",
     "test:lesson-visuals": "tsc src/lib/lessonVisuals.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2021 --skipLibCheck && node scripts/lesson-visuals-contract.mjs",
-    "test:notion-lesson-contract": "tsc src/lib/notionLessons.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2021 --types node --skipLibCheck && node scripts/notion-lesson-contract.mjs",
+    "test:notion-lesson-contract": "tsc src/lib/notionLessons.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2022 --types node --skipLibCheck && node scripts/notion-lesson-contract.mjs",
     "test:notion-lesson-archive-contract": "tsc src/lib/notionLessonArchive.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2021 --types node --skipLibCheck && node scripts/notion-lesson-archive-contract.mjs",
-    "test:lesson-step-write-contract": "tsc src/lib/notionLessonStepWrites.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2021 --types node --skipLibCheck && node scripts/notion-lesson-step-write-contract.mjs",
-    "test:public-lesson-contract": "tsc src/lib/publicLessonData.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2021 --types node --skipLibCheck && node scripts/public-lesson-data.mjs"
+    "test:lesson-step-write-contract": "tsc src/lib/notionLessonStepWrites.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2022 --types node --skipLibCheck && node scripts/notion-lesson-step-write-contract.mjs",
+    "test:lesson-routine-config-contract": "tsc src/lib/lessonRoutineConfig.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2021 --lib es2021,dom --skipLibCheck && node scripts/lesson-routine-config-contract.mjs",
+    "test:lesson-step-metadata-contract": "tsc src/lib/lessonStepMetadata.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2022 --skipLibCheck && node scripts/lesson-step-metadata-contract.mjs",
+    "test:success-criterion-contract": "tsc src/lib/successCriterion.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2021 --skipLibCheck && node scripts/success-criterion-contract.mjs",
+    "test:public-lesson-contract": "tsc src/lib/publicLessonData.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2021 --types node --skipLibCheck && node scripts/public-lesson-data.mjs",
+    "test:live-flow-privacy-contract": "tsc --project scripts/tsconfig.live-flow-privacy-contract.json && node scripts/live-flow-privacy-contract.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

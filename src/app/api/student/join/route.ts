@@ -109,6 +109,7 @@ export async function POST(request: Request) {
           sessionId: session.id,
           studentId: student.id,
           name: student.fullName,
+          syncKey: code,
         },
       },
       { headers: { "cache-control": "no-store" } },

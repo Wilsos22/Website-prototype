@@ -2,17 +2,23 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
+import ClassroomSpinner from "@/components/ClassroomSpinner";
 import { getSupabase } from "@/lib/supabase";
 import { SECURE_STUDENT_DATA, studentApiRequest } from "@/lib/studentApi";
+import { CLOSEOUT_DIRECTIONS } from "@/lib/classStates";
+import { publicSuccessCriterion } from "@/lib/successCriterion";
 import {
   LIVE_FLOW_MODE,
   STUDENT_SESSION_KEY,
   getStoredStudentSession,
   getStoredStudentSessionId,
   leaveClassMode,
+  liveIndependentSupportItems,
   liveTimerSeconds,
+  resolveLiveStepPollKind,
   type DiscussionPhaseId,
   type LiveClassFlowSnapshot,
+  type StoredStudentSession,
 } from "@/lib/liveClassFlow";
 
 const WARMUP_IDENTITY = process.env.NEXT_PUBLIC_WARMUP_IDENTITY_ENABLED === "true";
@@ -22,11 +28,6 @@ type SessionRow = {
   status: string;
   broadcast: string | null;
   live_flow: LiveClassFlowSnapshot | null;
-};
-
-type PollAnswer = {
-  id: string;
-  answer: string | null;
 };
 
 type ConnectionState = "connecting" | "connected" | "reconnecting";
@@ -104,12 +105,6 @@ function formatTime(totalSeconds: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-function missingLiveFlowColumn(message: string) {
-  return message.includes("live_flow")
-    || message.toLowerCase().includes("schema cache")
-    || message.toLowerCase().includes("column");
-}
-
 export default function LiveFlowPage() {
   const router = useRouter();
   const supabase = getSupabase();
@@ -117,7 +112,6 @@ export default function LiveFlowPage() {
   const [loading, setLoading] = useState(true);
   const [emptyMessage, setEmptyMessage] = useState("Waiting for the teacher.");
   const [holding, setHolding] = useState(false);
-  const [pollAnswers, setPollAnswers] = useState<PollAnswer[]>([]);
   const [pollAnswer, setPollAnswer] = useState("");
   const [fistRating, setFistRating] = useState(3);
   const [submittedPollIds, setSubmittedPollIds] = useState<string[]>([]);
@@ -165,65 +159,35 @@ export default function LiveFlowPage() {
       setLoading(false);
     };
     const readSession = async () => {
-      if (SECURE_STUDENT_DATA) {
-        try {
+      try {
+        if (SECURE_STUDENT_DATA) {
           const result = await studentApiRequest<{ session: SessionRow }>(
             `/api/student/session-state?sessionId=${encodeURIComponent(sessionId)}`,
           );
           applySession(result.session);
-        } catch (error) {
-          setEmptyMessage(error instanceof Error ? error.message : "Live Flow could not load.");
-          setConnectionState("reconnecting");
-          setLoading(false);
-        }
-        return;
-      }
-      const { data, error } = await supabase
-        .from("sessions")
-        .select("status,broadcast,live_flow")
-        .eq("id", sessionId)
-        .maybeSingle();
-      if (error) {
-        const fallback = await supabase
-          .from("sessions")
-          .select("status,broadcast")
-          .eq("id", sessionId)
-          .maybeSingle();
-        if (fallback.error) {
-          setEmptyMessage(fallback.error.message);
-          setConnectionState("reconnecting");
-          setLoading(false);
           return;
         }
-        applySession({ ...(fallback.data as Omit<SessionRow, "live_flow"> | null), live_flow: null } as SessionRow | null);
-        setEmptyMessage(
-          error.message && missingLiveFlowColumn(error.message)
-            ? "Live Flow database setup is missing."
-            : error.message || "Live Flow could not load.",
+        const response = await fetch(
+          `/api/student/session-state?sessionId=${encodeURIComponent(sessionId)}`,
+          { cache: "no-store", credentials: "same-origin" },
         );
-        return;
+        const result = await response.json().catch(() => ({})) as { session?: SessionRow; error?: string };
+        if (!response.ok || !result.session) throw new Error(result.error || "Live Flow could not load.");
+        applySession(result.session);
+      } catch (error) {
+        setEmptyMessage(error instanceof Error ? error.message : "Live Flow could not load.");
+        setConnectionState("reconnecting");
+        setLoading(false);
       }
-      applySession(data as SessionRow | null);
     };
 
     void readSession();
     const poll = window.setInterval(readSession, SECURE_STUDENT_DATA ? 2000 : 1000);
-    const channel = SECURE_STUDENT_DATA
-      ? null
-      : supabase
-        .channel(`live-flow-${sessionId}`)
-        .on(
-          "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "sessions", filter: `id=eq.${sessionId}` },
-          (payload) => applySession(payload.new as SessionRow),
-        )
-        .subscribe();
 
     return () => {
       stopped = true;
       window.clearTimeout(connectionFallback);
       window.clearInterval(poll);
-      if (channel) void supabase.removeChannel(channel);
     };
   }, [supabase]);
 
@@ -261,7 +225,7 @@ export default function LiveFlowPage() {
       });
       if (!response.ok || stopped) return;
       const result = await response.json().catch(() => ({})) as {
-        session?: { sessionId: string; studentId: string; name: string };
+        session?: StoredStudentSession;
       };
       if (!result.session) return;
       try {
@@ -296,32 +260,6 @@ export default function LiveFlowPage() {
       setSubmittedPollIds([]);
     }
   }, []);
-
-  useEffect(() => {
-    if (SECURE_STUDENT_DATA) {
-      setPollAnswers([]);
-      return;
-    }
-    if (!supabase || !activePollId) {
-      setPollAnswers([]);
-      return;
-    }
-    let stopped = false;
-    const loadAnswers = async () => {
-      const { data } = await supabase
-        .from("poll_answers")
-        .select("id,answer")
-        .eq("poll_id", activePollId)
-        .order("created_at");
-      if (!stopped) setPollAnswers((data as PollAnswer[]) || []);
-    };
-    void loadAnswers();
-    const interval = window.setInterval(loadAnswers, 1000);
-    return () => {
-      stopped = true;
-      window.clearInterval(interval);
-    };
-  }, [activePollId, supabase]);
 
   useEffect(() => {
     setPollSubmitError(null);
@@ -403,9 +341,38 @@ export default function LiveFlowPage() {
   }
 
   const phase = flow?.phase ?? null;
+  const activeSequenceStep = flow?.sequence?.steps?.[flow.sequence.currentIndex] || null;
+  const expectedPollKind = flow?.state?.semantic === "discussion"
+    ? null
+    : resolveLiveStepPollKind(
+        flow?.presentation?.responseMode,
+        activeSequenceStep?.pollKind || undefined,
+        flow?.state?.id,
+      );
+  const waitingForPoll = Boolean(flow?.state && expectedPollKind && !activePoll);
+  const isCloseout = flow?.state?.id === "closeout";
+  const publicSurfacesLinked = flow?.presentation?.publicSurfaceMode === "linked";
+  const linkedMainFocus = flow?.presentation?.mainDisplay || flow?.presentation?.body || flow?.state?.description || "";
+  const routineConfig = flow?.presentation?.routineConfig || null;
+  const studentSurfaceAction = publicSurfacesLinked
+    ? linkedMainFocus
+    : routineConfig?.kind === "gallery-walk"
+      ? routineConfig.recordPrompt
+      : routineConfig?.kind === "small-group"
+        ? routineConfig.publicTask
+        : flow?.presentation?.studentAction;
   const discussion = phase ? DISCUSSION_CONTENT[phase.id] : null;
-  const title = discussion?.title ?? flow?.state?.label ?? "Waiting for the teacher.";
-  const subtitle = discussion?.subtitle ?? flow?.presentation?.studentAction ?? flow?.state?.description ?? "";
+  const title = waitingForPoll
+    ? "Get ready to respond"
+    : discussion?.title ?? flow?.state?.label ?? "Waiting for the teacher.";
+  const subtitle = isCloseout
+    ? CLOSEOUT_DIRECTIONS
+    : waitingForPoll
+    ? "Wait for your teacher. Your response box is opening."
+    : discussion?.subtitle
+      ?? studentSurfaceAction
+      ?? flow?.state?.description
+      ?? "";
   const phaseMedia = phase?.media ?? null;
   const timer = flow?.timer ?? null;
   const showTimer = Boolean(timer && timer.totalSeconds > 0 && (!phase || phase.timed));
@@ -448,10 +415,35 @@ export default function LiveFlowPage() {
     .filter(Boolean);
   const showDiscussionSupports = !activePoll && (sentenceStems.length > 0 || keyVocabulary.length > 0);
   const resource = flow?.resource ?? null;
+  const linkedSpinnerMode = !activePoll && !resource && publicSurfacesLinked && flow?.state?.id === "learning-target-readers"
+    ? "readers"
+    : !activePoll && !resource && publicSurfacesLinked && flow?.state?.id === "ipad-kid"
+      ? "ipad"
+      : null;
+  const liveSessionId = getStoredStudentSessionId();
+  const spinnerSyncKey = getStoredStudentSession()?.syncKey || null;
+  const spinnerSyncScope = `${flow?.sequence?.currentIndex ?? -1}:${flow?.presentation?.notionStepId || flow?.state?.id || "spinner"}`;
+  const independentSupports = liveIndependentSupportItems(flow?.state?.id, flow?.lesson);
+  const routineSupports = !publicSurfacesLinked && routineConfig?.kind === "gallery-walk"
+    ? [
+        { label: "Notice", body: routineConfig.observationPrompt },
+        { label: "Move", body: routineConfig.movementDirections },
+        { label: "Share", body: routineConfig.sharePrompt },
+      ]
+    : !publicSurfacesLinked && routineConfig?.kind === "small-group"
+      ? [{ label: "Rotation", body: `${routineConfig.rotationMinutes} minutes with this group.` }]
+      : [];
   const actionBody = flow?.state?.id === "independent" && flow?.paper?.task
     ? flow.paper.task
     : flow?.presentation?.studentAction || "";
-  const showActionBody = Boolean(!activePoll && !resource && actionBody && actionBody.trim() !== subtitle.trim());
+  const showActionBody = Boolean(
+    !publicSurfacesLinked
+    && !waitingForPoll
+    && !activePoll
+    && !resource
+    && actionBody
+    && actionBody.trim() !== subtitle.trim(),
+  );
   const resourceNeedsIdentity = Boolean(resource?.url.includes(WARMUP_IDENTITY_PLACEHOLDER));
   const resolvedResourceUrl = resource?.url && (!resourceNeedsIdentity || authUserId)
     ? resource.url
@@ -469,9 +461,20 @@ export default function LiveFlowPage() {
         .lf-exit { position:fixed; top:16px; right:16px; z-index:5; min-height:42px; border:1px solid var(--bdb-line); border-radius:10px; background:#fff; color:var(--bdb-ink); padding:0 14px; font:inherit; font-size:0.74rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; cursor:pointer; box-shadow:var(--bdb-shadow-sm); }
         .lf-exit:hover, .lf-exit:focus-visible { border-color:var(--lf-accent); outline:none; }
         .lf-shell { width:min(100%,960px); text-align:center; display:grid; justify-items:center; gap:clamp(20px,3.6vw,38px); }
+        .lf-spinner-shell { position:relative; width:min(100%,960px); height:min(72vh,620px); overflow:hidden; border:1px solid var(--bdb-line); border-radius:16px; background:#fff; box-shadow:var(--bdb-shadow); }
+        .lf-spinner-shell .classroom-spinner { background:radial-gradient(circle at 50% 42%,color-mix(in srgb,var(--lf-accent) 12%,transparent),transparent 58%),var(--bdb-ground); }
+        .lf-spinner-shell .classroom-spinner-card { border-color:var(--bdb-line); border-top-color:var(--lf-accent); background:#fff; box-shadow:var(--bdb-shadow-sm); }
+        .lf-spinner-shell .classroom-spinner-label { color:var(--lf-accent); }
+        .lf-spinner-shell .classroom-spinner-target, .lf-spinner-shell .classroom-spinner-name { color:var(--bdb-ink); }
+        .lf-spinner-shell .classroom-spinner-window { border-color:var(--bdb-line); background:var(--bdb-ground); color:var(--bdb-ink); }
+        .lf-spinner-shell .classroom-spinner-window.landed { border-color:var(--lf-accent); box-shadow:0 0 0 3px color-mix(in srgb,var(--lf-accent) 24%,transparent) inset; }
+        .lf-spinner-shell .classroom-spinner-status { color:var(--bdb-ink-soft); }
         .lf-brand { margin:0; color:var(--lf-accent); font-size:0.76rem; font-weight:900; letter-spacing:0.14em; text-transform:uppercase; }
         .lf-title { margin:0; max-width:26ch; color:var(--bdb-ink); font-size:clamp(1.8rem,4.4vw,3.4rem); line-height:1.08; font-weight:900; letter-spacing:0; }
         .lf-subtitle { margin:0; max-width:42ch; color:var(--bdb-ink-soft); font-size:clamp(1rem,2vw,1.3rem); line-height:1.42; font-weight:700; }
+        .lf-share { width:min(100%,620px); display:grid; gap:6px; border:1px solid var(--bdb-line); border-left:6px solid var(--lf-accent); border-radius:12px; background:#fff; padding:16px 20px; text-align:left; box-shadow:var(--bdb-shadow-sm); }
+        .lf-share span { color:var(--lf-accent); font-size:0.72rem; font-weight:900; letter-spacing:0.12em; text-transform:uppercase; }
+        .lf-share strong { color:var(--bdb-ink); font-size:clamp(1.8rem,4.8vw,3.2rem); line-height:1; font-weight:950; }
         .lf-media-wrap { width:min(100%,760px); display:grid; place-items:center; }
         .lf-media { width:min(100%,720px); max-height:38vh; border:1px solid var(--bdb-line); border-radius:12px; background:#fff; object-fit:contain; box-shadow:var(--bdb-shadow); }
         .lf-media.embed { aspect-ratio:16 / 9; height:auto; }
@@ -497,9 +500,11 @@ export default function LiveFlowPage() {
         .lf-poll-text { width:100%; min-height:130px; box-sizing:border-box; border:2px solid var(--bdb-line); border-radius:10px; background:#fff; color:var(--bdb-ink); padding:14px 16px; font:inherit; font-size:1.1rem; font-weight:700; resize:vertical; box-shadow:var(--bdb-shadow-sm); }
         .lf-poll-text:focus { border-color:var(--lf-accent); outline:none; }
         .lf-poll-send { border-color:var(--lf-accent); background:var(--lf-accent); color:#fff; }
-        .lf-fist { width:min(100%,650px); display:grid; gap:14px; }
-        .lf-slider { width:100%; accent-color:var(--lf-accent); cursor:pointer; }
-        .lf-fist-value { color:var(--bdb-ink); font-size:clamp(3.4rem,8vw,5.5rem); font-weight:900; line-height:0.9; }
+        .lf-fist { width:min(100%,700px); display:grid; gap:14px; }
+        .lf-fist-options { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:10px; }
+        .lf-fist-option { min-height:72px; border:2px solid var(--bdb-line); border-radius:12px; background:#fff; color:var(--bdb-ink); font:inherit; font-size:clamp(1.35rem,3vw,2.15rem); font-weight:950; cursor:pointer; box-shadow:var(--bdb-shadow-sm); }
+        .lf-fist-option:hover, .lf-fist-option:focus-visible, .lf-fist-option.selected { border-color:var(--lf-accent); background:color-mix(in srgb,var(--lf-accent) 10%,#fff); outline:none; }
+        .lf-fist-option:disabled { cursor:not-allowed; opacity:0.72; }
         .lf-fist-labels { display:flex; justify-content:space-between; gap:6px; color:var(--bdb-ink-soft); font-size:0.76rem; font-weight:900; text-transform:uppercase; }
         .lf-poll-sent { color:#287652; font-size:clamp(1.1rem,2.5vw,1.5rem); font-weight:900; }
         .lf-poll-save-state { margin:0; color:var(--bdb-ink-soft); font-size:0.78rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
@@ -519,9 +524,13 @@ export default function LiveFlowPage() {
         .lf-resource-frame { width:100%; height:min(62vh,720px); border:1px solid var(--bdb-line); border-radius:12px; background:#fff; box-shadow:var(--bdb-shadow); }
         .lf-resource-link { display:inline-flex; min-height:58px; align-items:center; justify-content:center; border:2px solid var(--lf-accent); border-radius:10px; background:var(--lf-accent); color:#fff; padding:0 24px; text-decoration:none; font-size:1.05rem; font-weight:900; }
         .lf-action { width:min(100%,720px); border:1px solid var(--bdb-line); border-left:6px solid var(--lf-accent); border-radius:12px; background:#fff; padding:clamp(18px,3vw,28px); color:var(--bdb-ink); text-align:left; white-space:pre-wrap; font-size:clamp(1rem,1.8vw,1.2rem); line-height:1.5; font-weight:760; box-shadow:var(--bdb-shadow); }
+        .lf-independent-supports { width:min(100%,820px); display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; text-align:left; }
+        .lf-independent-card { border:1px solid var(--bdb-line); border-top:4px solid var(--lf-accent); border-radius:10px; background:#fff; padding:14px 16px; box-shadow:var(--bdb-shadow-sm); }
+        .lf-independent-label { margin:0 0 6px; color:var(--lf-accent); font-size:0.7rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
+        .lf-independent-body { margin:0; color:var(--bdb-ink); font-size:0.95rem; font-weight:760; line-height:1.4; white-space:pre-wrap; }
         .lf-connection { position:fixed; left:50%; top:16px; z-index:6; transform:translateX(-50%); border:1px solid #c78b24; border-radius:999px; background:#fff4d8; color:#694716; padding:9px 14px; font-size:0.76rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; box-shadow:var(--bdb-shadow-sm); }
         .lf-loading { color:var(--bdb-ink-soft); font-weight:800; }
-        @media (max-width:760px) { .lf-supports { grid-template-columns:1fr; } }
+        @media (max-width:760px) { .lf-supports, .lf-independent-supports { grid-template-columns:1fr; } }
         @media (max-width:600px) {
           .lf-page { padding:84px 18px 26px; }
           .lf-connection { top:68px; left:18px; right:18px; transform:none; box-sizing:border-box; text-align:center; }
@@ -551,10 +560,28 @@ export default function LiveFlowPage() {
               </div>
             </>
           )
+        ) : linkedSpinnerMode && liveSessionId ? (
+          <section className="lf-spinner-shell" aria-label="Classroom spinner synced with the main display">
+            <ClassroomSpinner
+              key={`${liveSessionId}:${spinnerSyncScope}:mirror`}
+              mode={linkedSpinnerMode}
+              sessionId={liveSessionId}
+              syncKey={spinnerSyncKey}
+              periodId={null}
+              stateId={flow.state.id}
+              syncScope={spinnerSyncScope}
+              role="mirror"
+              learningIntention={flow.lesson?.learningIntention}
+              successCriterion={publicSuccessCriterion(flow.lesson?.selectedSuccessCriterion)}
+            />
+          </section>
         ) : (
           <>
             {!activePoll && <h1 className="lf-title">{title}</h1>}
             {!activePoll && subtitle && <p className="lf-subtitle">{subtitle}</p>}
+            {!activePoll && phase?.id === "share" && phase.selectedSharer ? (
+              <div className="lf-share"><span>Ready to share</span><strong>{phase.selectedSharer}</strong></div>
+            ) : null}
             {!activePoll && phaseMedia && (
               <div className="lf-media-wrap">
                 {phaseMedia.type === "video" ? (
@@ -590,28 +617,54 @@ export default function LiveFlowPage() {
               </section>
             )}
             {showActionBody ? <section className="lf-action" aria-label="Current action">{actionBody}</section> : null}
+            {!activePoll && independentSupports.length > 0 ? (
+              <section className="lf-independent-supports" aria-label="Independent work supports">
+                {independentSupports.map((item) => (
+                  <article className="lf-independent-card" key={item.label}>
+                    <p className="lf-independent-label">{item.label}</p>
+                    <p className="lf-independent-body">{item.body}</p>
+                  </article>
+                ))}
+              </section>
+            ) : null}
+            {!activePoll && routineSupports.length > 0 ? (
+              <section className="lf-independent-supports" aria-label="Current routine supports">
+                {routineSupports.map((item) => (
+                  <article className="lf-independent-card" key={item.label}>
+                    <p className="lf-independent-label">{item.label}</p>
+                    <p className="lf-independent-body">{item.body}</p>
+                  </article>
+                ))}
+              </section>
+            ) : null}
             {activePoll ? activePoll.stage === "responding" ? (
               <section className="lf-poll">
                 <h1 className="lf-poll-question">{activePoll.question}</h1>
                 {activePoll.kind === "fist-to-five" ? (
                   <>
-                    <p className="lf-poll-help">Slide to show your current understanding.</p>
+                    <p className="lf-poll-help">Choose the number that best shows where you are right now.</p>
                     <div className="lf-fist">
-                      <div className="lf-fist-value">{fistRating}</div>
-                      <input
-                        className="lf-slider"
-                        type="range"
-                        min="0"
-                        max="5"
-                        step="1"
-                        value={fistRating}
-                        aria-label="Understanding from 0 to 5"
-                        disabled={pollSubmitted}
-                        onChange={(event) => setFistRating(Number(event.target.value))}
-                      />
+                      <div className="lf-fist-options" aria-label="Understanding from 0 to 5">
+                        {[0, 1, 2, 3, 4, 5].map((value) => (
+                          <button
+                            className={`lf-fist-option${fistRating === value ? " selected" : ""}`}
+                            type="button"
+                            key={value}
+                            aria-pressed={fistRating === value}
+                            disabled={pollSubmitted || pollSaveState === "saving"}
+                            onClick={() => {
+                              setFistRating(value);
+                              void submitPollAnswer(String(value));
+                            }}
+                          >
+                            {value}
+                          </button>
+                        ))}
+                      </div>
                       <div className="lf-fist-labels"><span>0 · Not yet</span><span>5 · Can explain</span></div>
                     </div>
-                    {pollSubmitted ? <p className="lf-poll-sent">Check-in submitted.</p> : <button className="lf-poll-send" disabled={pollSaveState === "saving"} onClick={() => submitPollAnswer(String(fistRating))}>Send check-in</button>}
+                    {pollSubmitted ? <p className="lf-poll-sent">Check-in submitted.</p> : <p className="lf-poll-help">Tap one number to submit.</p>}
+                    <p className="lf-poll-help">Only your teacher sees your number.</p>
                     {pollSubmitError && <p className="lf-poll-help">{pollSubmitError}</p>}
                   </>
                 ) : activePoll.kind === "multiple-choice" ? (
@@ -633,25 +686,8 @@ export default function LiveFlowPage() {
               </section>
             ) : (
               <section className="lf-poll">
-                <h1 className="lf-poll-question">Results</h1>
-                <p className="lf-poll-help">{activePoll.question}</p>
-                {activePoll.kind === "short-answer" ? (
-                  <p className="lf-poll-sent">{pollAnswers.length} response{pollAnswers.length === 1 ? "" : "s"} submitted.</p>
-                ) : (
-                  <div className="lf-results">
-                    {(activePoll.choices || []).map((choice) => {
-                      const count = pollAnswers.filter((answer) => answer.answer === choice).length;
-                      const percent = pollAnswers.length ? Math.round((count / pollAnswers.length) * 100) : 0;
-                      return (
-                        <div className="lf-result" key={choice}>
-                          <span>{activePoll.kind === "fist-to-five" ? `${choice} / 5` : choice}</span>
-                          <div className="lf-result-bar"><div className="lf-result-fill" style={{ width: `${percent}%` }} /></div>
-                          <span>{count}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                <h1 className="lf-poll-question">Response received</h1>
+                <p className="lf-poll-help">Look at the Pace + Support screen for the class view.</p>
               </section>
             ) : null}
             {!activePoll && discussion?.directions && (

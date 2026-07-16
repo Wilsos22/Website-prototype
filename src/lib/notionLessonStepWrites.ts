@@ -1,4 +1,21 @@
 import { DEFAULT_STATES, classStateStepDefaults } from "./classStates";
+import {
+  defaultLessonRoutineConfig,
+  lessonRoutineConfigFromAiContext,
+  stripLessonRoutineConfig,
+  validateLessonRoutineConfig,
+  withLessonRoutineConfig,
+  type LessonRoutineConfig,
+} from "./lessonRoutineConfig";
+import {
+  isPublicSurfaceMode,
+  parseLessonStepAiContext,
+  replaceLessonStepAiContextText,
+  defaultPublicSurfaceModeForState,
+  resolvePublicSurfaceMode,
+  setPublicSurfaceMode,
+  type PublicSurfaceMode,
+} from "./lessonStepMetadata";
 
 const LESSON_DATA_SOURCE_ID = "e367e541-c0c7-4613-8066-d2e61b6fee64";
 const LESSON_STEP_DATA_SOURCE_ID = "8e467c1b-8937-4902-811e-ca0a2e15af4d";
@@ -90,6 +107,8 @@ export interface EditableLessonStep {
   correctAnswer: string;
   standard: string;
   aiContext: string;
+  publicSurfaceMode: PublicSurfaceMode;
+  routineConfig: LessonRoutineConfig | null;
   advance: AdvanceMode;
   required: boolean;
   linkUrl: string;
@@ -161,6 +180,8 @@ const EDITABLE_KEYS = new Set<string>([
   ...Object.keys(BOOLEAN_PROPERTIES),
   "choices",
   "linkUrl",
+  "publicSurfaceMode",
+  "routineConfig",
 ]);
 
 function compactNotionId(value: string | undefined): string {
@@ -338,8 +359,31 @@ function validateMutationToken(value: unknown): string {
   return value.trim();
 }
 
+interface RoutineConfigInspection {
+  config: LessonRoutineConfig | null;
+  invalid: boolean;
+}
+
+function inspectRoutineConfigFromRawAiContext(value: string): RoutineConfigInspection {
+  try {
+    return { config: lessonRoutineConfigFromAiContext(value), invalid: false };
+  } catch {
+    return { config: null, invalid: true };
+  }
+}
+
+function invalidRoutineConfigError(): LessonStepApiError {
+  return new LessonStepApiError(
+    "This lesson step has invalid internal routine configuration. Replace the state or save a complete routine configuration to repair it.",
+    409,
+    "INVALID_ROUTINE_CONFIG",
+  );
+}
+
 function mapEditableStep(page: NotionPage, lessonId: string): EditableLessonStep {
   const p = page.properties;
+  const stateId = propertyText(p["State ID"]);
+  const rawAiContext = propertyText(p["AI Context"]);
   return {
     id: normalizeNotionPageId(page.id, "Step ID"),
     lessonId,
@@ -348,7 +392,7 @@ function mapEditableStep(page: NotionPage, lessonId: string): EditableLessonStep
     order: propertyNumber(p["Order"]),
     startMinute: propertyNumber(p["Start Minute"]),
     duration: propertyNumber(p["Duration"]),
-    stateId: propertyText(p["State ID"]),
+    stateId,
     studentDirections: propertyText(p["Student Directions"]),
     teacherNotes: propertyText(p["Teacher Notes"]),
     paperTask: propertyText(p["Paper Task"]),
@@ -358,7 +402,9 @@ function mapEditableStep(page: NotionPage, lessonId: string): EditableLessonStep
     choices: propertyText(p["Choices"]).split(/\r?\n/).map((choice) => choice.trim()).filter(Boolean),
     correctAnswer: propertyText(p["Correct Answer"]),
     standard: propertyText(p["Standard"]),
-    aiContext: stripCreateToken(propertyText(p["AI Context"])),
+    aiContext: parseLessonStepAiContext(stripLessonRoutineConfig(rawAiContext)).userText,
+    publicSurfaceMode: resolvePublicSurfaceMode(rawAiContext, stateId),
+    routineConfig: inspectRoutineConfigFromRawAiContext(rawAiContext).config,
     advance: propertySelect(p["Advance"], ADVANCE_MODES),
     required: p["Required"]?.checkbox === true,
     linkUrl: p["Link"]?.url || "",
@@ -586,6 +632,28 @@ function validateChanges(input: unknown): Record<string, unknown> {
 
   const properties: Record<string, unknown> = {};
   for (const [key, rawValue] of entries) {
+    if (key === "publicSurfaceMode") {
+      if (!isPublicSurfaceMode(rawValue)) {
+        throw new LessonStepApiError("Public screens must use split or linked mode.", 400, "INVALID_FIELD_VALUE");
+      }
+      continue;
+    }
+
+    if (key === "routineConfig") {
+      if (rawValue !== null) {
+        try {
+          validateLessonRoutineConfig(rawValue);
+        } catch (error) {
+          throw new LessonStepApiError(
+            error instanceof Error ? error.message : "Lesson routine configuration is invalid.",
+            400,
+            "INVALID_FIELD_VALUE",
+          );
+        }
+      }
+      continue;
+    }
+
     if (key in TEXT_PROPERTIES) {
       const config = TEXT_PROPERTIES[key as keyof typeof TEXT_PROPERTIES];
       const value = validateText(config.notionName, rawValue);
@@ -789,7 +857,13 @@ export async function createPublishedLessonStep(input: {
     });
     properties["Order"] = { number: order };
     properties["Lesson"] = { relation: [{ id: lessonId }] };
-    properties["AI Context"] = richTextWithCreateToken("", mutationToken);
+    const routineConfig = defaultLessonRoutineConfig(state.id);
+    const contextWithRoutine = routineConfig ? withLessonRoutineConfig("", routineConfig) : "";
+    const initialAiContext = setPublicSurfaceMode(
+      contextWithRoutine,
+      defaultPublicSurfaceModeForState(state.id),
+    );
+    properties["AI Context"] = richTextWithCreateToken(initialAiContext, mutationToken);
 
     let createdId: string;
     try {
@@ -838,11 +912,61 @@ export async function updatePublishedLessonStep(input: {
         current.step,
       );
     }
-    if (Object.prototype.hasOwnProperty.call(changes, "aiContext")) {
-      const createToken = extractCreateToken(propertyText(current.stepPage.properties["AI Context"]));
-      if (createToken) {
-        properties["AI Context"] = richTextWithCreateToken(changes.aiContext as string, createToken);
+    const currentRawAiContext = propertyText(current.stepPage.properties["AI Context"]);
+    const currentRoutineInspection = inspectRoutineConfigFromRawAiContext(currentRawAiContext);
+    const routineConfigWillBeReplaced = Object.prototype.hasOwnProperty.call(changes, "routineConfig");
+    if (currentRoutineInspection.invalid && !routineConfigWillBeReplaced) {
+      throw invalidRoutineConfigError();
+    }
+    if (
+      Object.prototype.hasOwnProperty.call(changes, "aiContext")
+      || Object.prototype.hasOwnProperty.call(changes, "publicSurfaceMode")
+      || Object.prototype.hasOwnProperty.call(changes, "routineConfig")
+    ) {
+      let nextRawAiContext = currentRawAiContext;
+      try {
+        if (Object.prototype.hasOwnProperty.call(changes, "aiContext")) {
+          const routineConfig = routineConfigWillBeReplaced
+            ? changes.routineConfig === null
+              ? null
+              : validateLessonRoutineConfig(changes.routineConfig)
+            : currentRoutineInspection.config;
+          nextRawAiContext = replaceLessonStepAiContextText(
+            stripLessonRoutineConfig(currentRawAiContext),
+            changes.aiContext as string,
+          );
+          nextRawAiContext = withLessonRoutineConfig(nextRawAiContext, routineConfig);
+        }
+        if (Object.prototype.hasOwnProperty.call(changes, "publicSurfaceMode")) {
+          nextRawAiContext = setPublicSurfaceMode(
+            nextRawAiContext,
+            changes.publicSurfaceMode as PublicSurfaceMode,
+          );
+        }
+        if (Object.prototype.hasOwnProperty.call(changes, "routineConfig")) {
+          nextRawAiContext = withLessonRoutineConfig(
+            nextRawAiContext,
+            changes.routineConfig === null
+              ? null
+              : validateLessonRoutineConfig(changes.routineConfig),
+          );
+        }
+      } catch (error) {
+        if (error instanceof LessonStepApiError) throw error;
+        throw new LessonStepApiError(
+          error instanceof Error ? error.message : "Lesson-step metadata is invalid.",
+          400,
+          "INVALID_FIELD_VALUE",
+        );
       }
+      if (nextRawAiContext.length > NOTION_TEXT_LIMIT) {
+        throw new LessonStepApiError(
+          `AI Context and internal lesson settings must total ${NOTION_TEXT_LIMIT.toLocaleString()} characters or fewer.`,
+          400,
+          "FIELD_TOO_LONG",
+        );
+      }
+      properties["AI Context"] = { rich_text: textValue(nextRawAiContext) };
     }
 
     try {

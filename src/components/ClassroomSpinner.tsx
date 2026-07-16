@@ -1,8 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  joinClassroomSpinnerRoom,
+  type ClassroomSpinnerSnapshot,
+  type ClassroomSpinnerSyncChannel,
+} from "@/lib/classroomSpinnerSync";
 import { TeacherApiError, teacherApiRequest } from "@/lib/teacherApi";
 import type { TeacherRemoteCommand } from "@/lib/liveClassFlow";
+import { publicSuccessCriterion } from "@/lib/successCriterion";
 
 export type ClassroomSpinnerMode = "readers" | "ipad";
 
@@ -19,7 +25,11 @@ interface SpinnerRosterResponse {
 interface ClassroomSpinnerProps {
   mode: ClassroomSpinnerMode;
   sessionId: string | null | undefined;
+  syncKey: string | null | undefined;
   periodId: string | null | undefined;
+  stateId?: string;
+  syncScope?: string;
+  role?: "controller" | "mirror";
   learningIntention?: string;
   successCriterion?: string;
   remoteCommand?: TeacherRemoteCommand | null;
@@ -74,17 +84,23 @@ function selectFairPicks(
 export default function ClassroomSpinner({
   mode,
   sessionId,
+  syncKey,
   periodId,
+  stateId,
+  syncScope = "current",
+  role = "controller",
   learningIntention = "",
   successCriterion = "",
   remoteCommand = null,
 }: ClassroomSpinnerProps) {
   const reelCount = mode === "readers" ? 2 : 1;
+  const resolvedStateId = stateId || (mode === "readers" ? "learning-target-readers" : "ipad-kid");
   const [students, setStudents] = useState<SpinnerStudent[]>([]);
   const [displayNames, setDisplayNames] = useState<string[]>(Array(reelCount).fill("Ready"));
   const [landed, setLanded] = useState<boolean[]>(Array(reelCount).fill(false));
   const [spinning, setSpinning] = useState(false);
-  const [status, setStatus] = useState("Loading the active class roster.");
+  const [status, setStatus] = useState(role === "controller" ? "Loading the active class roster." : "Waiting for the main display.");
+  const [spinNonce, setSpinNonce] = useState<string | null>(null);
   const spinningRef = useRef(false);
   const usedIdsRef = useRef<Set<string>>(new Set());
   const settledNamesRef = useRef<Array<string | null>>(Array(reelCount).fill(null));
@@ -95,6 +111,12 @@ export default function ClassroomSpinner({
   const handledRemoteNoncesRef = useRef<Set<string>>(new Set());
   const pendingRemoteReceiptRef = useRef<TeacherRemoteCommand | null>(null);
   const remoteReceiptInFlightRef = useRef(false);
+  const syncRef = useRef<ClassroomSpinnerSyncChannel | null>(null);
+  const snapshotRef = useRef<ClassroomSpinnerSnapshot | null>(null);
+  const mirrorHydratedRef = useRef(false);
+  const lastMirrorSnapshotAtRef = useRef(0);
+  const publishTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastPublishAtRef = useRef(0);
 
   const storageKey = useMemo(
     () => `${FAIR_ROTATION_KEY}:${periodId || "no-period"}:${mode}`,
@@ -108,16 +130,35 @@ export default function ClassroomSpinner({
         target: learningIntention || "Add the Learning Intention in Notion.",
       },
       {
-        label: "Success Criteria",
-        target: successCriterion || "Choose one I can statement in Notion.",
+        label: "Success Criterion",
+        target: publicSuccessCriterion(successCriterion),
       },
     ]
     : [{ label: "iPad Kid", target: "This week's classroom role" }];
 
   useEffect(() => {
+    if (cycleRef.current) {
+      clearInterval(cycleRef.current);
+      cycleRef.current = null;
+    }
+    timeoutsRef.current.forEach(clearTimeout);
+    timeoutsRef.current = [];
+    if (publishTimeoutRef.current) {
+      clearTimeout(publishTimeoutRef.current);
+      publishTimeoutRef.current = null;
+    }
+    spinningRef.current = false;
+    settledNamesRef.current = Array(reelCount).fill(null);
+    snapshotRef.current = null;
+    lastPublishAtRef.current = 0;
+    lastMirrorSnapshotAtRef.current = 0;
     setDisplayNames(Array(reelCount).fill("Ready"));
     setLanded(Array(reelCount).fill(false));
-  }, [reelCount]);
+    setSpinning(false);
+    setSpinNonce(null);
+    mirrorHydratedRef.current = false;
+    setStatus(role === "controller" ? "Loading the active class roster." : "Waiting for the main display.");
+  }, [periodId, reelCount, resolvedStateId, role, sessionId, syncScope]);
 
   useEffect(() => {
     try {
@@ -130,6 +171,10 @@ export default function ClassroomSpinner({
 
   useEffect(() => {
     let cancelled = false;
+    if (role === "mirror") {
+      setStudents([]);
+      return;
+    }
     if (!periodId) {
       setStudents([]);
       setStatus("Start or select a class session before using the spinner.");
@@ -159,12 +204,111 @@ export default function ClassroomSpinner({
       });
 
     return () => { cancelled = true; };
-  }, [periodId, reelCount, sessionId]);
+  }, [periodId, reelCount, role, sessionId]);
 
   useEffect(() => () => {
     if (cycleRef.current) clearInterval(cycleRef.current);
     timeoutsRef.current.forEach(clearTimeout);
+    if (publishTimeoutRef.current) clearTimeout(publishTimeoutRef.current);
   }, []);
+
+  useEffect(() => {
+    const snapshot: ClassroomSpinnerSnapshot = {
+      stateId: resolvedStateId,
+      mode,
+      displayNames,
+      landed,
+      spinning,
+      status,
+      spinNonce,
+    };
+    snapshotRef.current = snapshot;
+    if (role === "controller") {
+      const elapsed = Date.now() - lastPublishAtRef.current;
+      if (elapsed >= 120) {
+        lastPublishAtRef.current = Date.now();
+        syncRef.current?.publish(snapshot);
+      } else {
+        if (publishTimeoutRef.current) clearTimeout(publishTimeoutRef.current);
+        publishTimeoutRef.current = setTimeout(() => {
+          publishTimeoutRef.current = null;
+          const latest = snapshotRef.current;
+          if (!latest) return;
+          lastPublishAtRef.current = Date.now();
+          syncRef.current?.publish(latest);
+        }, Math.max(1, 120 - elapsed));
+      }
+    }
+  }, [displayNames, landed, mode, resolvedStateId, role, spinNonce, spinning, status]);
+
+  useEffect(() => {
+    syncRef.current?.close();
+    syncRef.current = null;
+    mirrorHydratedRef.current = false;
+    if (!sessionId || !syncKey) {
+      setStatus(role === "controller"
+        ? "Start or select a class session before using the spinner."
+        : "Waiting for the active class session.");
+      return;
+    }
+
+    const room = `${sessionId}:${syncScope}`;
+    const channel = role === "controller"
+      ? joinClassroomSpinnerRoom(room, syncKey, {
+          role: "controller",
+          getSnapshot: () => snapshotRef.current,
+        })
+      : joinClassroomSpinnerRoom(room, syncKey, {
+          role: "mirror",
+          onSnapshot: ({ snapshot }) => {
+            if (
+              snapshot.stateId !== resolvedStateId
+              || snapshot.mode !== mode
+              || snapshot.displayNames.length !== reelCount
+            ) return;
+            mirrorHydratedRef.current = true;
+            lastMirrorSnapshotAtRef.current = Date.now();
+            setDisplayNames(snapshot.displayNames);
+            setLanded(snapshot.landed);
+            setSpinning(snapshot.spinning);
+            setSpinNonce(snapshot.spinNonce);
+            setStatus(snapshot.spinning ? "Choosing from the active class." : "Synced with the main display.");
+          },
+        });
+    syncRef.current = channel;
+    if (role === "controller" && snapshotRef.current) channel.publish(snapshotRef.current);
+
+    const retryInterval = role === "mirror"
+      ? window.setInterval(() => {
+          if (!mirrorHydratedRef.current) channel.requestSnapshot();
+        }, 1_000)
+      : null;
+    if (role === "mirror") channel.requestSnapshot();
+    return () => {
+      if (retryInterval !== null) window.clearInterval(retryInterval);
+      if (syncRef.current === channel) syncRef.current = null;
+      channel.close();
+    };
+  }, [mode, reelCount, resolvedStateId, role, sessionId, syncKey, syncScope]);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    if (role === "controller") {
+      const heartbeat = window.setInterval(() => {
+        const snapshot = snapshotRef.current;
+        if (snapshot) syncRef.current?.publish(snapshot);
+      }, 10_000);
+      return () => window.clearInterval(heartbeat);
+    }
+
+    const staleCheck = window.setInterval(() => {
+      if (!mirrorHydratedRef.current || Date.now() - lastMirrorSnapshotAtRef.current <= 25_000) return;
+      mirrorHydratedRef.current = false;
+      setStatus("Reconnecting to the main display.");
+      syncRef.current?.requestSnapshot();
+    }, 5_000);
+    return () => window.clearInterval(staleCheck);
+  }, [role, sessionId, syncScope]);
 
   const tone = useCallback((frequency: number, duration = 0.09) => {
     try {
@@ -188,7 +332,7 @@ export default function ClassroomSpinner({
 
   const flushRemoteReceipt = useCallback(async () => {
     const pending = pendingRemoteReceiptRef.current;
-    if (!pending || !sessionId || remoteReceiptInFlightRef.current) return;
+    if (role !== "controller" || !pending || !sessionId || remoteReceiptInFlightRef.current) return;
 
     remoteReceiptInFlightRef.current = true;
     try {
@@ -213,7 +357,7 @@ export default function ClassroomSpinner({
     } finally {
       remoteReceiptInFlightRef.current = false;
     }
-  }, [sessionId]);
+  }, [role, sessionId]);
 
   useEffect(() => {
     const interval = window.setInterval(() => { void flushRemoteReceipt(); }, 1_000);
@@ -221,12 +365,15 @@ export default function ClassroomSpinner({
   }, [flushRemoteReceipt]);
 
   const spin = useCallback((command: TeacherRemoteCommand | null = null) => {
-    if (spinningRef.current || students.length < reelCount) return false;
+    if (role !== "controller" || spinningRef.current || students.length < reelCount) return false;
 
     const { picks, nextUsedIds } = selectFairPicks(students, usedIdsRef.current, reelCount);
     if (picks.length !== reelCount) return false;
 
     spinningRef.current = true;
+    setSpinNonce(typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `spin-${Date.now()}`);
     setSpinning(true);
     setLanded(Array(reelCount).fill(false));
     settledNamesRef.current = Array(reelCount).fill(null);
@@ -270,9 +417,10 @@ export default function ClassroomSpinner({
       }
     }, 1_150 + ((reelCount - 1) * 650) + 350));
     return true;
-  }, [flushRemoteReceipt, reelCount, storageKey, students, tone]);
+  }, [flushRemoteReceipt, reelCount, role, storageKey, students, tone]);
 
   useEffect(() => {
+    if (role !== "controller") return;
     const expectedStateId = mode === "readers" ? "learning-target-readers" : "ipad-kid";
     const commandMatches = remoteCommand?.action === "spin-spinner"
       && remoteCommand.stateId === expectedStateId;
@@ -306,12 +454,12 @@ export default function ClassroomSpinner({
       handledRemoteNoncesRef.current.delete(queued.nonce);
       queuedRemoteCommandRef.current = queued;
     }
-  }, [mode, reelCount, remoteCommand, spin, spinning, students.length]);
+  }, [mode, reelCount, remoteCommand, role, spin, spinning, students.length]);
 
-  const canSpin = students.length >= reelCount && !spinning;
+  const canSpin = role === "controller" && students.length >= reelCount && !spinning;
 
   return (
-    <section className={`classroom-spinner ${mode}`} aria-label={mode === "readers" ? "Reader spinner" : "iPad Kid spinner"}>
+    <section className={`classroom-spinner ${mode} ${role}`} aria-label={mode === "readers" ? "Reader spinner" : "iPad Kid spinner"}>
       <style>{`
         .classroom-spinner { position:absolute; inset:0; display:grid; grid-template-rows:minmax(0,1fr) auto; gap:18px; overflow:auto; background:radial-gradient(circle at 50% 42%,var(--stage-glow),transparent 58%); padding:clamp(22px,4vw,58px); }
         .classroom-spinner-grid { width:min(100%,1280px); margin:auto; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:clamp(16px,2.4vw,30px); align-items:stretch; }
@@ -345,9 +493,11 @@ export default function ClassroomSpinner({
       </div>
 
       <div className="classroom-spinner-actions">
-        <button className="classroom-spinner-button" type="button" disabled={!canSpin} onClick={() => { spin(); }}>
-          {spinning ? "Spinning" : mode === "readers" ? "Spin for readers" : "Spin for iPad Kid"}
-        </button>
+        {role === "controller" ? (
+          <button className="classroom-spinner-button" type="button" disabled={!canSpin} onClick={() => { spin(); }}>
+            {spinning ? "Spinning" : mode === "readers" ? "Spin for readers" : "Spin for iPad Kid"}
+          </button>
+        ) : null}
         <p className="classroom-spinner-status" role="status">{status}</p>
       </div>
     </section>

@@ -15,17 +15,20 @@ import StudentSpinner from "@/components/StudentSpinner";
 import DiscussionProtocol from "@/components/DiscussionProtocol";
 import AbbieConsole from "@/components/AbbieConsole";
 import RedBullCounter from "@/components/RedBullCounter";
+import LessonVisual from "@/components/LessonVisual";
 import { requestAbbieLine } from "@/lib/abbieBus";
 import { abbieDirectionForRemoteAction } from "@/lib/remoteDeck";
-import { inferClassroomStage } from "@/lib/classroomPilot";
+import { discussionSupportsForLesson, inferClassroomStage, usesDiscussionProtocol } from "@/lib/classroomPilot";
 import { TeacherApiError, teacherApiRequest, teacherPost } from "@/lib/teacherApi";
 import {
   LIVE_FLOW_MODE,
   REMOTE_COMMAND_STALE_MS,
+  canRevealM2T1L1FinalScore,
   clearStoredTeacherSession,
   getStoredTeacherSessionId,
+  isDiscussionRemoteAction,
   liveAssignedToolRoute,
-  liveResponseModePollKind,
+  resolveLiveStepPollKind,
   liveTimerSeconds,
   splitLiveFlowLines,
   splitLiveFlowVocabulary,
@@ -48,8 +51,15 @@ import { launchChallenge, endChallenge, fetchLeaderboard, type ChallengeRow, typ
 import { launchExitTicket, type ExitKind } from "@/lib/exitTickets";
 import { SBAC_CHECKPOINTS, getCheckpoint } from "@/lib/sbacCheckpoints";
 import { launchCheckpoint } from "@/lib/checkpoints";
+import { resolveLessonVisual } from "@/lib/lessonVisuals";
+import type { PublicLessonRoutineConfig } from "@/lib/lessonRoutineConfig";
+import { defaultPublicSurfaceModeForState, type PublicSurfaceMode } from "@/lib/lessonStepMetadata";
+import {
+  publicSuccessCriterion,
+  selectedSuccessCriterionValidationMessage,
+} from "@/lib/successCriterion";
 
-import { DEFAULT_STATES, BANK_GROUPS, type ClassState } from "@/lib/classStates";
+import { CLOSEOUT_DIRECTIONS, DEFAULT_STATES, BANK_GROUPS, type ClassState } from "@/lib/classStates";
 
 interface LineupItem {
   uid: string;
@@ -76,6 +86,8 @@ interface LineupItem {
   vocabulary?: string;
   responseMode?: string;
   workSpaceAvailable?: boolean;
+  publicSurfaceMode?: PublicSurfaceMode;
+  routineConfig?: PublicLessonRoutineConfig | null;
 }
 
 interface TeacherSessionRow {
@@ -166,6 +178,7 @@ interface ControlPoll {
   question: string;
   choices: string[] | null;
   stage: "responding" | "results";
+  awaitingTeacherAdvance?: boolean;
 }
 
 interface ControlPollAnswer {
@@ -402,6 +415,8 @@ interface TodayLessonStep {
   vocabulary: string;
   responseMode: string;
   workSpaceAvailable?: boolean;
+  publicSurfaceMode?: PublicSurfaceMode;
+  routineConfig?: PublicLessonRoutineConfig | null;
 }
 
 type TodayLesson = {
@@ -491,15 +506,13 @@ function parseLessonList(raw: string | undefined | null): string[] {
   return raw.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean);
 }
 
-function lessonWorkSummary(lesson: ActiveLessonContext | null, closeout = false): string {
+function lessonWorkSummary(lesson: ActiveLessonContext | null): string {
   if (!lesson) return "";
   const sections = [
     ["Required Paper Work", lesson.requiredPaperWork],
     ["Required Digital Work", lesson.requiredDigitalWork],
-    ...(!closeout ? [
-      ["Due and Turn In", lesson.dueAndTurnIn],
-      ["Help Path", lesson.helpPath],
-    ] : []),
+    ["Due and Turn In", lesson.dueAndTurnIn],
+    ["Help Path", lesson.helpPath],
     ["Optional Support", lesson.optionalSupport],
     ["Challenge", lesson.bigDogChallenge],
   ];
@@ -556,6 +569,7 @@ export default function ControlPage() {
   const [autoAdvance, setAutoAdvance] = useState(false);
   const [previewSyncPaused, setPreviewSyncPaused] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
+  const [scoreboardStage, setScoreboardStage] = useState<"halftime" | "final">("halftime");
   const [activeLessonContext, setActiveLessonContext] = useState<ActiveLessonContext | null>(null);
   const [soundUrls, setSoundUrls] = useState<Record<string, string>>({});
   const [teacherSession, setTeacherSession] = useState<TeacherSessionRow | null>(null);
@@ -571,6 +585,7 @@ export default function ControlPage() {
   const [admittingRequestCode, setAdmittingRequestCode] = useState<string | null>(null);
   const [admissionError, setAdmissionError] = useState<string | null>(null);
   const [discussionFlow, setDiscussionFlow] = useState<DiscussionPhaseSnapshot | null>(null);
+  const [discussionRemoteCommand, setDiscussionRemoteCommand] = useState<TeacherRemoteCommand | null>(null);
   const [controlPoll, setControlPoll] = useState<ControlPoll | null>(null);
   const [pollKind, setPollKind] = useState<LivePollKind>("short-answer");
   const [pollQuestion, setPollQuestion] = useState("");
@@ -591,6 +606,7 @@ export default function ControlPage() {
   const timerStartSecondsRef = useRef(0);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const musicRef = useRef<HTMLAudioElement | null>(null);
+  const previousScoreboardStageRef = useRef<"halftime" | "final" | null>(null);
   const autoOpenedStepRef = useRef<Set<string>>(new Set());
   const openingStepRef = useRef<string | null>(null);
   const lastRemoteCommandRef = useRef<string | null>(null);
@@ -611,6 +627,7 @@ export default function ControlPage() {
   const serverFlowRevisionRef = useRef<string | null>(null);
   const handledNotionLaunchRef = useRef(false);
   const handledPresetLaunchRef = useRef(false);
+  const autoOpenedDiscussionStepRef = useRef<string | null>(null);
 
   const markServerHydration = useCallback((flow: LiveClassFlowSnapshot) => {
     liveFlowSyncEpochRef.current += 1;
@@ -903,6 +920,12 @@ export default function ControlPage() {
     else if (key === "end") genTone([{ f: 880, t: 0, d: 0.2 }, { f: 880, t: 0.25, d: 0.2 }, { f: 880, t: 0.5, d: 0.2 }]);
   }, [soundUrls, genTone]);
 
+  useEffect(() => {
+    const previous = previousScoreboardStageRef.current;
+    previousScoreboardStageRef.current = scoreboardStage;
+    if (previous === "halftime" && scoreboardStage === "final") playCue("end");
+  }, [playCue, scoreboardStage]);
+
   const stopMusic = useCallback(() => {
     if (musicRef.current) {
       musicRef.current.pause();
@@ -958,6 +981,8 @@ export default function ControlPage() {
         vocabulary: step.vocabulary?.join("\n"),
         responseMode: step.responseMode,
         workSpaceAvailable: step.workSpaceAvailable,
+        publicSurfaceMode: step.publicSurfaceMode,
+        routineConfig: step.routineConfig,
       })));
     }
 
@@ -969,8 +994,8 @@ export default function ControlPage() {
         code: flow.lesson.code,
         title: flow.lesson.title,
         learningIntention: flow.lesson.learningIntention,
-        successCriteria: flow.lesson.successCriteria,
-        selectedSuccessCriterion: flow.lesson.selectedSuccessCriterion || flow.lesson.successCriteria,
+        successCriteria: publicSuccessCriterion(flow.lesson.selectedSuccessCriterion),
+        selectedSuccessCriterion: publicSuccessCriterion(flow.lesson.selectedSuccessCriterion),
         classroomMode: flow.lesson.classroomMode || "",
         discussionStems: flow.lesson.discussionStems?.join("\n") || "",
         discussionVocabulary: flow.lesson.discussionVocabulary?.join("\n") || "",
@@ -1002,6 +1027,14 @@ export default function ControlPage() {
       stopMusic();
     }
     setBoardOpen(Boolean(flow.presentation?.boardOpen));
+    setScoreboardStage(flow.presentation?.scoreboardStage || "halftime");
+    if (flow.phase && usesDiscussionProtocol(flow.state?.id, flow.state?.label || "")) {
+      setDiscussionFlow(flow.phase);
+      setShowDiscussion(true);
+    } else {
+      setDiscussionFlow(null);
+      setShowDiscussion(false);
+    }
     const interactiveStateId = flow.poll && flow.state ? flow.state.id : null;
     setControlPoll(flow.poll && interactiveStateId
       ? {
@@ -1011,6 +1044,7 @@ export default function ControlPage() {
           question: flow.poll.question,
           choices: flow.poll.choices,
           stage: flow.poll.stage,
+          awaitingTeacherAdvance: flow.poll.awaitingTeacherAdvance,
         }
       : null);
   }, [armTimer, disarmTimer, markServerHydration, persistLineup, startMusicFor, stopMusic, teacherSession]);
@@ -1046,7 +1080,7 @@ export default function ControlPage() {
   // Automatically close a timed response check, briefly show results, and
   // advance while lesson pacing remains on.
   useEffect(() => {
-    if (!finished || !autoAdvance) return;
+    if (!finished || !autoAdvance || (controlPoll?.stage === "results" && controlPoll.awaitingTeacherAdvance)) return;
     if (controlPoll?.stage === "responding") {
       setControlPoll((current) => current ? { ...current, stage: "results" } : null);
       void teacherPost("/api/teacher/poll", { action: "close", pollId: controlPoll.id });
@@ -1077,16 +1111,64 @@ export default function ControlPage() {
     return !t || p.code.toLowerCase().includes(t) || p.title.toLowerCase().includes(t);
   });
   const activeState = activeItem ? bank.find((s) => s.id === activeItem.stateId) : undefined;
+  const activeLessonCriterionValidationMessage = activeLessonContext
+    ? selectedSuccessCriterionValidationMessage(activeLessonContext.selectedSuccessCriterion)
+    : null;
+  const activeUsesDiscussionProtocol = usesDiscussionProtocol(
+    activeState?.id,
+    activeItem?.title || activeState?.label || "",
+  );
   const activeMinutes = minutesForLineupItem(activeItem, bank);
+  const activeLessonVisual = useMemo(() => {
+    if (!activeItem || !activeState) return null;
+    return resolveLessonVisual({
+      lessonCode: activeItem.lessonCode || activeLessonContext?.code,
+      stateId: activeState.id,
+      text: activeItem.mainDisplay || activeItem.studentDirections || activeItem.question || activeState.desc,
+      fallbackTexts: [activeItem.studentDirections || "", activeItem.question || "", activeItem.paperTask || ""],
+      contextSteps: lineup.map((item) => ({
+        stateId: item.stateId,
+        text: item.mainDisplay || item.studentDirections || item.question || item.paperTask || "",
+      })),
+      currentStepIndex: currentIndex,
+    });
+  }, [activeItem, activeLessonContext?.code, activeState, currentIndex, lineup]);
   const totalMin = lineup.reduce((sum, item) => sum + minutesForLineupItem(item, bank), 0);
-  const configuredResponseKind = liveResponseModePollKind(activeItem?.responseMode);
-  const hasConfiguredResponseMode = Boolean(activeItem?.responseMode?.trim());
-  const legacyInteractiveState = !hasConfiguredResponseMode
-    && (activeState?.id === "question" || activeState?.id === "poll" || activeState?.id === "learning-check");
-  const activeInteractiveState: InteractiveStateId | null = activeState && (configuredResponseKind || legacyInteractiveState)
+  const configuredResponseKind = activeUsesDiscussionProtocol
+    ? null
+    : resolveLiveStepPollKind(
+        activeItem?.responseMode,
+        activeItem?.pollKind,
+        activeState?.id,
+      );
+  const activeInteractiveState: InteractiveStateId | null = activeState && configuredResponseKind
     ? activeState.id
     : null;
   const activeToolState: ToolStateId | null = isToolStateId(activeState?.id) ? activeState.id : null;
+
+  useEffect(() => {
+    if (!activeUsesDiscussionProtocol || !activeItem) {
+      autoOpenedDiscussionStepRef.current = null;
+      return;
+    }
+    if ((!running && !autoAdvance) || autoOpenedDiscussionStepRef.current === activeItem.uid) return;
+    autoOpenedDiscussionStepRef.current = activeItem.uid;
+    disarmTimer();
+    setRunning(false);
+    setFinished(false);
+    setDiscussionFlow({
+      id: "think",
+      label: "Think",
+      subtitle: "Think quietly for one minute.",
+      timed: true,
+      totalSeconds: 60,
+      secondsLeft: 60,
+      running: true,
+      finished: false,
+      media: null,
+    });
+    setShowDiscussion(true);
+  }, [activeItem, activeUsesDiscussionProtocol, autoAdvance, disarmTimer, running]);
 
   useEffect(() => {
     if (configuredResponseKind) {
@@ -1233,14 +1315,12 @@ export default function ControlPage() {
   }
 
   useEffect(() => {
-    if (!activeItem?.question || !activeInteractiveState || controlPoll || autoOpenedStepRef.current.has(activeItem.uid)) return;
+    if (!activeItem?.question || !activeInteractiveState || !configuredResponseKind || controlPoll || autoOpenedStepRef.current.has(activeItem.uid)) return;
     if (!teacherSession || openingStepRef.current === activeItem.uid) return;
     openingStepRef.current = activeItem.uid;
     void openControlPoll({
       stateId: activeInteractiveState,
-      kind: liveResponseModePollKind(activeItem.responseMode)
-        || activeItem.pollKind
-        || (activeInteractiveState === "poll" || activeInteractiveState === "learning-check" ? "fist-to-five" : "short-answer"),
+      kind: configuredResponseKind,
       question: activeItem.question,
       choices: activeItem.choices,
       correctAnswer: activeItem.correctAnswer,
@@ -1254,7 +1334,7 @@ export default function ControlPage() {
     });
     // openControlPoll intentionally reads the latest teacher/session state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeInteractiveState, activeItem, controlPoll, teacherSession]);
+  }, [activeInteractiveState, activeItem, configuredResponseKind, controlPoll, teacherSession]);
 
   function prepareAnotherPoll() {
     setControlPoll(null);
@@ -1376,11 +1456,11 @@ export default function ControlPage() {
   }
 
   useEffect(() => {
-    if (activeState?.id !== "discussion" && showDiscussion) {
+    if (!activeUsesDiscussionProtocol && showDiscussion) {
       setShowDiscussion(false);
       setDiscussionFlow(null);
     }
-  }, [activeState?.id, showDiscussion]);
+  }, [activeUsesDiscussionProtocol, showDiscussion]);
 
   const liveFlowSignature = useMemo(() => {
     const state = activeState
@@ -1392,7 +1472,7 @@ export default function ControlPage() {
           semantic: inferClassroomStage(activeState.id, activeItem?.title || activeState.label),
         }
       : null;
-    const phase = activeState?.id === "discussion" && showDiscussion ? discussionFlow : null;
+    const phase = activeUsesDiscussionProtocol && showDiscussion ? discussionFlow : null;
     const poll = controlPoll?.stateId === activeInteractiveState
       ? {
           id: controlPoll.id,
@@ -1400,6 +1480,7 @@ export default function ControlPage() {
           question: controlPoll.question,
           choices: controlPoll.choices,
           stage: controlPoll.stage,
+          awaitingTeacherAdvance: controlPoll.awaitingTeacherAdvance,
         }
       : null;
     const tool = publishedTool?.stateId === activeToolState ? publishedTool.tool : null;
@@ -1413,18 +1494,23 @@ export default function ControlPage() {
           url: activeItem.linkUrl,
         }
       : null;
-    const structuredWork = activeState?.id === "independent" || activeState?.id === "closeout"
-      ? lessonWorkSummary(activeLessonContext, activeState.id === "closeout")
+    const structuredWork = activeState?.id === "independent"
+      ? lessonWorkSummary(activeLessonContext)
       : "";
-    const presentationBody = activeItem?.mainDisplay
-      || (activeState?.id === "independent" || activeState?.id === "closeout"
+    const presentationBody = activeState?.id === "closeout"
+      ? CLOSEOUT_DIRECTIONS
+      : activeItem?.mainDisplay
+      || (activeState?.id === "independent"
         ? structuredWork || activeItem?.paperTask || activeItem?.question || activeItem?.studentDirections || activeState.desc
         : activeItem?.question || activeItem?.studentDirections || activeItem?.paperTask || activeState?.desc || "");
-    const discussionStems = activeState?.id === "discussion"
+    const configuredDiscussionSupports = discussionSupportsForLesson(activeLessonContext?.code);
+    const discussionStems = activeUsesDiscussionProtocol
       ? splitLiveFlowLines(activeItem?.discussionStems || activeLessonContext?.discussionStems)
+        .concat(activeItem?.discussionStems || activeLessonContext?.discussionStems ? [] : configuredDiscussionSupports.sentenceStems)
       : [];
-    const vocabulary = activeState?.id === "discussion"
+    const vocabulary = activeUsesDiscussionProtocol
       ? splitLiveFlowVocabulary(activeItem?.vocabulary || activeLessonContext?.discussionVocabulary)
+        .concat(activeItem?.vocabulary || activeLessonContext?.discussionVocabulary ? [] : configuredDiscussionSupports.keyVocabulary)
       : [];
     const presentation = activeState
       ? {
@@ -1442,12 +1528,21 @@ export default function ControlPage() {
                   : "directions" as const,
           notionStepId: activeItem?.notionStepId || null,
           boardOpen,
-          paceDirections: activeItem?.paceDirections || activeState.paceAction || activeItem?.studentDirections || activeState.desc,
-          studentAction: activeItem?.studentAction || activeState.studentAction || activeItem?.studentDirections || activeState.desc,
+          paceDirections: activeState.id === "closeout"
+            ? CLOSEOUT_DIRECTIONS
+            : activeItem?.paceDirections || activeState.paceAction || activeItem?.studentDirections || activeState.desc,
+          studentAction: activeState.id === "closeout"
+            ? CLOSEOUT_DIRECTIONS
+            : activeItem?.studentAction || activeState.studentAction || activeItem?.studentDirections || activeState.desc,
           responseMode: activeItem?.responseMode || "",
           workSpaceAvailable: activeItem?.workSpaceAvailable,
+          publicSurfaceMode: activeItem?.publicSurfaceMode || defaultPublicSurfaceModeForState(activeState.id),
+          routineConfig: activeItem?.routineConfig || null,
           discussionStems,
           vocabulary,
+          scoreboardStage: canRevealM2T1L1FinalScore(activeLessonContext?.code, activeState.id, state?.semantic)
+            ? scoreboardStage
+            : undefined,
         }
       : null;
     const timer = poll?.stage === "results"
@@ -1471,14 +1566,15 @@ export default function ControlPage() {
 
     const nextItem = currentIndex >= 0 ? lineup[currentIndex + 1] : undefined;
     const nextState = nextItem ? bank.find((candidate) => candidate.id === nextItem.stateId) : undefined;
+    const publicCriterion = publicSuccessCriterion(activeLessonContext?.selectedSuccessCriterion);
     const lesson = activeLessonContext
       ? {
           id: activeLessonContext.id,
           code: activeLessonContext.code,
           title: activeLessonContext.title,
           learningIntention: activeLessonContext.learningIntention,
-          successCriteria: activeLessonContext.successCriteria,
-          selectedSuccessCriterion: activeLessonContext.selectedSuccessCriterion,
+          successCriteria: publicCriterion,
+          selectedSuccessCriterion: publicCriterion,
           classroomMode: activeLessonContext.classroomMode,
           discussionStems: splitLiveFlowLines(activeLessonContext.discussionStems),
           discussionVocabulary: splitLiveFlowVocabulary(activeLessonContext.discussionVocabulary),
@@ -1507,7 +1603,9 @@ export default function ControlPage() {
               semantic: inferClassroomStage(item.stateId, item.title || itemState?.label || ""),
               durationSeconds: minutesForLineupItem(item, bank) * 60,
               question: item.question || "",
-              pollKind: item.pollKind || null,
+              pollKind: usesDiscussionProtocol(item.stateId, item.title || itemState?.label || "")
+                ? null
+                : resolveLiveStepPollKind(item.responseMode, item.pollKind, item.stateId),
               choices: item.choices || [],
               correctAnswer: item.correctAnswer || "",
               standard: item.standard || "",
@@ -1519,14 +1617,18 @@ export default function ControlPage() {
               mainDisplay: item.mainDisplay || "",
               paceDirections: item.paceDirections || itemState?.paceAction || item.studentDirections || itemState?.desc || "",
               studentAction: item.studentAction || itemState?.studentAction || item.studentDirections || itemState?.desc || "",
-              discussionStems: item.stateId === "discussion"
+              discussionStems: usesDiscussionProtocol(item.stateId, item.title || itemState?.label || "")
                 ? splitLiveFlowLines(item.discussionStems || activeLessonContext?.discussionStems)
+                  .concat(item.discussionStems || activeLessonContext?.discussionStems ? [] : discussionSupportsForLesson(item.lessonCode || activeLessonContext?.code).sentenceStems)
                 : [],
-              vocabulary: item.stateId === "discussion"
+              vocabulary: usesDiscussionProtocol(item.stateId, item.title || itemState?.label || "")
                 ? splitLiveFlowVocabulary(item.vocabulary || activeLessonContext?.discussionVocabulary)
+                  .concat(item.vocabulary || activeLessonContext?.discussionVocabulary ? [] : discussionSupportsForLesson(item.lessonCode || activeLessonContext?.code).keyVocabulary)
                 : [],
               responseMode: item.responseMode || "",
               workSpaceAvailable: item.workSpaceAvailable,
+              publicSurfaceMode: item.publicSurfaceMode || defaultPublicSurfaceModeForState(item.stateId),
+              routineConfig: item.routineConfig || null,
             };
           }),
         }
@@ -1537,7 +1639,7 @@ export default function ControlPage() {
     const paper = activePaperTask ? { task: activePaperTask } : null;
 
     return JSON.stringify({ version: 2, state, phase, timer, poll, resource, presentation, tool, lesson, sequence, paper });
-  }, [activeInteractiveState, activeItem, activeLessonContext, activeMinutes, activeState, activeToolState, autoAdvance, bank, boardOpen, controlPoll, currentIndex, discussionFlow, finished, lineup, publishedTool, running, secondsLeft, showDiscussion]);
+  }, [activeInteractiveState, activeItem, activeLessonContext, activeMinutes, activeState, activeToolState, autoAdvance, bank, boardOpen, controlPoll, currentIndex, discussionFlow, finished, lineup, publishedTool, running, scoreboardStage, secondsLeft, showDiscussion]);
 
   const flushLiveFlowUpdates = useCallback(async () => {
     if (liveFlowSyncingRef.current) return;
@@ -1614,9 +1716,20 @@ export default function ControlPage() {
     setDiscussionFlow(snapshot);
   }, []);
 
+  const handleDiscussionRemoteCommand = useCallback((command: TeacherRemoteCommand) => {
+    setDiscussionRemoteCommand((current) => current?.nonce === command.nonce ? null : current);
+    if (!teacherSession) return;
+    pendingRemoteReceiptRef.current = {
+      sessionId: teacherSession.id,
+      command: { ...command, receivedAt: new Date().toISOString() },
+    };
+    void flushRemoteReceipt();
+  }, [flushRemoteReceipt, teacherSession]);
+
   const closeDiscussion = useCallback(() => {
     setShowDiscussion(false);
     setDiscussionFlow(null);
+    setDiscussionRemoteCommand(null);
   }, []);
 
   // ── Lineup management ───────────────────────────────────────────────────
@@ -1664,6 +1777,7 @@ export default function ControlPage() {
     setRunning(startImmediately && minutes > 0);
     setFinished(false);
     setBoardOpen(false);
+    setScoreboardStage("halftime");
     stopMusic();
     if (startImmediately && minutes > 0) startMusicFor(st.id);
   }
@@ -1766,6 +1880,8 @@ export default function ControlPage() {
           vocabulary: step.vocabulary,
           responseMode: step.responseMode,
           workSpaceAvailable: step.workSpaceAvailable,
+          publicSurfaceMode: step.publicSurfaceMode,
+          routineConfig: step.routineConfig,
         }))
       : ["warmup", ...mapped, "exit"].map((stateId) => ({ uid: uid(), stateId }));
     autoOpenedStepRef.current.clear();
@@ -1776,8 +1892,8 @@ export default function ControlPage() {
       code: lesson.lessonCode || "",
       title: lesson.title || lesson.lessonCode || "Math 6 lesson",
       learningIntention: lesson.learningIntention || "",
-      successCriteria: lesson.selectedSuccessCriterion || lesson.successCriteria || "",
-      selectedSuccessCriterion: lesson.selectedSuccessCriterion || lesson.successCriteria || "",
+      successCriteria: lesson.successCriteria || "",
+      selectedSuccessCriterion: lesson.selectedSuccessCriterion || "",
       classroomMode: lesson.classroomMode || "",
       discussionStems: lesson.discussionStems || "",
       discussionVocabulary: lesson.discussionVocabulary || "",
@@ -1806,6 +1922,8 @@ export default function ControlPage() {
       lessonSteps.length ? `${lessonSteps.length} timed steps added` : `${mapped.length} tool${mapped.length === 1 ? "" : "s"} added`,
       "student and projector screens unchanged until start",
     ];
+    const criterionValidationMessage = selectedSuccessCriterionValidationMessage(lesson.selectedSuccessCriterion);
+    if (criterionValidationMessage) parts.push(`start blocked: ${criterionValidationMessage}`);
     if (unmatched.length) parts.push(`couldn't match: ${unmatched.join(", ")}`);
     setTodayMsg(parts.join(" · "));
     window.setTimeout(() => setTodayMsg(null), 8000);
@@ -2058,6 +2176,11 @@ export default function ControlPage() {
   // ── Timer controls ──────────────────────────────────────────────────────
   function toggleRun() {
     if (!activeState) return;
+    if (!running && activeLessonCriterionValidationMessage) {
+      setLessonMsg(activeLessonCriterionValidationMessage);
+      setTodayMsg(activeLessonCriterionValidationMessage);
+      return;
+    }
     setPreviewSyncPaused(false);
     if (secondsLeft <= 0) { secRef.current = activeMinutes * 60; setSecondsLeft(secRef.current); setFinished(false); }
     const willRun = !running;
@@ -2070,6 +2193,12 @@ export default function ControlPage() {
   }
   function runSequence() {
     if (lineup.length === 0) return;
+    if (activeLessonCriterionValidationMessage) {
+      setPendingRun(false);
+      setLessonMsg(activeLessonCriterionValidationMessage);
+      setTodayMsg(activeLessonCriterionValidationMessage);
+      return;
+    }
     const nextIndex = currentIndex >= 0 ? currentIndex : 0;
     const item = lineup[nextIndex];
     const state = item ? bank.find((bankState) => bankState.id === item.stateId) : undefined;
@@ -2109,11 +2238,20 @@ export default function ControlPage() {
     if (deltaSeconds > 0) setFinished(false);
   }
   function next() {
-    const keepRunning = running;
+    const keepRunning = running || autoAdvance;
     setRunning(false);
     stopMusic();
     if (controlPoll?.stage === "responding") {
-      closeActivePoll();
+      setControlPoll((current) => current ? {
+        ...current,
+        stage: "results",
+        awaitingTeacherAdvance: true,
+      } : null);
+      void teacherPost("/api/teacher/poll", { action: "close", pollId: controlPoll.id });
+      setFinished(true);
+      return;
+    }
+    if (controlPoll?.stage === "results") {
       setControlPoll(null);
       setPollAnswers([]);
     }
@@ -2134,6 +2272,15 @@ export default function ControlPage() {
     if (!command || command.nonce === lastRemoteCommandRef.current) return;
     lastRemoteCommandRef.current = command.nonce;
     if (command.action === "spin-spinner") return;
+    if (isDiscussionRemoteAction(command.action) && !command.receivedAt) {
+      if (!activeUsesDiscussionProtocol) return;
+      if (!showDiscussion && teacherSession?.live_flow?.phase) {
+        setDiscussionFlow(teacherSession.live_flow.phase);
+      }
+      setShowDiscussion(true);
+      setDiscussionRemoteCommand(command);
+      return;
+    }
     if (command.receivedAt && teacherSession?.live_flow) {
       const publishedFlow = teacherSession.live_flow;
       const publishedTimer = publishedFlow.timer;
@@ -2163,6 +2310,8 @@ export default function ControlPage() {
           vocabulary: step.vocabulary?.join("\n"),
           responseMode: step.responseMode,
           workSpaceAvailable: step.workSpaceAvailable,
+          publicSurfaceMode: step.publicSurfaceMode,
+          routineConfig: step.routineConfig,
         })));
       }
       if (publishedFlow.sequence) setCurrentIndex(publishedFlow.sequence.currentIndex);
@@ -2173,8 +2322,8 @@ export default function ControlPage() {
           code: publishedFlow.lesson.code,
           title: publishedFlow.lesson.title,
           learningIntention: publishedFlow.lesson.learningIntention,
-          successCriteria: publishedFlow.lesson.successCriteria,
-          selectedSuccessCriterion: publishedFlow.lesson.selectedSuccessCriterion || publishedFlow.lesson.successCriteria,
+          successCriteria: publicSuccessCriterion(publishedFlow.lesson.selectedSuccessCriterion),
+          selectedSuccessCriterion: publicSuccessCriterion(publishedFlow.lesson.selectedSuccessCriterion),
           classroomMode: publishedFlow.lesson.classroomMode || "",
           discussionStems: publishedFlow.lesson.discussionStems?.join("\n") || "",
           discussionVocabulary: publishedFlow.lesson.discussionVocabulary?.join("\n") || "",
@@ -2204,6 +2353,14 @@ export default function ControlPage() {
         stopMusic();
       }
       setBoardOpen(Boolean(publishedFlow.presentation?.boardOpen));
+      setScoreboardStage(publishedFlow.presentation?.scoreboardStage || "halftime");
+      if (publishedFlow.phase && usesDiscussionProtocol(publishedFlow.state?.id, publishedFlow.state?.label || "")) {
+        setDiscussionFlow(publishedFlow.phase);
+        setShowDiscussion(true);
+      } else {
+        setDiscussionFlow(null);
+        setShowDiscussion(false);
+      }
       const publishedPoll = publishedFlow.poll;
       const publishedStateId = publishedFlow.state?.id;
       const interactiveStateId = publishedPoll && publishedStateId ? publishedStateId : null;
@@ -2215,6 +2372,7 @@ export default function ControlPage() {
             question: publishedPoll.question,
             choices: publishedPoll.choices,
             stage: publishedPoll.stage,
+            awaitingTeacherAdvance: publishedPoll.awaitingTeacherAdvance,
           }
         : null);
       setPollAnswers([]);
@@ -2410,6 +2568,17 @@ export default function ControlPage() {
         .cx-divider { width:1px; height:22px; background:#2a241a; flex:none; margin:0 2px; }
 
         .cx-main { display:grid; align-content:center; justify-items:center; gap:18px; padding:18px; text-align:center; }
+        .cx-main.cx-main-visual { align-content:start; gap:10px; padding:12px 18px; }
+        .cx-story-head { width:min(94vw,1180px); display:flex; align-items:end; justify-content:space-between; gap:20px; text-align:left; }
+        .cx-story-head-copy { min-width:0; display:grid; gap:2px; }
+        .cx-story-head .cx-pos { font-size:0.67rem; }
+        .cx-story-head .cx-state { min-height:0; font-size:clamp(1.05rem,2.2vw,1.75rem); line-height:1.05; }
+        .cx-story-time { flex:none; color:#fff; font-size:clamp(2.15rem,5vw,4.1rem); line-height:0.85; font-weight:950; font-variant-numeric:tabular-nums; letter-spacing:-0.045em; }
+        .cx-story-time.final { color:#fbbf24; animation:cxPulse 1s ease-in-out infinite; }
+        .cx-story-time.finished { color:#f95335; animation:cxFlash 0.7s steps(1) infinite; }
+        .cx-story-stage { width:min(94vw,1180px); min-width:0; }
+        .cx-main-visual .cx-progress { width:min(76vw,650px); height:10px; }
+        .cx-main-visual .cx-note { min-height:0.8em; font-size:0.82rem; }
         .cx-state { font-size:clamp(1.2rem,3.5vw,2.2rem); font-weight:900; color:${accent}; min-height:1.2em; transition:color 300ms ease; }
         .cx-pos { font-size:0.8rem; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:#7c7363; }
         .cx-clock { font-variant-numeric:tabular-nums; font-weight:900; line-height:0.9; letter-spacing:-0.02em;
@@ -2589,7 +2758,7 @@ export default function ControlPage() {
           </div>
         )}
 
-        <main className="cx-main">
+        <main className={`cx-main${activeLessonVisual ? " cx-main-visual" : ""}`}>
           {joinCode && (currentIndex === -1 || activeState?.id === "warmup") && (
             <div className="cx-join">
               <span className="cx-join-label">Join code</span>
@@ -2598,10 +2767,29 @@ export default function ControlPage() {
           )}
           {activeState ? (
             <>
-              <div className="cx-pos">Step {currentIndex + 1} of {lineup.length}</div>
-              <div className="cx-state">{activeItem?.title || activeState.label}</div>
-              <div className="cx-desc">{activeItem?.studentDirections || activeState.desc}</div>
-              <div className="cx-clock">{inFinal10 ? secondsLeft : fmt(secondsLeft)}</div>
+              {activeLessonVisual ? (
+                <>
+                  <div className="cx-story-head">
+                    <div className="cx-story-head-copy">
+                      <div className="cx-pos">Step {currentIndex + 1} of {lineup.length}</div>
+                      <div className="cx-state">{activeItem?.title || activeState.label}</div>
+                    </div>
+                    <div className={`cx-story-time${inFinal10 ? " final" : finished ? " finished" : ""}`}>
+                      {inFinal10 ? secondsLeft : fmt(secondsLeft)}
+                    </div>
+                  </div>
+                  <section className="cx-story-stage" aria-label={`${activeItem?.title || activeState.label} story slide`}>
+                    <LessonVisual visual={activeLessonVisual} variant="control" accent={accent} />
+                  </section>
+                </>
+              ) : (
+                <>
+                  <div className="cx-pos">Step {currentIndex + 1} of {lineup.length}</div>
+                  <div className="cx-state">{activeItem?.title || activeState.label}</div>
+                  <div className="cx-desc">{activeItem?.studentDirections || activeState.desc}</div>
+                  <div className="cx-clock">{inFinal10 ? secondsLeft : fmt(secondsLeft)}</div>
+                </>
+              )}
               <div className="cx-progress">
                 <div className="cx-progress-fill" style={{ width: `${pct}%`, background: finished ? "#f95335" : inFinal10 ? "#fbbf24" : accent }} />
               </div>
@@ -2906,8 +3094,13 @@ export default function ControlPage() {
                 </section>
               )}
               <div className="cx-actions">
-                <button className="cx-btn pri" onClick={running ? toggleRun : runSequence}>
-                  {running ? "Pause" : autoAdvance ? "Resume" : "Start lesson"}
+                <button
+                  className="cx-btn pri"
+                  onClick={running ? toggleRun : runSequence}
+                  disabled={!running && Boolean(activeLessonCriterionValidationMessage)}
+                  title={!running ? activeLessonCriterionValidationMessage || undefined : undefined}
+                >
+                  {running ? "Pause" : activeLessonCriterionValidationMessage ? "Fix success criterion" : autoAdvance ? "Resume" : "Start lesson"}
                 </button>
                 <button className="cx-btn" onClick={previous} disabled={currentIndex <= 0}>Back</button>
                 <button className="cx-btn next" onClick={next} disabled={controlPoll?.stage !== "responding" && currentIndex + 1 >= lineup.length}>{controlPoll?.stage === "responding" ? "Show results" : "Advance"}</button>
@@ -2920,7 +3113,7 @@ export default function ControlPage() {
                 {finished && activeState.id === "warmup" && (
                   <button className="cx-btn" style={{ background: "#f59e0b", borderColor: "#f59e0b" }} onClick={() => setShowSpinner(true)}>Pick readers</button>
                 )}
-                {activeState.id === "discussion" && (
+                {activeUsesDiscussionProtocol && (
                   <button className="cx-btn" style={{ background: "#06b6d4", borderColor: "#06b6d4" }} onClick={() => setShowDiscussion(true)}>Run discussion</button>
                 )}
               </div>
@@ -3159,7 +3352,15 @@ export default function ControlPage() {
           <div className="cx-overlay"><StudentSpinner onClose={() => setShowSpinner(false)} /></div>
         )}
         {showDiscussion && (
-          <div className="cx-overlay"><DiscussionProtocol onClose={closeDiscussion} onFlowChange={handleDiscussionFlowChange} /></div>
+          <div className="cx-overlay">
+            <DiscussionProtocol
+              onClose={closeDiscussion}
+              onFlowChange={handleDiscussionFlowChange}
+              initialFlow={discussionFlow}
+              remoteCommand={discussionRemoteCommand}
+              onRemoteCommandHandled={handleDiscussionRemoteCommand}
+            />
+          </div>
         )}
 
         <AbbieConsole stateLabel={activeState?.label} stateDesc={activeState?.desc} sessionId={teacherSession?.status === "open" ? teacherSession.id : null} />

@@ -1,14 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   REMOTE_COMMAND_STALE_MS,
+  canRevealM2T1L1FinalScore,
   liveTimerSeconds,
+  resolveRemoteNextBehavior,
+  type DiscussionPhaseId,
   type LiveClassFlowSnapshot,
   type LiveFlowSequenceStep,
   type TeacherRemoteAction,
   type TeacherRemoteCommand,
 } from "@/lib/liveClassFlow";
+import { usesDiscussionProtocol } from "@/lib/classroomPilot";
+import type { LessonRoutineConfig } from "@/lib/lessonRoutineConfig";
+import { defaultPublicSurfaceModeForState } from "@/lib/lessonStepMetadata";
 import type { LessonStepData } from "@/lib/notionLessons";
 import { ABBIE_REMOTE_BUTTONS, SOUND_REMOTE_BUTTONS, type RemoteDeckButton } from "@/lib/remoteDeck";
 import { speakerNoteItems } from "@/lib/speakerNotes";
@@ -33,6 +39,22 @@ const TIMER_BUTTONS: readonly RemoteDeckButton[] = [
   { action: "reset-timer", label: "Reset timer", detail: "Restart this stage", tone: "neutral" },
 ];
 
+const DISCUSSION_PHASE_BUTTONS: readonly RemoteDeckButton[] = [
+  { action: "discussion-think", label: "Think", detail: "One minute of quiet thinking", tone: "orange" },
+  { action: "discussion-write", label: "Write", detail: "Record one idea or strategy", tone: "orange" },
+  { action: "discussion-discuss", label: "Discuss", detail: "Use the stems and vocabulary", tone: "orange" },
+  { action: "discussion-revise", label: "Revise", detail: "Strengthen the response", tone: "orange" },
+  { action: "discussion-share", label: "Share", detail: "Choose and hear a response", tone: "orange" },
+];
+
+const DISCUSSION_ACTION_BY_PHASE: Record<DiscussionPhaseId, TeacherRemoteAction> = {
+  think: "discussion-think",
+  marker: "discussion-write",
+  table: "discussion-discuss",
+  revise: "discussion-revise",
+  share: "discussion-share",
+};
+
 interface RemoteSession {
   id: string;
   joinCode: string | null;
@@ -47,11 +69,17 @@ interface PollAnswer {
   answer: string | null;
 }
 
+interface PrivateLessonStepDetails {
+  id: string;
+  routineConfig: LessonRoutineConfig | null;
+}
+
 interface DeckKeyProps {
   button: RemoteDeckButton;
   busy: TeacherRemoteAction | null;
   disabled: boolean;
   onSend: (button: RemoteDeckButton) => void;
+  active?: boolean;
 }
 
 function formatTime(totalSeconds: number) {
@@ -158,8 +186,13 @@ function optimisticNavigation(
       studentAction: step.studentAction || step.description,
       responseMode: step.responseMode || "",
       workSpaceAvailable: step.workSpaceAvailable,
+      publicSurfaceMode: step.publicSurfaceMode || defaultPublicSurfaceModeForState(step.stateId),
+      routineConfig: step.routineConfig || null,
       discussionStems: step.discussionStems || [],
       vocabulary: step.vocabulary || [],
+      scoreboardStage: canRevealM2T1L1FinalScore(step.lessonCode, step.stateId, step.semantic)
+        ? "halftime"
+        : undefined,
     },
     tool: null,
     sequence: {
@@ -180,6 +213,25 @@ function optimisticRemoteFlow(
   if (["toggle-timer", "add-30", "subtract-30", "reset-timer"].includes(action)) {
     return optimisticTimer(flow, action, now);
   }
+  if (
+    (action === "reveal-results" || action === "next")
+    && flow.poll
+    && resolveRemoteNextBehavior(flow.state?.id, flow.state?.semantic, flow.poll.stage) === "reveal-results"
+  ) {
+    return {
+      ...flow,
+      updatedAt: new Date(now).toISOString(),
+      timer: null,
+      poll: { ...flow.poll, stage: "results", awaitingTeacherAdvance: true },
+    };
+  }
+  if (action === "reveal-final-score" && flow.presentation) {
+    return {
+      ...flow,
+      updatedAt: new Date(now).toISOString(),
+      presentation: { ...flow.presentation, scoreboardStage: "final" },
+    };
+  }
   if (action === "next" || action === "previous") {
     return optimisticNavigation(flow, action === "next" ? 1 : -1, now);
   }
@@ -193,10 +245,10 @@ function optimisticRemoteFlow(
   return flow;
 }
 
-function DeckKey({ button, busy, disabled, onSend }: DeckKeyProps) {
+function DeckKey({ button, busy, disabled, onSend, active = false }: DeckKeyProps) {
   return (
     <button
-      className={`deck-key ${button.tone}`}
+      className={`deck-key ${button.tone}${active ? " active" : ""}`}
       disabled={disabled}
       aria-busy={busy === button.action}
       onClick={() => onSend(button)}
@@ -223,6 +275,7 @@ export default function TeacherRemotePage() {
   const [completedSpinnerStateKey, setCompletedSpinnerStateKey] = useState<string | null>(null);
   const [pollAnswers, setPollAnswers] = useState<PollAnswer[]>([]);
   const [privateLessonSteps, setPrivateLessonSteps] = useState<LessonStepData[]>([]);
+  const [privateLessonStepDetails, setPrivateLessonStepDetails] = useState<PrivateLessonStepDetails | null>(null);
   const [boardPanelOpen, setBoardPanelOpen] = useState(false);
   const [endingSession, setEndingSession] = useState(false);
   const commandInFlightRef = useRef(false);
@@ -347,6 +400,7 @@ export default function TeacherRemotePage() {
 
   const privateLessonId = session?.liveFlow?.lesson?.id?.trim() || "";
   const privateLessonCode = session?.liveFlow?.lesson?.code?.trim() || "";
+  const privateNotionStepId = session?.liveFlow?.presentation?.notionStepId?.trim() || "";
   useEffect(() => {
     if (!privateLessonId && !privateLessonCode) {
       setPrivateLessonSteps([]);
@@ -368,6 +422,30 @@ export default function TeacherRemotePage() {
     })();
     return () => { stopped = true; };
   }, [privateLessonCode, privateLessonId]);
+
+  useEffect(() => {
+    if (!privateLessonId || !privateNotionStepId) {
+      setPrivateLessonStepDetails(null);
+      return;
+    }
+    let stopped = false;
+    setPrivateLessonStepDetails(null);
+    void (async () => {
+      try {
+        const params = new URLSearchParams({ lessonId: privateLessonId, stepId: privateNotionStepId });
+        const response = await fetch(`/api/teacher/lesson-step?${params.toString()}`, { cache: "no-store" });
+        const data = await response.json() as { step?: PrivateLessonStepDetails; error?: string };
+        if (!stopped) {
+          setPrivateLessonStepDetails(
+            response.ok && data.step?.id === privateNotionStepId ? data.step : null,
+          );
+        }
+      } catch {
+        if (!stopped) setPrivateLessonStepDetails(null);
+      }
+    })();
+    return () => { stopped = true; };
+  }, [privateLessonId, privateNotionStepId]);
 
   const chooseSession = useCallback((sessionId: string) => {
     refreshEpochRef.current += 1;
@@ -552,7 +630,71 @@ export default function TeacherRemotePage() {
       || flow?.state?.description
       || "The classroom computer has not published directions yet.",
   );
+  const privateSmallGroupPlan = privateLessonStepDetails?.routineConfig?.kind === "small-group"
+    ? privateLessonStepDetails.routineConfig.teacherPlan
+    : null;
   const controlsDisabled = !session || Boolean(busy) || Boolean(pendingCommand);
+  const isDiscussionState = Boolean(
+    flow?.state
+    && (
+      flow.state.semantic === "discussion"
+      || usesDiscussionProtocol(flow.state.id, flow.state.label)
+    )
+  );
+  const discussionPhase = isDiscussionState ? flow?.phase ?? null : null;
+  const learningCheckAwaitingReveal = Boolean(
+    flow?.poll
+    && resolveRemoteNextBehavior(flow.state?.id, flow.state?.semantic, flow.poll.stage) === "reveal-results",
+  );
+  const stageControlButtons: readonly RemoteDeckButton[] = STAGE_BUTTONS.map((button) => (
+    button.action === "next" && learningCheckAwaitingReveal
+      ? {
+          action: "reveal-results",
+          label: "Reveal anonymous bars",
+          detail: "Stay on this Learning Check",
+          tone: "purple",
+        }
+      : button
+  ));
+  const launchScoreboardAvailable = Boolean(
+    flow && canRevealM2T1L1FinalScore(flow.lesson?.code, flow.state?.id, flow.state?.semantic),
+  );
+  const finalScoreShowing = flow?.presentation?.scoreboardStage === "final";
+  const scoreboardButton: RemoteDeckButton | null = launchScoreboardAvailable
+    ? {
+        action: "reveal-final-score",
+        label: finalScoreShowing ? "Final score shown" : "Reveal final score",
+        detail: finalScoreShowing ? "The projector shows 60 to 40" : "Change 30 to 20 into 60 to 40",
+        tone: "gold",
+      }
+    : null;
+  const discussionPhaseIndex = discussionPhase
+    ? (["think", "marker", "table", "revise", "share"] as DiscussionPhaseId[]).indexOf(discussionPhase.id)
+    : -1;
+  const activeDiscussionAction = discussionPhase ? DISCUSSION_ACTION_BY_PHASE[discussionPhase.id] : null;
+  const discussionControlButtons: Array<{ button: RemoteDeckButton; disabled: boolean }> = [
+    {
+      button: { action: "discussion-previous", label: "Previous phase", detail: "Go back one part", tone: "neutral" },
+      disabled: discussionPhaseIndex <= 0,
+    },
+    {
+      button: {
+        action: "discussion-toggle",
+        label: discussionPhase?.running ? "Pause phase" : "Start or resume",
+        detail: "Control this phase timer",
+        tone: "timer",
+      },
+      disabled: !discussionPhase?.timed,
+    },
+    {
+      button: { action: "discussion-restart", label: "Restart phase", detail: "Reset this phase timer", tone: "gold" },
+      disabled: !discussionPhase?.timed,
+    },
+    {
+      button: { action: "discussion-next", label: "Next phase", detail: "Move to the next part", tone: "next" },
+      disabled: discussionPhaseIndex < 0 || discussionPhaseIndex >= 4,
+    },
+  ];
   const spinnerStateId = isSpinnerStateId(flow?.state?.id) ? flow.state.id : null;
   const spinnerStateKey = session && spinnerStateId
     ? `${session.id}:${spinnerStateId}:${sequence?.currentIndex ?? -1}`
@@ -586,26 +728,45 @@ export default function TeacherRemotePage() {
       pace: `/teacher/pace${query}`,
     };
   }, [session]);
+  const remoteStyle = {
+    "--remote-accent": flow?.state?.color || "#d59a55",
+  } as CSSProperties;
 
   if (boardPanelOpen && session) {
     return (
-      <main className="remote-write-page">
+      <main className="remote-write-page" style={remoteStyle}>
         <style>{`
-          .remote-write-page { position:fixed; inset:0; display:grid; grid-template-rows:auto minmax(0,1fr); background:#0d1017; font-family:var(--bdb-font); }
-          .remote-write-bar { display:flex; align-items:center; justify-content:space-between; gap:14px; border-bottom:1px solid #2b364d; background:#151b28; color:#f8fafc; padding:10px 14px; }
+          .remote-write-page { position:fixed; inset:0; display:grid; grid-template-rows:auto minmax(0,1fr); background:#f2ecdf; color:#28241e; font-family:var(--bdb-font); }
+          .remote-write-bar { display:flex; align-items:center; justify-content:space-between; gap:14px; border-bottom:1px solid #d8d0c3; background:#fff; padding:10px 14px; box-shadow:0 6px 20px rgba(62,50,35,0.08); }
           .remote-write-copy { min-width:0; }
-          .remote-write-copy strong { display:block; font-size:1rem; }
-          .remote-write-copy span { display:block; margin-top:2px; color:#94a3b8; font-size:0.76rem; font-weight:700; }
-          .remote-write-back { min-height:44px; border:1px solid #14b8a6; border-radius:10px; background:#0d2a27; color:#7ff3df; padding:0 16px; font:inherit; font-weight:900; cursor:pointer; }
+          .remote-write-copy strong { display:block; color:#28241e; font-size:1rem; }
+          .remote-write-copy span { display:block; margin-top:2px; color:#756d62; font-size:0.76rem; font-weight:700; }
+          .remote-write-back { min-height:48px; border:1px solid color-mix(in srgb,var(--remote-accent) 70%,#7f776c); border-radius:11px; background:color-mix(in srgb,var(--remote-accent) 15%,#fff); color:color-mix(in srgb,var(--remote-accent) 60%,#28241e); padding:0 16px; font:inherit; font-weight:900; cursor:pointer; }
           .remote-write-back:disabled { opacity:0.5; cursor:not-allowed; }
+          .remote-write-actions { display:flex; align-items:center; gap:9px; }
+          .remote-write-time { min-width:76px; color:#28241e; font-size:1.45rem; font-weight:900; font-variant-numeric:tabular-nums; text-align:center; }
+          .remote-write-pause { min-height:48px; border:1px solid #c89c35; border-radius:11px; background:#fff5d8; color:#6e5211; padding:0 14px; font:inherit; font-weight:900; cursor:pointer; }
+          .remote-write-pause:disabled { opacity:0.5; cursor:not-allowed; }
+          .remote-write-back:focus-visible, .remote-write-pause:focus-visible { outline:3px solid var(--remote-accent); outline-offset:2px; }
           .remote-write-frame { width:100%; height:100%; border:0; background:#fff; }
+          @media (max-width:720px) {
+            .remote-write-bar { align-items:flex-start; flex-direction:column; }
+            .remote-write-actions { width:100%; }
+            .remote-write-back, .remote-write-pause { flex:1; }
+          }
         `}</style>
         <header className="remote-write-bar">
           <div className="remote-write-copy">
             <strong>Writing on the main projector</strong>
             <span>The current problem stays visible beside this work space.</span>
           </div>
-          <button className="remote-write-back" type="button" disabled={Boolean(busy)} onClick={() => { void setWritingMode(false); }}>Back to Remote</button>
+          <div className="remote-write-actions">
+            <span className="remote-write-time">{timer ? formatTime(timerSeconds) : "--:--"}</span>
+            <button className="remote-write-pause" type="button" disabled={controlsDisabled} onClick={() => { void send(STAGE_BUTTONS[1]); }}>
+              {timer?.running ? "Pause" : "Resume"}
+            </button>
+            <button className="remote-write-back" type="button" disabled={controlsDisabled} onClick={() => { void setWritingMode(false); }}>Back to Remote</button>
+          </div>
         </header>
         <iframe className="remote-write-frame" src={`/ipad?room=${encodeURIComponent(session.id)}`} title="iPad writing work space" />
       </main>
@@ -613,80 +774,133 @@ export default function TeacherRemotePage() {
   }
 
   return (
-    <main className="remote-page">
+    <main className="remote-page" style={remoteStyle}>
       <style>{`
-        .remote-page { min-height:100vh; box-sizing:border-box; background:#0d1017; color:#f8fafc; font-family:var(--bdb-font); padding:clamp(16px,3vw,34px); }
-        .remote-shell { width:min(100%,980px); margin:0 auto; display:grid; gap:18px; }
-        .remote-head { display:flex; justify-content:space-between; gap:14px; align-items:flex-start; }
-        .remote-kicker { margin:0 0 5px; color:#5eead4; font-size:0.7rem; font-weight:900; letter-spacing:0.13em; text-transform:uppercase; }
-        .remote-title { margin:0; font-size:clamp(1.65rem,5vw,2.7rem); line-height:1; }
-        .remote-subtitle { margin:8px 0 0; color:#94a3b8; font-size:0.92rem; font-weight:700; }
-        .remote-code { min-width:108px; border:1px solid #2b364d; border-radius:12px; background:#151b28; padding:10px 14px; text-align:center; }
-        .remote-code small { display:block; color:#94a3b8; font-size:0.62rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
-        .remote-code strong { display:block; color:#5eead4; font-size:1.25rem; letter-spacing:0.1em; }
-        .remote-code span { display:block; margin-top:3px; color:#94a3b8; font-size:0.68rem; font-weight:750; }
-        .remote-status { margin:0; border-left:4px solid #14b8a6; background:#151b28; border-radius:8px; padding:11px 14px; color:#d9e2ef; font-weight:750; }
+        .remote-page { min-height:100dvh; box-sizing:border-box; display:grid; place-items:center; overflow:hidden; background:radial-gradient(circle at 18% 12%,color-mix(in srgb,var(--remote-accent) 12%,transparent),transparent 32%),linear-gradient(145deg,#e9e3d8,#dcd4c7); color:#28241e; font-family:var(--bdb-font); padding:12px; }
+        .remote-shell { width:min(100%,1194px); height:min(834px,calc(100dvh - 24px)); min-height:0; display:flex; flex-direction:column; overflow:hidden; border:1px solid #d5cdbf; border-radius:26px; background:#fbf6ea; box-shadow:0 24px 58px rgba(60,47,31,0.2); }
+        .remote-head { min-height:70px; flex:none; display:flex; align-items:center; gap:12px; border-bottom:1px solid #ddd5c8; background:#fff; padding:10px 18px; }
+        .remote-brand { min-width:0; display:flex; align-items:center; gap:11px; }
+        .remote-mark { width:38px; height:38px; flex:none; display:grid; place-items:center; border-radius:11px; background:#28241e; color:#fff; font-size:0.72rem; font-weight:950; letter-spacing:0.04em; }
+        .remote-brand-copy { min-width:0; }
+        .remote-kicker { margin:0 0 2px; color:color-mix(in srgb,var(--remote-accent) 64%,#28241e); font-size:0.62rem; font-weight:900; letter-spacing:0.13em; text-transform:uppercase; }
+        .remote-title { margin:0; color:#28241e; font-size:clamp(1.05rem,2vw,1.35rem); line-height:1; font-weight:900; }
+        .remote-subtitle { margin:4px 0 0; color:#756d62; font-size:0.72rem; font-weight:700; }
+        .remote-code { min-width:0; display:grid; grid-template-columns:auto auto; align-items:center; gap:2px 8px; margin-left:auto; border:1px solid #d8d0c3; border-radius:999px; background:#f7f1e6; padding:7px 12px; text-align:left; }
+        .remote-code small { color:#756d62; font-size:0.58rem; font-weight:900; letter-spacing:0.09em; text-transform:uppercase; }
+        .remote-code strong { grid-row:1 / 3; grid-column:2; color:#28241e; font-size:1rem; letter-spacing:0.1em; }
+        .remote-code span { color:#8a8175; font-size:0.62rem; font-weight:750; }
+        .remote-status { flex:none; margin:0; border-bottom:1px solid #e0d8cb; border-left:5px solid var(--remote-accent); background:#f7f1e6; color:#5f584f; padding:9px 18px; font-size:0.76rem; line-height:1.35; font-weight:780; }
+        .remote-workspace { flex:1; min-height:0; display:grid; grid-template-columns:minmax(286px,0.38fr) minmax(0,0.62fr); }
+        .remote-context { min-height:0; display:grid; align-content:start; gap:12px; overflow:auto; border-right:1px solid #dcd3c5; background:#f3eddf; padding:14px; scrollbar-color:#bdb3a4 transparent; }
+        .remote-controls { min-height:0; display:grid; align-content:start; gap:12px; overflow:auto; background:#fbf6ea; padding:14px 16px 18px; scrollbar-color:#bdb3a4 transparent; }
+        .remote-shell > .deck-section { margin:18px; overflow:auto; }
         .session-list { display:grid; gap:10px; }
-        .session-choice { width:100%; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center; border:1px solid #35415a; border-radius:12px; background:#171d2a; color:#f8fafc; padding:14px; font:inherit; text-align:left; cursor:pointer; }
-        .session-choice:hover, .session-choice:focus-visible { border-color:#14b8a6; outline:none; }
-        .session-choice strong { display:block; font-size:1rem; }
-        .session-choice span { display:block; margin-top:3px; color:#94a3b8; font-size:0.78rem; font-weight:700; }
-        .session-use { color:#7ff3df; font-size:0.76rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; }
-        .current-card { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:18px; border:1px solid #2b364d; border-left:5px solid #14b8a6; border-radius:16px; background:#151b28; padding:16px; }
-        .current-label { margin:0 0 5px; color:#5eead4; font-size:0.68rem; font-weight:900; letter-spacing:0.12em; text-transform:uppercase; }
-        .current-title { margin:0; font-size:clamp(1.35rem,4vw,2rem); line-height:1.05; }
-        .current-notes-label { margin:10px 0 0; color:#94a3b8; font-size:0.66rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
-        .current-directions { display:grid; gap:5px; margin:5px 0 0; padding-left:1.15rem; color:#cbd5e1; font-size:0.9rem; line-height:1.38; font-weight:700; }
+        .session-choice { width:100%; min-height:72px; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center; border:1px solid #d8d0c3; border-radius:13px; background:#fff; color:#28241e; padding:14px 16px; font:inherit; text-align:left; cursor:pointer; box-shadow:0 7px 18px rgba(73,57,36,0.07); }
+        .session-choice:hover, .session-choice:focus-visible { border-color:var(--remote-accent); outline:3px solid color-mix(in srgb,var(--remote-accent) 24%,transparent); outline-offset:2px; }
+        .session-choice strong { display:block; color:#28241e; font-size:1rem; }
+        .session-choice span { display:block; margin-top:3px; color:#756d62; font-size:0.78rem; font-weight:700; }
+        .session-use { color:color-mix(in srgb,var(--remote-accent) 68%,#28241e) !important; font-size:0.72rem !important; font-weight:900 !important; letter-spacing:0.08em; text-transform:uppercase; }
+        .current-card { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:14px; border:1px solid #d8d0c3; border-top:5px solid var(--remote-accent); border-radius:15px; background:#fff; padding:14px; box-shadow:0 8px 22px rgba(73,57,36,0.08); }
+        .current-label { margin:0 0 5px; color:color-mix(in srgb,var(--remote-accent) 66%,#28241e); font-size:0.64rem; font-weight:900; letter-spacing:0.11em; text-transform:uppercase; }
+        .current-title { margin:0; color:#28241e; font-size:clamp(1.25rem,3.1vw,1.85rem); line-height:1.06; font-weight:900; }
+        .current-notes-label { margin:11px 0 0; color:#756d62; font-size:0.62rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
+        .current-directions { display:grid; gap:6px; margin:6px 0 0; padding-left:1.1rem; color:#4f4941; font-size:0.86rem; line-height:1.38; font-weight:720; }
         .current-directions li { padding-left:2px; }
-        .current-directions li::marker { color:#5eead4; }
-        .current-next { margin:12px 0 0; color:#94a3b8; font-size:0.82rem; font-weight:750; }
-        .current-time { align-self:center; color:#fff; font-size:clamp(2.6rem,9vw,4.5rem); font-weight:900; line-height:0.9; font-variant-numeric:tabular-nums; letter-spacing:-0.04em; }
-        .current-time.finished { color:#fda4af; }
-        .deck-section { display:grid; gap:10px; border:1px solid #222a3a; border-radius:16px; background:#111620; padding:14px; }
+        .current-directions li::marker { color:var(--remote-accent); }
+        .current-next { margin:12px 0 0; color:#756d62; font-size:0.78rem; line-height:1.35; font-weight:740; }
+        .current-live-note { display:inline-flex; margin:10px 0 0; border:1px solid #ddbd76; border-radius:999px; background:#fff4d7; color:#674b0f; padding:7px 10px; font-size:0.7rem; font-weight:900; }
+        .current-time { align-self:start; border:1px solid color-mix(in srgb,var(--remote-accent) 45%,#d8d0c3); border-radius:999px; background:color-mix(in srgb,var(--remote-accent) 12%,#fff); color:#28241e; padding:8px 11px; font-size:clamp(1.65rem,4.2vw,2.65rem); font-weight:900; line-height:0.9; font-variant-numeric:tabular-nums; letter-spacing:-0.04em; }
+        .current-time.finished { border-color:#d97b85; background:#fff0f1; color:#9d3544; }
+        .private-plan { display:grid; gap:10px; border:1px solid #bfcfe3; border-left:5px solid #4d8df6; border-radius:15px; background:#f4f8ff; padding:13px; }
+        .private-plan-head { display:grid; gap:3px; }
+        .private-plan-title { margin:0; color:#355f9e; font-size:0.7rem; font-weight:900; letter-spacing:0.11em; text-transform:uppercase; }
+        .private-plan-note { margin:0; color:#6f7c8e; font-size:0.68rem; font-weight:730; }
+        .private-plan-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+        .private-plan-card { border:1px solid #d3deec; border-radius:10px; background:#fff; padding:10px 11px; }
+        .private-plan-label { margin:0 0 5px; color:#466eaa; font-size:0.62rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
+        .private-plan-body { margin:0; color:#374457; font-size:0.79rem; font-weight:720; line-height:1.38; white-space:pre-wrap; }
+        .private-plan-materials { margin:0; padding-left:1.1rem; color:#445267; font-size:0.78rem; line-height:1.4; }
+        .deck-section { display:grid; gap:10px; border:1px solid #d8d0c3; border-radius:15px; background:#fff; padding:13px; box-shadow:0 7px 18px rgba(73,57,36,0.06); }
+        .remote-controls > .deck-section:first-child { border-top:5px solid var(--remote-accent); }
+        .deck-section.compact-private { box-shadow:none; }
         .deck-section-head { display:flex; justify-content:space-between; align-items:baseline; gap:12px; }
-        .deck-section-title { margin:0; color:#f8fafc; font-size:0.76rem; font-weight:900; letter-spacing:0.12em; text-transform:uppercase; }
-        .deck-section-note { margin:0; color:#94a3b8; font-size:0.75rem; font-weight:700; text-align:right; }
-        .deck-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+        .deck-section-title { margin:0; color:#28241e; font-size:0.7rem; font-weight:900; letter-spacing:0.11em; text-transform:uppercase; }
+        .deck-section-note { margin:0; color:#756d62; font-size:0.7rem; font-weight:700; text-align:right; }
+        .deck-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+        .deck-grid.stages { grid-template-columns:repeat(4,minmax(0,1fr)); }
+        .deck-grid.discussion-phases { grid-template-columns:repeat(5,minmax(0,1fr)); }
+        .deck-grid.discussion-controls { grid-template-columns:repeat(4,minmax(0,1fr)); }
         .deck-grid.spinner-control { grid-template-columns:1fr; }
-        .deck-key { min-height:92px; display:grid; align-content:center; gap:5px; border:1px solid #35415a; border-bottom-width:4px; border-radius:14px; background:#171d2a; color:#f8fafc; padding:12px; font:inherit; text-align:left; cursor:pointer; touch-action:manipulation; box-shadow:0 8px 18px rgba(0,0,0,0.2); }
-        .deck-key:active:not(:disabled) { transform:translateY(2px); border-bottom-width:2px; }
-        .deck-key:disabled { opacity:0.42; cursor:not-allowed; }
-        .deck-key-label { font-size:clamp(0.98rem,2.4vw,1.2rem); font-weight:900; line-height:1.05; }
-        .deck-key-detail { color:#a9b6c9; font-size:0.72rem; font-weight:750; line-height:1.2; }
-        .deck-key.timer { border-color:#c89c35; background:#2a2315; color:#fcd67d; }
-        .deck-key.next, .deck-key.teal { border-color:#14b8a6; background:#0d2a27; color:#7ff3df; }
-        .deck-key.orange { border-color:#db6338; background:#2d1914; color:#ffad8d; }
-        .deck-key.blue { border-color:#4d8df6; background:#14233e; color:#a8c7ff; }
-        .deck-key.gold { border-color:#c89c35; background:#2a2315; color:#fcd67d; }
-        .deck-key.purple { border-color:#8b5cf6; background:#21183a; color:#cbb7ff; }
-        .deck-key.green { border-color:#22a06b; background:#102b21; color:#92efc1; }
-        .deck-key.red { border-color:#dc5b5b; background:#321818; color:#ffaaaa; }
+        .discussion-selection { display:grid; gap:5px; border:1px solid #bba9dd; border-left:5px solid #8b5cf6; border-radius:12px; background:#f5efff; padding:11px 13px; }
+        .discussion-selection span { color:#6d4aa7; font-size:0.62rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
+        .discussion-selection strong { color:#322544; font-size:clamp(1.2rem,2.6vw,1.7rem); line-height:1; }
+        .deck-key { min-height:68px; display:grid; align-content:center; gap:4px; border:1px solid #d5cdbf; border-bottom-width:3px; border-radius:12px; background:#fff; color:#28241e; padding:10px 11px; font:inherit; text-align:left; cursor:pointer; touch-action:manipulation; box-shadow:0 5px 12px rgba(73,57,36,0.08); transition:transform 100ms ease,box-shadow 100ms ease,border-color 100ms ease; }
+        .deck-key:hover:not(:disabled) { border-color:color-mix(in srgb,var(--remote-accent) 62%,#9c9387); box-shadow:0 7px 16px rgba(73,57,36,0.12); }
+        .deck-key:focus-visible { outline:3px solid color-mix(in srgb,var(--remote-accent) 42%,transparent); outline-offset:2px; }
+        .deck-key:active:not(:disabled) { transform:translateY(2px); border-bottom-width:1px; box-shadow:0 2px 6px rgba(73,57,36,0.1); }
+        .deck-key.active { outline:3px solid color-mix(in srgb,var(--remote-accent) 58%,#fff); outline-offset:2px; }
+        .deck-key:disabled { opacity:0.46; cursor:not-allowed; }
+        .deck-key-label { font-size:clamp(0.88rem,1.55vw,1.05rem); font-weight:900; line-height:1.06; }
+        .deck-key-detail { color:#756d62; font-size:0.67rem; font-weight:720; line-height:1.2; }
+        .deck-key.timer { border-color:#d4ad55; background:#fff5d8; color:#6e5211; }
+        .deck-key.next, .deck-key.teal { border-color:#65ad99; background:#eaf8f3; color:#155f4c; }
+        .deck-key.orange { border-color:#dd8a69; background:#fff0e8; color:#8b3f24; }
+        .deck-key.blue { border-color:#87aee7; background:#edf4ff; color:#315f9d; }
+        .deck-key.gold { border-color:#d4ad55; background:#fff5d8; color:#6e5211; }
+        .deck-key.purple { border-color:#a995d2; background:#f4efff; color:#65459a; }
+        .deck-key.green { border-color:#76b494; background:#edf8f1; color:#216947; }
+        .deck-key.red { border-color:#d88d94; background:#fff0f1; color:#963b49; }
         .response-list { display:grid; gap:8px; margin:0; padding:0; list-style:none; }
-        .response-row { display:grid; grid-template-columns:minmax(110px,0.8fr) minmax(0,1.8fr); gap:10px; border-top:1px solid #273247; padding-top:8px; color:#dce6f5; font-size:0.84rem; }
+        .response-row { display:grid; grid-template-columns:minmax(92px,0.8fr) minmax(0,1.8fr); gap:9px; border-top:1px solid #e1d9cc; padding-top:8px; color:#39342d; font-size:0.8rem; }
         .response-name { font-weight:900; }
-        .response-answer { color:#b7c3d4; overflow-wrap:anywhere; }
-        .response-empty { margin:0; color:#94a3b8; font-size:0.84rem; font-weight:700; }
-        .remote-links { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
-        .remote-link, .remote-change, .remote-end { display:flex; min-height:54px; align-items:center; justify-content:center; border:1px solid #35415a; border-radius:12px; background:#151b28; color:#dce6f5; padding:0 12px; text-align:center; text-decoration:none; font:inherit; font-weight:850; cursor:pointer; }
-        .remote-change { color:#fcd67d; }
-        .remote-end { border-color:#7f3340; color:#ffb2bc; }
+        .response-answer { color:#635c53; overflow-wrap:anywhere; }
+        .response-empty { margin:0; color:#756d62; font-size:0.8rem; font-weight:700; }
+        .remote-links { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+        .remote-link, .remote-change, .remote-end { display:flex; min-height:50px; align-items:center; justify-content:center; border:1px solid #d5cdbf; border-radius:11px; background:#fff; color:#39342d; padding:0 11px; text-align:center; text-decoration:none; font:inherit; font-size:0.78rem; font-weight:850; cursor:pointer; }
+        .remote-link:hover, .remote-change:hover { border-color:var(--remote-accent); }
+        .remote-link:focus-visible, .remote-change:focus-visible, .remote-end:focus-visible { outline:3px solid color-mix(in srgb,var(--remote-accent) 36%,transparent); outline-offset:2px; }
+        .remote-change { color:#6e5211; }
+        .remote-end { flex:none; min-width:118px; margin-left:2px; border-color:#d88d94; background:#fff5f5; color:#963b49; }
         .remote-end:disabled { opacity:0.5; cursor:not-allowed; }
+        @media (max-width:920px) {
+          .remote-page { place-items:start center; overflow:auto; }
+          .remote-shell { height:auto; min-height:calc(100dvh - 24px); overflow:hidden; }
+          .remote-workspace { grid-template-columns:1fr; }
+          .remote-context { overflow:visible; border-right:0; border-bottom:1px solid #dcd3c5; }
+          .remote-controls { overflow:visible; }
+        }
         @media (max-width:680px) {
-          .deck-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+          .remote-page { padding:0; }
+          .remote-shell { min-height:100dvh; border:0; border-radius:0; }
+          .remote-head { align-items:flex-start; flex-wrap:wrap; padding:10px 12px; }
+          .remote-brand { flex:1 1 220px; }
+          .remote-subtitle { display:none; }
+          .remote-code { order:3; width:100%; box-sizing:border-box; border-radius:11px; }
+          .remote-end { min-width:104px; }
+          .remote-status { padding:8px 12px; }
+          .remote-context, .remote-controls { padding:12px; }
+          .deck-grid, .deck-grid.stages { grid-template-columns:repeat(2,minmax(0,1fr)); }
+          .deck-grid.discussion-phases, .deck-grid.discussion-controls { grid-template-columns:repeat(2,minmax(0,1fr)); }
+          .deck-grid.discussion-phases .deck-key:last-child { grid-column:1 / -1; }
           .deck-grid.stages .deck-key.timer { grid-column:1 / -1; grid-row:1; }
           .current-card { grid-template-columns:1fr; }
           .current-time { justify-self:start; }
-          .remote-links { grid-template-columns:1fr 1fr; }
+          .remote-links { grid-template-columns:1fr; }
           .deck-section-head { display:block; }
           .deck-section-note { margin-top:4px; text-align:left; }
+          .private-plan-grid { grid-template-columns:1fr; }
         }
+        @media (prefers-reduced-motion:reduce) { .deck-key { transition:none; } }
       `}</style>
       <section className="remote-shell">
         <header className="remote-head">
-          <div>
-            <p className="remote-kicker">Private teacher controls</p>
-            <h1 className="remote-title">Classroom Remote</h1>
-            <p className="remote-subtitle">Confirm the class, then control its lesson, timer, Abbie, and audio.</p>
+          <div className="remote-brand">
+            <span className="remote-mark" aria-hidden="true">BDM</span>
+            <div className="remote-brand-copy">
+              <p className="remote-kicker">Private teacher controls</p>
+              <h1 className="remote-title">Classroom Remote</h1>
+              <p className="remote-subtitle">Confirm the class, then control its lesson, timer, Abbie, and audio.</p>
+            </div>
           </div>
           {session ? (
             <div className="remote-code">
@@ -694,6 +908,11 @@ export default function TeacherRemotePage() {
               <strong>{session.joinCode || "No code"}</strong>
               <span>{formatStartedAt(session.startedAt)}</span>
             </div>
+          ) : null}
+          {session ? (
+            <button className="remote-end" type="button" disabled={endingSession} onClick={() => { void endSession(); }}>
+              {endingSession ? "Ending session" : "End session"}
+            </button>
           ) : null}
         </header>
 
@@ -719,24 +938,85 @@ export default function TeacherRemotePage() {
           </section>
         ) : (
           <>
-            <section className="current-card" aria-label="Current classroom state">
-              <div>
-                <p className="current-label">{lesson?.code || "Live lesson"} · {sequence ? `Step ${sequence.currentIndex + 1} of ${sequence.totalSteps}` : "Current step"}</p>
-                <h2 className="current-title">{flow?.state?.label || "Waiting for a lesson step"}</h2>
-                <p className="current-notes-label">Speaker notes</p>
-                <ul className="current-directions" aria-label="Private speaker notes">
-                  {currentSpeakerNotes.map((note, index) => <li key={`${index}-${note}`}>{note}</li>)}
-                </ul>
-                <p className="current-next"><strong>Next:</strong> {sequence?.nextLabel || "Lesson closeout"}{sequence?.nextDirections ? ` - ${sequence.nextDirections}` : ""}</p>
-              </div>
-              <div className={`current-time ${timerFinished ? "finished" : ""}`}>{timer ? formatTime(timerSeconds) : "--:--"}</div>
-            </section>
+            <div className="remote-workspace">
+              <aside className="remote-context" aria-label="Private lesson context">
+                <section className="current-card" aria-label="Current classroom state">
+                  <div>
+                    <p className="current-label">{lesson?.code || "Live lesson"} · {sequence ? `Step ${sequence.currentIndex + 1} of ${sequence.totalSteps}` : "Current step"}</p>
+                    <h2 className="current-title">{flow?.state?.label || "Waiting for a lesson step"}</h2>
+                    <p className="current-notes-label">Speaker notes</p>
+                    <ul className="current-directions" aria-label="Private speaker notes">
+                      {currentSpeakerNotes.map((note, index) => <li key={`${index}-${note}`}>{note}</li>)}
+                    </ul>
+                    {launchScoreboardAvailable ? (
+                      <p className="current-live-note">{finalScoreShowing ? "Final score 60 to 40 is showing" : "Halftime score 30 to 20 is showing"}</p>
+                    ) : null}
+                    <p className="current-next"><strong>Next:</strong> {sequence?.nextLabel || "Lesson closeout"}{sequence?.nextDirections ? ` - ${sequence.nextDirections}` : ""}</p>
+                  </div>
+                  <div className={`current-time ${timerFinished ? "finished" : ""}`}>{timer ? formatTime(timerSeconds) : "--:--"}</div>
+                </section>
 
-            <section className="deck-section" aria-labelledby="stage-controls-title">
+                {privateSmallGroupPlan ? (
+                  <section className="private-plan" aria-labelledby="private-small-group-title">
+                    <div className="private-plan-head">
+                      <h2 className="private-plan-title" id="private-small-group-title">Private small-group plan</h2>
+                      <p className="private-plan-note">Only this teacher Remote receives these notes.</p>
+                    </div>
+                    <div className="private-plan-grid">
+                      {[
+                        ["Pull", privateSmallGroupPlan.pull],
+                        ["Focus", privateSmallGroupPlan.focus],
+                        ["Activity", privateSmallGroupPlan.activity],
+                        ["Check", privateSmallGroupPlan.check],
+                      ].map(([label, body]) => (
+                        <article className="private-plan-card" key={label}>
+                          <p className="private-plan-label">{label}</p>
+                          <p className="private-plan-body">{body}</p>
+                        </article>
+                      ))}
+                    </div>
+                    {privateSmallGroupPlan.materials.length ? (
+                      <article className="private-plan-card">
+                        <p className="private-plan-label">Materials</p>
+                        <ul className="private-plan-materials">
+                          {privateSmallGroupPlan.materials.map((item) => <li key={item}>{item}</li>)}
+                        </ul>
+                      </article>
+                    ) : null}
+                  </section>
+                ) : null}
+
+                <section className="deck-section compact-private" aria-labelledby="response-title">
+                  <div className="deck-section-head">
+                    <h2 className="deck-section-title" id="response-title">Private response data</h2>
+                    <p className="deck-section-note">{flow?.poll ? `${pollAnswers.length} response${pollAnswers.length === 1 ? "" : "s"}` : "No live response is open"}</p>
+                  </div>
+                  {flow?.poll ? (
+                    pollAnswers.length ? (
+                      <ul className="response-list">
+                        {pollAnswers.map((answer) => (
+                          <li className="response-row" key={answer.id}>
+                            <span className="response-name">{answer.display_name || "Student"}</span>
+                            <span className="response-answer">{answer.answer || "No answer"}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : <p className="response-empty">Waiting for responses.</p>
+                  ) : <p className="response-empty">Student names and individual answers stay on this private screen.</p>}
+                </section>
+              </aside>
+
+              <section className="remote-controls" aria-label="Classroom controls">
+
+                <section className="deck-section" aria-labelledby="stage-controls-title">
               <div className="deck-section-head">
                 <h2 className="deck-section-title" id="stage-controls-title">Lesson stages</h2>
                 <p className="deck-section-note">
-                  {flow?.poll?.stage === "results" && sequence?.advanceMode === "automatic"
+                  {isDiscussionState
+                    ? "Use the routine controls below for each phase. Next state ends the discussion."
+                    : flow?.poll?.stage === "results" && flow.poll.awaitingTeacherAdvance
+                    ? "Results are showing. Tap Next state when ready."
+                    : flow?.poll?.stage === "results" && sequence?.advanceMode === "automatic"
                     ? "Results are showing. The next stage will advance automatically."
                     : timer?.running
                       ? "Automatic pacing is running. Pause the timer to hold this stage."
@@ -746,36 +1026,101 @@ export default function TeacherRemotePage() {
                 </p>
               </div>
               <div className="deck-grid stages">
-                {STAGE_BUTTONS.map((button) => <DeckKey key={button.action} button={button} busy={busy} disabled={controlsDisabled} onSend={send} />)}
+                {stageControlButtons.filter((button) => !(isDiscussionState && button.action === "toggle-timer")).map((button) => (
+                  <DeckKey
+                    key={button.action}
+                    button={button}
+                    busy={busy}
+                    disabled={controlsDisabled}
+                    onSend={send}
+                  />
+                ))}
+                <DeckKey
+                  button={{ action: "show-board", label: "Write on screen", detail: "Open the side whiteboard", tone: "blue" }}
+                  busy={busy}
+                  disabled={controlsDisabled || !flow?.presentation}
+                  onSend={() => { void setWritingMode(true); }}
+                />
               </div>
               {spinnerButton ? (
                 <div className="deck-grid spinner-control">
                   <DeckKey button={spinnerButton} busy={busy} disabled={controlsDisabled} onSend={send} />
                 </div>
               ) : null}
-              <div className="deck-grid">
-                {TIMER_BUTTONS.map((button) => <DeckKey key={button.action} button={button} busy={busy} disabled={controlsDisabled} onSend={send} />)}
-              </div>
+              {scoreboardButton ? (
+                <div className="deck-grid spinner-control">
+                  <DeckKey
+                    button={scoreboardButton}
+                    busy={busy}
+                    disabled={controlsDisabled || finalScoreShowing}
+                    onSend={send}
+                  />
+                </div>
+              ) : null}
+              {!isDiscussionState ? (
+                <div className="deck-grid">
+                  {TIMER_BUTTONS.map((button) => (
+                    <DeckKey key={button.action} button={button} busy={busy} disabled={controlsDisabled} onSend={send} />
+                  ))}
+                </div>
+              ) : null}
             </section>
 
-            <section className="deck-section" aria-labelledby="response-title">
-              <div className="deck-section-head">
-                <h2 className="deck-section-title" id="response-title">Private response data</h2>
-                <p className="deck-section-note">{flow?.poll ? `${pollAnswers.length} response${pollAnswers.length === 1 ? "" : "s"}` : "No live response is open"}</p>
-              </div>
-              {flow?.poll ? (
-                pollAnswers.length ? (
-                  <ul className="response-list">
-                    {pollAnswers.map((answer) => (
-                      <li className="response-row" key={answer.id}>
-                        <span className="response-name">{answer.display_name || "Student"}</span>
-                        <span className="response-answer">{answer.answer || "No answer"}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : <p className="response-empty">Waiting for responses.</p>
-              ) : <p className="response-empty">Student names and individual answers stay on this private screen.</p>}
-            </section>
+            {isDiscussionState ? (
+              <section className="deck-section" aria-labelledby="discussion-controls-title">
+                <div className="deck-section-head">
+                  <h2 className="deck-section-title" id="discussion-controls-title">Discussion routine</h2>
+                  <p className="deck-section-note">
+                    {discussionPhase
+                      ? `${discussionPhase.label}. ${discussionPhase.running ? "Timer running." : discussionPhase.finished ? "Time is up." : discussionPhase.timed ? "Ready or paused." : "Use the class spinner to share."}`
+                      : "Choose Think to open the five-part routine."}
+                  </p>
+                </div>
+                <div className="deck-grid discussion-phases">
+                  {DISCUSSION_PHASE_BUTTONS.map((button) => (
+                    <DeckKey
+                      key={button.action}
+                      button={button}
+                      busy={busy}
+                      disabled={controlsDisabled}
+                      active={button.action === activeDiscussionAction}
+                      onSend={send}
+                    />
+                  ))}
+                </div>
+                <div className="deck-grid discussion-controls">
+                  {discussionControlButtons.map(({ button, disabled }) => (
+                    <DeckKey
+                      key={button.action}
+                      button={button}
+                      busy={busy}
+                      disabled={controlsDisabled || disabled}
+                      onSend={send}
+                    />
+                  ))}
+                </div>
+                {discussionPhase?.id === "share" ? (
+                  <>
+                    {discussionPhase.selectedSharer ? (
+                      <div className="discussion-selection"><span>Ready to share</span><strong>{discussionPhase.selectedSharer}</strong></div>
+                    ) : null}
+                    <div className="deck-grid spinner-control">
+                      <DeckKey
+                        button={{
+                          action: "discussion-pick-sharer",
+                          label: discussionPhase.selectedSharer ? "Choose another sharer" : "Choose sharer",
+                          detail: "Choose from joined students first",
+                          tone: "purple",
+                        }}
+                        busy={busy}
+                        disabled={controlsDisabled}
+                        onSend={send}
+                      />
+                    </div>
+                  </>
+                ) : null}
+              </section>
+            ) : null}
 
             <section className="deck-section" aria-labelledby="abbie-controls-title">
               <div className="deck-section-head">
@@ -800,11 +1145,9 @@ export default function TeacherRemotePage() {
             <div className="remote-links">
               <a className="remote-link" href={stageLinks.present} target="_blank" rel="noreferrer">Open main projector</a>
               <a className="remote-link" href={stageLinks.pace} target="_blank" rel="noreferrer">Open Pace + Support</a>
-              {flow?.presentation && flow.presentation.workSpaceAvailable !== false ? (
-                <button className="remote-link" type="button" disabled={controlsDisabled} onClick={() => { void setWritingMode(true); }}>Open work space</button>
-              ) : null}
               <button className="remote-change" type="button" onClick={changeSession}>Change session</button>
-              <button className="remote-end" type="button" disabled={endingSession} onClick={() => { void endSession(); }}>{endingSession ? "Ending session" : "End session"}</button>
+            </div>
+              </section>
             </div>
           </>
         )}

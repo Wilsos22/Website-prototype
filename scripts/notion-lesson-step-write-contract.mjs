@@ -5,6 +5,7 @@ import path from "node:path";
 
 const require = createRequire(import.meta.url);
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const routines = require(path.join(root, ".tmp-mastery", "lessonRoutineConfig.js"));
 
 const lessonId = "11111111-1111-4111-8111-111111111111";
 const stepId = "22222222-2222-4222-8222-222222222222";
@@ -14,9 +15,34 @@ const createMutationToken = "create-readers-20260715-a1";
 const lessonSourceId = "e367e541-c0c7-4613-8066-d2e61b6fee64";
 const stepSourceId = "8e467c1b-8937-4902-811e-ca0a2e15af4d";
 
+const initialSmallGroupRoutine = {
+  kind: "small-group",
+  rotationMinutes: 8,
+  publicTask: "Complete the assigned ratio sort and show your thinking on paper.",
+  teacherPlan: {
+    pull: "Pull the teacher-selected group after the opening example.",
+    focus: "Connect equivalent ratios to multiplicative reasoning.",
+    activity: "Build one equivalent ratio, then revise a second example.",
+    check: "Ask each learner to explain the scale factor before returning.",
+    materials: ["Ratio cards", "Counters"],
+  },
+};
+const updatedSmallGroupRoutine = {
+  ...initialSmallGroupRoutine,
+  rotationMinutes: 6,
+  publicTask: "Complete the assigned ratio match and justify one choice on paper.",
+};
+const initialRawAiContext = routines.withLessonRoutineConfig(
+  "Do not solve the task.\n\n[BDM_PUBLIC_SURFACES:linked]",
+  initialSmallGroupRoutine,
+);
+
 const rich = (value) => ({ type: "rich_text", rich_text: value ? [{ plain_text: value }] : [] });
 const title = (value) => ({ type: "title", title: value ? [{ plain_text: value }] : [] });
 const select = (value) => ({ type: "select", select: value ? { name: value } : null });
+const propertyText = (property) => (property?.rich_text || property?.title || [])
+  .map((item) => item.plain_text ?? item.text?.content ?? "")
+  .join("");
 
 const lessonPage = {
   id: lessonId,
@@ -38,7 +64,7 @@ let stepPage = {
     "Order": { type: "number", number: 3 },
     "Start Minute": { type: "number", number: 9 },
     "Duration": { type: "number", number: 4 },
-    "State ID": rich("launch"),
+    "State ID": rich("small-group"),
     "Student Directions": rich("Study the score."),
     "Teacher Notes": rich("Keep the answer private."),
     "Paper Task": rich(""),
@@ -48,7 +74,7 @@ let stepPage = {
     "Choices": rich("First\nSecond"),
     "Correct Answer": rich("A private answer"),
     "Standard": rich("6.RP.A.1"),
-    "AI Context": rich("Do not solve the task."),
+    "AI Context": rich(initialRawAiContext),
     "Advance": select("Automatic"),
     "Required": { type: "checkbox", checkbox: true },
     "Link": { type: "url", url: null },
@@ -173,6 +199,13 @@ assert.equal(loaded.lessonId, lessonId);
 assert.equal(loaded.lastEditedTime, "2026-07-15T17:01:00.000Z");
 assert.deepEqual(loaded.choices, ["First", "Second"]);
 assert.equal(loaded.remoteActions, "Monitor private responses.");
+assert.equal(loaded.aiContext, "Do not solve the task.");
+assert.equal(loaded.publicSurfaceMode, "linked");
+assert.deepEqual(
+  loaded.routineConfig,
+  initialSmallGroupRoutine,
+  "The gated teacher read must retain the full private Small Group plan.",
+);
 
 const updated = await lessonSteps.updatePublishedLessonStep({
   lessonId,
@@ -185,6 +218,9 @@ const updated = await lessonSteps.updatePublishedLessonStep({
     duration: 5,
     required: false,
     linkUrl: "https://example.com/resource",
+    aiContext: "Use evidence, but keep the answer private.",
+    publicSurfaceMode: "split",
+    routineConfig: updatedSmallGroupRoutine,
   },
 });
 
@@ -199,8 +235,14 @@ assert.deepEqual(patchBody.properties["Poll Kind"], { select: { name: "multiple-
 assert.deepEqual(patchBody.properties["Duration"], { number: 5 });
 assert.deepEqual(patchBody.properties["Required"], { checkbox: false });
 assert.deepEqual(patchBody.properties["Link"], { url: "https://example.com/resource" });
+const patchedAiContext = patchBody.properties["AI Context"].rich_text[0].text.content;
+assert.equal(patchedAiContext.includes("[BDM_PUBLIC_SURFACES:split]"), true);
+assert.deepEqual(routines.lessonRoutineConfigFromAiContext(patchedAiContext), updatedSmallGroupRoutine);
 assert.equal(updated.lastEditedTime, "2026-07-15T17:02:00.000Z");
 assert.equal(updated.mainDisplay, "Updated projector content");
+assert.equal(updated.aiContext, "Use evidence, but keep the answer private.");
+assert.equal(updated.publicSurfaceMode, "split");
+assert.deepEqual(updated.routineConfig, updatedSmallGroupRoutine);
 
 await assert.rejects(
   lessonSteps.updatePublishedLessonStep({
@@ -229,6 +271,15 @@ for (const changes of [
   { duration: 0 },
   { order: 1.5 },
   { linkUrl: "javascript:alert(1)" },
+  {
+    routineConfig: {
+      ...updatedSmallGroupRoutine,
+      teacherPlan: {
+        ...updatedSmallGroupRoutine.teacherPlan,
+        studentNames: ["Fictional Student"],
+      },
+    },
+  },
 ]) {
   await assert.rejects(
     lessonSteps.updatePublishedLessonStep({
@@ -385,7 +436,8 @@ assert.deepEqual(createBody.properties["Duration"], { number: 1 });
 assert.equal(createBody.properties["Order"].number > stepPage.properties["Order"].number, true);
 assert.match(
   createBody.properties["AI Context"].rich_text[0].text.content,
-  new RegExp(`\\[BDM_CREATE_TOKEN:${createMutationToken}\\]$`),
+  new RegExp(`^\\[BDM_PUBLIC_SURFACES:linked\\]\\n\\n\\[BDM_CREATE_TOKEN:${createMutationToken}\\]$`),
+  "A new linked-by-default spinner state must persist its public surface mode before the mutation token.",
 );
 
 deferCreatedRelation = false;
@@ -428,8 +480,8 @@ assert.equal(resizedCreated.duration, 2);
 assert.equal(resizedCreated.aiContext, "Teacher-only context");
 assert.match(
   createdStepPage.properties["AI Context"].rich_text[0].text.content,
-  new RegExp(`^Teacher-only context\\n\\n\\[BDM_CREATE_TOKEN:${createMutationToken}\\]$`),
-  "Editing AI Context must preserve the hidden mutation token for future reconciliation.",
+  new RegExp(`^Teacher-only context\\n\\n\\[BDM_PUBLIC_SURFACES:linked\\]\\n\\n\\[BDM_CREATE_TOKEN:${createMutationToken}\\]$`),
+  "Editing AI Context must preserve public surface metadata and the hidden mutation token.",
 );
 assert.equal(downstreamPatchCalls, 2, "Changing a state's duration must reflow the following Start Minute.");
 assert.equal(downstreamStepPage.properties["Start Minute"].number, 16);
@@ -455,5 +507,61 @@ await assert.rejects(
   (error) => error?.status === 400 && error?.code === "INVALID_STATE_ID",
 );
 assert.equal(createCalls, 1, "An unknown state must not create a Notion page.");
+
+stepPage = {
+  ...stepPage,
+  last_edited_time: new Date(Date.parse(stepPage.last_edited_time) + 60_000).toISOString(),
+  properties: {
+    ...stepPage.properties,
+    "AI Context": rich([
+      "Stale launch context.",
+      "",
+      "[BDM_ROUTINE_CONFIG:not-valid-base64-length-a]",
+      "",
+      "[BDM_PUBLIC_SURFACES:linked]",
+    ].join("\n")),
+  },
+};
+const malformedRoutineStep = await lessonSteps.getPublishedLessonStep(lessonId, stepId);
+assert.equal(malformedRoutineStep.aiContext, "Stale launch context.");
+assert.equal(
+  malformedRoutineStep.routineConfig,
+  null,
+  "A malformed internal routine marker must not make the step impossible to open in Studio.",
+);
+
+const patchCallsBeforeRepair = patchCalls;
+await assert.rejects(
+  lessonSteps.updatePublishedLessonStep({
+    lessonId,
+    stepId,
+    expectedLastEditedTime: malformedRoutineStep.lastEditedTime,
+    changes: { mainDisplay: "Do not save around corrupt metadata." },
+  }),
+  (error) => error?.status === 409 && error?.code === "INVALID_ROUTINE_CONFIG",
+  "An ordinary save must not silently preserve malformed routine metadata.",
+);
+assert.equal(patchCalls, patchCallsBeforeRepair);
+
+const repairedRoutineStep = await lessonSteps.updatePublishedLessonStep({
+  lessonId,
+  stepId,
+  expectedLastEditedTime: malformedRoutineStep.lastEditedTime,
+  changes: {
+    stateId: "launch",
+    aiContext: "",
+    publicSurfaceMode: "split",
+    routineConfig: null,
+  },
+});
+assert.equal(patchCalls, patchCallsBeforeRepair + 1);
+assert.equal(repairedRoutineStep.aiContext, "", "Replacing a state must clear its stale AI Context.");
+assert.equal(repairedRoutineStep.publicSurfaceMode, "split");
+assert.equal(repairedRoutineStep.routineConfig, null);
+assert.equal(
+  propertyText(stepPage.properties["AI Context"]),
+  "[BDM_PUBLIC_SURFACES:split]",
+  "A replacement payload must remove malformed routine metadata while preserving the new public-screen mode.",
+);
 
 console.log("PASS - guarded Notion Lesson Step reads, writes, and inserts enforce ownership, validation, and revisions.");
