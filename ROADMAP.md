@@ -5,12 +5,16 @@
 `56ee55bb-c067-4613-8f3b-6d5810a82ced`). Steele checks things off there; agents
 should update BOTH that database and this mirror when a feature ships.
 
-Snapshot (2026-07-15):
+Snapshot (2026-07-16):
 
 ## Live
 Student home/join · Lesson page (Notion-fed) · Manipulative tools suite ·
 Live polls (stuck-poll trap fixed) · Class mode broadcast · Challenge games ·
 Today's boards · Control panel · Session controls · Rosters ·
+**Weekly classroom display** (7/16 — separately launched projector display with
+five weekday themes and four 20-second screens: Notion-fed learning intention,
+success criteria, weekly topics with the current day highlighted, and the bell
+schedule) ·
 **Lesson Screen Studio** (7/15 — one private editing surface for every lesson
 state with synchronized Main, Pace + Support, Student Chromebook, and iPad
 Remote previews; guarded Notion saves with revision conflicts; no active-session
