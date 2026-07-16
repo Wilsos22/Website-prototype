@@ -62,34 +62,196 @@ export function reelTargets(reward: BruhReward): { sign: number; hun: number; te
 
 /**
  * Squash a typed answer down to what it actually means, so a kid is not marked
- * wrong for writing "$48.00" instead of "48" or "h>=48" without the space.
- * Deliberately conservative: it never reorders terms, so "3x + 2" and "2 + 3x"
- * stay different and the teacher can override on the board.
+ * wrong for spacing or capitals. Deliberately conservative: it never reorders
+ * terms, so "3x + 2" and "2 + 3x" stay different and the teacher overrules on
+ * the board if that was unfair.
+ *
+ * Note this does NOT strip "$" or units - those carry meaning and are handled
+ * by splitValue/gradeAnswer.
  */
 export function normalizeAnswer(raw: string): string {
   let s = String(raw ?? "").trim().toLowerCase();
-  s = s.replace(/[$,]/g, "");
-  s = s.replace(/−/g, "-");      // real minus glyph -> hyphen
+  s = s.replace(/[−–—]/g, "-");   // minus / en / em dash -> hyphen
   s = s.replace(/[‘’]/g, "'");
+  s = s.replace(/,/g, "");
   s = s.replace(/\s+/g, " ");
-  s = s.replace(/\s*([+\-*/=<>:])\s*/g, "$1");  // "4x + 3" -> "4x+3"
+  s = s.replace(/\s*([+\-*/=<>:])\s*/g, "$1");   // "4x + 3" -> "4x+3"
   s = s.replace(/^the\s+/, "");
   s = s.replace(/[.!?]+$/, "");
-  // Trailing zeros on a decimal: "48.00" -> "48", "22.50" -> "22.5"
   if (/^-?\d+\.\d+$/.test(s)) s = s.replace(/0+$/, "").replace(/\.$/, "");
   return s;
 }
 
+/**
+ * The units a 6th grader might actually type, and every spelling worth
+ * accepting. First entry of each row is the canonical form; matching is by
+ * exact alias after lowercasing, so "8 FT", "8ft" and "8 Feet" all land on
+ * "foot".
+ *
+ * Order matters only in that longer aliases are matched before shorter ones
+ * (see canonUnit), so "sq ft" never gets read as "ft".
+ */
+const UNIT_ALIASES: Record<string, string[]> = {
+  dollar: ["$", "dollar", "dollars", "usd", "buck", "bucks"],
+  cent: ["cent", "cents", "¢"],
+  percent: ["%", "percent", "pct", "percents"],
+  degree: ["°", "deg", "degree", "degrees", "°f", "degrees f", "degree f", "degrees fahrenheit"],
+
+  // length
+  inch: ["in", "inch", "inches", '"'],
+  foot: ["ft", "foot", "feet", "'"],
+  yard: ["yd", "yds", "yard", "yards"],
+  mile: ["mi", "mile", "miles"],
+  millimeter: ["mm", "millimeter", "millimeters", "millimetre", "millimetres"],
+  centimeter: ["cm", "centimeter", "centimeters", "centimetre", "centimetres"],
+  meter: ["m", "meter", "meters", "metre", "metres"],
+  kilometer: ["km", "kilometer", "kilometers", "kilometre", "kilometres"],
+
+  // area
+  "square inch": ["sq in", "sqin", "square inch", "square inches", "in2", "in^2", "in²"],
+  "square foot": ["sq ft", "sqft", "square foot", "square feet", "ft2", "ft^2", "ft²"],
+  "square yard": ["sq yd", "square yard", "square yards", "yd2", "yd^2", "yd²"],
+  "square centimeter": ["sq cm", "square centimeter", "square centimeters", "cm2", "cm^2", "cm²"],
+  "square meter": ["sq m", "square meter", "square meters", "m2", "m^2", "m²"],
+  "square unit": ["square unit", "square units", "sq units", "sq unit", "units2", "units^2"],
+
+  // weight
+  ounce: ["oz", "ounce", "ounces"],
+  pound: ["lb", "lbs", "pound", "pounds"],
+  gram: ["g", "gram", "grams"],
+  kilogram: ["kg", "kilogram", "kilograms"],
+
+  // volume
+  cup: ["cup", "cups"],
+  pint: ["pt", "pint", "pints"],
+  quart: ["qt", "quart", "quarts"],
+  gallon: ["gal", "gallon", "gallons"],
+  milliliter: ["ml", "milliliter", "milliliters", "millilitre", "millilitres"],
+  liter: ["l", "liter", "liters", "litre", "litres"],
+
+  // time
+  second: ["s", "sec", "secs", "second", "seconds"],
+  minute: ["min", "mins", "minute", "minutes"],
+  hour: ["h", "hr", "hrs", "hour", "hours"],
+  day: ["day", "days"],
+  week: ["wk", "wks", "week", "weeks"],
+  month: ["mo", "month", "months"],
+  year: ["yr", "yrs", "year", "years"],
+
+  // rates
+  mph: ["mph", "mi/h", "miles per hour", "miles/hour", "miles an hour"],
+  "per hour": ["/h", "per hour", "an hour", "each hour"],
+  kph: ["kph", "km/h", "kilometers per hour"],
+
+  // counting nouns that show up as answers
+  point: ["point", "points", "pt", "pts"],
+  page: ["page", "pages"],
+  student: ["student", "students"],
+  ticket: ["ticket", "tickets"],
+  part: ["part", "parts"],
+  question: ["question", "questions"],
+  visit: ["visit", "visits"],
+  boy: ["boy", "boys"],
+  girl: ["girl", "girls"],
+};
+
+// alias -> canonical, longest alias first so "sq ft" wins over "ft".
+const ALIAS_TO_CANON: [string, string][] = Object.entries(UNIT_ALIASES)
+  .flatMap(([canon, aliases]) => aliases.map((a) => [a, canon] as [string, string]))
+  .sort((x, y) => y[0].length - x[0].length);
+
+/** Canonical unit for a scrap of trailing text, or "" if it is not a unit. */
+export function canonUnit(raw: string): string {
+  const s = String(raw ?? "").trim().toLowerCase().replace(/\.$/, "").replace(/\s+/g, " ");
+  if (!s) return "";
+  const hit = ALIAS_TO_CANON.find(([alias]) => alias === s);
+  return hit ? hit[1] : "";
+}
+
+export interface SplitValue {
+  /** The numeric part, or null when this is not a plain "number + unit". */
+  num: number | null;
+  /** Canonical unit, or "" when the value carries no unit. */
+  unit: string;
+}
+
+/**
+ * Read "8 feet", "$45.00", "1/2 cup" or "22.5" as a number plus a unit.
+ *
+ * Returns num:null for anything that is not cleanly a number and a RECOGNISED
+ * unit - which is what keeps "3:4", "h >= 48" and "5r + 3s + 15" out of the
+ * numeric path. Without that guard "3:4" would read as the number 3 and a bare
+ * "3" would be graded correct.
+ */
+export function splitValue(raw: string): SplitValue {
+  let s = String(raw ?? "").trim().toLowerCase();
+  s = s.replace(/[−–—]/g, "-");
+  s = s.replace(/,/g, "");
+  s = s.replace(/[.!?]+$/, "");
+  if (!s) return { num: null, unit: "" };
+
+  // Leading currency: "$45", "$ 45.00"
+  const money = s.match(/^-?\$\s*(-?\d+(?:\.\d+)?)\s*(.*)$/);
+  if (money) {
+    const rest = money[2].trim();
+    // "$45 per hour" keeps its rate; "$45 banana" is not a value.
+    const unit = rest ? canonUnit(rest) : "dollar";
+    if (rest && !unit) return { num: null, unit: "" };
+    const neg = s.startsWith("-");
+    return { num: (neg ? -1 : 1) * Number(money[1]), unit: rest ? unit : "dollar" };
+  }
+
+  // Fraction: "1/2", "3/4 cup"
+  const frac = s.match(/^(-?\d+)\s*\/\s*(\d+)\s*(.*)$/);
+  if (frac) {
+    const denom = Number(frac[2]);
+    if (!denom) return { num: null, unit: "" };
+    const rest = frac[3].trim();
+    const unit = rest ? canonUnit(rest) : "";
+    if (rest && !unit) return { num: null, unit: "" };
+    return { num: Number(frac[1]) / denom, unit };
+  }
+
+  // Plain number with optional trailing unit: "8", "8 feet", "8ft"
+  const plain = s.match(/^(-?\d+(?:\.\d+)?|-?\.\d+)\s*(.*)$/);
+  if (!plain) return { num: null, unit: "" };
+  const rest = plain[2].trim();
+  if (!rest) return { num: Number(plain[1]), unit: "" };
+  const unit = canonUnit(rest);
+  if (!unit) return { num: null, unit: "" };   // trailing text is not a unit
+  return { num: Number(plain[1]), unit };
+}
+
+/**
+ * Grade a submission against the key.
+ *
+ * The rule that matters: **if the key names a unit, the student must name a
+ * matching one.** An answer of "8 feet" is not satisfied by a bare "8" - the
+ * unit is part of the answer. Any spelling of that unit is fine ("8 ft",
+ * "8ft", "8 FEET"), and money must carry its sign ("$45", "45 dollars", but
+ * not "45").
+ *
+ * If the key carries no unit, a bare number is what is wanted and a student who
+ * adds a unit anyway is not punished for it.
+ */
 export function gradeAnswer(submitted: string, correct: string): boolean {
-  const a = normalizeAnswer(submitted);
-  const b = normalizeAnswer(correct);
-  if (!a) return false;
-  if (a === b) return true;
-  // Same number written differently ("0.5" vs ".5", "60" vs "60.0").
-  const na = Number(a);
-  const nb = Number(b);
-  if (Number.isFinite(na) && Number.isFinite(nb)) return na === nb;
-  return false;
+  const sub = String(submitted ?? "").trim();
+  const key = String(correct ?? "").trim();
+  if (!sub) return false;
+
+  const k = splitValue(key);
+  const s = splitValue(sub);
+
+  if (k.num !== null && s.num !== null) {
+    if (k.num !== s.num) return false;
+    if (k.unit) return s.unit === k.unit;   // the key names a unit -> require it
+    return true;                            // key is a bare number
+  }
+  // The key wants a unit but the submission is not even a number+unit.
+  if (k.num !== null && s.num === null) return false;
+
+  // Expressions, inequalities, ratios, words.
+  return normalizeAnswer(sub) === normalizeAnswer(key);
 }
 
 // ---------------------------------------------------------------------------
