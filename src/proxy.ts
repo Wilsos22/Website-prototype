@@ -95,7 +95,8 @@ export async function proxy(request: NextRequest) {
       path: "/",
       maxAge: TEACHER_COOKIE_MAX_AGE,
       httpOnly: true,
-      secure: true,
+      // Secure only in production — http://localhost drops Secure cookies.
+      secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
     });
     return response;
