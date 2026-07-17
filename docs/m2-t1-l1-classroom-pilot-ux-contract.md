@@ -133,6 +133,22 @@ Projector surfaces use dark tonal fields and soft glow. Chromebook surfaces stay
 - Each daily lesson selects exactly one success criterion from the options in Notion.
 - The student-facing wording is one concise `I can` statement.
 
+### Private adaptive City Routes
+
+- The midlesson digital readiness check may recommend one of three temporary next-step routes using correctness first and confidence second.
+- Student-facing routes use neutral city names rather than letters, colors, scores, tiers, or ability labels.
+- The default editable city bank is `Denver`, `Austin`, `Seattle`, `Phoenix`, `Nashville`, `Portland`, `Charlotte`, `Milwaukee`, `Sacramento`, and `Columbus`.
+- At lesson load, the system selects three cities from the bank, prefers cities not used in recent lessons, and randomly maps the three instructional routes to those city names.
+- The selected cities and their route meanings remain stable for that lesson. A city never has a permanent instructional meaning across lessons.
+- Before class, the teacher may accept the automatic selection, choose three cities manually, or use `Shuffle cities`.
+- The private Remote shows the complete proposed routing: student names, city counts, instructional purpose, destination, and the checkpoint evidence behind each recommendation.
+- The teacher may override any individual assignment before selecting `Send routes`.
+- A student sees only their own city, physical destination, required materials, and first action. Do not show the student's score, confidence category, misconception label, or a description such as `support group`.
+- Public projectors never show student names or route rosters. They may show an anonymous location key so students can find each city.
+- Route recommendations may be calculated as students submit, but students do not move until the teacher releases the routes. The teacher may release all routes together or stagger them to reduce transition congestion.
+- Route assignments survive reconnects and expire at the end of the lesson. They never become permanent student labels.
+- Students with no response or an unresolved connection appear in a private `Needs assignment` list rather than being silently placed.
+
 ### Discussion
 
 - Show the current discussion prompt, round number, sentence stems, and key vocabulary.
@@ -196,6 +212,8 @@ The pilot passes only when all of these are observed in one new M2.T1.L1 session
 - No join code remains on the active student lesson screen.
 - Warm-up and review show no learning intention or success criterion.
 - The midlesson check introduces one `I can` success criterion.
+- The readiness check can produce three private City Routes from the editable ten-city bank; the teacher can review, override, and release them without calling names publicly.
+- City names and route meanings rotate between lessons, and no city functions as a permanent level label.
 - The halftime launch uses the approved beginning-score layout.
 - Discussion includes sentence stems and vocabulary.
 - The projector timer stays in its top frame, has no toolbar, and shows only current directions on the Pace screen.
