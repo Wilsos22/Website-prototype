@@ -20,8 +20,10 @@ import {
   StudentApiError,
   studentApiRequest,
 } from "@/lib/studentApi";
+import { STUDENT_SESSION_READY_EVENT } from "@/components/ClassSync";
 
 type ClaimedStudent = { id: string; name: string; email: string };
+type WarmupSessionLesson = { code: string; title: string };
 
 const REQUIRE_GOOGLE_AUTH = process.env.NEXT_PUBLIC_REQUIRE_STUDENT_GOOGLE_AUTH === "true";
 const WARMUP_IDENTITY = process.env.NEXT_PUBLIC_WARMUP_IDENTITY_ENABLED === "true";
@@ -38,6 +40,7 @@ export default function StudentLanding() {
   const [pendingCode, setPendingCode] = useState<string | null>(null);
   const [warmupHref, setWarmupHref] = useState<string | null>(null);
   const [warmupToken, setWarmupToken] = useState<string | null>(null);
+  const [sessionLesson, setSessionLesson] = useState<WarmupSessionLesson | null>(null);
   const [identityReady, setIdentityReady] = useState(false);
   const [helpRequestCode, setHelpRequestCode] = useState<string | null>(null);
   const [requestingHelp, setRequestingHelp] = useState(false);
@@ -57,6 +60,7 @@ export default function StudentLanding() {
             setPendingCode(pending);
             setIdentityReady(false);
             setWarmupToken(link.warmupToken);
+            setSessionLesson(link.lesson);
             if (!link.open) {
               resetPendingSession("That session ended. Enter the new class code.");
               return;
@@ -105,11 +109,13 @@ export default function StudentLanding() {
     open: boolean;
     href: string | null;
     warmupToken: string;
+    lesson: WarmupSessionLesson | null;
   }> {
     const data = await studentApiRequest<{
       sessionId: string;
       warmupToken: string;
       warmUpLink: string | null;
+      lesson: WarmupSessionLesson | null;
     }>("/api/student/warmup-start", {
       method: "POST",
       body: JSON.stringify({ code: classCode }),
@@ -124,6 +130,7 @@ export default function StudentLanding() {
       open: true,
       href: link ? personalizeWarmupLink(link, data.warmupToken) : null,
       warmupToken: data.warmupToken,
+      lesson: data.lesson || null,
     };
   }
 
@@ -131,6 +138,7 @@ export default function StudentLanding() {
     setPendingCode(null);
     setWarmupHref(null);
     setWarmupToken(null);
+    setSessionLesson(null);
     setIdentityReady(false);
     setHelpRequestCode(null);
     clearStoredStudentSession();
@@ -163,6 +171,7 @@ export default function StudentLanding() {
         }
         setWarmupToken(result.warmupToken);
         setWarmupHref(result.href);
+        setSessionLesson(result.lesson);
       } catch (error) {
         if (error instanceof StudentApiError && error.code === "session_not_open") {
           resetPendingSession("That session ended. Enter the new class code.");
@@ -211,6 +220,7 @@ export default function StudentLanding() {
     setPendingCode(null);
     setWarmupHref(null);
     setWarmupToken(null);
+    setSessionLesson(null);
     setIdentityReady(false);
     setHelpRequestCode(null);
     try {
@@ -226,6 +236,7 @@ export default function StudentLanding() {
     if (result.session.syncKey) sessionStorage.setItem("bdm-pending-class-code", result.session.syncKey);
     setIdentityReady(true);
     markStudentTab();
+    window.dispatchEvent(new Event(STUDENT_SESSION_READY_EVENT));
   }
 
   useEffect(() => {
@@ -313,6 +324,7 @@ export default function StudentLanding() {
         setPendingCode(c);
         setIdentityReady(false);
         setWarmupToken(link.warmupToken);
+        setSessionLesson(link.lesson);
         setHelpRequestCode(null);
         if (!link.open) {
           resetPendingSession("That session ended. Enter the new class code.");
@@ -324,6 +336,7 @@ export default function StudentLanding() {
         setPendingCode(null);
         setWarmupHref(null);
         setWarmupToken(null);
+        setSessionLesson(null);
         setJoinErr(error instanceof Error ? error.message : "The class could not be joined.");
       } finally {
         setJoining(false);
@@ -358,6 +371,9 @@ export default function StudentLanding() {
     router.push("/lesson");
   }
 
+  const moduleNumber = sessionLesson?.code.match(/^M(\d+)/i)?.[1] || "";
+  const topicNumber = sessionLesson?.code.match(/\.T(\d+)/i)?.[1] || "";
+
   return (
     <main className="st-page">
       <style>{`
@@ -368,7 +384,7 @@ export default function StudentLanding() {
         .st-hello { margin:4px 0 2px; font-size:clamp(1.35rem,3vw,1.8rem); font-weight:700; letter-spacing:-0.02em; color:var(--bdb-ink); text-align:center; }
         .st-hello-sub { margin:0 0 clamp(14px,2.4vw,20px); color:var(--bdb-ink-soft); font-weight:500; font-size:clamp(0.94rem,1.8vw,1.04rem); text-align:center; }
 
-        .st-cards { width:100%; max-width:440px; display:grid; gap:16px; }
+        .st-cards { width:100%; max-width:${pendingCode ? "680px" : "440px"}; display:grid; gap:16px; }
         .st-join { border:none; border-radius:var(--bdb-r-lg); background:var(--bdb-card); padding:22px 22px 24px;
           box-shadow:0 18px 36px -22px rgba(80,163,164,0.55); border:2px solid color-mix(in srgb, var(--bdb-teal) 30%, transparent); }
         .st-join-h { margin:0 0 4px; font-size:1.25rem; font-weight:800; letter-spacing:-0.01em; color:var(--bdb-ink); }
@@ -381,6 +397,13 @@ export default function StudentLanding() {
         .st-code-btn:hover { filter:brightness(1.04); }
         .st-joinerr { color:var(--bdb-coral); font-weight:600; font-size:0.9rem; margin-top:10px; }
         .st-warmup { display:grid; gap:10px; text-align:left; }
+        .st-lesson-card { display:grid; gap:10px; border:1px solid color-mix(in srgb,var(--bdb-teal) 28%,white); border-radius:16px;
+          background:linear-gradient(135deg,color-mix(in srgb,var(--bdb-teal) 9%,white),#fff); padding:16px; }
+        .st-lesson-kicker { margin:0; color:var(--bdb-teal); font-size:0.7rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
+        .st-lesson-title { margin:0; color:var(--bdb-ink); font-size:clamp(1.35rem,3vw,1.8rem); font-weight:850; line-height:1.12; }
+        .st-lesson-meta { display:flex; flex-wrap:wrap; gap:7px; }
+        .st-lesson-pill { border:1px solid color-mix(in srgb,var(--bdb-teal) 30%,white); border-radius:999px; background:#fff;
+          color:#0f5e5f; padding:6px 10px; font-size:0.76rem; font-weight:850; }
         .st-warmup-label { margin:0; color:var(--bdb-teal); font-size:0.72rem; font-weight:850; letter-spacing:0.1em; text-transform:uppercase; }
         .st-warmup-copy { margin:0; color:var(--bdb-ink-soft); font-size:0.94rem; font-weight:600; line-height:1.45; }
         .st-warmup-wait { margin:2px 0 0; color:var(--bdb-ink-faint); font-size:0.86rem; font-weight:700; }
@@ -434,7 +457,17 @@ export default function StudentLanding() {
         <div className="st-join">
           {pendingCode ? (
             <div className="st-warmup">
-              <p className="st-warmup-label">Code accepted</p>
+              <section className="st-lesson-card" aria-label="Today's lesson">
+                <p className="st-lesson-kicker">Today&apos;s lesson</p>
+                <h2 className="st-lesson-title">{sessionLesson?.title || "Your teacher is connecting today's lesson"}</h2>
+                <div className="st-lesson-meta">
+                  {moduleNumber ? <span className="st-lesson-pill">Module {moduleNumber}</span> : null}
+                  {topicNumber ? <span className="st-lesson-pill">Topic {topicNumber}</span> : null}
+                  {sessionLesson?.code ? <span className="st-lesson-pill">{sessionLesson.code}</span> : null}
+                  <span className="st-lesson-pill">Class {pendingCode}</span>
+                </div>
+              </section>
+              <p className="st-warmup-label">Warm-up</p>
               <h2 className="st-join-h">{warmupHref ? "Start today's warm-up" : "Waiting for your teacher"}</h2>
               <p className="st-warmup-copy">
                 {warmupHref

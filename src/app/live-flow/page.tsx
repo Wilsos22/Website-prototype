@@ -10,6 +10,7 @@ import { normalizeDiscussionPhaseSnapshot } from "@/lib/discussionProtocol";
 import { publicSuccessCriterion } from "@/lib/successCriterion";
 import {
   LIVE_FLOW_MODE,
+  MAX_LIVE_STATE_SECONDS,
   STUDENT_SESSION_KEY,
   getStoredStudentSession,
   getStoredStudentSessionId,
@@ -102,7 +103,9 @@ const DISCUSSION_CONTENT: Record<DiscussionPhaseId, DiscussionContent> = {
 };
 
 function formatTime(totalSeconds: number) {
-  const seconds = Math.max(0, totalSeconds);
+  const seconds = Number.isFinite(totalSeconds)
+    ? Math.max(0, Math.min(MAX_LIVE_STATE_SECONDS, Math.round(totalSeconds)))
+    : 0;
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
@@ -382,11 +385,6 @@ export default function LiveFlowPage() {
   const activeTimerSeconds = phase?.timed && typeof phase.secondsLeft === "number"
     ? phase.secondsLeft
     : liveTimerSeconds(timer);
-  const activeTimerFinished = phase?.timed
-    ? phase.finished
-    : Boolean(timer?.finished || (timer?.running && activeTimerSeconds <= 0));
-  const activeTimerRunning = phase?.timed ? phase.running : Boolean(timer?.running);
-  const status = activeTimerFinished ? "Time is up. Wait for the teacher." : activeTimerRunning ? "In progress" : "Ready";
   const pollSubmitted = activePoll ? submittedPollIds.includes(activePoll.id) : false;
   const pollSaveLabel = connectionState === "reconnecting"
     ? "Reconnecting"
@@ -455,15 +453,25 @@ export default function LiveFlowPage() {
   const embeddedResourceUrl = resolvedResourceUrl?.includes("docs.google.com/forms")
     ? `${resolvedResourceUrl}${resolvedResourceUrl.includes("?") ? "&" : "?"}embedded=true`
     : null;
+  const hasStudentSession = Boolean(getStoredStudentSessionId());
+  const studentName = getStoredStudentSession()?.name || "Student";
 
   return (
     <main className="lf-page" style={{ "--lf-accent": accent } as CSSProperties}>
       <style>{`
-        .lf-page { min-height:100vh; display:grid; place-items:center; box-sizing:border-box; overflow:hidden; background:radial-gradient(circle at 18% 12%,color-mix(in srgb,var(--lf-accent) 12%,transparent),transparent 34%),var(--bdb-ground); color:var(--bdb-ink); font-family:var(--bdb-font); padding:clamp(20px,5vw,72px); }
-        .lf-exit { position:fixed; top:16px; right:16px; z-index:5; min-height:42px; border:1px solid var(--bdb-line); border-radius:10px; background:#fff; color:var(--bdb-ink); padding:0 14px; font:inherit; font-size:0.74rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; cursor:pointer; box-shadow:var(--bdb-shadow-sm); }
+        .lf-page { position:fixed; inset:0; box-sizing:border-box; overflow:hidden; background:linear-gradient(180deg,#fbf6ea,#f1e8d5); color:var(--bdb-ink); font-family:var(--bdb-font); }
+        .lf-page::before { content:""; position:absolute; z-index:0; right:-12vw; top:-18vw; width:42vw; height:42vw; border-radius:50%; background:var(--lf-accent); filter:blur(130px); opacity:0.08; pointer-events:none; }
+        .lf-exit { min-height:34px; border:1px solid var(--bdb-line); border-radius:9px; background:#fff; color:var(--bdb-ink-soft); padding:0 11px; font:inherit; font-size:0.66rem; font-weight:900; letter-spacing:0.06em; text-transform:uppercase; cursor:pointer; }
         .lf-exit:hover, .lf-exit:focus-visible { border-color:var(--lf-accent); outline:none; }
-        .lf-shell { width:min(100%,960px); text-align:center; display:grid; justify-items:center; gap:clamp(16px,2.8vw,30px); }
-        .lf-topbar { width:100%; min-height:46px; box-sizing:border-box; display:flex; align-items:center; justify-content:space-between; gap:18px; border-bottom:1px solid var(--bdb-line); padding:0 2px 10px; }
+        .lf-shell { position:relative; z-index:1; width:100%; height:100%; text-align:center; display:grid; grid-template-rows:52px minmax(0,1fr); }
+        .lf-topbar { width:100%; box-sizing:border-box; display:flex; align-items:center; gap:10px; border-top:5px solid var(--lf-accent); border-bottom:1px solid rgba(0,0,0,0.06); background:rgba(251,246,234,0.9); padding:0 18px; }
+        .lf-mark { width:26px; height:26px; flex:none; display:grid; place-items:center; border-radius:8px; background:var(--bdb-ink); color:#fff; font-size:0.8rem; font-weight:900; }
+        .lf-phase-dot { width:9px; height:9px; flex:none; border-radius:3px; background:var(--lf-accent); }
+        .lf-phase { margin:0; color:color-mix(in srgb,var(--lf-accent) 58%,#26221c); font-size:0.82rem; font-weight:850; }
+        .lf-sync { margin-left:auto; display:inline-flex; align-items:center; gap:7px; min-height:24px; border-radius:999px; background:#e8f5ed; color:#255e41; padding:0 11px; font-size:0.66rem; font-weight:850; }
+        .lf-sync::before { content:""; width:7px; height:7px; border-radius:50%; background:#2f9e6f; }
+        .lf-who { color:var(--bdb-ink-soft); font-size:0.75rem; font-weight:800; }
+        .lf-body { min-height:0; overflow:auto; display:grid; align-content:center; justify-items:center; gap:clamp(13px,2vw,22px); padding:clamp(18px,3.2vw,34px); }
         .lf-spinner-shell { position:relative; width:min(100%,960px); height:min(72vh,620px); overflow:hidden; border:1px solid var(--bdb-line); border-radius:16px; background:#fff; box-shadow:var(--bdb-shadow); }
         .lf-spinner-shell .classroom-spinner { background:radial-gradient(circle at 50% 42%,color-mix(in srgb,var(--lf-accent) 12%,transparent),transparent 58%),var(--bdb-ground); }
         .lf-spinner-shell .classroom-spinner-card { border-color:var(--bdb-line); border-top-color:var(--lf-accent); background:#fff; box-shadow:var(--bdb-shadow-sm); }
@@ -472,18 +480,16 @@ export default function LiveFlowPage() {
         .lf-spinner-shell .classroom-spinner-window { border-color:var(--bdb-line); background:var(--bdb-ground); color:var(--bdb-ink); }
         .lf-spinner-shell .classroom-spinner-window.landed { border-color:var(--lf-accent); box-shadow:0 0 0 3px color-mix(in srgb,var(--lf-accent) 24%,transparent) inset; }
         .lf-spinner-shell .classroom-spinner-status { color:var(--bdb-ink-soft); }
-        .lf-brand { margin:0; color:var(--lf-accent); font-size:0.76rem; font-weight:900; letter-spacing:0.14em; text-transform:uppercase; }
-        .lf-title { margin:0; max-width:28ch; color:var(--bdb-ink); font-size:clamp(1.55rem,3.4vw,2.7rem); line-height:1.1; font-weight:900; letter-spacing:0; }
-        .lf-subtitle { margin:0; max-width:46ch; color:var(--bdb-ink-soft); font-size:clamp(0.95rem,1.8vw,1.18rem); line-height:1.42; font-weight:700; }
+        .lf-title { margin:0; max-width:31ch; color:var(--bdb-ink); font-size:clamp(1.45rem,2.8vw,2.2rem); line-height:1.14; font-weight:900; letter-spacing:-0.01em; }
+        .lf-subtitle { margin:0; max-width:54ch; color:var(--bdb-ink-soft); font-size:clamp(0.88rem,1.45vw,1.02rem); line-height:1.48; font-weight:700; }
         .lf-share { width:min(100%,620px); display:grid; gap:6px; border:1px solid var(--bdb-line); border-left:6px solid var(--lf-accent); border-radius:12px; background:#fff; padding:16px 20px; text-align:left; box-shadow:var(--bdb-shadow-sm); }
         .lf-share span { color:var(--lf-accent); font-size:0.72rem; font-weight:900; letter-spacing:0.12em; text-transform:uppercase; }
         .lf-share strong { color:var(--bdb-ink); font-size:clamp(1.8rem,4.8vw,3.2rem); line-height:1; font-weight:950; }
         .lf-media-wrap { width:min(100%,760px); display:grid; place-items:center; }
         .lf-media { width:min(100%,720px); max-height:38vh; border:1px solid var(--bdb-line); border-radius:12px; background:#fff; object-fit:contain; box-shadow:var(--bdb-shadow); }
         .lf-media.embed { aspect-ratio:16 / 9; height:auto; }
-        .lf-timer { display:flex; align-items:center; justify-content:flex-end; gap:10px; white-space:nowrap; }
-        .lf-time { color:var(--bdb-ink); font-size:clamp(1.15rem,2.5vw,1.65rem); font-variant-numeric:tabular-nums; font-weight:900; line-height:1; letter-spacing:0; }
-        .lf-status { color:var(--lf-accent); font-size:0.66rem; font-weight:900; letter-spacing:0.11em; text-transform:uppercase; }
+        .lf-timer { display:flex; align-items:center; justify-content:flex-end; gap:8px; white-space:nowrap; }
+        .lf-time { color:var(--bdb-ink); font-size:1rem; font-variant-numeric:tabular-nums; font-weight:900; line-height:1; letter-spacing:0; }
         .lf-directions { width:min(100%,720px); display:grid; gap:10px; margin:0; padding:0; list-style:none; }
         .lf-direction { border:1px solid var(--bdb-line); border-left:5px solid var(--lf-accent); background:#fff; color:var(--bdb-ink); padding:clamp(13px,2vw,18px) clamp(17px,3vw,26px); text-align:left; font-size:clamp(1rem,1.8vw,1.22rem); font-weight:800; line-height:1.4; box-shadow:var(--bdb-shadow-sm); }
         .lf-supports { width:min(100%,1000px); display:grid; grid-template-columns:minmax(0,1.35fr) minmax(230px,0.75fr); gap:14px; text-align:left; }
@@ -531,65 +537,69 @@ export default function LiveFlowPage() {
         .lf-independent-card { border:1px solid var(--bdb-line); border-top:4px solid var(--lf-accent); border-radius:10px; background:#fff; padding:14px 16px; box-shadow:var(--bdb-shadow-sm); }
         .lf-independent-label { margin:0 0 6px; color:var(--lf-accent); font-size:0.7rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
         .lf-independent-body { margin:0; color:var(--bdb-ink); font-size:0.95rem; font-weight:760; line-height:1.4; white-space:pre-wrap; }
-        .lf-connection { position:fixed; left:50%; top:16px; z-index:6; transform:translateX(-50%); border:1px solid #c78b24; border-radius:999px; background:#fff4d8; color:#694716; padding:9px 14px; font-size:0.76rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; box-shadow:var(--bdb-shadow-sm); }
+        .lf-connection { position:fixed; left:50%; top:62px; z-index:6; transform:translateX(-50%); border:1px solid #c78b24; border-radius:999px; background:#fff4d8; color:#694716; padding:8px 13px; font-size:0.7rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; box-shadow:var(--bdb-shadow-sm); }
         .lf-loading { color:var(--bdb-ink-soft); font-weight:800; }
         @media (max-width:760px) { .lf-supports, .lf-independent-supports { grid-template-columns:1fr; } }
         @media (max-width:600px) {
-          .lf-page { padding:84px 18px 26px; }
           .lf-topbar { gap:10px; }
-          .lf-status { display:none; }
-          .lf-connection { top:68px; left:18px; right:18px; transform:none; box-sizing:border-box; text-align:center; }
+          .lf-phase { max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+          .lf-who { display:none; }
+          .lf-connection { top:60px; left:18px; right:18px; transform:none; box-sizing:border-box; text-align:center; }
         }
       `}</style>
 
-      <button className="lf-exit" type="button" onClick={exitLiveFlow}>Exit Live Flow</button>
-      {connectionState === "reconnecting" ? <div className="lf-connection" role="status">Reconnecting. Your draft is safe.</div> : null}
+      {connectionState === "reconnecting" && hasStudentSession ? <div className="lf-connection" role="status">Reconnecting. Your draft is safe.</div> : null}
 
       <section className="lf-shell" aria-live="polite">
         <header className="lf-topbar">
-          <p className="lf-brand">Big Dog Math</p>
+          <span className="lf-mark" aria-hidden="true">÷</span>
+          <span className="lf-phase-dot" aria-hidden="true" />
+          <p className="lf-phase">{flow?.state?.label || "Today"}</p>
+          <span className="lf-sync">{!hasStudentSession ? "Not joined" : connectionState === "connected" ? "Synced" : "Connecting"}</span>
           {showTimer && timer ? (
             <div className="lf-timer" aria-label="Current lesson timer">
-              <div className="lf-status">{status}</div>
               <div className="lf-time">{formatTime(activeTimerSeconds)}</div>
             </div>
           ) : null}
+          <span className="lf-who">{studentName}</span>
+          <button className="lf-exit" type="button" onClick={exitLiveFlow}>Leave class</button>
         </header>
-        {loading ? (
-          <p className="lf-loading">Connecting to class…</p>
-        ) : !flow?.state ? (
-          holding ? (
-            <>
-              <h1 className="lf-title">Class is starting</h1>
-              <p className="lf-subtitle">Get your warm-up out and get ready. Your screen updates the moment we begin.</p>
-              <div className="lf-ready"><span className="lf-ready-dot" />You&apos;re connected</div>
-            </>
+        <div className="lf-body">
+          {loading ? (
+            <p className="lf-loading">Connecting to class…</p>
+          ) : !flow?.state ? (
+            holding ? (
+              <>
+                <h1 className="lf-title">Class is starting</h1>
+                <p className="lf-subtitle">Get ready. Your screen updates the moment the lesson begins.</p>
+                <div className="lf-ready"><span className="lf-ready-dot" />You&apos;re connected</div>
+              </>
+            ) : (
+              <>
+                <h1 className="lf-wait">{emptyMessage}</h1>
+                <div className="lf-switches">
+                  <a className="lf-switch" href="/?leaveClass=1">Return to website</a>
+                  <a className="lf-switch" href="/join?leaveClass=1">Join a different session</a>
+                </div>
+              </>
+            )
+          ) : linkedSpinnerMode && liveSessionId ? (
+            <section className="lf-spinner-shell" aria-label="Classroom spinner synced with the main display">
+              <ClassroomSpinner
+                key={`${liveSessionId}:${spinnerSyncScope}:mirror`}
+                mode={linkedSpinnerMode}
+                sessionId={liveSessionId}
+                syncKey={spinnerSyncKey}
+                periodId={null}
+                stateId={flow.state.id}
+                syncScope={spinnerSyncScope}
+                role="mirror"
+                learningIntention={flow.lesson?.learningIntention}
+                successCriterion={publicSuccessCriterion(flow.lesson?.selectedSuccessCriterion)}
+              />
+            </section>
           ) : (
             <>
-              <h1 className="lf-wait">{emptyMessage}</h1>
-              <div className="lf-switches">
-                <a className="lf-switch" href="/?leaveClass=1">Return to website</a>
-                <a className="lf-switch" href="/join?leaveClass=1">Join a different session</a>
-              </div>
-            </>
-          )
-        ) : linkedSpinnerMode && liveSessionId ? (
-          <section className="lf-spinner-shell" aria-label="Classroom spinner synced with the main display">
-            <ClassroomSpinner
-              key={`${liveSessionId}:${spinnerSyncScope}:mirror`}
-              mode={linkedSpinnerMode}
-              sessionId={liveSessionId}
-              syncKey={spinnerSyncKey}
-              periodId={null}
-              stateId={flow.state.id}
-              syncScope={spinnerSyncScope}
-              role="mirror"
-              learningIntention={flow.lesson?.learningIntention}
-              successCriterion={publicSuccessCriterion(flow.lesson?.selectedSuccessCriterion)}
-            />
-          </section>
-        ) : (
-          <>
             {!activePoll && <h1 className="lf-title">{title}</h1>}
             {!activePoll && subtitle && <p className="lf-subtitle">{subtitle}</p>}
             {!activePoll && phase?.id === "share" && phase.selectedSharer ? (
@@ -722,8 +732,9 @@ export default function LiveFlowPage() {
                 )}
               </section>
             )}
-          </>
-        )}
+            </>
+          )}
+        </div>
       </section>
     </main>
   );

@@ -42,7 +42,8 @@ export async function POST(request: Request) {
       throw new StudentIdentityError("That code is not open right now.", 404, "session_not_open");
     }
 
-    const warmupUrl = assignedWarmupLink(session.live_flow as LiveClassFlowSnapshot | null);
+    const liveFlow = session.live_flow as LiveClassFlowSnapshot | null;
+    const warmupUrl = assignedWarmupLink(liveFlow);
     const resourceKey = canonicalGoogleFormResource(warmupUrl);
     if (warmupUrl && !resourceKey) {
       throw new StudentIdentityError(
@@ -123,6 +124,12 @@ export async function POST(request: Request) {
         sessionId: session.id,
         warmupToken: receipt.verification_token,
         warmUpLink: warmupUrl || null,
+        lesson: liveFlow?.lesson
+          ? {
+              code: liveFlow.lesson.code || "",
+              title: liveFlow.lesson.title || "",
+            }
+          : null,
       },
       { headers: { "cache-control": "no-store" } },
     );

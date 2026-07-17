@@ -29,6 +29,7 @@ export const STUDENT_SESSION_KEY = "bdm-student-session";
 export const TEACHER_SESSION_KEY = "bdm-teacher-session";
 export const CLASS_MODE_EXIT_KEY = "bdm-class-mode-exited";
 export const REMOTE_COMMAND_STALE_MS = 15_000;
+export const MAX_LIVE_STATE_SECONDS = 120 * 60;
 
 export const DISCUSSION_REMOTE_ACTIONS = [
   "discussion-think",
@@ -266,10 +267,13 @@ export function liveTimerSeconds(
   now = Date.now(),
 ): number {
   if (!timer) return 0;
-  if (!timer.running || !timer.endsAt) return Math.max(0, timer.secondsLeft);
+  const fallback = Number.isFinite(timer.secondsLeft)
+    ? Math.max(0, Math.min(MAX_LIVE_STATE_SECONDS, Math.round(timer.secondsLeft)))
+    : 0;
+  if (!timer.running || !timer.endsAt) return fallback;
   const end = Date.parse(timer.endsAt);
-  if (!Number.isFinite(end)) return Math.max(0, timer.secondsLeft);
-  return Math.max(0, Math.ceil((end - now) / 1000));
+  if (!Number.isFinite(end)) return fallback;
+  return Math.max(0, Math.min(MAX_LIVE_STATE_SECONDS, Math.ceil((end - now) / 1000)));
 }
 
 export interface TeacherRemoteCommand {

@@ -39,10 +39,17 @@ export interface InkChannel {
   close: () => void;
 }
 
-export function joinInkRoom(room: string, onMessage: (m: InkMessage) => void): InkChannel {
+export type InkConnectionStatus = "connecting" | "connected" | "disconnected";
+
+export function joinInkRoom(
+  room: string,
+  onMessage: (m: InkMessage) => void,
+  onStatus?: (status: InkConnectionStatus) => void,
+): InkChannel {
   const supabase = getSupabase();
 
   if (supabase) {
+    onStatus?.("connecting");
     const channel = supabase.channel(`ink-${room}`, { config: { broadcast: { self: false } } });
     let ready = false;
     const queue: InkMessage[] = [];
@@ -53,9 +60,13 @@ export function joinInkRoom(room: string, onMessage: (m: InkMessage) => void): I
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
           ready = true;
+          onStatus?.("connected");
           for (const m of queue.splice(0)) {
             void channel.send({ type: "broadcast", event: "ink", payload: m });
           }
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          ready = false;
+          onStatus?.("disconnected");
         }
       });
     return {
@@ -72,6 +83,7 @@ export function joinInkRoom(room: string, onMessage: (m: InkMessage) => void): I
     typeof window !== "undefined" && "BroadcastChannel" in window
       ? new BroadcastChannel(`ink-${room}`)
       : null;
+  onStatus?.(bc ? "connected" : "disconnected");
   if (bc) bc.onmessage = (e) => onMessage(e.data as InkMessage);
   return {
     send: (m) => bc?.postMessage(m),

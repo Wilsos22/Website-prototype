@@ -6,7 +6,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import InkBoard from "@/components/InkBoard";
-import { joinInkRoom, type InkChannel } from "@/lib/inkSync";
+import { joinInkRoom, type InkChannel, type InkConnectionStatus } from "@/lib/inkSync";
 import { BOARD_TEMPLATES } from "@/lib/boardTemplates";
 
 function classroomDate(): string {
@@ -38,6 +38,7 @@ export default function IpadPage() {
   const [showTemplates, setShowTemplates] = useState(false);
   const [scratchOpen, setScratchOpen] = useState(false);
   const [scratchClear, setScratchClear] = useState(0);
+  const [boardStatus, setBoardStatus] = useState<InkConnectionStatus>("connecting");
   const fileRef = useRef<HTMLInputElement | null>(null);
   const ctrlRef = useRef<InkChannel | null>(null);
 
@@ -114,6 +115,12 @@ export default function IpadPage() {
         .ip-group { display:flex; align-items:center; gap:6px; }
         .ip-room { font-weight:800; color:var(--bdb-ink); font-size:0.92rem; margin-right:2px; }
         .ip-sub { color:var(--bdb-ink-faint); font-size:0.72rem; font-weight:700; }
+        .ip-status { display:inline-flex; align-items:center; gap:6px; border-radius:999px; background:#eef2f0; color:#756d62; padding:6px 9px; font-size:0.7rem; font-weight:850; }
+        .ip-status::before { content:""; width:7px; height:7px; border-radius:50%; background:#c78b24; }
+        .ip-status.connected { background:#e8f5ed; color:#255e41; }
+        .ip-status.connected::before { background:#2f9e6f; }
+        .ip-status.disconnected { background:#fff0e8; color:#8b3f24; }
+        .ip-status.disconnected::before { background:#d05f3c; }
         .ip-sw { width:30px; height:30px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px var(--bdb-line); cursor:pointer; padding:0; }
         .ip-sw.on { box-shadow:0 0 0 3px var(--bdb-ink); }
         .ip-btn { min-height:42px; padding:0 14px; border-radius:10px; border:1px solid var(--bdb-line); background:var(--bdb-card); color:var(--bdb-ink); font-weight:700; font-size:0.9rem; cursor:pointer; touch-action:manipulation; }
@@ -134,6 +141,9 @@ export default function IpadPage() {
       <div className="ip-bar">
         <span className="ip-room">iPad</span>
         <span className="ip-sub">room {room}</span>
+        <span className={`ip-status ${boardStatus}`} role="status">
+          {boardStatus === "connected" ? "Board connected" : boardStatus === "disconnected" ? "Board reconnecting" : "Connecting board"}
+        </span>
         <span className="ip-divider" />
 
         <div className="ip-group" role="group" aria-label="Colors">
@@ -205,6 +215,7 @@ export default function IpadPage() {
           clearSignal={clearSignal}
           exportSignal={exportSignal}
           onExport={handleExport}
+          onConnectionChange={setBoardStatus}
         />
         {scratchOpen && (
           <div className="ip-scratch">

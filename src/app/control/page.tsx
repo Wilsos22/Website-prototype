@@ -243,8 +243,21 @@ const CUE_LABELS: Record<CueKey, string> = {
   end: "Time's-up buzzer",
 };
 
+const MAX_STATE_MINUTES = 120;
+const MAX_STATE_SECONDS = MAX_STATE_MINUTES * 60;
+
+function safeStateMinutes(value: number, fallback = 1): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(1, Math.min(MAX_STATE_MINUTES, Math.round(value)));
+}
+
+function safeTimerSeconds(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(MAX_STATE_SECONDS, Math.round(value)));
+}
+
 function fmt(totalSeconds: number): string {
-  const s = Math.max(0, totalSeconds);
+  const s = safeTimerSeconds(totalSeconds);
   const m = Math.floor(s / 60);
   const sec = s % 60;
   return `${m}:${String(sec).padStart(2, "0")}`;
@@ -529,9 +542,10 @@ function lessonWorkSummary(lesson: ActiveLessonContext | null): string {
 
 function minutesForLineupItem(item: LineupItem | undefined, bank: ClassState[]): number {
   if (!item) return 0;
-  return item.minutes && item.minutes > 0
+  const configured = item.minutes && item.minutes > 0
     ? item.minutes
-    : bank.find((state) => state.id === item.stateId)?.minutes ?? 0;
+    : bank.find((state) => state.id === item.stateId)?.minutes ?? 1;
+  return safeStateMinutes(configured);
 }
 
 function matchLessonToolStateId(name: string): string | null {
@@ -682,7 +696,7 @@ export default function ControlPage() {
   }, [flushRemoteReceipt]);
 
   const armTimer = useCallback((seconds: number) => {
-    const safeSeconds = Math.max(0, seconds);
+    const safeSeconds = safeTimerSeconds(seconds);
     timerStartSecondsRef.current = safeSeconds;
     timerEndsAtRef.current = safeSeconds > 0 ? Date.now() + safeSeconds * 1000 : null;
   }, []);
@@ -736,7 +750,7 @@ export default function ControlPage() {
         const saved = JSON.parse(rawBank) as ClassState[];
         loadedBank = DEFAULT_STATES.map((d) => {
           const s = saved.find((x) => x.id === d.id);
-          return s ? { ...d, minutes: s.minutes } : d;
+          return s ? { ...d, minutes: safeStateMinutes(s.minutes, d.minutes) } : d;
         });
         setBank(loadedBank);
       }
@@ -747,7 +761,7 @@ export default function ControlPage() {
         const firstState = savedLineup[0] ? loadedBank.find((state) => state.id === savedLineup[0].stateId) : undefined;
         if (firstState) {
           setCurrentIndex(0);
-          secRef.current = firstState.minutes * 60;
+          secRef.current = safeTimerSeconds(firstState.minutes * 60);
           setSecondsLeft(secRef.current);
         }
       }
@@ -1551,15 +1565,15 @@ export default function ControlPage() {
       ? null
       : phase?.timed && phase.totalSeconds !== null && phase.secondsLeft !== null
       ? {
-          totalSeconds: phase.totalSeconds,
-          secondsLeft: phase.secondsLeft,
+          totalSeconds: safeTimerSeconds(phase.totalSeconds),
+          secondsLeft: safeTimerSeconds(phase.secondsLeft),
           running: phase.running,
           finished: phase.finished,
         }
       : activeState
         ? {
-            totalSeconds: activeMinutes * 60,
-            secondsLeft: running ? timerStartSecondsRef.current || secondsLeft : secondsLeft,
+            totalSeconds: safeTimerSeconds(activeMinutes * 60),
+            secondsLeft: safeTimerSeconds(running ? timerStartSecondsRef.current || secondsLeft : secondsLeft),
             running,
             finished,
             endsAt: running && timerEndsAtRef.current ? new Date(timerEndsAtRef.current).toISOString() : null,
@@ -1798,7 +1812,7 @@ export default function ControlPage() {
     setPreviewSyncPaused(true);
     const newBank = DEFAULT_STATES.map((d) => ({
       ...d,
-      minutes: typeof p.minutes[d.id] === "number" ? p.minutes[d.id] : d.minutes,
+      minutes: typeof p.minutes[d.id] === "number" ? safeStateMinutes(p.minutes[d.id], d.minutes) : d.minutes,
     }));
     const newLineup = p.lineup.map((s) => ({ uid: uid(), stateId: s.stateId }));
     persistBank(newBank);
@@ -2256,13 +2270,30 @@ export default function ControlPage() {
     stopMusic();
   }
   function adjust(deltaSeconds: number) {
-    secRef.current = Math.max(0, secRef.current + deltaSeconds);
+    secRef.current = safeTimerSeconds(secRef.current + deltaSeconds);
     if (running) armTimer(secRef.current);
     setSecondsLeft(secRef.current);
     if (deltaSeconds > 0) setFinished(false);
   }
-  function next() {
-    const keepRunning = shouldRunNavigationDestination(
+  async function next() {
+    const startingFromPreview = Boolean(
+      teacherSession
+      && teacherSession.status === "open"
+      && (previewSyncPaused || teacherSession.broadcast !== LIVE_FLOW_MODE),
+    );
+    if (startingFromPreview && teacherSession) {
+      try {
+        await switchSessionToLiveFlow(teacherSession);
+        setPreviewSyncPaused(false);
+        setAutoAdvance(true);
+      } catch {
+        const message = "Nothing advanced. Connect the open session to Live Class Flow and try again.";
+        setLessonMsg(message);
+        setTodayMsg(message);
+        return;
+      }
+    }
+    const keepRunning = startingFromPreview || shouldRunNavigationDestination(
       autoAdvance ? "automatic" : "manual",
       activeUsesDiscussionProtocol ? discussionFlow?.running : running,
       activeUsesDiscussionProtocol ? discussionFlow?.finished : finished,
@@ -2427,7 +2458,7 @@ export default function ControlPage() {
       setPollAnswers([]);
       return;
     }
-    if (command.action === "next") next();
+    if (command.action === "next") void next();
     else if (command.action === "previous") previous();
     else if (command.action === "toggle-timer") toggleRun();
     else if (command.action === "add-30") adjust(30);
@@ -2765,6 +2796,7 @@ export default function ControlPage() {
           <div className="cx-tbtns">
             <a className="cx-sbtn cx-home" href="/teacher">Home</a>
             <a className="cx-sbtn" href={teacherSession ? `/session?sessionId=${encodeURIComponent(teacherSession.id)}` : "/session"}>{teacherSession ? "Session" : "Start session"}</a>
+            {teacherSession ? <a className="cx-sbtn" href={`/session?sessionId=${encodeURIComponent(teacherSession.id)}#classroom-screens-title`}>Set up screens</a> : null}
             {admissionRequests.length > 0 && (
               <button
                 className="cx-sbtn cx-admission-alert"
@@ -3152,7 +3184,7 @@ export default function ControlPage() {
                   {running ? "Pause" : activeLessonCriterionValidationMessage ? "Fix success criterion" : autoAdvance ? "Resume" : "Start lesson"}
                 </button>
                 <button className="cx-btn" onClick={previous} disabled={currentIndex <= 0}>Back</button>
-                <button className="cx-btn next" onClick={next} disabled={controlPoll?.stage !== "responding" && currentIndex + 1 >= lineup.length}>{controlPoll?.stage === "responding" ? "Show results" : "Advance"}</button>
+                <button className="cx-btn next" onClick={() => { void next(); }} disabled={controlPoll?.stage !== "responding" && currentIndex + 1 >= lineup.length}>{controlPoll?.stage === "responding" ? "Show results" : "Advance"}</button>
                 <button className="cx-btn" onClick={stopSequence}>Stop pacing</button>
                 <span className="cx-actions-sep" />
                 <button className="cx-btn" onClick={reset}>Reset state</button>

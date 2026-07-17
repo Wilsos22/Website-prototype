@@ -54,6 +54,8 @@ type StudentSessionState = {
   } | null;
 };
 
+export const STUDENT_SESSION_READY_EVENT = "bdm-student-session-ready";
+
 function isTeacherRoute(pathname: string) {
   return TEACHER_ROUTE_PREFIXES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
 }
@@ -162,9 +164,15 @@ export default function ClassSync() {
         router.push("/lesson");
       }
     };
-    tick();
+    const handleStudentSessionReady = () => { void tick(); };
+    void tick();
     const id = setInterval(tick, 3000);
-    return () => { stop = true; clearInterval(id); };
+    window.addEventListener(STUDENT_SESSION_READY_EVENT, handleStudentSessionReady);
+    return () => {
+      stop = true;
+      clearInterval(id);
+      window.removeEventListener(STUDENT_SESSION_READY_EVENT, handleStudentSessionReady);
+    };
   }, [supabase, router, pathname]);
 
   return null;

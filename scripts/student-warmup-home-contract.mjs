@@ -33,6 +33,9 @@ if (!home.includes("Warm-up not connecting? Ask for help") || !home.includes("Te
 if (!home.includes("background:var(--bdb-amber)") || !home.includes("Open today's warm-up")) {
   throw new Error("The accepted-code homepage must expose the assigned warm-up as the bright amber action.");
 }
+if (!home.includes("Today&apos;s lesson") || !home.includes("Module {moduleNumber}") || !home.includes("Topic {topicNumber}")) {
+  throw new Error("The accepted-code homepage must show today's lesson, module, and topic before the warm-up action.");
+}
 if (!home.includes("identityReady &&") || !home.includes('href="/practice"')) {
   throw new Error("Verified warm-up completion must unlock the solo challenge activities.");
 }
@@ -41,7 +44,9 @@ const verifiedJoinEnd = home.indexOf("\n\n  useEffect", verifiedJoinStart);
 const verifiedJoin = verifiedJoinStart >= 0 && verifiedJoinEnd > verifiedJoinStart
   ? home.slice(verifiedJoinStart, verifiedJoinEnd)
   : "";
-if (!verifiedJoin.includes("setIdentityReady(true)") || verifiedJoin.includes("router.push")) {
+if (!verifiedJoin.includes("setIdentityReady(true)")
+  || !verifiedJoin.includes("STUDENT_SESSION_READY_EVENT")
+  || verifiedJoin.includes("router.push")) {
   throw new Error("Automatic warm-up verification must unlock the homepage without routing away from it.");
 }
 if (!teacherSession.includes('status: "open", broadcast: "free"')) {
@@ -51,9 +56,12 @@ if (!classSync.includes('!liveStateId || liveStateId === "warmup"')
   || !classSync.includes('currentPath === LIVE_FLOW_ROUTE ? "/" : null')) {
   throw new Error("Live Flow Warm-Up and its null-state handoff must preserve the student homepage.");
 }
-const classSyncTick = classSync.slice(classSync.indexOf("const tick = async"), classSync.indexOf("tick();"));
+const classSyncTick = classSync.slice(classSync.indexOf("const tick = async"), classSync.indexOf("void tick();"));
 if (!classSyncTick.includes("getStoredStudentSessionId()")) {
   throw new Error("ClassSync must discover a student session that becomes verified after the homepage mounts.");
+}
+if (!classSync.includes("window.addEventListener(STUDENT_SESSION_READY_EVENT")) {
+  throw new Error("ClassSync must react immediately when warm-up verification creates the student session.");
 }
 if (!control.includes('teacherSession?.broadcast === "free"')
   || !control.includes('item.stateId === "warmup" && Boolean(item.linkUrl)')) {
@@ -65,6 +73,7 @@ if (!warmupStart.includes('.from("student_warmup_sessions")')
   || !warmupStart.includes('select("verification_token,warmup_resource_key,completed_at")')
   || !warmupStart.includes("warmupToken: receipt.verification_token")
   || !warmupStart.includes("warmUpLink: warmupUrl || null")
+  || !warmupStart.includes("lesson: liveFlow?.lesson")
   || !warmupStart.includes("canonicalGoogleFormResource")
   || !warmupStart.includes("verification_token: crypto.randomUUID()")
   || !warmupStart.includes("receipt.warmup_resource_key !== nextResourceKey")
@@ -141,6 +150,12 @@ const runSequence = sliceBetween(control, "async function runSequence", "functio
 if (!runSequence.includes("await switchSessionToLiveFlow(teacherSession)")
   || runSequence.indexOf("await switchSessionToLiveFlow(teacherSession)") > runSequence.indexOf("armTimer(secRef.current)")) {
   throw new Error("Start lesson must connect Live Class Flow before arming automatic pacing.");
+}
+const nextState = sliceBetween(control, "async function next()", "function previous()");
+if (!nextState.includes("await switchSessionToLiveFlow(teacherSession)")
+  || !nextState.includes("setPreviewSyncPaused(false)")
+  || !nextState.includes("setAutoAdvance(true)")) {
+  throw new Error("The first Advance from preview must connect the open session before changing screens.");
 }
 
 for (const requiredSql of [

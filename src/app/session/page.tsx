@@ -340,6 +340,13 @@ export default function SessionPage() {
         .se-code-wrap { text-align:center; padding:8px 0; }
         .se-code-label { font-size:0.8rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; color:#a89f8c; }
         .se-code { font-size:clamp(3rem,12vw,6rem); font-weight:900; letter-spacing:0.12em; color:#14b8a6; line-height:1.1; }
+        .se-screen-intro { margin:0 0 14px; color:#5a5346; font-size:0.92rem; font-weight:650; line-height:1.5; }
+        .se-screen-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+        .se-screen-link { min-height:82px; box-sizing:border-box; display:flex; flex-direction:column; justify-content:center; gap:5px;
+          border:1px solid #d9d1c1; border-radius:13px; background:#fbf7ef; color:#2a2a2e; padding:13px; text-decoration:none; }
+        .se-screen-link:hover, .se-screen-link:focus-visible { border-color:#14b8a6; outline:3px solid rgba(20,184,166,0.18); outline-offset:2px; }
+        .se-screen-link strong { font-size:0.98rem; font-weight:900; }
+        .se-screen-link span { color:#7a7468; font-size:0.78rem; font-weight:700; line-height:1.35; }
         .se-count { font-size:1rem; font-weight:800; color:#5a5346; margin-bottom:10px; }
         .se-joins { display:flex; flex-wrap:wrap; gap:8px; }
         .se-chip { background:#e7f8f3; border:1px solid #b9ebdf; color:#0f766e; border-radius:999px; padding:9px 16px; font-weight:800; animation:sePop 0.3s ease; }
@@ -348,7 +355,7 @@ export default function SessionPage() {
           border:1px solid #ffe2a8; background:#fffaf0; border-radius:12px; padding:12px; }
         .se-admission-code { color:#92660a; font-size:1.18rem; font-weight:900; letter-spacing:0.1em; }
         .se-admission-help { margin:0 0 12px; color:#7a7468; font-size:0.9rem; font-weight:650; line-height:1.45; }
-        @media (max-width:560px) { .se-admission-row { grid-template-columns:1fr; } .se-admission-row .se-start { width:100%; } }
+        @media (max-width:560px) { .se-admission-row, .se-screen-grid { grid-template-columns:1fr; } .se-admission-row .se-start { width:100%; } }
         @keyframes sePop { from{transform:scale(0.85); opacity:0.4;} to{transform:none; opacity:1;} }
         .se-empty { color:#b3aa97; font-weight:600; }
         .se-warn { background:#fff7e6; border:1px solid #ffe2a8; color:#92660a; border-radius:14px; padding:16px 18px; font-weight:700; line-height:1.6; }
@@ -417,6 +424,21 @@ export default function SessionPage() {
               <div className="se-code">{session.code}</div>
               <button className="se-end" onClick={end} disabled={ending}>{ending ? "Ending session" : "End session"}</button>
             </div>
+            <section className="se-card" aria-labelledby="classroom-screens-title">
+              <h2 className="se-qh" id="classroom-screens-title">Classroom screens</h2>
+              <p className="se-screen-intro">Keep Live class host on the laptop. Open Main on panel 1, Pace + Support on panel 2, and Remote on the signed-in iPad.</p>
+              <div className="se-screen-grid">
+                <a className="se-screen-link" href={`/teacher/present?session=${encodeURIComponent(session.id)}`} target="_blank" rel="noreferrer">
+                  <strong>Open Main</strong><span>Problem, story, visuals, and live writing</span>
+                </a>
+                <a className="se-screen-link" href={`/teacher/pace?session=${encodeURIComponent(session.id)}`} target="_blank" rel="noreferrer">
+                  <strong>Open Pace + Support</strong><span>Timer and the current student directions</span>
+                </a>
+                <a className="se-screen-link" href={`/teacher/remote?session=${encodeURIComponent(session.id)}`} target="_blank" rel="noreferrer">
+                  <strong>Open iPad Remote</strong><span>Private controls, notes, Abbie, sound, and writing</span>
+                </a>
+              </div>
+            </section>
             {admissionRequests.length > 0 && (
               <div className="se-card">
                 <h3 className="se-qh">Waiting for teacher: {admissionRequests.length}</h3>

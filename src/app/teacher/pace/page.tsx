@@ -165,16 +165,25 @@ export default function PaceSupportPage() {
   return (
     <main className="pace-page" style={style}>
       <style>{`
-        .pace-page { position:fixed; inset:0; overflow:hidden; box-sizing:border-box; background:radial-gradient(circle at 16% 14%,var(--pace-glow),transparent 38%),radial-gradient(circle at 86% 78%,var(--pace-glow),transparent 36%),var(--pace-base); color:#fff; font-family:var(--bdb-font); padding:clamp(18px,2.5vw,36px); }
-        .pace-shell { width:100%; height:100%; display:grid; grid-template-rows:auto minmax(0,1fr); gap:clamp(14px,2vw,24px); }
-        .pace-timer { display:flex; align-items:center; justify-content:center; border:1px solid var(--pace-line); border-radius:20px; background:color-mix(in srgb,var(--pace-panel) 94%,transparent); padding:clamp(12px,1.8vw,20px); box-shadow:0 18px 50px rgba(0,0,0,0.24); }
-        .pace-time { color:#fff; font-size:clamp(4rem,10vw,8.5rem); font-weight:900; line-height:0.82; font-variant-numeric:tabular-nums; letter-spacing:-0.06em; }
+        .pace-page { position:fixed; inset:0; overflow:hidden; box-sizing:border-box; background:radial-gradient(1200px 640px at 50% 18%,var(--pace-panel),var(--pace-base) 60%,var(--pace-base)); color:#f4eee3; font-family:var(--bdb-font); }
+        .pace-page::before, .pace-page::after { content:""; position:absolute; z-index:0; width:38vw; height:38vw; border-radius:50%; background:var(--pace-accent); filter:blur(120px); opacity:0.12; pointer-events:none; }
+        .pace-page::before { left:-8vw; top:-16vw; }
+        .pace-page::after { right:-12vw; bottom:-18vw; opacity:0.08; }
+        .pace-shell { position:relative; z-index:1; width:100%; height:100%; display:grid; grid-template-rows:66px minmax(0,1fr); }
+        .pace-topbar { z-index:5; display:flex; align-items:center; gap:13px; border-bottom:1px solid rgba(255,255,255,0.1); background:color-mix(in srgb,var(--pace-base) 90%,transparent); padding:0 32px; }
+        .pace-mark { width:30px; height:30px; flex:none; display:grid; place-items:center; border-radius:9px; background:rgba(255,255,255,0.12); color:#fff; font-size:0.95rem; font-weight:900; }
+        .pace-dot { width:12px; height:12px; flex:none; border-radius:3px; background:var(--pace-accent); }
+        .pace-phase { margin:0; overflow:hidden; color:#f7f1e6; text-overflow:ellipsis; white-space:nowrap; font-size:17px; font-weight:900; }
+        .pace-lesson { margin:0; overflow:hidden; color:rgba(244,238,227,0.44); text-overflow:ellipsis; white-space:nowrap; font-size:13px; font-weight:650; }
+        .pace-timer { min-width:128px; flex:none; display:grid; grid-template-columns:auto auto; align-items:center; justify-content:center; gap:11px; margin-left:auto; border:1.5px solid color-mix(in srgb,var(--pace-accent) 46%,transparent); border-radius:999px; background:color-mix(in srgb,var(--pace-accent) 15%,transparent); padding:8px 18px; }
+        .pace-timer::before { content:"Time left"; color:rgba(244,238,227,0.58); font-size:9.5px; font-weight:800; letter-spacing:0.16em; text-transform:uppercase; }
+        .pace-time { color:var(--pace-accent); font-size:25px; font-weight:900; line-height:0.9; font-variant-numeric:tabular-nums; letter-spacing:-0.04em; }
         .pace-time.finished { color:#ffd5dc; }
-        .pace-current { min-height:0; display:grid; place-items:center; border:1px solid var(--pace-line); border-radius:24px; background:color-mix(in srgb,var(--pace-panel) 88%,transparent); padding:clamp(30px,6vw,88px); box-shadow:0 28px 70px rgba(0,0,0,0.28); text-align:center; }
+        .pace-current { min-height:0; display:grid; place-items:center; padding:clamp(28px,5vw,72px); text-align:center; }
         .pace-current.spinner-linked { position:relative; overflow:hidden; padding:0; }
         .pace-current-inner { width:min(100%,1180px); display:grid; gap:18px; justify-items:center; }
         .pace-current-label { margin:0; color:var(--pace-accent); font-size:clamp(0.72rem,1.3vw,0.92rem); font-weight:900; letter-spacing:0.14em; text-transform:uppercase; }
-        .pace-directions { margin:0; max-width:28ch; color:#fff; font-size:clamp(2.5rem,6.4vw,6.8rem); line-height:1.02; letter-spacing:-0.035em; text-wrap:balance; white-space:pre-wrap; }
+        .pace-directions { margin:0; max-width:31ch; color:#f8f2e7; font-size:clamp(2.8rem,6vw,6.4rem); line-height:1.04; letter-spacing:-0.03em; text-wrap:balance; white-space:pre-wrap; }
         .pace-check { width:min(100%,1120px); display:grid; align-content:center; gap:20px; }
         .pace-check-title { margin:0; color:var(--pace-accent); font-size:clamp(0.78rem,1.4vw,1rem); font-weight:950; letter-spacing:0.14em; text-transform:uppercase; }
         .pace-check-prompt { margin:0; color:#fff; font-size:clamp(2rem,4.6vw,4.8rem); line-height:1.05; font-weight:900; text-wrap:balance; }
@@ -197,10 +206,19 @@ export default function PaceSupportPage() {
         .pace-support-card ul { display:grid; gap:7px; margin:0; padding-left:1.1rem; color:#fff; font-size:clamp(0.92rem,1.5vw,1.15rem); line-height:1.3; font-weight:760; }
         .pace-vocab { display:flex; flex-wrap:wrap; gap:7px; }
         .pace-vocab span { border:1px solid var(--pace-line); border-radius:999px; background:color-mix(in srgb,var(--pace-panel) 76%,transparent); padding:7px 10px; color:#fff; font-size:0.9rem; font-weight:880; }
-        .pace-empty { grid-row:1 / -1; display:grid; place-items:center; border:1px solid var(--pace-line); border-radius:24px; background:color-mix(in srgb,var(--pace-panel) 88%,transparent); text-align:center; padding:40px; }
+        .pace-empty { grid-row:1 / -1; display:grid; place-items:center; text-align:center; padding:40px; }
         .pace-empty h1 { margin:0; max-width:20ch; font-size:clamp(2.4rem,6vw,5.6rem); line-height:1.02; }
         .pace-empty p { margin:15px 0 0; color:var(--pace-muted); font-size:clamp(1rem,2vw,1.35rem); font-weight:720; }
-        @media (max-width:760px) { .pace-discussion { grid-template-columns:1fr; } .pace-bars { height:240px; } }
+        @media (max-width:760px) { .pace-discussion { grid-template-columns:1fr; } .pace-bars { height:240px; } .pace-lesson { display:none; } }
+        @media (max-height:650px) {
+          .pace-shell { grid-template-rows:54px minmax(0,1fr); }
+          .pace-topbar { padding:0 18px; }
+          .pace-mark { width:28px; height:28px; }
+          .pace-timer { min-width:112px; padding:6px 13px; }
+          .pace-time { font-size:1.35rem; }
+          .pace-current { padding:20px 32px; }
+          .pace-directions { font-size:clamp(2.2rem,5.1vw,4rem); }
+        }
       `}</style>
 
       <section className="pace-shell">
@@ -213,9 +231,15 @@ export default function PaceSupportPage() {
           </section>
         ) : (
           <>
-            <section className="pace-timer" aria-label="Class timer">
-              <div className={`pace-time ${timerFinished ? "finished" : ""}`}>{timer ? formatTime(timerSeconds) : "--:--"}</div>
-            </section>
+            <header className="pace-topbar">
+              <span className="pace-mark" aria-hidden="true">÷</span>
+              <span className="pace-dot" aria-hidden="true" />
+              <h1 className="pace-phase">{flow.presentation?.title || state.label}</h1>
+              {flow.lesson?.title ? <p className="pace-lesson">{flow.lesson.title}</p> : null}
+              <section className="pace-timer" aria-label="Class timer">
+                <div className={`pace-time ${timerFinished ? "finished" : ""}`}>{timer ? formatTime(timerSeconds) : "--:--"}</div>
+              </section>
+            </header>
             <section className={`pace-current${linkedSpinnerMode ? " spinner-linked" : ""}`} aria-label="Current directions and timer">
               {linkedSpinnerMode ? (
                 <ClassroomSpinner

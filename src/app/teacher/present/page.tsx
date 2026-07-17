@@ -14,6 +14,7 @@ import {
   LIVE_FLOW_MODE,
   getStoredTeacherSessionId,
   liveTimerSeconds,
+  type AbbieBroadcast,
   type LiveClassFlowSnapshot,
   type TeacherRemoteCommand,
 } from "@/lib/liveClassFlow";
@@ -27,6 +28,7 @@ interface StageSession {
   broadcast: string | null;
   live_flow: LiveClassFlowSnapshot | null;
   remote_command: TeacherRemoteCommand | null;
+  abbie: AbbieBroadcast | null;
 }
 
 interface PollAnswer {
@@ -254,7 +256,13 @@ export default function ClassroomStagePage() {
     : [];
   const assignedToolActive = presentation?.responseMode?.trim().toLowerCase() === "assigned tool";
   const showPollPanel = Boolean(poll && (theme.id === "learning-check" || poll.stage === "results" || !presentation?.mainDisplay));
-  const showResourcePanel = Boolean(resource && !showPollPanel && (assignedToolActive || !presentation?.mainDisplay));
+  const showResourcePanel = Boolean(
+    resource
+    && !showPollPanel
+    && assignedToolActive
+    && resource.url.startsWith("/")
+    && !["discussion", "independent", "closeout"].includes(theme.id),
+  );
   const style = {
     "--stage-accent": theme.accent,
     "--stage-base": theme.projectorBase,
@@ -267,23 +275,30 @@ export default function ClassroomStagePage() {
   return (
     <main className="stage-page" style={style}>
       <style>{`
-        .stage-page { position:fixed; inset:0; box-sizing:border-box; overflow:hidden; background:radial-gradient(circle at 24% 18%,var(--stage-glow),transparent 38%),radial-gradient(circle at 82% 80%,var(--stage-glow),transparent 36%),var(--stage-base); color:#fff; font-family:var(--bdb-font); padding:clamp(14px,2.2vw,30px); }
-        .stage-frame { position:relative; width:100%; height:100%; display:grid; grid-template-rows:auto minmax(0,1fr); gap:12px; }
-        .stage-topbar { z-index:4; width:100%; box-sizing:border-box; display:flex; align-items:center; justify-content:space-between; gap:18px; border:1px solid var(--stage-line); border-radius:16px; background:color-mix(in srgb,var(--stage-panel) 94%,transparent); padding:10px 14px 10px 18px; box-shadow:0 12px 28px rgba(0,0,0,0.2); }
-        .stage-topbar-copy { min-width:0; }
+        .stage-page { position:fixed; inset:0; box-sizing:border-box; overflow:hidden; background:radial-gradient(1200px 640px at 50% 18%,var(--stage-panel),var(--stage-base) 60%,var(--stage-base)); color:#f4eee3; font-family:var(--bdb-font); }
+        .stage-page::before, .stage-page::after { content:""; position:absolute; z-index:0; width:38vw; height:38vw; border-radius:50%; background:var(--stage-accent); filter:blur(120px); opacity:0.12; pointer-events:none; }
+        .stage-page::before { left:-8vw; top:-16vw; }
+        .stage-page::after { right:-12vw; bottom:-18vw; opacity:0.08; }
+        .stage-frame { position:relative; z-index:1; width:100%; height:100%; display:grid; grid-template-rows:66px minmax(0,1fr); }
+        .stage-topbar { z-index:8; width:100%; box-sizing:border-box; display:flex; align-items:center; gap:13px; border-bottom:1px solid rgba(255,255,255,0.1); padding:0 32px; background:color-mix(in srgb,var(--stage-base) 90%,transparent); }
+        .stage-mark { width:30px; height:30px; flex:none; display:grid; place-items:center; border-radius:9px; background:rgba(255,255,255,0.12); color:#fff; font-size:0.95rem; font-weight:900; }
+        .stage-dot { width:12px; height:12px; flex:none; border-radius:3px; background:var(--stage-accent); }
+        .stage-topbar-copy { min-width:0; display:flex; align-items:baseline; gap:12px; }
         .stage-kicker { margin:0; color:var(--stage-accent); font-size:0.66rem; font-weight:900; letter-spacing:0.13em; text-transform:uppercase; }
-        .stage-title { margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:clamp(0.92rem,1.65vw,1.25rem); line-height:1.05; font-weight:900; }
-        .stage-timer { flex:none; min-width:108px; border-left:1px solid var(--stage-line); padding-left:14px; color:#fff; text-align:center; font-size:clamp(1.65rem,3vw,2.55rem); line-height:0.9; font-weight:900; font-variant-numeric:tabular-nums; letter-spacing:-0.04em; }
+        .stage-title { margin:0; overflow:hidden; color:#f7f1e6; text-overflow:ellipsis; white-space:nowrap; font-size:17px; line-height:1.05; font-weight:900; }
+        .stage-lesson { margin:0; overflow:hidden; color:rgba(244,238,227,0.44); text-overflow:ellipsis; white-space:nowrap; font-size:13px; font-weight:650; }
+        .stage-timer { min-width:128px; flex:none; display:grid; grid-template-columns:auto auto; align-items:center; justify-content:center; gap:11px; margin-left:auto; border:1.5px solid color-mix(in srgb,var(--stage-accent) 46%,transparent); border-radius:999px; background:color-mix(in srgb,var(--stage-accent) 15%,transparent); padding:8px 18px; color:var(--stage-accent); text-align:center; font-size:25px; line-height:0.9; font-weight:900; font-variant-numeric:tabular-nums; letter-spacing:-0.04em; }
+        .stage-timer::before { content:"Time left"; color:rgba(244,238,227,0.58); font-size:9.5px; font-weight:800; letter-spacing:0.16em; text-transform:uppercase; }
         .stage-timer.finished { color:#ffd6dc; }
         .stage-success { position:absolute; z-index:4; top:14px; right:14px; width:min(34vw,440px); border:1px solid var(--stage-line); border-top:4px solid var(--stage-accent); border-radius:16px; background:color-mix(in srgb,var(--stage-panel) 90%,transparent); padding:13px 16px; box-shadow:0 14px 34px rgba(0,0,0,0.22); backdrop-filter:blur(12px); }
         .stage-success-label { margin:0; color:var(--stage-accent); font-size:0.66rem; font-weight:900; letter-spacing:0.12em; text-transform:uppercase; }
         .stage-success-text { margin:6px 0 0; color:#fff; font-size:clamp(0.8rem,1.25vw,1.02rem); line-height:1.32; font-weight:760; }
-        .stage-work { position:relative; min-height:0; overflow:hidden; border:1px solid var(--stage-line); border-radius:24px; background:linear-gradient(145deg,color-mix(in srgb,var(--stage-panel) 88%,#000),color-mix(in srgb,var(--stage-base) 92%,#000)); box-shadow:0 30px 80px rgba(0,0,0,0.3); }
+        .stage-work { position:relative; min-height:0; overflow:hidden; }
         .stage-empty, .stage-directions, .stage-poll, .stage-resource-link { position:absolute; inset:0; display:grid; place-items:center; padding:clamp(34px,6vw,88px); text-align:center; }
         .stage-empty h1 { margin:0; max-width:22ch; color:#fff; font-size:clamp(2.2rem,5.2vw,5.2rem); line-height:1.02; }
         .stage-empty p { margin:14px 0 0; color:var(--stage-muted); font-size:clamp(1rem,2vw,1.4rem); font-weight:700; }
-        .stage-directions-inner { width:min(100%,1200px); display:grid; gap:18px; justify-items:center; }
-        .stage-directions p { margin:0; max-width:54ch; border-left:8px solid var(--stage-accent); background:color-mix(in srgb,var(--stage-base) 58%,transparent); padding:15px 20px; color:var(--stage-muted); text-align:left; white-space:pre-wrap; font-size:clamp(1.15rem,2.5vw,2rem); line-height:1.35; font-weight:760; }
+        .stage-directions-inner { width:min(100%,1500px); display:grid; gap:22px; justify-items:center; }
+        .stage-main-prompt { margin:0; max-width:92%; color:#f8f2e7; text-align:center; white-space:pre-wrap; font-size:clamp(3.1rem,6.3vw,6.9rem); line-height:1.08; font-weight:900; letter-spacing:-0.025em; text-wrap:balance; }
         .stage-routine { position:absolute; inset:0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:clamp(12px,2vw,22px); align-content:center; padding:clamp(24px,4vw,60px); }
         .stage-routine article { display:grid; align-content:center; gap:8px; min-height:120px; border:1px solid var(--stage-line); border-top:5px solid var(--stage-accent); border-radius:16px; background:color-mix(in srgb,var(--stage-panel) 92%,transparent); padding:clamp(16px,2.4vw,28px); }
         .stage-routine .stage-routine-lead { grid-column:1 / -1; min-height:100px; grid-template-columns:1fr auto; align-items:end; }
@@ -365,16 +380,22 @@ export default function ClassroomStagePage() {
         .stage-work.board-open .stage-independent-card { grid-column:1; }
         .stage-work.board-open .classroom-spinner { right:42%; }
         .stage-board-panel { position:absolute; z-index:5; inset:0 0 0 auto; width:42%; overflow:hidden; border-left:5px solid var(--stage-accent); background:#fff; box-shadow:-18px 0 40px rgba(0,0,0,0.28); }
+        .stage-abbie { position:absolute; z-index:12; left:50%; bottom:20px; width:min(88%,860px); box-sizing:border-box; display:grid; grid-template-columns:auto minmax(0,1fr); gap:14px; align-items:center;
+          transform:translateX(-50%); border:1px solid #2b5e54; border-left:7px solid #5eead4; border-radius:18px; background:#0d1f1b; padding:16px 20px; box-shadow:0 22px 60px rgba(0,0,0,0.48); }
+        .stage-abbie-mark { width:50px; height:50px; display:grid; place-items:center; overflow:hidden; border-radius:50%; background:#14241f; }
+        .stage-abbie-mark img { width:44px; height:44px; object-fit:contain; }
+        .stage-abbie-name { margin:0 0 3px; color:#5eead4; font-size:0.7rem; font-weight:950; letter-spacing:0.12em; text-transform:uppercase; }
+        .stage-abbie-line { margin:0; color:#f3fffb; font-size:clamp(1rem,2vw,1.45rem); font-weight:820; line-height:1.3; }
         @media (max-width:900px) { .stage-success { width:40vw; } .stage-score-scene, .stage-discussion { grid-template-columns:1fr; overflow:auto; } }
         @media (max-height:650px) {
-          .stage-page { padding:10px; }
-          .stage-frame { gap:8px; }
-          .stage-topbar { border-radius:12px; padding:7px 12px; }
+          .stage-frame { grid-template-rows:54px minmax(0,1fr); }
+          .stage-topbar { padding:0 18px; }
+          .stage-mark { width:28px; height:28px; }
           .stage-title { font-size:0.9rem; }
-          .stage-timer { min-width:94px; padding-left:12px; font-size:1.7rem; }
-          .stage-work { border-radius:18px; }
+          .stage-lesson { font-size:0.72rem; }
+          .stage-timer { min-width:112px; padding:6px 13px; font-size:1.35rem; }
           .stage-empty, .stage-directions, .stage-poll, .stage-resource-link { padding:20px; }
-          .stage-directions p { max-width:68ch; padding:11px 15px; font-size:clamp(1rem,1.75vw,1.3rem); line-height:1.28; }
+          .stage-main-prompt { font-size:clamp(2.2rem,5.4vw,4rem); }
           .stage-score-scene { grid-template-columns:minmax(270px,0.8fr) minmax(0,1.2fr); gap:24px; padding:22px; }
           .stage-scoreboard { gap:8px; padding:12px; }
           .stage-scoreboard-label { padding-bottom:8px; }
@@ -405,8 +426,11 @@ export default function ClassroomStagePage() {
 
       <section className="stage-frame">
         <div className="stage-topbar">
+          <span className="stage-mark" aria-hidden="true">÷</span>
+          <span className="stage-dot" aria-hidden="true" />
           <div className="stage-topbar-copy">
             <h1 className="stage-title">{presentation?.title || state?.label || "Waiting for the lesson"}</h1>
+            {lesson?.title ? <p className="stage-lesson">{lesson.title}</p> : null}
           </div>
           <div className={`stage-timer ${timerFinished ? "finished" : ""}`}>{timer ? formatTime(timerSeconds) : "--:--"}</div>
         </div>
@@ -556,7 +580,7 @@ export default function ClassroomStagePage() {
             <div className="stage-directions">
               <div className="stage-directions-inner">
                 {showLessonTargets && lesson?.learningIntention ? <p className="stage-learning">{lesson.learningIntention}</p> : null}
-                <p>{slideBody}</p>
+                <h2 className="stage-main-prompt">{slideBody}</h2>
               </div>
             </div>
           )}
@@ -566,6 +590,19 @@ export default function ClassroomStagePage() {
             </aside>
           ) : null}
         </section>
+
+        {session?.abbie?.text ? (
+          <aside className="stage-abbie" aria-live="polite" aria-label="Abbie classroom message">
+            <span className="stage-abbie-mark" aria-hidden="true">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/big-dog-mark.png" alt="" />
+            </span>
+            <span>
+              <p className="stage-abbie-name">Abbie</p>
+              <p className="stage-abbie-line">{session.abbie.text}</p>
+            </span>
+          </aside>
+        ) : null}
 
       </section>
     </main>

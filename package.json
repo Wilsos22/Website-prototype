@@ -12,6 +12,7 @@
     "test:warmup": "tsc src/lib/warmupEngine.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2021 --skipLibCheck && node scripts/warmup-golden.mjs",
     "test:warmup-apps-script": "node scripts/warmup-apps-script-contract.mjs",
     "test:student-warmup-home": "node scripts/student-warmup-home-contract.mjs",
+    "test:classroom-surfaces": "node scripts/classroom-surface-contract.mjs",
     "test:live-flow-contract": "tsc src/lib/liveFlowContract.ts src/lib/classroomPilot.ts src/lib/discussionProtocol.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2021 --skipLibCheck && node scripts/live-flow-contract.mjs",
     "test:lesson-visuals": "tsc src/lib/lessonVisuals.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2021 --skipLibCheck && node scripts/lesson-visuals-contract.mjs",
     "test:notion-lesson-contract": "tsc src/lib/notionLessons.ts --ignoreConfig --outDir .tmp-mastery --module commonjs --target es2022 --types node --skipLibCheck && node scripts/notion-lesson-contract.mjs",
