@@ -152,7 +152,7 @@ function inPoly(x: number, y: number, verts: Pt[]) {
 }
 
 export default function AreaExplorer() {
-  const [mode, setMode] = useState<"solve" | "sandbox">("solve");
+  const [mode, setMode] = useState<"solve" | "sandbox" | "composite">("solve");
   const [phase, setPhase] = useState<Phase>("bank");
   const [shape, setShape] = useState<Shape | null>(null);
   const [placed, setPlaced] = useState<Record<string, number | null>>({});
@@ -327,11 +327,13 @@ export default function AreaExplorer() {
       <div className="ae-modebar">
         <div className="ae-modeseg">
           <button className={mode === "solve" ? "on" : ""} onClick={() => setMode("solve")}>Solve</button>
+          <button className={mode === "composite" ? "on" : ""} onClick={() => setMode("composite")}>Composite</button>
           <button className={mode === "sandbox" ? "on" : ""} onClick={() => setMode("sandbox")}>Sandbox</button>
         </div>
       </div>
 
       {mode === "sandbox" && <AreaSandbox />}
+      {mode === "composite" && <AreaComposite />}
 
       {mode === "solve" && phase === "bank" && (
         <>
@@ -935,6 +937,173 @@ function SandboxTriangleLock({ onBack }: { onBack: () => void }) {
         <div className="ae-bar"><button className="ae-btn ghost" onClick={reset}>Pull it back out</button></div>
       )}
       {locked && <p className="ae-why">The parallelogram is base x height = 40. Your triangle is exactly half of it, so A = ½ x base x height.</p>}
+    </div>
+  );
+}
+
+// ── Composite mode: decompose an irregular figure into rectangles ────────────
+// Guided level (step 1 of the gradual release): the figure arrives already cut
+// into colored rectangles on the unit grid. The student finds each rectangle's
+// area and adds them — area is additive. "Count the squares" self-checks the
+// total against the structured unit grid. (Drag-your-own-cut and blank-figure
+// levels land next.)
+interface CompRect { x: number; y: number; w: number; h: number }
+interface CompFig { name: string; verts: Pt[]; rects: CompRect[]; cuts: [Pt, Pt][] }
+
+const COMP_FIGS: CompFig[] = [
+  {
+    name: "L",
+    verts: [[0, 0], [5, 0], [5, 2], [2, 2], [2, 4], [0, 4]],
+    rects: [{ x: 0, y: 0, w: 5, h: 2 }, { x: 0, y: 2, w: 2, h: 2 }],
+    cuts: [[[0, 2], [2, 2]]],
+  },
+  {
+    name: "T",
+    verts: [[0, 0], [6, 0], [6, 2], [4, 2], [4, 5], [2, 5], [2, 2], [0, 2]],
+    rects: [{ x: 0, y: 0, w: 6, h: 2 }, { x: 2, y: 2, w: 2, h: 3 }],
+    cuts: [[[2, 2], [4, 2]]],
+  },
+  {
+    name: "staircase",
+    verts: [[0, 0], [6, 0], [6, 2], [4, 2], [4, 4], [2, 4], [2, 6], [0, 6]],
+    rects: [{ x: 0, y: 0, w: 2, h: 6 }, { x: 2, y: 0, w: 2, h: 4 }, { x: 4, y: 0, w: 2, h: 2 }],
+    cuts: [[[2, 0], [2, 4]], [[4, 0], [4, 2]]],
+  },
+];
+const COMP_COLORS = [C_BASE, C_HEIGHT, C_B2];
+const COMP_COLOR_NAMES = ["teal", "amber", "coral"];
+
+function AreaComposite() {
+  const [idx, setIdx] = useState(0);
+  const fig = COMP_FIGS[idx];
+  const cols = Math.max(...fig.verts.map((v) => v[0]));
+  const rows = Math.max(...fig.verts.map((v) => v[1]));
+  const pieceAreas = fig.rects.map((r) => r.w * r.h);
+  const totalArea = pieceAreas.reduce((a, b) => a + b, 0);
+
+  const [entries, setEntries] = useState<string[]>(fig.rects.map(() => ""));
+  const [totalIn, setTotalIn] = useState("");
+  const [done, setDone] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [showCount, setShowCount] = useState(false);
+  const wrongRef = useRef(0);
+  const solvedRef = useRef(false);
+
+  useEffect(() => {
+    setEntries(COMP_FIGS[idx].rects.map(() => ""));
+    setTotalIn(""); setDone(false); setNote(null); setShowCount(false);
+    wrongRef.current = 0; solvedRef.current = false;
+  }, [idx]);
+
+  const U = Math.max(30, Math.min(50, Math.floor(Math.min(420 / cols, 300 / rows))));
+  const M = Math.round(1.2 * U);
+  const W = 2 * M + cols * U, H = 2 * M + rows * U;
+  const sx = (gx: number) => M + gx * U;
+  const sy = (gy: number) => M + gy * U;
+  const pts = fig.verts.map((v) => `${sx(v[0])},${sy(v[1])}`).join(" ");
+
+  const cells = useMemo(() => {
+    if (!showCount) return [] as Pt[];
+    const out: Pt[] = [];
+    for (let gy = 0; gy < rows; gy++) for (let gx = 0; gx < cols; gx++) {
+      if (inPoly(gx + 0.5, gy + 0.5, fig.verts)) out.push([gx, gy]);
+    }
+    return out;
+  }, [showCount, fig, cols, rows]);
+
+  function check() {
+    const bad = fig.rects.findIndex((r, i) => Number(entries[i]) !== r.w * r.h);
+    if (bad !== -1) {
+      setNote(`Check the ${COMP_COLOR_NAMES[bad]} rectangle: ${fig.rects[bad].w} × ${fig.rects[bad].h}.`);
+      wrongRef.current += 1;
+      return;
+    }
+    if (Number(totalIn) !== totalArea) {
+      setNote(`Add the pieces: ${pieceAreas.join(" + ")} = ?`);
+      wrongRef.current += 1;
+      return;
+    }
+    setNote(null); setDone(true);
+    if (!solvedRef.current) {
+      solvedRef.current = true;
+      reportToolResult({ tool: "area-explorer", correct: wrongRef.current === 0, standardId: "6.G.A.1", misconception: null, problemId: `composite-${fig.name}` });
+    }
+  }
+
+  return (
+    <div className="ae-stage">
+      <div className="ae-prompt">{done ? `Area = ${totalArea} square units` : "Break the figure into rectangles"}</div>
+      <div className="ae-sub">{done ? "Same total area, however you slice it." : "Find each rectangle's area, then add them together."}</div>
+
+      <div className="ae-tools">
+        <button className="ae-tbtn" onClick={() => { setEntries(fig.rects.map(() => "")); setTotalIn(""); setDone(false); setNote(null); wrongRef.current = 0; solvedRef.current = false; }}>Reset</button>
+        <button className="ae-tbtn" onClick={() => setIdx((i) => (i + 1) % COMP_FIGS.length)}>Next figure</button>
+      </div>
+
+      <svg className="ae-svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`composite ${fig.name} figure on a grid`}>
+        <defs>
+          <pattern id="ae-comp-cell" width={U} height={U} patternUnits="userSpaceOnUse">
+            <path d={`M ${U} 0 L 0 0 0 ${U}`} fill="none" stroke="var(--bdb-line)" strokeWidth={1} opacity={0.8} />
+          </pattern>
+        </defs>
+        <rect x={M} y={M} width={cols * U} height={rows * U} fill="url(#ae-comp-cell)" />
+
+        {/* decomposed pieces */}
+        {fig.rects.map((r, i) => {
+          const filled = done || Number(entries[i]) === r.w * r.h;
+          return (
+            <g key={i}>
+              <rect x={sx(r.x)} y={sy(r.y)} width={r.w * U} height={r.h * U}
+                fill={`color-mix(in srgb, ${COMP_COLORS[i]} ${filled ? 40 : 20}%, transparent)`} />
+              <text x={sx(r.x + r.w / 2)} y={sy(r.y + r.h / 2)} textAnchor="middle" dominantBaseline="central"
+                fontSize={Math.max(13, U * 0.4)} fontWeight={900} fill={COMP_COLORS[i]}>{r.w} × {r.h}</text>
+            </g>
+          );
+        })}
+
+        {/* count-the-squares self-check */}
+        {showCount && cells.map(([gx, gy]) => (
+          <rect key={`c-${gx}-${gy}`} x={sx(gx)} y={sy(gy)} width={U} height={U} fill={C_BASE} opacity={0.22} />
+        ))}
+
+        {/* decomposition cut lines + outer outline */}
+        {fig.cuts.map((c, i) => (
+          <line key={i} x1={sx(c[0][0])} y1={sy(c[0][1])} x2={sx(c[1][0])} y2={sy(c[1][1])}
+            stroke="var(--bdb-ink)" strokeWidth={2} strokeDasharray="6 5" />
+        ))}
+        <polygon points={pts} fill="none" stroke="var(--bdb-ink)" strokeWidth={3} strokeLinejoin="miter" />
+      </svg>
+
+      {done ? (
+        <>
+          <div className="ae-formula"><span>{pieceAreas.join(" + ")} = {totalArea}</span></div>
+          <div className="ae-bar"><button className="ae-btn" onClick={() => setIdx((i) => (i + 1) % COMP_FIGS.length)}>Next figure</button></div>
+        </>
+      ) : (
+        <>
+          <div className="ae-formula">
+            {fig.rects.map((r, i) => (
+              <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                {i > 0 && <span>+</span>}
+                <span style={{ display: "inline-grid", placeItems: "center", minWidth: 44, minHeight: 40, padding: "0 8px", border: `3px solid ${COMP_COLORS[i]}`, color: COMP_COLORS[i], fontSize: "1rem", background: "#fff" }}>{r.w}×{r.h}</span>
+                <input className="ae-answer" style={{ width: 66 }} value={entries[i]} inputMode="numeric"
+                  onChange={(e) => { const v = e.target.value.replace(/\D/g, ""); setEntries((es) => es.map((x, j) => (j === i ? v : x))); setNote(null); }}
+                  aria-label={`${COMP_COLOR_NAMES[i]} rectangle area`} />
+              </span>
+            ))}
+            <span>=</span>
+            <input className="ae-answer" style={{ width: 90 }} value={totalIn} inputMode="numeric"
+              onChange={(e) => { setTotalIn(e.target.value.replace(/\D/g, "")); setNote(null); }}
+              onKeyDown={(e) => e.key === "Enter" && check()} aria-label="total area" />
+          </div>
+          <div className="ae-bar">
+            <button className="ae-link" onClick={() => setShowCount((c) => !c)}>{showCount ? "Hide the squares" : "Count the squares"}</button>
+            <button className="ae-btn" onClick={check}>Check</button>
+          </div>
+        </>
+      )}
+
+      <div className="ae-note">{note && <span key={note} className="ae-note-in">{note}</span>}</div>
     </div>
   );
 }
