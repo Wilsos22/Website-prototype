@@ -28,9 +28,12 @@ const PLACES: Place[] = [
 ];
 
 // Fixed pixel layout so the connecting arcs land exactly on the card centers.
-const CARD_X = [0, 92, 184, 276, 384, 476, 568];
-const CX = [42, 134, 226, 318, 426, 518, 610];
+// Symmetric about the ones center (318) so the fold reflects onto each partner
+// exactly. Fractional cards fold left onto their mirror; ones is the hinge.
+const CARD_X = [0, 92, 184, 276, 368, 460, 552];
+const CX = [42, 134, 226, 318, 410, 502, 594];
 const CARD_W = 84;
+const FOLD_DX = CX.map((cx, i) => (i > 3 ? CX[6 - i] - cx : 0)); // [0,0,0,0,-184,-368,-552]
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 function worthStr(i: number, d: number): string {
@@ -51,6 +54,7 @@ const PRESETS = ["3452.678", "40.05", "700.007", "268.4"];
 export default function PlaceValueMirror() {
   const [raw, setRaw] = useState("3452.678");
   const [selected, setSelected] = useState<number | null>(null);
+  const [folded, setFolded] = useState(false);
 
   const micros = useMemo(() => {
     const n = parseFloat(raw);
@@ -81,6 +85,9 @@ export default function PlaceValueMirror() {
         .pm-chartwrap { overflow-x:auto; padding:4px 2px; }
         .pm-svg { display:block; margin:0 auto; width:100%; min-width:560px; max-width:720px; height:auto; }
         .pm-card { cursor:pointer; }
+        .pm-fcard { transition:transform .6s cubic-bezier(.5,.05,.3,1), opacity .4s ease; }
+        .pm-arcs { transition:opacity .35s ease; }
+        @media (prefers-reduced-motion: reduce) { .pm-fcard { transition-duration:.001s; } }
         .pm-readout { text-align:center; margin:16px auto 0; }
         .pm-value { font-size:clamp(1.7rem,6vw,2.6rem); font-weight:900; letter-spacing:0.02em; }
         .pm-expanded { color:var(--bdb-ink-soft); font-weight:700; font-size:clamp(1rem,3vw,1.2rem); margin-top:4px; min-height:24px; }
@@ -89,6 +96,7 @@ export default function PlaceValueMirror() {
         .pm-input { width:150px; font:inherit; font-size:1.2rem; font-weight:900; text-align:center; padding:9px; border:3px solid var(--bdb-ink); border-radius:0; background:#fff; color:var(--bdb-ink); }
         .pm-pill { font:inherit; font-weight:800; font-size:0.9rem; min-height:42px; padding:0 14px; border-radius:999px; border:1px solid var(--bdb-line); background:var(--bdb-card); color:var(--bdb-ink-soft); cursor:pointer; }
         .pm-pill:active { background:var(--bdb-ground-2); color:var(--bdb-ink); }
+        .pm-fold { font:inherit; font-weight:800; font-size:0.95rem; min-height:44px; padding:0 20px; border-radius:12px; border:2px solid var(--bdb-ink); background:var(--bdb-ink); color:#fff; cursor:pointer; }
       `}</style>
 
       <div className="pm-prompt">The places group in threes and mirror around the ones</div>
@@ -96,18 +104,22 @@ export default function PlaceValueMirror() {
 
       <div className="pm-chartwrap">
         <svg className="pm-svg" viewBox="0 0 652 225" role="img" aria-label={`Place value chart showing ${valueText} across thousands to thousandths`}>
-          {/* period brackets */}
-          <text x="42" y="18" textAnchor="middle" fontSize="11" fill="var(--bdb-ink-faint)">next 3</text>
-          <path d="M92,30 L92,26 L360,26 L360,30" fill="none" stroke="var(--bdb-ink-faint)" strokeWidth="1.5" />
-          <text x="226" y="18" textAnchor="middle" fontSize="12" fontWeight="700" fill="var(--bdb-ink-soft)">a group of 3</text>
-          <path d="M384,30 L384,26 L652,26 L652,30" fill="none" stroke="var(--bdb-ink-faint)" strokeWidth="1.5" />
-          <text x="518" y="18" textAnchor="middle" fontSize="12" fontWeight="700" fill="var(--bdb-ink-soft)">its mirror</text>
+          {/* period brackets (hidden while folded) */}
+          <g style={{ opacity: folded ? 0 : 1, transition: "opacity .3s ease" }}>
+            <text x="42" y="18" textAnchor="middle" fontSize="11" fill="var(--bdb-ink-faint)">next 3</text>
+            <path d="M92,30 L92,26 L360,26 L360,30" fill="none" stroke="var(--bdb-ink-faint)" strokeWidth="1.5" />
+            <text x="226" y="18" textAnchor="middle" fontSize="12" fontWeight="700" fill="var(--bdb-ink-soft)">a group of 3</text>
+            <path d="M368,30 L368,26 L636,26 L636,30" fill="none" stroke="var(--bdb-ink-faint)" strokeWidth="1.5" />
+            <text x="502" y="18" textAnchor="middle" fontSize="12" fontWeight="700" fill="var(--bdb-ink-soft)">its mirror</text>
+          </g>
 
-          {/* mirror line through the ones place */}
-          <line x1="318" y1="34" x2="318" y2="150" stroke="var(--bdb-ink-faint)" strokeDasharray="4 4" strokeWidth="1.5" />
+          {/* mirror line through the ones place (the hinge) */}
+          <line x1="318" y1="34" x2="318" y2="150" stroke={folded ? C_INK : "var(--bdb-ink-faint)"}
+            strokeDasharray="4 4" strokeWidth="1.5" style={{ transition: "stroke .3s ease" }} />
 
-          {/* cards */}
+          {/* whole-number cards + ones (stay put) */}
           {PLACES.map((p, i) => {
+            if (i > 3) return null;
             const isSel = selected === i;
             const isPartner = selected !== null && selected !== 3 && 6 - selected === i;
             const fill = `color-mix(in srgb, ${p.stroke} ${i === 3 ? 16 : 10}%, var(--bdb-card))`;
@@ -116,20 +128,51 @@ export default function PlaceValueMirror() {
                 <rect x={CARD_X[i]} y={40} width={CARD_W} height={66} rx={12}
                   fill={fill} stroke={p.stroke} strokeWidth={isSel ? 4 : isPartner ? 3 : 2}
                   opacity={selected === null || isSel || isPartner ? 1 : 0.55} />
-                <text x={CX[i]} y={86} textAnchor="middle" fontSize="34" fontWeight="900" fill="var(--bdb-ink)">{digits[i]}</text>
-                <text x={CX[i]} y={126} textAnchor="middle" fontSize="14" fontWeight="800" fill={p.text}>{p.name}</text>
-                <text x={CX[i]} y={143} textAnchor="middle" fontSize="12" fontWeight="700" fill="var(--bdb-ink-faint)">{p.val}</text>
+                <text x={CX[i]} y={86} textAnchor="middle" fontSize="34" fontWeight="900" fill="var(--bdb-ink)" opacity={folded ? 0 : 1}>{digits[i]}</text>
+                <text x={CX[i]} y={126} textAnchor="middle" fontSize="14" fontWeight="800" fill={p.text} opacity={folded && i !== 3 ? 0 : 1}>{p.name}</text>
+                <text x={CX[i]} y={143} textAnchor="middle" fontSize="12" fontWeight="700" fill="var(--bdb-ink-faint)" opacity={folded ? 0 : 1}>{p.val}</text>
               </g>
             );
           })}
 
           {/* decimal point */}
-          <circle cx="372" cy="99" r="5" fill={C_CORAL} />
+          <circle cx="364" cy="73" r="4" fill={C_CORAL} style={{ opacity: folded ? 0 : 1, transition: "opacity .3s ease" }} />
 
-          {/* mirror arcs */}
-          <path d="M226,152 Q326,182 426,152" fill="none" stroke={C_CORAL} strokeWidth="2" />
-          <path d="M134,156 Q326,196 518,156" fill="none" stroke={C_AMBER} strokeWidth="2.5" />
-          <path d="M42,160 Q326,214 610,160" fill="none" stroke={C_TEAL} strokeWidth="2.5" />
+          {/* mirror arcs (fade as the fold takes over) */}
+          <g className="pm-arcs" style={{ opacity: folded ? 0 : 1 }}>
+            <path d="M226,152 Q318,182 410,152" fill="none" stroke={C_CORAL} strokeWidth="2" />
+            <path d="M134,156 Q318,196 502,156" fill="none" stroke={C_AMBER} strokeWidth="2.5" />
+            <path d="M42,160 Q318,214 594,160" fill="none" stroke={C_TEAL} strokeWidth="2.5" />
+          </g>
+
+          {/* fractional cards — fold left onto their mirror partners */}
+          {PLACES.map((p, i) => {
+            if (i <= 3) return null;
+            const isSel = selected === i;
+            const isPartner = selected !== null && selected !== 3 && 6 - selected === i;
+            const fill = `color-mix(in srgb, ${p.stroke} 10%, var(--bdb-card))`;
+            const dimmed = !folded && selected !== null && !isSel && !isPartner;
+            return (
+              <g key={p.name} className="pm-card pm-fcard" onClick={() => setSelected(isSel ? null : i)}
+                style={{ transform: folded ? `translateX(${FOLD_DX[i]}px)` : "translateX(0px)", opacity: folded ? 0.9 : dimmed ? 0.55 : 1, transitionDelay: `${(i - 4) * 70}ms` }}>
+                <rect x={CARD_X[i]} y={40} width={CARD_W} height={66} rx={12}
+                  fill={fill} stroke={p.stroke} strokeWidth={folded ? 3 : isSel ? 4 : isPartner ? 3 : 2}
+                  strokeDasharray={folded ? "6 4" : "none"} />
+                <text x={CX[i]} y={86} textAnchor="middle" fontSize="34" fontWeight="900" fill="var(--bdb-ink)" opacity={folded ? 0 : 1}>{digits[i]}</text>
+                {folded ? (
+                  <>
+                    <text x={CX[i]} y={124} textAnchor="middle" fontSize="13" fontWeight="800" fill={p.text}>{PLACES[6 - i].name}</text>
+                    <text x={CX[i]} y={142} textAnchor="middle" fontSize="13" fontWeight="800" fill={p.text}>{p.name}</text>
+                  </>
+                ) : (
+                  <>
+                    <text x={CX[i]} y={126} textAnchor="middle" fontSize="14" fontWeight="800" fill={p.text}>{p.name}</text>
+                    <text x={CX[i]} y={143} textAnchor="middle" fontSize="12" fontWeight="700" fill="var(--bdb-ink-faint)">{p.val}</text>
+                  </>
+                )}
+              </g>
+            );
+          })}
         </svg>
       </div>
 
@@ -138,9 +181,16 @@ export default function PlaceValueMirror() {
         <div className="pm-expanded">{expanded}</div>
       </div>
 
-      {selected !== null && <div className="pm-explain">{explain(selected)}</div>}
+      {folded ? (
+        <div className="pm-explain">Folded on the ones: every fractional place lands on its mirror — tenths on tens, hundredths on hundreds, thousandths on thousandths. The name just adds "-ths".</div>
+      ) : selected !== null ? (
+        <div className="pm-explain">{explain(selected)}</div>
+      ) : null}
 
       <div className="pm-controls">
+        <button className="pm-fold" onClick={() => { setFolded((f) => !f); setSelected(null); }}>
+          {folded ? "Unfold" : "Fold on the ones"}
+        </button>
         <input className="pm-input" value={raw} inputMode="decimal" aria-label="number to show"
           onChange={(e) => { setRaw(e.target.value.replace(/[^0-9.]/g, "")); }} />
         {PRESETS.map((n) => (
