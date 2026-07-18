@@ -3,13 +3,14 @@
 // Long Division — the standard algorithm in the "house" (M1.T3.L4 "Dividend in
 // the House", 6.NS.3). Whole-number division only, on purpose. A guided,
 // choreographed demo walks Divide, Multiply, Subtract, Bring down one step at a
-// time: the active step and its digits pulse, the step's little equation
-// assembles beside it, faint dotted trails arc the movement, the result travels
-// into place and settles to black, the step greys, and the four steps reset for
-// the next quotient digit. Support fades across the problem set. Optional-
-// support: no scoring.
+// time. Each step's little equation assembles beside its step word — the two
+// operands first, then (once they settle) the answer — and stays parked there
+// through the whole cycle, clearing when the next quotient digit begins.
+// Subtract builds in the house first (minus sign, then the rule), then moves the
+// numbers to the side, then reveals the difference. Bring down shows just the
+// arrow, then the digit. Support fades across the problem set. No scoring.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const C_TEAL = "#50a3a4";
 const C_AMBER = "#fcaf38";
@@ -112,12 +113,24 @@ const cy = (row: number) => HTOP + row * CH + CH / 2;
 
 const KIND_COLOR: Record<string, string> = { quotient: C_TEAL, product: C_AMBER, diff: C_CORAL, bring: C_GREEN, dividend: C_INK };
 
-// phase counts per step: index of the "settled" phase
+// per-step phase map (phase 0 is the pulse). `final` = settled phase.
+const PH = {
+  divide: { ab: 1, c: 2, travel: 3, final: 4 },
+  multiply: { ab: 1, c: 2, final: 3 },
+  subtract: { minus: 1, line: 2, ab: 3, c: 4, final: 5 },
+  bringdown: { arrow: 1, num: 2, final: 3 },
+} as const;
+
 function phaseDurs(step: StepKind, flourish: boolean): number[] {
   if (!flourish) return [420];
-  if (step === "divide") return [1100, 1300, 1300];
-  return [1000, 1200];
+  if (step === "divide") return [900, 1100, 800, 1100];
+  if (step === "multiply") return [700, 900, 800];
+  if (step === "subtract") return [700, 700, 800, 800, 800];
+  return [700, 800, 700]; // bringdown
 }
+
+// equation-piece x positions beside the step words
+const EQ = { a: 236, op: 274, b: 306, eq: 340, c: 374 };
 
 export default function LongDivisionHouse() {
   const [pIdx, setPIdx] = useState(0);
@@ -139,7 +152,6 @@ export default function LongDivisionHouse() {
   const FINAL = durs.length;
   const settled = phase >= FINAL;
 
-  // drive the phase timeline whenever the active move (or a replay) changes
   useEffect(() => {
     if (move < 0 || move >= moves.length) return;
     const d = phaseDurs(moves[move].step, pIdx === 0);
@@ -153,7 +165,6 @@ export default function LongDivisionHouse() {
     return () => timers.forEach(clearTimeout);
   }, [move, moves, pIdx, replay]);
 
-  // auto-advance once a step settles
   useEffect(() => {
     if (!auto || done || move < 0) return;
     if (settled) {
@@ -171,13 +182,6 @@ export default function LongDivisionHouse() {
     const c = cellById(id);
     return c ? [cx(c.col), cy(c.row)] : [0, 0];
   };
-  // center of the current chunk being divided (highlight cells minus divisor)
-  function chunkPos(m: Move): [number, number] {
-    const ids = m.highlight.filter((h) => h !== "divisor");
-    if (!ids.length) return posOf("divisor");
-    const ps = ids.map(posOf);
-    return [ps.reduce((s, p) => s + p[0], 0) / ps.length, ps.reduce((s, p) => s + p[1], 0) / ps.length];
-  }
 
   const maxRow = cells.reduce((m, c) => Math.max(m, c.row), 1);
   const width = OX + nd * CW + 92;
@@ -188,8 +192,14 @@ export default function LongDivisionHouse() {
   const activeStepIdx = active ? STEPS.findIndex((s) => s.kind === active.step) : -1;
   const ey = active ? stepMid(activeStepIdx) : 0;
 
-  // which phase a step's reveal cells become visible
-  const revealPhase = (step: StepKind) => (step === "divide" && showFlourish ? FINAL : (showFlourish ? 1 : FINAL));
+  // a step's reveal cells appear at a specific phase
+  const revealPhase = (step: StepKind) => {
+    if (!showFlourish) return 1;
+    if (step === "divide") return PH.divide.final;
+    if (step === "multiply") return PH.multiply.c;
+    if (step === "subtract") return PH.subtract.c;
+    return PH.bringdown.num;
+  };
   function cellVisible(c: Cell): boolean {
     if (c.revealAt < 0) return true;
     if (c.revealAt < move) return true;
@@ -205,10 +215,7 @@ export default function LongDivisionHouse() {
     return `M ${from[0]} ${from[1]} Q ${mx + bow} ${my - Math.abs(bow)} ${to[0]} ${to[1]}`;
   }
 
-  // divide flourish geometry
-  const divA = active && active.step === "divide" ? chunkPos(active) : [0, 0] as [number, number];
   const divQ = active && active.step === "divide" && active.reveal[0] ? posOf(active.reveal[0]) : [0, 0] as [number, number];
-  const eqAx = 236, eqBx = 306, eqCx = 374;
 
   return (
     <div className="ld-wrap">
@@ -219,10 +226,11 @@ export default function LongDivisionHouse() {
         .ld-svgwrap { overflow-x:auto; }
         .ld-pulse { animation:ldPulse 1.15s ease-in-out infinite; transform-box:fill-box; transform-origin:center; }
         @keyframes ldPulse { 0%,100% { opacity:1; } 50% { opacity:0.32; } }
-        .ld-fly { transition:transform 1.15s cubic-bezier(.45,.05,.3,1), opacity .5s ease; }
+        .ld-fly { transition:transform 1s cubic-bezier(.45,.05,.3,1), opacity .5s ease; }
         .ld-trail { transition:opacity .5s ease; }
-        .ld-appear { animation:ldAppear .5s ease backwards; }
+        .ld-appear { animation:ldAppear .45s ease backwards; }
         @keyframes ldAppear { from { opacity:0; transform:translateY(-5px) scale(.7); } to { opacity:1; transform:none; } }
+        .ld-grow { transition:transform .5s cubic-bezier(.4,.7,.3,1); transform-box:fill-box; transform-origin:left center; }
         .ld-bar { display:flex; gap:10px; justify-content:center; align-items:center; margin-top:14px; flex-wrap:wrap; }
         .ld-btn { font:inherit; font-weight:800; font-size:0.98rem; min-height:48px; padding:0 22px; border-radius:13px; border:2px solid var(--bdb-ink); background:var(--bdb-ink); color:#fff; cursor:pointer; }
         .ld-btn.ghost { background:var(--bdb-card); color:var(--bdb-ink); }
@@ -230,7 +238,7 @@ export default function LongDivisionHouse() {
         .ld-pill.on { background:var(--bdb-ink); color:#fff; border-color:var(--bdb-ink); }
         .ld-probs { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:12px; }
         .ld-done { text-align:center; font-weight:900; font-size:clamp(1.2rem,3.6vw,1.6rem); margin-top:8px; color:${C_GREEN}; min-height:26px; }
-        @media (prefers-reduced-motion: reduce) { .ld-pulse,.ld-fly,.ld-appear { animation:none; transition:none; } }
+        @media (prefers-reduced-motion: reduce) { .ld-pulse,.ld-fly,.ld-appear,.ld-grow { animation:none; transition:none; } }
       `}</style>
 
       <div className="ld-prompt">{problem.dividend} ÷ {problem.divisor}</div>
@@ -268,22 +276,39 @@ export default function LongDivisionHouse() {
             );
           })}
 
-          {/* the active step's equation, assembling beside it */}
-          {active && active.eq && phase >= 1 && showFlourish && (
-            <g opacity={settled ? 0 : 1} style={{ transition: "opacity .4s ease" }}>
-              {active.step !== "divide" && (
-                <text className="ld-appear" x={eqAx} y={ey + 8} textAnchor="middle" fontSize="26" fontWeight="900" fill={STEPS[activeStepIdx].color}>{active.eq.a}</text>
-              )}
-              <text className="ld-appear" x={274} y={ey + 8} textAnchor="middle" fontSize="24" fontWeight="900" fill="var(--bdb-ink)">{STEPS[activeStepIdx].op}</text>
-              {active.step !== "divide" && (
-                <text className="ld-appear" x={eqBx} y={ey + 8} textAnchor="middle" fontSize="26" fontWeight="900" fill="var(--bdb-ink)">{active.eq.b}</text>
-              )}
-              <text className="ld-appear" x={340} y={ey + 8} textAnchor="middle" fontSize="24" fontWeight="900" fill="var(--bdb-ink)">=</text>
-              {active.step !== "divide" && (
-                <text className="ld-appear" x={eqCx} y={ey + 8} textAnchor="middle" fontSize="26" fontWeight="900" fill={STEPS[activeStepIdx].color}>{active.eq.c}</text>
-              )}
-            </g>
-          )}
+          {/* side equations: two operands first, then the answer; parked through the cycle */}
+          {showFlourish && active && STEPS.map((s, i) => {
+            const mvIdx = moves.findIndex((mv) => mv.cycle === active.cycle && mv.step === s.kind);
+            if (mvIdx < 0) return null;
+            const mv = moves[mvIdx];
+            if (!mv.eq) return null; // bring down has no side equation
+            if (mvIdx > move) return null;
+            const isActive = mvIdx === move;
+            const showStatic = mvIdx < move || (isActive && settled);
+            // divide's live equation is drawn by the flying ghosts
+            if (isActive && !settled && s.kind === "divide") return null;
+            const ph = PH[s.kind];
+            const showAB = showStatic || (isActive && phase >= (ph as { ab: number }).ab);
+            const showC = showStatic || (isActive && phase >= (ph as { c: number }).c);
+            const y = stepMid(i) + 8;
+            return (
+              <g key={`eq${i}`}>
+                {showAB && (
+                  <g className="ld-appear">
+                    <text x={EQ.a} y={y} textAnchor="middle" fontSize="24" fontWeight="900" fill={s.color}>{mv.eq.a}</text>
+                    <text x={EQ.op} y={y} textAnchor="middle" fontSize="22" fontWeight="900" fill="var(--bdb-ink)">{s.op}</text>
+                    <text x={EQ.b} y={y} textAnchor="middle" fontSize="24" fontWeight="900" fill="var(--bdb-ink)">{mv.eq.b}</text>
+                  </g>
+                )}
+                {showC && (
+                  <g className="ld-appear">
+                    <text x={EQ.eq} y={y} textAnchor="middle" fontSize="22" fontWeight="900" fill="var(--bdb-ink)">=</text>
+                    <text x={EQ.c} y={y} textAnchor="middle" fontSize="24" fontWeight="900" fill={s.color}>{mv.eq.c}</text>
+                  </g>
+                )}
+              </g>
+            );
+          })}
 
           {/* the house */}
           <path d={`M ${OX - 4} ${barY + CH} L ${OX - 4} ${barY} L ${rightX} ${barY}`}
@@ -303,23 +328,29 @@ export default function LongDivisionHouse() {
             );
           })}
 
-          {/* subtract: the minus sign + rule under the product */}
-          {active && active.step === "subtract" && phase >= 1 && showFlourish && (() => {
-            const p0 = posOf(active.highlight[active.highlight.length - 1]);
+          {/* subtract: minus sign, then the rule, both in the house (the numbers move to the side, then the answer) */}
+          {active && active.step === "subtract" && showFlourish && (() => {
             const pcells = active.highlight.filter((h) => h.startsWith("p"));
+            if (!pcells.length) return null;
+            const p0 = posOf(pcells[pcells.length - 1]);
             const leftX = Math.min(...pcells.map((id) => posOf(id)[0])) - 20;
             const rightXX = Math.max(...pcells.map((id) => posOf(id)[0])) + 20;
             const lineY = p0[1] + 22;
             return (
               <g>
-                <text className="ld-appear" x={leftX - 8} y={p0[1] + 10} textAnchor="middle" fontSize="26" fontWeight="900" fill={C_CORAL}>−</text>
-                <line className="ld-appear" x1={leftX} y1={lineY} x2={rightXX} y2={lineY} stroke={C_INK} strokeWidth="2.5" />
+                {phase >= PH.subtract.minus && (
+                  <text className="ld-appear" x={leftX - 8} y={p0[1] + 10} textAnchor="middle" fontSize="26" fontWeight="900" fill={C_CORAL}>−</text>
+                )}
+                {phase >= PH.subtract.line && (
+                  <line className="ld-grow" style={{ transform: `scaleX(${phase >= PH.subtract.line ? 1 : 0})` }}
+                    x1={leftX} y1={lineY} x2={rightXX} y2={lineY} stroke={C_INK} strokeWidth="2.5" />
+                )}
               </g>
             );
           })()}
 
-          {/* bringdown: the red arrow */}
-          {active && active.step === "bringdown" && phase >= 1 && showFlourish && (() => {
+          {/* bringdown: the red arrow first, then the digit follows (digit via cellVisible at PH.num) */}
+          {active && active.step === "bringdown" && showFlourish && phase >= PH.bringdown.arrow && (() => {
             const src = posOf(`d${active.to[0]}`);
             const dst = posOf(active.reveal[0]);
             return (
@@ -328,23 +359,27 @@ export default function LongDivisionHouse() {
             );
           })()}
 
-          {/* DIVIDE flourish: dotted trails + flying ghosts + traveling quotient */}
-          {active && active.step === "divide" && showFlourish && (
+          {/* DIVIDE flourish: 7 ÷ 6 appears left to right (phase 1), then = and 1 (phase 2),
+              then the 1 travels up over the house into the quotient (phase 3) */}
+          {active && active.step === "divide" && showFlourish && !settled && (
             <g>
-              <path className="ld-trail" d={arc(divA, posOf("divisor"), 14)} fill="none" stroke={C_INK}
-                strokeWidth="2" strokeDasharray="1.5 7" strokeLinecap="round" opacity={phase === 1 ? 0.55 : 0} />
-              <path className="ld-trail" d={arc(posOf("divisor"), divQ, 20)} fill="none" stroke={C_TEAL}
-                strokeWidth="2.5" strokeDasharray="1.5 7" strokeLinecap="round" opacity={phase === 2 ? 0.7 : 0} />
-
-              <text className="ld-fly" x={eqAx} y={ey + 8} textAnchor="middle" fontSize="26" fontWeight="900" fill={C_TEAL}
-                opacity={phase >= 1 && !settled ? 1 : 0}
-                style={{ transform: phase >= 1 ? "translate(0px,0px)" : `translate(${divA[0] - eqAx}px, ${divA[1] - ey}px)` }}>{active.eq!.a}</text>
-              <text className="ld-fly" x={eqBx} y={ey + 8} textAnchor="middle" fontSize="26" fontWeight="900" fill={C_INK}
-                opacity={phase >= 1 && !settled ? 1 : 0}
-                style={{ transform: phase >= 1 ? "translate(0px,0px)" : `translate(${posOf("divisor")[0] - eqBx}px, ${posOf("divisor")[1] - ey}px)` }}>{active.eq!.b}</text>
+              {phase >= PH.divide.ab && (
+                <>
+                  <text className="ld-appear" style={{ animationDelay: "0s" }} x={EQ.a} y={ey + 8} textAnchor="middle" fontSize="24" fontWeight="900" fill={C_TEAL}>{active.eq!.a}</text>
+                  <text className="ld-appear" style={{ animationDelay: "0.2s" }} x={EQ.op} y={ey + 8} textAnchor="middle" fontSize="22" fontWeight="900" fill="var(--bdb-ink)">÷</text>
+                  <text className="ld-appear" style={{ animationDelay: "0.4s" }} x={EQ.b} y={ey + 8} textAnchor="middle" fontSize="24" fontWeight="900" fill="var(--bdb-ink)">{active.eq!.b}</text>
+                </>
+              )}
+              {phase >= PH.divide.c && (
+                <text className="ld-appear" x={EQ.eq} y={ey + 8} textAnchor="middle" fontSize="22" fontWeight="900" fill="var(--bdb-ink)">=</text>
+              )}
+              {/* dotted trail from the side equation up over the house */}
+              <path className="ld-trail" d={arc([EQ.c, ey], divQ, 22)} fill="none" stroke={C_TEAL}
+                strokeWidth="2.5" strokeDasharray="1.5 7" strokeLinecap="round" opacity={phase === PH.divide.travel ? 0.7 : 0} />
+              {/* the 1: appears at the side just after =, then travels up over the house */}
               <text className="ld-fly" x={divQ[0]} y={divQ[1] + 10} textAnchor="middle" fontSize="30" fontWeight="900" fill={C_TEAL}
-                opacity={phase >= 1 && !settled ? 1 : 0}
-                style={{ transform: phase >= 2 ? "translate(0px,0px)" : `translate(${eqCx - divQ[0]}px, ${ey - 2 - divQ[1]}px)` }}>{active.eq!.c}</text>
+                opacity={phase >= PH.divide.c ? 1 : 0}
+                style={{ transform: phase >= PH.divide.travel ? "translate(0px,0px)" : `translate(${EQ.c - divQ[0]}px, ${ey - 2 - divQ[1]}px)`, transitionDelay: phase === PH.divide.c ? "0.2s" : "0s" }}>{active.eq!.c}</text>
             </g>
           )}
         </svg>
