@@ -285,6 +285,27 @@ export default function LongDivisionHouse() {
             </g>
           )}
 
+          {/* each completed step's equation stays beside its step word through the
+              whole cycle, then clears when the next digit begins (new cycle) */}
+          {showFlourish && active && STEPS.map((s, i) => {
+            const mvIdx = moves.findIndex((mv) => mv.cycle === active.cycle && mv.step === s.kind);
+            if (mvIdx < 0) return null;
+            const mv = moves[mvIdx];
+            if (!mv.eq) return null;
+            const reached = mvIdx < move || (mvIdx === move && settled);
+            if (!reached) return null;
+            const y = stepMid(i);
+            return (
+              <g key={`peq${i}`} className="ld-appear">
+                <text x={236} y={y + 8} textAnchor="middle" fontSize="24" fontWeight="900" fill={s.color}>{mv.eq.a}</text>
+                <text x={274} y={y + 8} textAnchor="middle" fontSize="22" fontWeight="900" fill="var(--bdb-ink)">{s.op}</text>
+                <text x={306} y={y + 8} textAnchor="middle" fontSize="24" fontWeight="900" fill="var(--bdb-ink)">{mv.eq.b}</text>
+                <text x={340} y={y + 8} textAnchor="middle" fontSize="22" fontWeight="900" fill="var(--bdb-ink)">=</text>
+                <text x={374} y={y + 8} textAnchor="middle" fontSize="24" fontWeight="900" fill={s.color}>{mv.eq.c}</text>
+              </g>
+            );
+          })}
+
           {/* the house */}
           <path d={`M ${OX - 4} ${barY + CH} L ${OX - 4} ${barY} L ${rightX} ${barY}`}
             fill="none" stroke={C_INK} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
