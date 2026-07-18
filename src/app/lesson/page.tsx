@@ -44,6 +44,7 @@ const TOOL_ROUTES: Record<string, string> = {
   "box method": "/area-model", "distributive area method": "/distributive-area", "distributive area": "/distributive-area",
   "area explorer": "/area-explorer", "area of shapes": "/area-explorer",
   "ratio explainer": "/ratio-explainer", "ratios explainer": "/ratio-explainer",
+  "divisibility": "/divisibility", "divisibility rules": "/divisibility",
 };
 function lines(text?: string) {
   return (text || "").split(/[\n,]/).map((s) => s.trim()).filter(Boolean);

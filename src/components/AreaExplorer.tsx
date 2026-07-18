@@ -8,7 +8,7 @@
 // nothing drifts. Squared corners + unit grid on purpose. Sandbox + Composite
 // modes land next.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { reportToolResult } from "@/lib/toolEvidence";
 
 type ShapeType = "rectangle" | "square" | "parallelogram" | "triangle" | "trapezoid";
@@ -203,7 +203,7 @@ function inPoly(x: number, y: number, verts: Pt[]) {
 }
 
 export default function AreaExplorer() {
-  const [mode, setMode] = useState<"solve" | "practice" | "sandbox" | "composite">("solve");
+  const [mode, setMode] = useState<"solve" | "practice" | "sandbox" | "composite" | "volume">("solve");
   const [phase, setPhase] = useState<Phase>("bank");
   const [shape, setShape] = useState<Shape | null>(null);
   const [placed, setPlaced] = useState<Record<string, number | null>>({});
@@ -447,6 +447,7 @@ export default function AreaExplorer() {
         .ae-count-cell { animation:aeCountIn .34s var(--ae-carry) backwards; transform-box:fill-box; transform-origin:center; }
         @keyframes aeCountIn { from { opacity:0; transform:scale(.55); } 60% { opacity:1; transform:scale(1.09); } to { opacity:1; transform:scale(1); } }
         .ae-soon { font-size:0.72rem; font-weight:800; color:var(--bdb-ink-faint); }
+        .ae-vterm { animation:aeCountIn .3s var(--ae-carry) backwards; }
         .ae-compare { display:flex; flex-wrap:wrap; gap:14px; justify-content:center; align-items:stretch; margin-top:6px; }
         .ae-compcard { display:grid; justify-items:center; gap:8px; padding:14px 16px; border:2px solid var(--bdb-line); background:var(--bdb-card); }
         .ae-compname { font-size:0.78rem; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; color:var(--bdb-ink-soft); }
@@ -468,12 +469,14 @@ export default function AreaExplorer() {
           <button className={mode === "solve" ? "on" : ""} onClick={() => setMode("solve")}>Solve</button>
           <button className={mode === "practice" ? "on" : ""} onClick={() => setMode("practice")}>Practice</button>
           <button className={mode === "composite" ? "on" : ""} onClick={() => setMode("composite")}>Composite</button>
+          <button className={mode === "volume" ? "on" : ""} onClick={() => setMode("volume")}>Volume</button>
           <button className={mode === "sandbox" ? "on" : ""} onClick={() => setMode("sandbox")}>Sandbox</button>
         </div>
       </div>
 
       {mode === "sandbox" && <AreaSandbox />}
       {mode === "composite" && <AreaComposite />}
+      {mode === "volume" && <VolumeBuilder />}
 
       {mode === "solve" && phase === "bank" && (
         <>
@@ -1856,6 +1859,569 @@ function AreaComposite() {
             ? <button className="ae-btn" onClick={() => reset(level + 1)}>Next level</button>
             : <button className="ae-btn ghost" onClick={() => reset(0)}>All levels complete — start over</button>}
         </div>
+      )}
+
+      <div className="ae-note">{note && <span key={note} className="ae-note-in">{note}</span>}</div>
+    </div>
+  );
+}
+
+// ── Volume mode — M1.T2.L3 "Length, Width, and Depth" (6.G.A.2, Session 1) ──
+// Build walk on the lesson's anchor prism (5 x 3 x 4): find the floor's area
+// flat, tilt the floor down into perspective, stack layers (each layer adds the
+// whole base area again), collapse the sum into layers x B, commit to cubic
+// units. Then the lesson's problem set: 8x3x5, base-area 24 with height 7 (no
+// length or width on purpose), and the 6x4x3 exit-ticket prism.
+
+const VOL_KEY = "bdm-volume-practice-v1";
+const VOL_ANCHOR = { l: 5, d: 3, h: 4 };
+const VOL_B = VOL_ANCHOR.l * VOL_ANCHOR.d;
+const VOL_V = VOL_B * VOL_ANCHOR.h;
+
+interface VolTask { title: string; l?: number; d?: number; B?: number; h: number; unit: string; problemId: string; note: string }
+const VOL_TASKS: VolTask[] = [
+  { title: "Prism 1", l: 8, d: 3, h: 5, unit: "in", problemId: "volume-1-8x3x5",
+    note: "Copy this prism onto your evidence card: label the length, the width, and the height." },
+  { title: "Base and height", B: 24, h: 7, unit: "cm", problemId: "volume-2-b24x7",
+    note: "No length or width this time. One layer is already measured — that IS the base area." },
+  { title: "Final check", l: 6, d: 4, h: 3, unit: "m", problemId: "volume-3-6x4x3",
+    note: "Every measurement, the right formula, the right unit." },
+];
+const volTaskV = (t: VolTask) => (t.B ?? t.l! * t.d!) * t.h;
+
+interface VolSave { idx: number; results: (PracticeResult | null)[]; confirmedAt: string | null }
+function loadVol(): VolSave {
+  const empty: VolSave = { idx: 0, results: VOL_TASKS.map(() => null), confirmedAt: null };
+  try {
+    const raw = window.localStorage.getItem(VOL_KEY);
+    if (!raw) return empty;
+    const p = JSON.parse(raw) as VolSave;
+    if (typeof p.idx !== "number" || !Array.isArray(p.results)) return empty;
+    return {
+      idx: clamp(p.idx, 0, VOL_TASKS.length),
+      results: VOL_TASKS.map((_, i) => p.results[i] ?? null),
+      confirmedAt: typeof p.confirmedAt === "string" ? p.confirmedAt : null,
+    };
+  } catch { return empty; }
+}
+
+// Shallow-camera axonometric axes: x runs right, z runs back-left, y up.
+const VAX = { x: [38, 11] as Pt, z: [-30, 13] as Pt, y: [0, -34] as Pt };
+const volPt = (o: Pt, s: number, x: number, z: number, y: number): Pt => [
+  o[0] + (x * VAX.x[0] + z * VAX.z[0] + y * VAX.y[0]) * s,
+  o[1] + (x * VAX.x[1] + z * VAX.z[1] + y * VAX.y[1]) * s,
+];
+const volPoly = (ps: Pt[]) => ps.map((p) => p.join(",")).join(" ");
+
+const VOL_TOP = `color-mix(in srgb, ${C_BASE} 42%, #fff)`;
+const VOL_LEFT = `color-mix(in srgb, ${C_BASE} 88%, #10312f)`;
+const VOL_RIGHT = `color-mix(in srgb, ${C_BASE} 62%, #10312f)`;
+
+// One extruded slab (layer) of an l x d prism from height y0 to y1, with an
+// optional per-unit cube grid on the three visible faces.
+function VolSlab({ o, s, l, d, y0, y1, grid, fillTop = VOL_TOP, fillLeft = VOL_LEFT, fillRight = VOL_RIGHT, opacity, className, style }: {
+  o: Pt; s: number; l: number; d: number; y0: number; y1: number; grid: boolean;
+  fillTop?: string; fillLeft?: string; fillRight?: string; opacity?: number; className?: string; style?: CSSProperties;
+}) {
+  const P = (x: number, z: number, y: number) => volPt(o, s, x, z, y);
+  const stroke = "rgba(255,255,255,0.75)";
+  const lines: ReactPathLine[] = [];
+  if (grid) {
+    for (let i = 1; i < l; i++) {
+      lines.push([P(i, 0, y1), P(i, d, y1)]);           // top face, across depth
+      lines.push([P(i, d, y1), P(i, d, y0)]);           // front-left face, vertical
+    }
+    for (let j = 1; j < d; j++) {
+      lines.push([P(0, j, y1), P(l, j, y1)]);           // top face, along length
+      lines.push([P(l, j, y1), P(l, j, y0)]);           // front-right face, vertical
+    }
+    for (let k = Math.ceil(y0) + 1; k < y1; k++) {
+      lines.push([P(0, d, k), P(l, d, k)]);             // front-left face, layer line
+      lines.push([P(l, 0, k), P(l, d, k)]);             // front-right face, layer line
+    }
+  }
+  return (
+    <g className={className} style={style} opacity={opacity}>
+      <polygon points={volPoly([P(0, d, y1), P(l, d, y1), P(l, d, y0), P(0, d, y0)])} fill={fillLeft} />
+      <polygon points={volPoly([P(l, 0, y1), P(l, d, y1), P(l, d, y0), P(l, 0, y0)])} fill={fillRight} />
+      <polygon points={volPoly([P(0, 0, y1), P(l, 0, y1), P(l, d, y1), P(0, d, y1)])} fill={fillTop} />
+      {lines.map(([a, b], i) => (
+        <line key={i} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} stroke={stroke} strokeWidth={1.4} />
+      ))}
+      <polygon points={volPoly([P(0, 0, y1), P(l, 0, y1), P(l, d, y1), P(0, d, y1)])} fill="none" stroke="var(--bdb-ink)" strokeWidth={2} />
+      <polygon points={volPoly([P(0, d, y1), P(l, d, y1), P(l, d, y0), P(0, d, y0)])} fill="none" stroke="var(--bdb-ink)" strokeWidth={2} />
+      <polygon points={volPoly([P(l, 0, y1), P(l, d, y1), P(l, d, y0), P(l, 0, y0)])} fill="none" stroke="var(--bdb-ink)" strokeWidth={2} />
+    </g>
+  );
+}
+type ReactPathLine = [Pt, Pt];
+
+function VolumeBuilder() {
+  type VPhase = "base" | "tilt" | "stack" | "units" | "bridge" | "solve" | "tdone" | "complete";
+  const [vPhase, setVPhase] = useState<VPhase>("base");
+  const [note, setNote] = useState<string | null>(null);
+  const [entry, setEntry] = useState("");
+
+  // build-walk state
+  const [walkSlot, setWalkSlot] = useState(0);           // 0 = length, 1 = width, 2 = base area
+  const [showBaseCount, setShowBaseCount] = useState(false);
+  const [tilted, setTilted] = useState(false);
+  const [layers, setLayers] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // solve state
+  const [tIdx, setTIdx] = useState(0);
+  const [tResults, setTResults] = useState<(PracticeResult | null)[]>(() => VOL_TASKS.map(() => null));
+  const [tConfirmedAt, setTConfirmedAt] = useState<string | null>(null);
+  const [tHydrated, setTHydrated] = useState(false);
+  const [tSlot, setTSlot] = useState(0);
+  const [tWrongs, setTWrongs] = useState(0);
+
+  useEffect(() => {
+    const s = loadVol();
+    setTIdx(s.idx); setTResults(s.results); setTConfirmedAt(s.confirmedAt);
+    if (s.idx > 0 || s.results.some(Boolean) || s.confirmedAt) {
+      setVPhase(s.idx >= VOL_TASKS.length ? "complete" : "solve");
+    }
+    setTHydrated(true);
+  }, []);
+  useEffect(() => {
+    if (!tHydrated) return;
+    try { window.localStorage.setItem(VOL_KEY, JSON.stringify({ idx: tIdx, results: tResults, confirmedAt: tConfirmedAt })); } catch { /* private mode */ }
+  }, [tHydrated, tIdx, tResults, tConfirmedAt]);
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+
+  // When the box is full, pause on the finished plus-chain, then collapse it.
+  useEffect(() => {
+    if (vPhase !== "stack" || layers !== VOL_ANCHOR.h) return;
+    timerRef.current = setTimeout(() => setVPhase("units"), 1200);
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [vPhase, layers]);
+
+  // ── build-walk geometry ────────────────────────────────────────────────────
+  const U = 44;                                          // flat px per unit
+  const FLAT: Pt = [170, 64];                            // flat rect top-left
+  const O: Pt = [230, 228];                              // iso origin (x=0, z=0 corner)
+  const a = VAX.x[0] / U, b = VAX.x[1] / U, c = VAX.z[0] / U, d = VAX.z[1] / U;
+  const e = O[0] - a * FLAT[0] - c * FLAT[1];
+  const f = O[1] - b * FLAT[0] - d * FLAT[1];
+  const tiltMatrix = `matrix(${a},${b},${c},${d},${e},${f})`;
+
+  const WALK_SLOTS = [
+    { val: VOL_ANCHOR.l, ghost: "length", wrong: "Count the squares along the BOTTOM edge — that is the length." },
+    { val: VOL_ANCHOR.d, ghost: "width", wrong: "Count the squares along the SIDE edge — that is the width." },
+    { val: VOL_B, ghost: "area", wrong: "Count every square — the whole floor." },
+  ];
+
+  function submitWalkSlot() {
+    const v = Number(entry.trim());
+    if (!entry.trim() || !Number.isFinite(v)) return;
+    const slot = WALK_SLOTS[walkSlot];
+    if (v !== slot.val) {
+      setNote(slot.wrong);
+      if (walkSlot === 2) setShowBaseCount(true);
+      setEntry("");
+      return;
+    }
+    setNote(null); setEntry(""); setShowBaseCount(false);
+    if (walkSlot === 2) { setVPhase("tilt"); return; }
+    setWalkSlot(walkSlot + 1);
+  }
+
+  function layDown() {
+    setTilted(true);
+    timerRef.current = setTimeout(() => setVPhase("stack"), 1050);
+  }
+
+  function pickWalkUnit(kind: "plain" | "sq" | "cu") {
+    if (kind === "cu") { setNote(null); setVPhase("bridge"); return; }
+    setNote(kind === "sq"
+      ? "Square units cover a FLAT face. We filled space — that takes cubic units."
+      : "Plain units measure a length. We filled space — that takes cubic units.");
+  }
+
+  function resetWalk() {
+    setVPhase("base"); setWalkSlot(0); setEntry(""); setNote(null);
+    setShowBaseCount(false); setTilted(false); setLayers(0);
+  }
+
+  // ── solve helpers ──────────────────────────────────────────────────────────
+  const task = VOL_TASKS[Math.min(tIdx, VOL_TASKS.length - 1)];
+  const taskV = volTaskV(task);
+  const taskSlots: { val: number; ghost: string }[] = task.B
+    ? [{ val: task.B, ghost: "B" }, { val: task.h, ghost: "h" }, { val: taskV, ghost: "volume" }]
+    : [{ val: task.l!, ghost: "l" }, { val: task.d!, ghost: "w" }, { val: task.h, ghost: "h" }, { val: taskV, ghost: "volume" }];
+
+  function wrongVolumeNote(v: number): string {
+    if (task.B) {
+      if (v === task.B + task.h) return `Multiply, not add: one layer is ${task.B}, and there are ${task.h} layers.`;
+      return `B is already one whole layer. ${task.B} in each of ${task.h} layers: ${task.B} times ${task.h}.`;
+    }
+    const { l, d: w, h } = { l: task.l!, d: task.d!, h: task.h };
+    if (v === l * w) return `${l} times ${w} = ${l * w} is ONE layer — the base. The prism is ${h} layers tall.`;
+    if (v === l * h || v === w * h) return "That multiplies only two edges — one flat face. Use all three.";
+    if (v === l + w + h) return "Adding the edges gives a length. Volume multiplies them.";
+    return `Base area first (${l} times ${w}), then multiply by the ${h} layers.`;
+  }
+
+  function submitTaskSlot() {
+    const v = Number(entry.trim());
+    if (!entry.trim() || !Number.isFinite(v)) return;
+    const slot = taskSlots[tSlot];
+    if (v !== slot.val) {
+      setTWrongs(tWrongs + 1);
+      if (tSlot === taskSlots.length - 1) setNote(wrongVolumeNote(v));
+      else if (task.B) setNote(tSlot === 0 ? "B is labeled on the shaded layer — it is already an area." : "The height is labeled on the vertical edge.");
+      else setNote(["The length is labeled along the front edge.", "The width is labeled along the side edge.", "The height is labeled on the vertical edge."][tSlot]);
+      setEntry("");
+      return;
+    }
+    setNote(null); setEntry("");
+    setTSlot(tSlot + 1);
+  }
+
+  function pickTaskUnit(kind: "plain" | "sq" | "cu") {
+    if (kind !== "cu") {
+      setTWrongs(tWrongs + 1);
+      setNote(kind === "sq"
+        ? `Square ${task.unit} cover a flat face. The prism is FILLED with cubes — cubic ${task.unit}.`
+        : `Plain ${task.unit} measure one edge. The prism is FILLED with cubes — cubic ${task.unit}.`);
+      return;
+    }
+    setNote(null);
+    const results = tResults.map((r, i) => (i === tIdx ? { firstTry: tWrongs === 0, wrongs: tWrongs } : r));
+    setTResults(results);
+    reportToolResult({ tool: "area-explorer", correct: tWrongs === 0, standardId: "6.G.A.2", misconception: null, problemId: task.problemId });
+    setVPhase("tdone");
+  }
+
+  function nextTask() {
+    const n = tIdx + 1;
+    setTIdx(n); setTSlot(0); setTWrongs(0); setEntry(""); setNote(null);
+    setVPhase(n >= VOL_TASKS.length ? "complete" : "solve");
+  }
+
+  function restartProblems() {
+    setTIdx(0); setTResults(VOL_TASKS.map(() => null)); setTConfirmedAt(null);
+    setTSlot(0); setTWrongs(0); setEntry(""); setNote(null);
+    setVPhase("solve");
+  }
+
+  // ── task prism drawing ─────────────────────────────────────────────────────
+  function TaskPrism({ t }: { t: VolTask }) {
+    const L = t.B ? 4 : t.l!;
+    const D = t.B ? 3 : t.d!;
+    const H = t.h;
+    const s = Math.min(1.1, 470 / (L * VAX.x[0] + D * -VAX.z[0]), 250 / (L * VAX.x[1] + D * VAX.z[1] + H * -VAX.y[1]));
+    const spanX = (L * VAX.x[0] + D * -VAX.z[0]) * s;
+    const o: Pt = [(560 - spanX) / 2 + D * -VAX.z[0] * s, 30 + H * -VAX.y[1] * s];
+    const P = (x: number, z: number, y: number) => volPt(o, s, x, z, y);
+    const xMid = P(L / 2, D, 0), zMid = P(L, D / 2, 0), hMid = P(L, 0, H / 2);
+    const bMid = P(L / 2, D, 0.5);
+    const height = Math.ceil(o[1] + (L * VAX.x[1] + D * VAX.z[1]) * s + 46);
+    return (
+      <svg className="ae-svg" viewBox={`0 0 560 ${height}`} role="img"
+        aria-label={t.B ? `prism with base area ${t.B} square ${t.unit} and height ${t.h} ${t.unit}` : `prism ${t.l} by ${t.d} by ${t.h} ${t.unit}`}>
+        <VolSlab o={o} s={s} l={L} d={D} y0={0} y1={H} grid={!t.B} />
+        {t.B && (
+          <>
+            <VolSlab o={o} s={s} l={L} d={D} y0={0} y1={1} grid={false}
+              fillTop={`color-mix(in srgb, ${C_HEIGHT} 55%, #fff)`}
+              fillLeft={`color-mix(in srgb, ${C_HEIGHT} 88%, #4d3208)`}
+              fillRight={`color-mix(in srgb, ${C_HEIGHT} 68%, #4d3208)`} />
+            <text x={bMid[0]} y={bMid[1] + 5} textAnchor="middle" fontWeight={900} fontSize={16} fill="#3d2a06">B = {t.B} {t.unit}²</text>
+          </>
+        )}
+        {!t.B && (
+          <>
+            <text x={xMid[0]} y={xMid[1] + 26} textAnchor="middle" fontWeight={800} fontSize={15} fill="var(--bdb-ink)">{t.l} {t.unit}</text>
+            <text x={zMid[0] + 30} y={zMid[1] + 18} textAnchor="middle" fontWeight={800} fontSize={15} fill="var(--bdb-ink)">{t.d} {t.unit}</text>
+          </>
+        )}
+        <text x={hMid[0] + 34} y={hMid[1] + 5} textAnchor="middle" fontWeight={800} fontSize={15} fill="var(--bdb-ink)">{t.h} {t.unit}</text>
+      </svg>
+    );
+  }
+
+  const chainTotal = VOL_B * layers;
+  const P0 = (x: number, z: number, y: number) => volPt(O, 1, x, z, y);
+
+  return (
+    <div>
+      {/* ── build walk ── */}
+      {(vPhase === "base" || vPhase === "tilt" || vPhase === "stack" || vPhase === "units" || vPhase === "bridge") && (
+        <>
+          <div className="ae-prompt">
+            {vPhase === "base" && "First: how big is the floor?"}
+            {vPhase === "tilt" && `The floor is done — B = ${VOL_B} square units.`}
+            {vPhase === "stack" && (layers < VOL_ANCHOR.h ? "Stack the layers." : "The box is full.")}
+            {vPhase === "units" && `${VOL_V} what?`}
+            {vPhase === "bridge" && "Volume is layers of area."}
+          </div>
+          <div className="ae-sub">
+            {vPhase === "base" && "This rectangle is about to become the bottom of a box."}
+            {vPhase === "tilt" && "Lay it down so we can build on top of it."}
+            {vPhase === "stack" && "Fill the dashed box. Every layer adds the whole floor again."}
+            {vPhase === "units" && "Pick the unit that matches what we just counted."}
+            {vPhase === "bridge" && "B is the area of ONE layer. The height counts the layers."}
+          </div>
+
+          <svg className="ae-svg" viewBox="0 0 560 344" role="img" aria-label="build a rectangular prism from its base">
+            {/* dashed goal box */}
+            {(vPhase === "stack" || vPhase === "units" || vPhase === "bridge") && (
+              <g stroke="color-mix(in srgb, var(--bdb-ink) 38%, transparent)" strokeWidth={2}
+                strokeDasharray={vPhase === "stack" && layers < VOL_ANCHOR.h ? "7 6" : "none"} fill="none">
+                <polygon points={volPoly([P0(0, 0, VOL_ANCHOR.h), P0(VOL_ANCHOR.l, 0, VOL_ANCHOR.h), P0(VOL_ANCHOR.l, VOL_ANCHOR.d, VOL_ANCHOR.h), P0(0, VOL_ANCHOR.d, VOL_ANCHOR.h)])} />
+                <line x1={P0(VOL_ANCHOR.l, 0, 0)[0]} y1={P0(VOL_ANCHOR.l, 0, 0)[1]} x2={P0(VOL_ANCHOR.l, 0, VOL_ANCHOR.h)[0]} y2={P0(VOL_ANCHOR.l, 0, VOL_ANCHOR.h)[1]} />
+                <line x1={P0(0, VOL_ANCHOR.d, 0)[0]} y1={P0(0, VOL_ANCHOR.d, 0)[1]} x2={P0(0, VOL_ANCHOR.d, VOL_ANCHOR.h)[0]} y2={P0(0, VOL_ANCHOR.d, VOL_ANCHOR.h)[1]} />
+                <line x1={P0(VOL_ANCHOR.l, VOL_ANCHOR.d, 0)[0]} y1={P0(VOL_ANCHOR.l, VOL_ANCHOR.d, 0)[1]} x2={P0(VOL_ANCHOR.l, VOL_ANCHOR.d, VOL_ANCHOR.h)[0]} y2={P0(VOL_ANCHOR.l, VOL_ANCHOR.d, VOL_ANCHOR.h)[1]} />
+              </g>
+            )}
+
+            {/* the floor: flat rectangle that tilts down into the iso base */}
+            <g style={{ transform: tilted ? tiltMatrix : "none", transition: "transform 1s var(--ae-carry)" }}>
+              <rect x={FLAT[0]} y={FLAT[1]} width={VOL_ANCHOR.l * U} height={VOL_ANCHOR.d * U}
+                fill="var(--bdb-card)" stroke="var(--bdb-ink)" strokeWidth={2.5} />
+              {Array.from({ length: VOL_ANCHOR.l - 1 }, (_, i) => (
+                <line key={`gx${i}`} x1={FLAT[0] + (i + 1) * U} y1={FLAT[1]} x2={FLAT[0] + (i + 1) * U} y2={FLAT[1] + VOL_ANCHOR.d * U}
+                  stroke="var(--bdb-line)" strokeWidth={1.5} />
+              ))}
+              {Array.from({ length: VOL_ANCHOR.d - 1 }, (_, j) => (
+                <line key={`gy${j}`} x1={FLAT[0]} y1={FLAT[1] + (j + 1) * U} x2={FLAT[0] + VOL_ANCHOR.l * U} y2={FLAT[1] + (j + 1) * U}
+                  stroke="var(--bdb-line)" strokeWidth={1.5} />
+              ))}
+            </g>
+
+            {/* flat-phase edge labels and counting (outside the tilting group so text never skews) */}
+            {!tilted && (
+              <g>
+                <text x={FLAT[0] + (VOL_ANCHOR.l * U) / 2} y={FLAT[1] + VOL_ANCHOR.d * U + 28} textAnchor="middle" fontWeight={800} fontSize={16} fill="var(--bdb-ink)">
+                  {VOL_ANCHOR.l} units
+                </text>
+                <text x={FLAT[0] - 16} y={FLAT[1] + (VOL_ANCHOR.d * U) / 2 + 5} textAnchor="end" fontWeight={800} fontSize={16} fill="var(--bdb-ink)">
+                  {VOL_ANCHOR.d} units
+                </text>
+                {showBaseCount && Array.from({ length: VOL_B }, (_, n) => {
+                  const cx = FLAT[0] + (n % VOL_ANCHOR.l) * U + U / 2;
+                  const cy = FLAT[1] + Math.floor(n / VOL_ANCHOR.l) * U + U / 2;
+                  return (
+                    <text key={n} x={cx} y={cy + 6} textAnchor="middle" fontWeight={900} fontSize={17} fill="var(--bdb-teal)"
+                      className="ae-count-cell" style={{ animationDelay: `${n * 0.05}s` }}>{n + 1}</text>
+                  );
+                })}
+              </g>
+            )}
+
+            {/* stacked layers */}
+            {(vPhase === "stack" || vPhase === "units" || vPhase === "bridge") &&
+              Array.from({ length: layers }, (_, i) => (
+                <VolSlab key={i} o={O} s={1} l={VOL_ANCHOR.l} d={VOL_ANCHOR.d} y0={i} y1={i + 1} grid className="ae-count-cell" />
+              ))}
+
+            {/* cube numbers on the first layer while it is alone */}
+            {vPhase === "stack" && layers === 1 &&
+              Array.from({ length: VOL_B }, (_, n) => {
+                const p = P0((n % VOL_ANCHOR.l) + 0.5, Math.floor(n / VOL_ANCHOR.l) + 0.5, 1);
+                return (
+                  <text key={n} x={p[0]} y={p[1] + 5} textAnchor="middle" fontWeight={900} fontSize={13} fill="var(--bdb-ink)"
+                    className="ae-count-cell" style={{ animationDelay: `${0.25 + n * 0.045}s` }}>{n + 1}</text>
+                );
+              })}
+
+            {/* iso-phase labels */}
+            {(vPhase === "stack" || vPhase === "units" || vPhase === "bridge") && (
+              <g fontWeight={800} fontSize={15} fill="var(--bdb-ink)">
+                <text x={P0(VOL_ANCHOR.l / 2, VOL_ANCHOR.d, 0)[0]} y={P0(VOL_ANCHOR.l / 2, VOL_ANCHOR.d, 0)[1] + 30} textAnchor="middle">
+                  B = {VOL_B} square units
+                </text>
+                <text x={P0(VOL_ANCHOR.l, 0, VOL_ANCHOR.h / 2)[0] + 40} y={P0(VOL_ANCHOR.l, 0, VOL_ANCHOR.h / 2)[1] + 5} textAnchor="middle">
+                  h = {VOL_ANCHOR.h}
+                </text>
+              </g>
+            )}
+          </svg>
+
+          {vPhase === "base" && (
+            <div className="ae-formula">
+              <span>The floor:</span>
+              {WALK_SLOTS.map((s2, i) => (
+                <span key={s2.ghost} style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                  {i === 1 && <span>{"×"}</span>}
+                  {i === 2 && <span>=</span>}
+                  {i < walkSlot && <span className="ae-slot ok" style={{ background: C_BASE, borderColor: C_BASE }}>{s2.val}</span>}
+                  {i === walkSlot && (
+                    <input className="ae-slotin" value={entry} inputMode="numeric" placeholder={s2.ghost} autoFocus
+                      aria-label={s2.ghost}
+                      onChange={(ev) => { setEntry(ev.target.value.replace(/\D/g, "")); }}
+                      onKeyDown={(ev) => ev.key === "Enter" && submitWalkSlot()} />
+                  )}
+                  {i > walkSlot && <span className="ae-slot dim"><span className="ghost">{s2.ghost}</span></span>}
+                </span>
+              ))}
+              <span>square units</span>
+              <button className="ae-btn" disabled={!entry.trim()} onClick={submitWalkSlot}>Enter</button>
+            </div>
+          )}
+
+          {vPhase === "tilt" && (
+            <div className="ae-bar">
+              <button className="ae-btn" onClick={layDown} disabled={tilted}>Lay it down</button>
+            </div>
+          )}
+
+          {vPhase === "stack" && (
+            <>
+              <div className="ae-formula" aria-live="polite">
+                {layers === 0 && <span style={{ color: "var(--bdb-ink-faint)" }}>Add the first layer</span>}
+                {Array.from({ length: layers }, (_, i) => (
+                  <span key={i} className="ae-vterm">{i > 0 ? `+ ${VOL_B}` : `${VOL_B}`}</span>
+                ))}
+                {layers > 0 && <span>= {chainTotal}</span>}
+              </div>
+              <div className="ae-bar">
+                <button className="ae-btn" onClick={() => setLayers(layers + 1)} disabled={layers >= VOL_ANCHOR.h}>Add a layer</button>
+                <button className="ae-btn ghost" onClick={() => setLayers(Math.max(0, layers - 1))} disabled={layers === 0 || layers >= VOL_ANCHOR.h}>Take one off</button>
+              </div>
+            </>
+          )}
+
+          {vPhase === "units" && (
+            <>
+              <div className="ae-formula">
+                <span key="collapsed" className="ae-vterm">{VOL_ANCHOR.h} layers {"×"} {VOL_B} = {VOL_V}</span>
+              </div>
+              <div className="ae-unitchips">
+                <button className="ae-uchip" onClick={() => pickWalkUnit("plain")}>{VOL_V} units</button>
+                <button className="ae-uchip" onClick={() => pickWalkUnit("sq")}>{VOL_V} units{"²"}</button>
+                <button className="ae-uchip" onClick={() => pickWalkUnit("cu")}>{VOL_V} units{"³"}</button>
+              </div>
+            </>
+          )}
+
+          {vPhase === "bridge" && (
+            <div className="ae-done">
+              <div className="eq">V = B {"×"} h = {VOL_B} {"×"} {VOL_ANCHOR.h} = {VOL_V} units{"³"}</div>
+              <div className="eq" style={{ fontSize: "clamp(1.1rem,3.4vw,1.7rem)", color: "var(--bdb-ink-soft)" }}>
+                V = l {"×"} w {"×"} h = {VOL_ANCHOR.l} {"×"} {VOL_ANCHOR.d} {"×"} {VOL_ANCHOR.h} = {VOL_V} units{"³"}
+              </div>
+              <p className="ae-why">
+                Both formulas count every cube exactly once. l {"×"} w is the floor — that is B.
+                Multiplying by h stacks the floor h times.
+              </p>
+              <div className="ae-bar">
+                <button className="ae-btn" onClick={() => setVPhase("solve")}>Start the problems</button>
+                <button className="ae-btn ghost" onClick={resetWalk}>Rebuild it</button>
+              </div>
+            </div>
+          )}
+
+          {vPhase !== "bridge" && (
+            <div className="ae-bar">
+              <button className="ae-link" onClick={() => setVPhase("solve")}>Skip to the problems</button>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── solve tasks ── */}
+      {(vPhase === "solve" || vPhase === "tdone") && tIdx < VOL_TASKS.length && (
+        <>
+          <div className="ae-ptask">Task {tIdx + 1} of {VOL_TASKS.length} {"—"} {task.title}</div>
+          <div className="ae-prompt">
+            {vPhase === "tdone" ? `Task ${tIdx + 1} complete` : task.B ? "Use V = B × h." : "Use V = l × w × h."}
+          </div>
+          <div className="ae-sub">{vPhase === "tdone" ? "Nice. Lock it in on your card." : task.note}</div>
+
+          <TaskPrism t={task} />
+
+          {vPhase === "solve" && (
+            <>
+              <div className="ae-formula">
+                <span>V =</span>
+                {taskSlots.map((s2, i) => (
+                  <span key={s2.ghost} style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                    {i > 0 && i < taskSlots.length - 1 && <span>{"×"}</span>}
+                    {i === taskSlots.length - 1 && <span>=</span>}
+                    {i < tSlot && <span className="ae-slot ok" style={{ background: C_BASE, borderColor: C_BASE }}>{s2.val}</span>}
+                    {i === tSlot && (
+                      <input className="ae-slotin" value={entry} inputMode="numeric" placeholder={s2.ghost} autoFocus
+                        aria-label={s2.ghost}
+                        onChange={(ev) => { setEntry(ev.target.value.replace(/\D/g, "")); }}
+                        onKeyDown={(ev) => ev.key === "Enter" && submitTaskSlot()} />
+                    )}
+                    {i > tSlot && <span className="ae-slot dim"><span className="ghost">{s2.ghost}</span></span>}
+                  </span>
+                ))}
+                {tSlot < taskSlots.length && (
+                  <button className="ae-btn" disabled={!entry.trim()} onClick={submitTaskSlot}>Enter</button>
+                )}
+              </div>
+              {tSlot >= taskSlots.length && (
+                <>
+                  <div className="ae-sub" style={{ marginTop: 8 }}>{taskV} what?</div>
+                  <div className="ae-unitchips">
+                    <button className="ae-uchip" onClick={() => pickTaskUnit("plain")}>{taskV} {task.unit}</button>
+                    <button className="ae-uchip" onClick={() => pickTaskUnit("sq")}>{taskV} {task.unit}{"²"}</button>
+                    <button className="ae-uchip" onClick={() => pickTaskUnit("cu")}>{taskV} {task.unit}{"³"}</button>
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
+          {vPhase === "tdone" && (
+            <div className="ae-done">
+              <div className="eq">
+                {task.B
+                  ? `V = ${task.B} × ${task.h} = ${taskV} ${task.unit}³`
+                  : `V = ${task.l} × ${task.d} × ${task.h} = ${taskV} ${task.unit}³`}
+              </div>
+              <div className="ae-bar">
+                <button className="ae-btn" onClick={nextTask}>
+                  {tIdx + 1 < VOL_TASKS.length ? "Next problem" : "Finish"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {vPhase === "solve" && (
+            <div className="ae-bar">
+              <button className="ae-link" onClick={resetWalk}>Rebuild the box first</button>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── completion ── */}
+      {vPhase === "complete" && (
+        <>
+          <div className="ae-prompt">Volume practice complete</div>
+          <div className="ae-sub">M1.T2.L3 {"—"} Length, Width, and Depth</div>
+          <div className="ae-plist">
+            {VOL_TASKS.map((t, i) => (
+              <div key={t.problemId} className="ae-prow">
+                <span className="ae-prow-name">{t.title}</span>
+                <span className={`ae-prow-res ${tResults[i]?.firstTry ? "good" : ""}`}>
+                  {tResults[i] ? (tResults[i]!.firstTry ? "First try" : `Retried ${tResults[i]!.wrongs}x`) : "—"}
+                </span>
+              </div>
+            ))}
+          </div>
+          {tConfirmedAt ? (
+            <div className="ae-pconfirm on">
+              Practice confirmed {new Date(tConfirmedAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}.
+              Show this screen to Mr. Wilson.
+            </div>
+          ) : (
+            <div className="ae-bar">
+              <button className="ae-btn" onClick={() => setTConfirmedAt(new Date().toISOString())}>Confirm my practice is complete</button>
+            </div>
+          )}
+          <div className="ae-bar">
+            <button className="ae-link" onClick={restartProblems}>Start the problems over</button>
+            <button className="ae-link" onClick={resetWalk}>Rebuild the box</button>
+          </div>
+        </>
       )}
 
       <div className="ae-note">{note && <span key={note} className="ae-note-in">{note}</span>}</div>
