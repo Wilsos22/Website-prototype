@@ -59,13 +59,17 @@ interface Shape {
 }
 
 // ── Shape generation ────────────────────────────────────────────────────────
-function makeShape(type: ShapeType): Shape {
-  const unit = UNITS[rand(0, UNITS.length - 1)];
+// Optional fixed dims make a shape deterministic — used by the Practice mode's
+// curated task set so every student works the same assigned builds.
+interface FixedDims { b?: number; h?: number; k?: number; a?: number; b1?: number; b2?: number; o?: number; unit?: string; problemId?: string }
+
+function makeShape(type: ShapeType, fixed?: FixedDims): Shape {
+  const unit = fixed?.unit ?? UNITS[rand(0, UNITS.length - 1)];
   const slot = (id: string, value: number, color: string, ghost: string, mark: MarkKind): Slot => ({ id, value, color, ghost, mark });
 
   if (type === "rectangle" || type === "square") {
-    const b = type === "square" ? rand(3, 8) : rand(3, 10);
-    const h = type === "square" ? b : rand(3, 8);
+    const b = fixed?.b ?? (type === "square" ? rand(3, 8) : rand(3, 10));
+    const h = type === "square" ? b : fixed?.h ?? rand(3, 8);
     const diag = round1(Math.hypot(b, h));
     const slots: Slot[] = type === "square"
       ? [slot("s1", b, C_BASE, "s", "base"), slot("s2", b, C_HEIGHT, "s", "height")]
@@ -78,12 +82,12 @@ function makeShape(type: ShapeType): Shape {
       base: { a: [0, h], b: [b, h], value: b, label: type === "square" ? "s" : "b" },
       height: { a: [0, 0], b: [0, h], foot: [0, h], value: h, label: type === "square" ? "s" : "h" },
       decoy: { a: [0, 0], b: [b, h], value: diag, name: "diagonal" },
-      formula, slots, chips, area: b * h, problemId: `${type}-${b}x${h}-${unit}`,
+      formula, slots, chips, area: b * h, problemId: fixed?.problemId ?? `${type}-${b}x${h}-${unit}`,
     };
   }
 
   if (type === "parallelogram") {
-    const b = rand(4, 9), h = rand(3, 7), k = rand(1, 4);
+    const b = fixed?.b ?? rand(4, 9), h = fixed?.h ?? rand(3, 7), k = fixed?.k ?? rand(1, 4);
     const slant = round1(Math.hypot(k, h));
     const slots = [slot("b", b, C_BASE, "b", "base"), slot("h", h, C_HEIGHT, "h", "height")];
     const formula: Token[] = [{ t: "text", v: "A =" }, { t: "slot", slot: slots[0] }, { t: "text", v: "×" }, { t: "slot", slot: slots[1] }];
@@ -94,14 +98,14 @@ function makeShape(type: ShapeType): Shape {
       base: { a: [0, h], b: [b, h], value: b, label: "b" },
       height: { a: [k, 0], b: [k, h], foot: [k, h], value: h, label: "h" },
       decoy: { a: [0, h], b: [k, 0], value: slant, name: "slant" },
-      formula, slots, chips, area: b * h, problemId: `parallelogram-${b}x${h}s${k}-${unit}`,
+      formula, slots, chips, area: b * h, problemId: fixed?.problemId ?? `parallelogram-${b}x${h}s${k}-${unit}`,
     };
   }
 
   if (type === "triangle") {
-    let b = rand(4, 10), h = rand(3, 8);
-    while ((b * h) % 2 !== 0) { b = rand(4, 10); h = rand(3, 8); }
-    const a = rand(2, b - 1); // apex x — kept off the edges so the height sits clearly inside
+    let b = fixed?.b ?? rand(4, 10), h = fixed?.h ?? rand(3, 8);
+    while ((b * h) % 2 !== 0 && fixed?.b == null) { b = rand(4, 10); h = rand(3, 8); }
+    const a = fixed?.a ?? rand(2, b - 1); // apex x — kept off the edges so the height sits clearly inside
     const slant = round1(Math.hypot(b - a, h)); // right slant edge
     const slots = [slot("b", b, C_BASE, "b", "base"), slot("h", h, C_HEIGHT, "h", "height")];
     const formula: Token[] = [{ t: "text", v: "A = ½ ×" }, { t: "slot", slot: slots[0] }, { t: "text", v: "×" }, { t: "slot", slot: slots[1] }];
@@ -112,14 +116,14 @@ function makeShape(type: ShapeType): Shape {
       base: { a: [0, h], b: [b, h], value: b, label: "b" },
       height: { a: [a, 0], b: [a, h], foot: [a, h], value: h, label: "h" },
       decoy: { a: [b, h], b: [a, 0], value: slant, name: "slant" },
-      formula, slots, chips, area: (b * h) / 2, problemId: `triangle-${b}x${h}a${a}-${unit}`,
+      formula, slots, chips, area: (b * h) / 2, problemId: fixed?.problemId ?? `triangle-${b}x${h}a${a}-${unit}`,
     };
   }
 
   // trapezoid
-  let b1 = rand(5, 10), b2 = rand(2, b1 - 2), h = rand(3, 7);
-  while (((b1 + b2) * h) % 2 !== 0) { b1 = rand(5, 10); b2 = rand(2, b1 - 2); h = rand(3, 7); }
-  const o = rand(1, Math.max(1, b1 - b2));
+  let b1 = fixed?.b1 ?? rand(5, 10), b2 = fixed?.b2 ?? rand(2, b1 - 2), h = fixed?.h ?? rand(3, 7);
+  while (((b1 + b2) * h) % 2 !== 0 && fixed?.b1 == null) { b1 = rand(5, 10); b2 = rand(2, b1 - 2); h = rand(3, 7); }
+  const o = fixed?.o ?? rand(1, Math.max(1, b1 - b2));
   const slant = round1(Math.hypot(o, h)); // left leg
   const slots = [
     slot("b1", b1, C_BASE, "b₁", "base"),
@@ -137,8 +141,50 @@ function makeShape(type: ShapeType): Shape {
     height: { a: [o, 0], b: [o, h], foot: [o, h], value: h, label: "h" },
     decoy: { a: [0, h], b: [o, 0], value: slant, name: "slant" },
     base2: { a: [o, 0], b: [o + b2, 0], value: b2, label: "b₂" },
-    formula, slots, chips, area: ((b1 + b2) * h) / 2, problemId: `trapezoid-${b1}-${b2}x${h}o${o}-${unit}`,
+    formula, slots, chips, area: ((b1 + b2) * h) / 2, problemId: fixed?.problemId ?? `trapezoid-${b1}-${b2}x${h}o${o}-${unit}`,
   };
+}
+
+// ── Practice mode: the assigned task set (M1.T2-P1) ─────────────────────────
+// A curated, deterministic sequence every student completes in order: four
+// assigned builds (one per shape — copied onto the paper evidence card), one
+// slanted-side error analysis, and a final check. Progress and completion are
+// saved on the device so students can show the confirmed state before closing
+// the Chromebook.
+interface PracticeTask { title: string; type: ShapeType; fixed: FixedDims; note: string }
+
+const PRACTICE_TASKS: PracticeTask[] = [
+  { title: "Build 1 — Rectangle", type: "rectangle", fixed: { b: 7, h: 4, unit: "cm", problemId: "practice-1-rectangle-7x4" },
+    note: "Copy this figure onto your evidence card: mark the base, the height, and the square units." },
+  { title: "Build 2 — Parallelogram", type: "parallelogram", fixed: { b: 8, h: 5, k: 2, unit: "m", problemId: "practice-2-parallelogram-8x5" },
+    note: "Copy this figure onto your evidence card. Careful — one of those numbers is the slant." },
+  { title: "Build 3 — Triangle", type: "triangle", fixed: { b: 10, h: 4, a: 3, unit: "in", problemId: "practice-3-triangle-10x4" },
+    note: "Copy this figure onto your evidence card: mark the base and the PERPENDICULAR height." },
+  { title: "Build 4 — Trapezoid", type: "trapezoid", fixed: { b1: 9, b2: 5, h: 4, o: 2, unit: "ft", problemId: "practice-4-trapezoid-9-5x4" },
+    note: "Copy this figure onto your evidence card: label both bases and the height." },
+  { title: "Error analysis", type: "parallelogram", fixed: { b: 6, h: 4, k: 3, unit: "cm", problemId: "practice-5-error-slant" },
+    note: "A student used the slant side as the height. Put the CORRECT measurements in the formula, then write the fix on your card." },
+  { title: "Final check — Triangle", type: "triangle", fixed: { b: 8, h: 6, a: 5, unit: "m", problemId: "practice-6-triangle-8x6" },
+    note: "Last one. Every measurement, the right formula, the right unit." },
+];
+
+const PRACTICE_KEY = "bdm-area-practice-v1";
+interface PracticeResult { firstTry: boolean; wrongs: number }
+interface PracticeSave { idx: number; results: (PracticeResult | null)[]; confirmedAt: string | null }
+
+function loadPractice(): PracticeSave {
+  const empty: PracticeSave = { idx: 0, results: PRACTICE_TASKS.map(() => null), confirmedAt: null };
+  try {
+    const raw = window.localStorage.getItem(PRACTICE_KEY);
+    if (!raw) return empty;
+    const p = JSON.parse(raw) as PracticeSave;
+    if (typeof p.idx !== "number" || !Array.isArray(p.results)) return empty;
+    return {
+      idx: Math.max(0, Math.min(PRACTICE_TASKS.length, p.idx)),
+      results: PRACTICE_TASKS.map((_, i) => p.results[i] ?? null),
+      confirmedAt: typeof p.confirmedAt === "string" ? p.confirmedAt : null,
+    };
+  } catch { return empty; }
 }
 
 // point-in-polygon (ray cast) for the count-squares self-check
@@ -152,7 +198,7 @@ function inPoly(x: number, y: number, verts: Pt[]) {
 }
 
 export default function AreaExplorer() {
-  const [mode, setMode] = useState<"solve" | "sandbox" | "composite">("solve");
+  const [mode, setMode] = useState<"solve" | "practice" | "sandbox" | "composite">("solve");
   const [phase, setPhase] = useState<Phase>("bank");
   const [shape, setShape] = useState<Shape | null>(null);
   const [placed, setPlaced] = useState<Record<string, number | null>>({});
@@ -167,7 +213,28 @@ export default function AreaExplorer() {
   const [finePointer, setFinePointer] = useState(false);
   const solvedRef = useRef(false);
 
+  // Practice mode: current task, per-task results, and the confirmed state —
+  // persisted on the device so completion survives a reload and can be shown
+  // to the teacher before the Chromebook closes.
+  const [pIdx, setPIdx] = useState(0);
+  const [pResults, setPResults] = useState<(PracticeResult | null)[]>(() => PRACTICE_TASKS.map(() => null));
+  const [pConfirmedAt, setPConfirmedAt] = useState<string | null>(null);
+  const pLoaded = useRef(false);
+
   useEffect(() => { setFinePointer(window.matchMedia?.("(pointer: fine)").matches ?? false); }, []);
+
+  useEffect(() => {
+    const saved = loadPractice();
+    setPIdx(saved.idx); setPResults(saved.results); setPConfirmedAt(saved.confirmedAt);
+    pLoaded.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!pLoaded.current) return;
+    try {
+      window.localStorage.setItem(PRACTICE_KEY, JSON.stringify({ idx: pIdx, results: pResults, confirmedAt: pConfirmedAt } satisfies PracticeSave));
+    } catch { /* storage unavailable — practice still works, it just won't survive a reload */ }
+  }, [pIdx, pResults, pConfirmedAt]);
 
   const flagWrong = useCallback((tag: string) => {
     setWrongSteps((w) => w + 1);
@@ -186,6 +253,27 @@ export default function AreaExplorer() {
   const pickShape = useCallback((type: ShapeType) => startShape(makeShape(type)), [startShape]);
   const resetProblem = useCallback(() => { if (shape) startShape({ ...shape }); }, [shape, startShape]);
   const randomSame = useCallback(() => { if (shape) startShape(makeShape(shape.type)); }, [shape, startShape]);
+
+  // Entering practice (or advancing to the next task) starts that task's shape.
+  useEffect(() => {
+    if (!pLoaded.current || mode !== "practice") return;
+    if (pIdx < PRACTICE_TASKS.length) {
+      const t = PRACTICE_TASKS[pIdx];
+      startShape(makeShape(t.type, t.fixed));
+    }
+  }, [mode, pIdx, startShape]);
+
+  const practiceAdvance = useCallback(() => {
+    setPIdx((i) => Math.min(PRACTICE_TASKS.length, i + 1));
+  }, []);
+  const practiceRestart = useCallback(() => {
+    if (!window.confirm("Start the whole practice set over? Your saved progress will be cleared.")) return;
+    setPResults(PRACTICE_TASKS.map(() => null));
+    setPConfirmedAt(null);
+    setPIdx(0);
+    // start task 1 directly — the pIdx effect won't re-fire if we were already on it
+    startShape(makeShape(PRACTICE_TASKS[0].type, PRACTICE_TASKS[0].fixed));
+  }, [startShape]);
 
   const back = useCallback(() => {
     setNote(null);
@@ -253,6 +341,12 @@ export default function AreaExplorer() {
       if (!solvedRef.current) {
         solvedRef.current = true;
         reportToolResult({ tool: "area-explorer", correct: wrongSteps === 0, standardId: "6.G.A.1", misconception: firstTag, problemId: shape.problemId });
+        // Practice: record the task result the moment it's solved, so progress
+        // is saved even if the Chromebook closes on the done screen. The retry
+        // count is the "clicks until correct" look-for made visible.
+        if (mode === "practice" && pIdx < PRACTICE_TASKS.length) {
+          setPResults((rs) => rs.map((r, i) => (i === pIdx ? { firstTry: wrongSteps === 0, wrongs: wrongSteps } : r)));
+        }
       }
       setPhase("done");
       return;
@@ -321,12 +415,22 @@ export default function AreaExplorer() {
         .ae-count-cell { animation:aeCountIn .34s var(--ae-carry) backwards; transform-box:fill-box; transform-origin:center; }
         @keyframes aeCountIn { from { opacity:0; transform:scale(.55); } 60% { opacity:1; transform:scale(1.09); } to { opacity:1; transform:scale(1); } }
         .ae-soon { font-size:0.72rem; font-weight:800; color:var(--bdb-ink-faint); }
+        .ae-ptask { text-align:center; margin:0 auto 6px; width:max-content; max-width:100%; font-size:0.8rem; font-weight:800; letter-spacing:0.05em; text-transform:uppercase; color:var(--bdb-teal); border:2px solid color-mix(in srgb, var(--bdb-teal) 45%, transparent); border-radius:999px; padding:4px 14px; background:color-mix(in srgb, var(--bdb-teal) 10%, var(--bdb-card)); }
+        .ae-plist { width:min(440px,100%); margin:6px auto 0; border:2px solid var(--bdb-line); background:var(--bdb-card); }
+        .ae-prow { display:flex; justify-content:space-between; gap:10px; padding:9px 14px; border-bottom:1px solid var(--bdb-line); font-size:0.92rem; }
+        .ae-prow:last-child { border-bottom:none; }
+        .ae-prow-name { font-weight:700; }
+        .ae-prow-res { font-weight:800; color:var(--bdb-ink-soft); }
+        .ae-prow-res.good { color:var(--bdb-green); }
+        .ae-pconfirm { max-width:460px; margin:12px auto 0; text-align:center; font-weight:700; font-size:0.95rem; color:var(--bdb-ink-soft); }
+        .ae-pconfirm.on { color:var(--bdb-green); font-weight:800; font-size:1.05rem; border:2px solid color-mix(in srgb, var(--bdb-green) 45%, transparent); background:color-mix(in srgb, var(--bdb-green) 10%, var(--bdb-card)); padding:12px 16px; }
         @media (prefers-reduced-motion: reduce) { .ae-mark-pulse, .ae-chip.picked { animation:none; } .ae-slide { animation:none; transform:translateX(var(--dx)); } .ae-flip { animation:none; } .ae-count-cell { animation:none; } }
       `}</style>
 
       <div className="ae-modebar">
         <div className="ae-modeseg">
           <button className={mode === "solve" ? "on" : ""} onClick={() => setMode("solve")}>Solve</button>
+          <button className={mode === "practice" ? "on" : ""} onClick={() => setMode("practice")}>Practice</button>
           <button className={mode === "composite" ? "on" : ""} onClick={() => setMode("composite")}>Composite</button>
           <button className={mode === "sandbox" ? "on" : ""} onClick={() => setMode("sandbox")}>Sandbox</button>
         </div>
@@ -350,25 +454,28 @@ export default function AreaExplorer() {
         </>
       )}
 
-      {mode === "solve" && phase !== "bank" && shape && (
+      {(mode === "solve" || (mode === "practice" && pIdx < PRACTICE_TASKS.length)) && phase !== "bank" && shape && (
         <>
+          {mode === "practice" && (
+            <div className="ae-ptask">Task {pIdx + 1} of {PRACTICE_TASKS.length} — {PRACTICE_TASKS[pIdx].title}</div>
+          )}
           <div className="ae-prompt">
             {phase === "substitute" && "Put each measurement into the formula."}
             {phase === "compute" && "Now solve it."}
             {phase === "unit" && "What unit is the area measured in?"}
-            {phase === "done" && `${SHAPE_NAMES[shape.type]} solved`}
+            {phase === "done" && (mode === "practice" ? `Task ${pIdx + 1} complete` : `${SHAPE_NAMES[shape.type]} solved`)}
           </div>
           <div className="ae-sub">
-            {phase === "substitute" && (picked != null ? "Now tap the blank where it goes." : focusSlot ? "Now tap the measurement that belongs there." : "Tap a number, then tap where it goes.")}
+            {phase === "substitute" && (mode === "practice" ? PRACTICE_TASKS[pIdx].note : picked != null ? "Now tap the blank where it goes." : focusSlot ? "Now tap the measurement that belongs there." : "Tap a number, then tap where it goes.")}
             {phase === "compute" && "Work out the area, then enter it."}
             {phase === "unit" && "Length, area, or volume? Pick the unit."}
-            {phase === "done" && "Same area, however you measured it."}
+            {phase === "done" && (mode === "practice" ? (wrongSteps === 0 ? "First try. Copy anything you still need onto your evidence card." : "Solved — copy anything you still need onto your evidence card.") : "Same area, however you measured it.")}
           </div>
 
           <div className="ae-tools">
-            <button className="ae-tbtn" onClick={back}>Back</button>
+            {mode === "solve" && <button className="ae-tbtn" onClick={back}>Back</button>}
             <button className="ae-tbtn" onClick={resetProblem}>Reset</button>
-            <button className="ae-tbtn" onClick={randomSame}>Random</button>
+            {mode === "solve" && <button className="ae-tbtn" onClick={randomSame}>Random</button>}
           </div>
 
           <div className="ae-stage">
@@ -436,8 +543,16 @@ export default function AreaExplorer() {
               <div className="ae-done">
                 <div className="eq">A = {shape.area} {shape.unit}&sup2;</div>
                 <div className="ae-bar">
-                  <button className="ae-btn ghost" onClick={() => { setShape(null); setPhase("bank"); }}>New shape</button>
-                  <button className="ae-btn" onClick={randomSame}>Same shape again</button>
+                  {mode === "practice" ? (
+                    <button className="ae-btn" onClick={practiceAdvance}>
+                      {pIdx === PRACTICE_TASKS.length - 1 ? "Finish practice" : "Next task"}
+                    </button>
+                  ) : (
+                    <>
+                      <button className="ae-btn ghost" onClick={() => { setShape(null); setPhase("bank"); }}>New shape</button>
+                      <button className="ae-btn" onClick={randomSame}>Same shape again</button>
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -445,6 +560,44 @@ export default function AreaExplorer() {
 
           <div className="ae-note">{note && <span key={note} className="ae-note-in">{note}</span>}</div>
         </>
+      )}
+
+      {mode === "practice" && pIdx >= PRACTICE_TASKS.length && (
+        <div className="ae-stage">
+          <div className="ae-prompt">Practice complete</div>
+          <div className="ae-sub">All {PRACTICE_TASKS.length} assigned tasks are done and saved on this device.</div>
+
+          <div className="ae-plist" role="list">
+            {PRACTICE_TASKS.map((t, i) => {
+              const r = pResults[i];
+              return (
+                <div key={i} className="ae-prow" role="listitem">
+                  <span className="ae-prow-name">{t.title}</span>
+                  <span className={`ae-prow-res ${r && r.firstTry ? "good" : ""}`}>
+                    {r ? (r.firstTry ? "first try" : `${r.wrongs} ${r.wrongs === 1 ? "retry" : "retries"}`) : "done"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          {pConfirmedAt ? (
+            <div className="ae-pconfirm on" role="status">
+              Submitted and confirmed — {pConfirmedAt}. Show this screen to your teacher before you close the Chromebook.
+            </div>
+          ) : (
+            <>
+              <div className="ae-pconfirm" role="status">Saved. One last step: confirm your work below.</div>
+              <div className="ae-bar">
+                <button className="ae-btn" onClick={() => setPConfirmedAt(new Date().toLocaleString())}>Confirm my practice is complete</button>
+              </div>
+            </>
+          )}
+
+          <div className="ae-bar">
+            <button className="ae-link" onClick={practiceRestart}>Start the practice set over</button>
+          </div>
+        </div>
       )}
     </div>
   );
