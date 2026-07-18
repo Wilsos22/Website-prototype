@@ -68,8 +68,13 @@ function makeShape(type: ShapeType, fixed?: FixedDims): Shape {
   const slot = (id: string, value: number, color: string, ghost: string, mark: MarkKind): Slot => ({ id, value, color, ghost, mark });
 
   if (type === "rectangle" || type === "square") {
-    const b = fixed?.b ?? (type === "square" ? rand(3, 8) : rand(3, 10));
-    const h = type === "square" ? b : fixed?.h ?? rand(3, 8);
+    let b = fixed?.b ?? (type === "square" ? rand(3, 8) : rand(3, 10));
+    let h = type === "square" ? b : fixed?.h ?? rand(3, 8);
+    // A random rectangle must READ as a rectangle — keep the sides at least
+    // 3 apart so it never looks like the square tile next door.
+    if (type === "rectangle" && fixed?.b == null) {
+      while (Math.abs(b - h) < 3) { b = rand(3, 10); h = rand(3, 8); }
+    }
     const diag = round1(Math.hypot(b, h));
     const slots: Slot[] = type === "square"
       ? [slot("s1", b, C_BASE, "s", "base"), slot("s2", b, C_HEIGHT, "s", "height")]
@@ -202,8 +207,7 @@ export default function AreaExplorer() {
   const [phase, setPhase] = useState<Phase>("bank");
   const [shape, setShape] = useState<Shape | null>(null);
   const [placed, setPlaced] = useState<Record<string, number | null>>({});
-  const [picked, setPicked] = useState<number | null>(null);
-  const [focusSlot, setFocusSlot] = useState<string | null>(null);
+  const [slotEntry, setSlotEntry] = useState(""); // what the student is typing into the active blank
   const [answer, setAnswer] = useState("");
   const [note, setNote] = useState<string | null>(null);
   const [wrongSteps, setWrongSteps] = useState(0);
@@ -219,22 +223,25 @@ export default function AreaExplorer() {
   const [pIdx, setPIdx] = useState(0);
   const [pResults, setPResults] = useState<(PracticeResult | null)[]>(() => PRACTICE_TASKS.map(() => null));
   const [pConfirmedAt, setPConfirmedAt] = useState<string | null>(null);
-  const pLoaded = useRef(false);
+  // Hydration gate as STATE, not a ref: the save effect must not run until the
+  // loaded values have actually rendered, or a remount can overwrite the saved
+  // progress with the initial empty state.
+  const [pHydrated, setPHydrated] = useState(false);
 
   useEffect(() => { setFinePointer(window.matchMedia?.("(pointer: fine)").matches ?? false); }, []);
 
   useEffect(() => {
     const saved = loadPractice();
     setPIdx(saved.idx); setPResults(saved.results); setPConfirmedAt(saved.confirmedAt);
-    pLoaded.current = true;
+    setPHydrated(true);
   }, []);
 
   useEffect(() => {
-    if (!pLoaded.current) return;
+    if (!pHydrated) return;
     try {
       window.localStorage.setItem(PRACTICE_KEY, JSON.stringify({ idx: pIdx, results: pResults, confirmedAt: pConfirmedAt } satisfies PracticeSave));
     } catch { /* storage unavailable — practice still works, it just won't survive a reload */ }
-  }, [pIdx, pResults, pConfirmedAt]);
+  }, [pHydrated, pIdx, pResults, pConfirmedAt]);
 
   const flagWrong = useCallback((tag: string) => {
     setWrongSteps((w) => w + 1);
@@ -244,7 +251,7 @@ export default function AreaExplorer() {
   const startShape = useCallback((s: Shape) => {
     setShape(s);
     setPlaced(Object.fromEntries(s.slots.map((sl) => [sl.id, null])));
-    setPicked(null); setFocusSlot(null); setAnswer(""); setNote(null);
+    setSlotEntry(""); setAnswer(""); setNote(null);
     setWrongSteps(0); setFirstTag(null); setShowCount(false); setWhySquared(false);
     solvedRef.current = false;
     setPhase("substitute");
@@ -256,12 +263,12 @@ export default function AreaExplorer() {
 
   // Entering practice (or advancing to the next task) starts that task's shape.
   useEffect(() => {
-    if (!pLoaded.current || mode !== "practice") return;
+    if (!pHydrated || mode !== "practice") return;
     if (pIdx < PRACTICE_TASKS.length) {
       const t = PRACTICE_TASKS[pIdx];
       startShape(makeShape(t.type, t.fixed));
     }
-  }, [mode, pIdx, startShape]);
+  }, [pHydrated, mode, pIdx, startShape]);
 
   const practiceAdvance = useCallback(() => {
     setPIdx((i) => Math.min(PRACTICE_TASKS.length, i + 1));
@@ -288,41 +295,41 @@ export default function AreaExplorer() {
     [shape, placed],
   );
 
-  function placeInSlot(slotId: string, value: number) {
-    if (!shape) return;
-    const sl = shape.slots.find((s) => s.id === slotId);
-    if (!sl) return;
+  // Students type each measurement themselves, in formula order — the base
+  // before the height (and b1 before b2 before h on a trapezoid). The next
+  // blank only opens once the current one is right.
+  const activeSlot = useMemo(
+    () => (shape ? shape.slots.find((sl) => placed[sl.id] !== sl.value) ?? null : null),
+    [shape, placed],
+  );
+
+  function submitSlotEntry() {
+    if (!shape || !activeSlot) return;
+    const raw = slotEntry.trim();
+    if (!raw) return;
+    const value = Number(raw);
+    if (!Number.isFinite(value)) { setSlotEntry(""); return; }
     if (value === shape.decoy.value) {
       setNote(shape.decoy.name === "diagonal"
         ? "That's the diagonal, not a side you multiply. Use the base and the height."
         : "That's the slant side, not the height. The height has the right-angle mark — use the dashed length.");
       flagWrong("slant-for-height");
-      setPicked(null);
+      setSlotEntry("");
       return;
     }
-    if (value !== sl.value) {
-      setNote(sl.mark === "height"
-        ? "Check which side that is. The height goes straight up from the base."
+    if (value !== activeSlot.value) {
+      setNote(activeSlot.mark === "height"
+        ? "Check the figure again — the height goes straight up from the base."
         : shape.type === "square"
         ? "A square's sides are equal — both blanks are the same number."
-        : "Not that measurement — look at what each side is labeled.");
+        : "Check the figure again — find the labeled measurement for this blank.");
       flagWrong("swapped-dims");
-      setPicked(null);
+      setSlotEntry("");
       return;
     }
     setNote(null);
-    setPlaced((p) => ({ ...p, [slotId]: value }));
-    setPicked(null);
-    setFocusSlot(null);
-  }
-
-  function onChipTap(value: number) {
-    if (focusSlot) { placeInSlot(focusSlot, value); return; }
-    setPicked((cur) => (cur === value ? null : value));
-  }
-  function onSlotTap(slotId: string) {
-    if (picked != null) { placeInSlot(slotId, picked); return; }
-    setFocusSlot((cur) => (cur === slotId ? null : slotId));
+    setPlaced((p) => ({ ...p, [activeSlot.id]: value }));
+    setSlotEntry("");
   }
 
   function submitCompute() {
@@ -355,11 +362,8 @@ export default function AreaExplorer() {
     else { setNote("That's for 3D solids. This shape is flat, so it's 2D."); flagWrong("cubed-unit"); }
   }
 
-  const activeMark: MarkKind | null = useMemo(() => {
-    const id = focusSlot ?? (picked != null ? null : null);
-    if (!id || !shape) return null;
-    return shape.slots.find((s) => s.id === id)?.mark ?? null;
-  }, [focusSlot, picked, shape]);
+  // Pulse the figure label for whichever measurement the student is typing now.
+  const activeMark: MarkKind | null = phase === "substitute" ? activeSlot?.mark ?? null : null;
 
   return (
     <div className="ae-wrap">
@@ -378,13 +382,12 @@ export default function AreaExplorer() {
         .ae-mark-pulse { animation:aePulse 1s ease-in-out infinite; transform-box:fill-box; transform-origin:center; }
         @keyframes aePulse { 0%,100% { opacity:1; } 50% { opacity:0.35; } }
         .ae-formula { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:8px; font-weight:900; font-size:clamp(1.3rem,4vw,1.9rem); margin:12px 0 4px; }
-        .ae-slot { display:inline-grid; place-items:center; min-width:56px; min-height:52px; padding:0 8px; border:3px solid var(--bdb-line); border-radius:0; background:#fff; color:var(--bdb-ink); cursor:pointer; }
+        .ae-slot { display:inline-grid; place-items:center; min-width:56px; min-height:52px; padding:0 8px; border:3px solid var(--bdb-line); border-radius:0; background:#fff; color:var(--bdb-ink); }
         .ae-slot .ghost { color:var(--bdb-ink-faint); font-weight:800; }
-        .ae-slot.on { outline:3px solid var(--bdb-ink); outline-offset:2px; }
         .ae-slot.ok { color:#fff; }
-        .ae-chips { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin:10px 0 2px; }
-        .ae-chip { min-width:58px; min-height:56px; padding:0 14px; border:2px solid var(--bdb-ink); border-radius:0; background:var(--bdb-card); color:var(--bdb-ink); font:inherit; font-weight:900; font-size:1.2rem; cursor:pointer; }
-        .ae-chip.picked { background:var(--bdb-ink); color:#fff; transform:scale(1.06); }
+        .ae-slot.dim { opacity:0.5; background:var(--bdb-ground-2); }
+        .ae-slotin { width:92px; min-height:52px; font:inherit; font-size:1.25rem; font-weight:900; text-align:center; padding:0 8px; border:3px solid var(--bdb-ink); border-radius:0; background:#fff; color:var(--bdb-ink); }
+        .ae-slotin::placeholder { color:var(--bdb-ink-faint); font-weight:800; }
         .ae-answer { width:120px; font:inherit; font-size:1.3rem; font-weight:900; text-align:center; padding:6px; border:3px solid var(--bdb-ink); border-radius:0; background:#fff; color:var(--bdb-ink); }
         .ae-unitchips { display:flex; gap:10px; justify-content:center; margin:8px 0; flex-wrap:wrap; }
         .ae-uchip { min-width:74px; min-height:56px; padding:0 16px; border:2px solid var(--bdb-ink); border-radius:0; background:var(--bdb-card); color:var(--bdb-ink); font:inherit; font-weight:900; font-size:1.25rem; cursor:pointer; }
@@ -424,7 +427,7 @@ export default function AreaExplorer() {
         .ae-prow-res.good { color:var(--bdb-green); }
         .ae-pconfirm { max-width:460px; margin:12px auto 0; text-align:center; font-weight:700; font-size:0.95rem; color:var(--bdb-ink-soft); }
         .ae-pconfirm.on { color:var(--bdb-green); font-weight:800; font-size:1.05rem; border:2px solid color-mix(in srgb, var(--bdb-green) 45%, transparent); background:color-mix(in srgb, var(--bdb-green) 10%, var(--bdb-card)); padding:12px 16px; }
-        @media (prefers-reduced-motion: reduce) { .ae-mark-pulse, .ae-chip.picked { animation:none; } .ae-slide { animation:none; transform:translateX(var(--dx)); } .ae-flip { animation:none; } .ae-count-cell { animation:none; } }
+        @media (prefers-reduced-motion: reduce) { .ae-mark-pulse { animation:none; } .ae-slide { animation:none; transform:translateX(var(--dx)); } .ae-flip { animation:none; } .ae-count-cell { animation:none; } }
       `}</style>
 
       <div className="ae-modebar">
@@ -466,7 +469,7 @@ export default function AreaExplorer() {
             {phase === "done" && (mode === "practice" ? `Task ${pIdx + 1} complete` : `${SHAPE_NAMES[shape.type]} solved`)}
           </div>
           <div className="ae-sub">
-            {phase === "substitute" && (mode === "practice" ? PRACTICE_TASKS[pIdx].note : picked != null ? "Now tap the blank where it goes." : focusSlot ? "Now tap the measurement that belongs there." : "Tap a number, then tap where it goes.")}
+            {phase === "substitute" && (mode === "practice" ? PRACTICE_TASKS[pIdx].note : "Read the figure and type each measurement — base first.")}
             {phase === "compute" && "Work out the area, then enter it."}
             {phase === "unit" && "Length, area, or volume? Pick the unit."}
             {phase === "done" && (mode === "practice" ? (wrongSteps === 0 ? "First try. Copy anything you still need onto your evidence card." : "Solved — copy anything you still need onto your evidence card.") : "Same area, however you measured it.")}
@@ -484,23 +487,38 @@ export default function AreaExplorer() {
             {phase === "substitute" && (
               <>
                 <div className="ae-formula">
-                  {shape.formula.map((tok, i) =>
-                    tok.t === "text" ? <span key={i}>{tok.v}</span> : (
-                      <button key={i} className={`ae-slot ${focusSlot === tok.slot.id ? "on" : ""} ${placed[tok.slot.id] === tok.slot.value ? "ok" : ""}`}
-                        style={placed[tok.slot.id] === tok.slot.value ? { background: tok.slot.color, borderColor: tok.slot.color } : { borderColor: tok.slot.color }}
-                        onClick={() => onSlotTap(tok.slot.id)}>
-                        {placed[tok.slot.id] === tok.slot.value ? placed[tok.slot.id] : <span className="ghost">{tok.slot.ghost}</span>}
-                      </button>
-                    ))}
-                </div>
-                <div className="ae-chips">
-                  {shape.chips.map((v) => (
-                    <button key={v} className={`ae-chip ${picked === v ? "picked" : ""}`} onClick={() => onChipTap(v)}>{v}</button>
-                  ))}
+                  {shape.formula.map((tok, i) => {
+                    if (tok.t === "text") return <span key={i}>{tok.v}</span>;
+                    const filled = placed[tok.slot.id] === tok.slot.value;
+                    const isActive = activeSlot?.id === tok.slot.id;
+                    if (filled) {
+                      return (
+                        <span key={i} className="ae-slot ok" style={{ background: tok.slot.color, borderColor: tok.slot.color, color: "#fff" }}>
+                          {tok.slot.value}
+                        </span>
+                      );
+                    }
+                    if (isActive) {
+                      return (
+                        <input key={i} className="ae-slotin" style={{ borderColor: tok.slot.color }}
+                          value={slotEntry} inputMode="decimal" autoFocus={finePointer}
+                          placeholder={tok.slot.ghost} aria-label={`value for ${tok.slot.ghost}`}
+                          onChange={(e) => { setSlotEntry(e.target.value.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1")); setNote(null); }}
+                          onKeyDown={(e) => e.key === "Enter" && submitSlotEntry()} />
+                      );
+                    }
+                    return (
+                      <span key={i} className="ae-slot dim" style={{ borderColor: tok.slot.color }}>
+                        <span className="ghost">{tok.slot.ghost}</span>
+                      </span>
+                    );
+                  })}
                 </div>
                 <div className="ae-bar">
                   <button className="ae-link" onClick={() => setShowCount((c) => !c)}>{showCount ? "Hide the squares" : "Count the squares"}</button>
-                  <button className="ae-btn" disabled={!allFilled} onClick={() => { setNote(null); setPhase("compute"); }}>Compute</button>
+                  {allFilled
+                    ? <button className="ae-btn" onClick={() => { setNote(null); setPhase("compute"); }}>Compute</button>
+                    : <button className="ae-btn" disabled={!slotEntry.trim()} onClick={submitSlotEntry}>Enter</button>}
                 </div>
               </>
             )}
