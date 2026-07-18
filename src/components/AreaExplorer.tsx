@@ -402,6 +402,7 @@ export default function AreaExplorer() {
         .ae-tools { display:flex; gap:8px; justify-content:center; margin-bottom:12px; }
         .ae-tbtn { font:inherit; font-weight:700; font-size:0.82rem; padding:6px 13px; border-radius:999px; border:1px solid var(--bdb-line); background:var(--bdb-card); color:var(--bdb-ink-soft); cursor:pointer; }
         .ae-tbtn:active, .ae-tbtn:focus-visible { color:var(--bdb-ink); }
+        .ae-tbtn-on { background:var(--bdb-ink); color:#fff; border-color:var(--bdb-ink); }
         .ae-bank { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; max-width:720px; margin:14px auto 0; }
         .ae-shapecard { display:grid; place-items:center; gap:8px; min-height:120px; padding:14px; border:2px solid var(--bdb-line); border-radius:0; background:var(--bdb-card); color:var(--bdb-ink); font-weight:800; font-size:1rem; cursor:pointer; }
         .ae-shapecard:active, .ae-shapecard:focus-visible { border-color:var(--bdb-ink); }
@@ -1178,106 +1179,332 @@ function SandboxTriangleLock({ onBack }: { onBack: () => void }) {
   );
 }
 
-// ── Composite mode: decompose an irregular figure into rectangles ────────────
-// Guided level (step 1 of the gradual release): the figure arrives already cut
-// into colored rectangles on the unit grid. The student finds each rectangle's
-// area and adds them — area is additive. "Count the squares" self-checks the
-// total against the structured unit grid. (Drag-your-own-cut and blank-figure
-// levels land next.)
-interface CompRect { x: number; y: number; w: number; h: number }
-interface CompFig { name: string; verts: Pt[]; rects: CompRect[]; cuts: [Pt, Pt][] }
+// ── Composite mode: divide it yourself, deduce every side ───────────────────
+// Gradual release per level, same process each time: (1) the figure arrives
+// whole, with only a few sides labeled — the student DRAWS the cut(s); a cut
+// that doesn't split it into simple shapes gets "try again" plus a hint.
+// (2) A valid division colors the pieces, then every unlabeled side is deduced
+// one step at a time: count it on the grid, match the opposite side (the given
+// side flashes), or watch two offset parallel walls slide onto the straight
+// wall they add up to. (3) With every side marked, find each piece's area and
+// the total. Three levels: two rectangles, three-piece figure with multiple
+// valid divisions, then a figure with a triangle in it.
+interface CompEdge { id: string; a: Pt; b: Pt; value: number; given: boolean; off: [number, number]; interior?: boolean }
+interface CompCut { a: Pt; b: Pt }
+interface CompPiece { kind: "rect" | "tri"; x: number; y: number; w: number; h: number }
+type CompStep =
+  | { type: "count"; edge: string; prompt: string; strip: Pt[] }
+  | { type: "opposite"; from: string; edge: string; prompt: string }
+  | { type: "partial"; whole: string; parts: string[]; edge: string; prompt: string };
+interface CompLevel {
+  label: string;
+  name: string;
+  verts: Pt[];
+  edges: CompEdge[];
+  cutSets: CompCut[][];
+  piecesBySet: CompPiece[][];
+  steps: CompStep[];
+  hint: string;
+}
 
-const COMP_FIGS: CompFig[] = [
+const COMP_LEVELS: CompLevel[] = [
   {
-    name: "L",
-    verts: [[0, 0], [5, 0], [5, 2], [2, 2], [2, 4], [0, 4]],
-    rects: [{ x: 0, y: 0, w: 5, h: 2 }, { x: 0, y: 2, w: 2, h: 2 }],
-    cuts: [[[0, 2], [2, 2]]],
+    label: "Level 1",
+    name: "L-shape",
+    verts: [[0, 0], [3, 0], [3, 2], [7, 2], [7, 5], [0, 5]],
+    edges: [
+      { id: "A", a: [0, 0], b: [3, 0], value: 3, given: true, off: [0, -18] },
+      { id: "B", a: [3, 0], b: [3, 2], value: 2, given: false, off: [24, 0] },
+      { id: "C", a: [3, 2], b: [7, 2], value: 4, given: false, off: [0, -18] },
+      { id: "D", a: [7, 2], b: [7, 5], value: 3, given: false, off: [26, 0] },
+      { id: "E", a: [0, 5], b: [7, 5], value: 7, given: true, off: [0, 24] },
+      { id: "F", a: [0, 0], b: [0, 5], value: 5, given: true, off: [-26, 0] },
+    ],
+    cutSets: [
+      [{ a: [3, 2], b: [3, 5] }],
+      [{ a: [0, 2], b: [3, 2] }],
+    ],
+    piecesBySet: [
+      [{ kind: "rect", x: 0, y: 0, w: 3, h: 5 }, { kind: "rect", x: 3, y: 2, w: 4, h: 3 }],
+      [{ kind: "rect", x: 0, y: 0, w: 3, h: 2 }, { kind: "rect", x: 0, y: 2, w: 7, h: 3 }],
+    ],
+    steps: [
+      { type: "count", edge: "B", prompt: "This wall has no label. Count the highlighted squares along it, then type its length.", strip: [[2, 0], [2, 1]] },
+      { type: "partial", whole: "F", parts: ["B", "D"], edge: "D", prompt: "The two right-side walls together line up with the left wall. Watch them slide over — then type the missing length." },
+      { type: "partial", whole: "E", parts: ["A", "C"], edge: "C", prompt: "The two top edges together match the bottom. Watch them slide down — then type the missing length." },
+    ],
+    hint: "Cut straight across from the inside corner — one straight line from edge to edge.",
   },
   {
-    name: "T",
-    verts: [[0, 0], [6, 0], [6, 2], [4, 2], [4, 5], [2, 5], [2, 2], [0, 2]],
-    rects: [{ x: 0, y: 0, w: 6, h: 2 }, { x: 2, y: 2, w: 2, h: 3 }],
-    cuts: [[[2, 2], [4, 2]]],
+    label: "Level 2",
+    name: "T-shape",
+    verts: [[2, 0], [5, 0], [5, 3], [7, 3], [7, 6], [0, 6], [0, 3], [2, 3]],
+    edges: [
+      { id: "A", a: [2, 0], b: [5, 0], value: 3, given: true, off: [0, -18] },
+      { id: "B", a: [5, 0], b: [5, 3], value: 3, given: false, off: [26, 0] },
+      { id: "C", a: [5, 3], b: [7, 3], value: 2, given: false, off: [0, -18] },
+      { id: "D", a: [7, 3], b: [7, 6], value: 3, given: true, off: [26, 0] },
+      { id: "E", a: [0, 6], b: [7, 6], value: 7, given: true, off: [0, 24] },
+      { id: "F", a: [0, 3], b: [0, 6], value: 3, given: false, off: [-26, 0] },
+      { id: "G", a: [0, 3], b: [2, 3], value: 2, given: false, off: [0, -18] },
+      { id: "H", a: [2, 0], b: [2, 3], value: 3, given: false, off: [-26, 0] },
+    ],
+    cutSets: [
+      [{ a: [2, 3], b: [5, 3] }],
+      [{ a: [2, 3], b: [2, 6] }, { a: [5, 3], b: [5, 6] }],
+    ],
+    piecesBySet: [
+      [{ kind: "rect", x: 2, y: 0, w: 3, h: 3 }, { kind: "rect", x: 0, y: 3, w: 7, h: 3 }],
+      [{ kind: "rect", x: 0, y: 3, w: 2, h: 3 }, { kind: "rect", x: 2, y: 0, w: 3, h: 6 }, { kind: "rect", x: 5, y: 3, w: 2, h: 3 }],
+    ],
+    steps: [
+      { type: "opposite", from: "D", edge: "F", prompt: "The right wall of the bar is 3. The bar's left wall must be the same — type its length." },
+      { type: "count", edge: "H", prompt: "Count the highlighted squares along the stem's wall, then type its height.", strip: [[2, 0], [2, 1], [2, 2]] },
+      { type: "opposite", from: "H", edge: "B", prompt: "The stem's left wall is 3 — its right wall must match. Type it." },
+      { type: "count", edge: "G", prompt: "Count the highlighted squares along this shelf, then type its length.", strip: [[0, 3], [1, 3]] },
+      { type: "partial", whole: "E", parts: ["G", "A", "C"], edge: "C", prompt: "The three top edges of the bar line up with the bottom. Watch them slide down — then type the missing length." },
+    ],
+    hint: "Split the bar from the stem with one straight cut, or cut straight down on both sides of the stem.",
   },
   {
-    name: "staircase",
-    verts: [[0, 0], [6, 0], [6, 2], [4, 2], [4, 4], [2, 4], [2, 6], [0, 6]],
-    rects: [{ x: 0, y: 0, w: 2, h: 6 }, { x: 2, y: 0, w: 2, h: 4 }, { x: 4, y: 0, w: 2, h: 2 }],
-    cuts: [[[2, 0], [2, 4]], [[4, 0], [4, 2]]],
+    label: "Level 3",
+    name: "house",
+    verts: [[0, 2], [3, 0], [6, 2], [6, 5], [0, 5]],
+    edges: [
+      { id: "D", a: [6, 2], b: [6, 5], value: 3, given: true, off: [26, 0] },
+      { id: "E", a: [0, 5], b: [6, 5], value: 6, given: true, off: [0, 24] },
+      { id: "F", a: [0, 2], b: [0, 5], value: 3, given: false, off: [-26, 0] },
+      { id: "ROOF", a: [0, 2], b: [6, 2], value: 6, given: false, off: [0, 22], interior: true },
+      { id: "RH", a: [3, 0], b: [3, 2], value: 2, given: false, off: [24, 0], interior: true },
+    ],
+    cutSets: [
+      [{ a: [0, 2], b: [6, 2] }],
+    ],
+    piecesBySet: [
+      [{ kind: "tri", x: 0, y: 0, w: 6, h: 2 }, { kind: "rect", x: 0, y: 2, w: 6, h: 3 }],
+    ],
+    steps: [
+      { type: "opposite", from: "D", edge: "F", prompt: "The right wall is 3 — the left wall must match. Type its length." },
+      { type: "opposite", from: "E", edge: "ROOF", prompt: "The bottom is 6, and the roof's base sits directly above it — same width. Type its length." },
+      { type: "count", edge: "RH", prompt: "The dashed line is the roof's height — straight up from its base to the peak. Count the highlighted squares and type it.", strip: [[2, 0], [2, 1]] },
+    ],
+    hint: "Slice the roof off — one straight cut across where the roof meets the walls.",
   },
 ];
+
 const COMP_COLORS = [C_BASE, C_HEIGHT, C_B2];
-const COMP_COLOR_NAMES = ["teal", "amber", "coral"];
 
 function AreaComposite() {
-  const [idx, setIdx] = useState(0);
-  const fig = COMP_FIGS[idx];
+  const [level, setLevel] = useState(0);
+  const fig = COMP_LEVELS[level];
   const cols = Math.max(...fig.verts.map((v) => v[0]));
   const rows = Math.max(...fig.verts.map((v) => v[1]));
-  const pieceAreas = fig.rects.map((r) => r.w * r.h);
-  const totalArea = pieceAreas.reduce((a, b) => a + b, 0);
 
-  const [entries, setEntries] = useState<string[]>(fig.rects.map(() => ""));
-  const [totalIn, setTotalIn] = useState("");
-  const [done, setDone] = useState(false);
+  const [phase, setPhase] = useState<"cut" | "deduce" | "areas" | "done">("cut");
+  const [acceptedCuts, setAcceptedCuts] = useState<CompCut[]>([]);
+  const [matchedSet, setMatchedSet] = useState<number | null>(null);
+  const [stepIdx, setStepIdx] = useState(0);
+  const [solvedEdges, setSolvedEdges] = useState<Record<string, boolean>>({});
+  const [stepEntry, setStepEntry] = useState("");
+  const [pieceEntries, setPieceEntries] = useState<string[]>([]);
+  const [totalEntry, setTotalEntry] = useState("");
   const [note, setNote] = useState<string | null>(null);
-  const [showCount, setShowCount] = useState(false);
+  const [animOn, setAnimOn] = useState(false);
+  const [animKey, setAnimKey] = useState(0);
+  const [drag, setDrag] = useState<{ a: Pt; b: Pt } | null>(null);
   const wrongRef = useRef(0);
   const solvedRef = useRef(false);
+  const svgRef = useRef<SVGSVGElement | null>(null);
 
-  useEffect(() => {
-    setEntries(COMP_FIGS[idx].rects.map(() => ""));
-    setTotalIn(""); setDone(false); setNote(null); setShowCount(false);
-    wrongRef.current = 0; solvedRef.current = false;
-  }, [idx]);
-
-  const U = Math.max(30, Math.min(50, Math.floor(Math.min(420 / cols, 300 / rows))));
-  const M = Math.round(1.2 * U);
-  const W = 2 * M + cols * U, H = 2 * M + rows * U;
+  const U = Math.max(34, Math.min(56, Math.floor(Math.min(440 / cols, 300 / rows))));
+  const M = Math.round(1.3 * U);
+  const W = 2 * M + cols * U + 44; // extra right margin for outside labels
+  const H = 2 * M + rows * U;
   const sx = (gx: number) => M + gx * U;
   const sy = (gy: number) => M + gy * U;
   const pts = fig.verts.map((v) => `${sx(v[0])},${sy(v[1])}`).join(" ");
 
-  const cells = useMemo(() => {
-    if (!showCount) return [] as Pt[];
-    const out: Pt[] = [];
-    for (let gy = 0; gy < rows; gy++) for (let gx = 0; gx < cols; gx++) {
-      if (inPoly(gx + 0.5, gy + 0.5, fig.verts)) out.push([gx, gy]);
-    }
-    return out;
-  }, [showCount, fig, cols, rows]);
+  const reset = useCallback((lv: number) => {
+    setLevel(lv);
+    setPhase("cut"); setAcceptedCuts([]); setMatchedSet(null); setStepIdx(0);
+    setSolvedEdges({}); setStepEntry(""); setPieceEntries([]); setTotalEntry("");
+    setNote(null); setAnimOn(false); setAnimKey(0); setDrag(null);
+    wrongRef.current = 0; solvedRef.current = false;
+  }, []);
 
-  function check() {
-    const bad = fig.rects.findIndex((r, i) => Number(entries[i]) !== r.w * r.h);
+  const edgeById = useCallback((id: string) => fig.edges.find((e) => e.id === id)!, [fig]);
+  const step = phase === "deduce" ? fig.steps[stepIdx] : null;
+  const pieces = matchedSet != null ? fig.piecesBySet[matchedSet] : [];
+
+  // Kick the partial-walls slide a beat after the step (or a replay) starts.
+  useEffect(() => {
+    if (!step || step.type !== "partial") { setAnimOn(false); return; }
+    setAnimOn(false);
+    const t = window.setTimeout(() => setAnimOn(true), 500);
+    return () => window.clearTimeout(t);
+  }, [step, animKey]);
+
+  // ── Cut drawing: press, drag along a gridline, release ─────────────────────
+  const snapNode = (e: React.PointerEvent): Pt => {
+    const r = svgRef.current?.getBoundingClientRect();
+    if (!r) return [0, 0];
+    const gx = Math.round(((e.clientX - r.left) * (W / r.width) - M) / U);
+    const gy = Math.round(((e.clientY - r.top) * (H / r.height) - M) / U);
+    return [clamp(gx, 0, cols), clamp(gy, 0, rows)];
+  };
+  const onCutDown = (e: React.PointerEvent) => {
+    if (phase !== "cut") return;
+    const p = snapNode(e);
+    setDrag({ a: p, b: p });
+    svgRef.current?.setPointerCapture?.(e.pointerId);
+  };
+  const onCutMove = (e: React.PointerEvent) => {
+    if (phase !== "cut" || !drag) return;
+    setDrag((d) => (d ? { ...d, b: snapNode(e) } : d));
+  };
+  const onCutUp = () => {
+    if (phase !== "cut" || !drag) return;
+    const { a, b } = drag;
+    setDrag(null);
+    const dx = Math.abs(b[0] - a[0]), dy = Math.abs(b[1] - a[1]);
+    if (dx < 1 && dy < 1) { setNote(`Drag along a grid line to draw your cut. ${fig.hint}`); return; }
+    const horizontal = dx >= dy;
+    const line = horizontal ? a[1] : a[0];
+    const s0 = horizontal ? Math.min(a[0], b[0]) : Math.min(a[1], b[1]);
+    const s1 = horizontal ? Math.max(a[0], b[0]) : Math.max(a[1], b[1]);
+
+    // candidate cuts = cuts in sets consistent with what's already accepted
+    const sameCut = (c1: CompCut, c2: CompCut) =>
+      c1.a[0] === c2.a[0] && c1.a[1] === c2.a[1] && c1.b[0] === c2.b[0] && c1.b[1] === c2.b[1];
+    const eligibleSets = fig.cutSets.filter((set) => acceptedCuts.every((ac) => set.some((c) => sameCut(c, ac))));
+    let matched: CompCut | null = null;
+    for (const set of eligibleSets) {
+      for (const c of set) {
+        if (acceptedCuts.some((ac) => sameCut(ac, c))) continue;
+        const cHorizontal = c.a[1] === c.b[1];
+        if (cHorizontal !== horizontal) continue;
+        const cLine = cHorizontal ? c.a[1] : c.a[0];
+        if (cLine !== line) continue;
+        const c0 = cHorizontal ? Math.min(c.a[0], c.b[0]) : Math.min(c.a[1], c.b[1]);
+        const c1v = cHorizontal ? Math.max(c.a[0], c.b[0]) : Math.max(c.a[1], c.b[1]);
+        if (s0 <= c0 + 1 && s1 >= c1v - 1) { matched = c; break; }
+      }
+      if (matched) break;
+    }
+    if (!matched) {
+      wrongRef.current += 1;
+      setNote(`That cut doesn't split it into simple shapes. Try again — ${fig.hint}`);
+      return;
+    }
+    const nextCuts = [...acceptedCuts, matched];
+    setAcceptedCuts(nextCuts);
+    setNote(null);
+    const doneSet = fig.cutSets.findIndex((set) =>
+      set.length === nextCuts.length && set.every((c) => nextCuts.some((ac) => sameCut(ac, c))));
+    if (doneSet !== -1) {
+      setMatchedSet(doneSet);
+      setPhase("deduce");
+      setStepIdx(0);
+    } else {
+      setNote("Good cut — the figure needs one more.");
+    }
+  };
+
+  // ── Deduce: one side per step ──────────────────────────────────────────────
+  function submitStep() {
+    if (!step) return;
+    const target = edgeById(step.edge);
+    const v = Number(stepEntry.trim());
+    if (!stepEntry.trim() || !Number.isFinite(v)) return;
+    if (v !== target.value) {
+      wrongRef.current += 1;
+      setNote(step.type === "count"
+        ? "Count the highlighted squares one at a time — each square is 1 unit."
+        : step.type === "opposite"
+        ? "Look at the flashing side — this side must be the same length."
+        : "Watch the walls slide again — the pieces together cover the whole wall.");
+      if (step.type === "partial") setAnimKey((k) => k + 1);
+      setStepEntry("");
+      return;
+    }
+    setNote(null);
+    setSolvedEdges((m) => ({ ...m, [target.id]: true }));
+    setStepEntry("");
+    if (stepIdx + 1 < fig.steps.length) setStepIdx(stepIdx + 1);
+    else { setPhase("areas"); setPieceEntries(pieces.map(() => "")); }
+  }
+
+  // ── Areas ─────────────────────────────────────────────────────────────────
+  const pieceArea = (p: CompPiece) => (p.kind === "tri" ? (p.w * p.h) / 2 : p.w * p.h);
+  const totalArea = pieces.reduce((acc, p) => acc + pieceArea(p), 0);
+  function checkAreas() {
+    const bad = pieces.findIndex((p, i) => Number(pieceEntries[i]) !== pieceArea(p));
     if (bad !== -1) {
-      setNote(`Check the ${COMP_COLOR_NAMES[bad]} rectangle: ${fig.rects[bad].w} × ${fig.rects[bad].h}.`);
       wrongRef.current += 1;
+      const p = pieces[bad];
+      setNote(p.kind === "tri"
+        ? `Check the triangle piece: half of ${p.w} times ${p.h}.`
+        : `Check the highlighted piece: ${p.w} times ${p.h}.`);
       return;
     }
-    if (Number(totalIn) !== totalArea) {
-      setNote(`Add the pieces: ${pieceAreas.join(" + ")} = ?`);
+    if (Number(totalEntry) !== totalArea) {
       wrongRef.current += 1;
+      setNote(`Add the pieces: ${pieces.map((p) => pieceArea(p)).join(" + ")} = ?`);
       return;
     }
-    setNote(null); setDone(true);
+    setNote(null);
+    setPhase("done");
     if (!solvedRef.current) {
       solvedRef.current = true;
-      reportToolResult({ tool: "area-explorer", correct: wrongRef.current === 0, standardId: "6.G.A.1", misconception: null, problemId: `composite-${fig.name}` });
+      reportToolResult({ tool: "area-explorer", correct: wrongRef.current === 0, standardId: "6.G.A.1", misconception: null, problemId: `composite-l${level + 1}-${fig.name}` });
     }
   }
 
+  // ── Rendering helpers ─────────────────────────────────────────────────────
+  const edgeLine = (e: CompEdge) => ({ x1: sx(e.a[0]), y1: sy(e.a[1]), x2: sx(e.b[0]), y2: sy(e.b[1]) });
+  const edgeMid = (e: CompEdge): [number, number] => [(sx(e.a[0]) + sx(e.b[0])) / 2 + e.off[0], (sy(e.a[1]) + sy(e.b[1])) / 2 + e.off[1]];
+  const edgeKnown = (e: CompEdge) => e.given || solvedEdges[e.id];
+  // Where a partial-step part slides to: stacked along the whole, in listed order.
+  const partShift = (whole: CompEdge, partIds: string[], id: string): [number, number] => {
+    const part = edgeById(id);
+    const horizontal = whole.a[1] === whole.b[1];
+    let cum = 0;
+    for (const pid of partIds) { if (pid === id) break; cum += edgeById(pid).value; }
+    if (horizontal) {
+      const x0 = Math.min(whole.a[0], whole.b[0]) + cum;
+      return [sx(x0) - sx(Math.min(part.a[0], part.b[0])), sy(whole.a[1]) - sy(part.a[1])];
+    }
+    const y0 = Math.min(whole.a[1], whole.b[1]) + cum;
+    return [sx(whole.a[0]) - sx(part.a[0]), sy(y0) - sy(Math.min(part.a[1], part.b[1]))];
+  };
+
+  const stepTargetId = step ? step.edge : null;
+  const flashFromId = step && step.type === "opposite" ? step.from : step && step.type === "partial" ? step.whole : null;
+
   return (
     <div className="ae-stage">
-      <div className="ae-prompt">{done ? `Area = ${totalArea} square units` : "Break the figure into rectangles"}</div>
-      <div className="ae-sub">{done ? "Same total area, however you slice it." : "Find each rectangle's area, then add them together."}</div>
-
-      <div className="ae-tools">
-        <button className="ae-tbtn" onClick={() => { setEntries(fig.rects.map(() => "")); setTotalIn(""); setDone(false); setNote(null); wrongRef.current = 0; solvedRef.current = false; }}>Reset</button>
-        <button className="ae-tbtn" onClick={() => setIdx((i) => (i + 1) % COMP_FIGS.length)}>Next figure</button>
+      <div className="ae-prompt">
+        {phase === "cut" && "Divide the figure into simple shapes"}
+        {phase === "deduce" && "Find every side length"}
+        {phase === "areas" && "Find each piece's area"}
+        {phase === "done" && `Total area = ${totalArea} square units`}
+      </div>
+      <div className="ae-sub">
+        {phase === "cut" && (acceptedCuts.length ? "Keep going — drag your next cut." : "Press and drag along a grid line to draw your cut.")}
+        {phase === "deduce" && step?.prompt}
+        {phase === "areas" && "Use the sides you marked. Add the pieces for the total."}
+        {phase === "done" && "Divided, deduced, and solved — same area either way you cut it."}
       </div>
 
-      <svg className="ae-svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`composite ${fig.name} figure on a grid`}>
+      <div className="ae-tools">
+        {COMP_LEVELS.map((l, i) => (
+          <button key={i} className={`ae-tbtn ${i === level ? "ae-tbtn-on" : ""}`} onClick={() => reset(i)}>{l.label}</button>
+        ))}
+        <button className="ae-tbtn" onClick={() => reset(level)}>Reset</button>
+      </div>
+
+      <svg ref={svgRef} className="ae-svg" viewBox={`0 0 ${W} ${H}`} style={{ touchAction: "none", cursor: phase === "cut" ? "crosshair" : "default" }}
+        onPointerDown={onCutDown} onPointerMove={onCutMove} onPointerUp={onCutUp} onPointerCancel={onCutUp}>
         <defs>
           <pattern id="ae-comp-cell" x={M} y={M} width={U} height={U} patternUnits="userSpaceOnUse">
             <path d={`M ${U} 0 L 0 0 0 ${U}`} fill="none" stroke="var(--bdb-line)" strokeWidth={1} opacity={0.8} />
@@ -1285,59 +1512,126 @@ function AreaComposite() {
         </defs>
         <rect x={M} y={M} width={cols * U} height={rows * U} fill="url(#ae-comp-cell)" />
 
-        {/* decomposed pieces */}
-        {fig.rects.map((r, i) => {
-          const filled = done || Number(entries[i]) === r.w * r.h;
-          return (
-            <g key={i}>
-              <rect x={sx(r.x)} y={sy(r.y)} width={r.w * U} height={r.h * U}
-                fill={`color-mix(in srgb, ${COMP_COLORS[i]} ${filled ? 40 : 20}%, transparent)`} />
-              <text x={sx(r.x + r.w / 2)} y={sy(r.y + r.h / 2)} textAnchor="middle" dominantBaseline="central"
-                fontSize={Math.max(13, U * 0.4)} fontWeight={900} fill={COMP_COLORS[i]}>{r.w} × {r.h}</text>
-            </g>
-          );
+        {/* pieces (after a valid division) */}
+        {pieces.map((p, i) =>
+          p.kind === "rect" ? (
+            <rect key={i} x={sx(p.x)} y={sy(p.y)} width={p.w * U} height={p.h * U}
+              fill={`color-mix(in srgb, ${COMP_COLORS[i % COMP_COLORS.length]} ${phase === "done" ? 42 : 26}%, transparent)`} />
+          ) : (
+            <polygon key={i} points={`${sx(p.x)},${sy(p.y + p.h)} ${sx(p.x + p.w / 2)},${sy(p.y)} ${sx(p.x + p.w)},${sy(p.y + p.h)}`}
+              fill={`color-mix(in srgb, ${COMP_COLORS[i % COMP_COLORS.length]} ${phase === "done" ? 42 : 26}%, transparent)`} />
+          ))}
+
+        {/* count-step strip */}
+        {step?.type === "count" && step.strip.map(([gx, gy], i) => (
+          <g key={`cs-${gx}-${gy}`} className="ae-count-cell" style={{ animationDelay: `${i * 200}ms` }}>
+            <rect x={sx(gx)} y={sy(gy)} width={U} height={U} fill={C_HEIGHT} opacity={0.32} stroke={C_HEIGHT} strokeWidth={2} />
+            <text x={sx(gx) + U / 2} y={sy(gy) + U / 2} textAnchor="middle" dominantBaseline="central" fontSize={Math.round(U * 0.4)} fontWeight={900} fill="var(--bdb-ink)">{i + 1}</text>
+          </g>
+        ))}
+
+        {/* accepted cuts */}
+        {acceptedCuts.map((c, i) => (
+          <line key={i} x1={sx(c.a[0])} y1={sy(c.a[1])} x2={sx(c.b[0])} y2={sy(c.b[1])} stroke="var(--bdb-ink)" strokeWidth={2.5} strokeDasharray="7 5" />
+        ))}
+
+        {/* live cut preview */}
+        {drag && (() => {
+          const dx = Math.abs(drag.b[0] - drag.a[0]), dy = Math.abs(drag.b[1] - drag.a[1]);
+          const horizontal = dx >= dy;
+          const x2 = horizontal ? drag.b[0] : drag.a[0];
+          const y2 = horizontal ? drag.a[1] : drag.b[1];
+          return <line x1={sx(drag.a[0])} y1={sy(drag.a[1])} x2={sx(x2)} y2={sy(y2)} stroke="var(--bdb-coral)" strokeWidth={3} strokeDasharray="4 5" />;
+        })()}
+
+        {/* outline */}
+        <polygon points={pts} fill={phase === "cut" ? `color-mix(in srgb, ${C_BASE} 16%, transparent)` : "none"} stroke="var(--bdb-ink)" strokeWidth={3} strokeLinejoin="miter" />
+
+        {/* interior helper edges (roof base is the cut itself; roof height is dashed) */}
+        {fig.edges.filter((e) => e.interior && (edgeKnown(e) || e.id === stepTargetId)).map((e) => {
+          const l = edgeLine(e);
+          return <line key={e.id} {...l} stroke="var(--bdb-ink-soft)" strokeWidth={2} strokeDasharray="5 5" />;
         })}
 
-        {/* count-the-squares self-check */}
-        {showCount && cells.map(([gx, gy]) => (
-          <rect key={`c-${gx}-${gy}`} x={sx(gx)} y={sy(gy)} width={U} height={U} fill={C_BASE} opacity={0.22} />
-        ))}
+        {/* step flashes: the known side pulses in green; the asked side pulses coral */}
+        {flashFromId && (() => {
+          const e = edgeById(flashFromId);
+          const l = edgeLine(e);
+          return <line className="ae-mark-pulse" {...l} stroke="var(--bdb-green)" strokeWidth={6} strokeLinecap="round" />;
+        })()}
+        {stepTargetId && (() => {
+          const e = edgeById(stepTargetId);
+          const l = edgeLine(e);
+          return <line className="ae-mark-pulse" {...l} stroke="var(--bdb-coral)" strokeWidth={5} strokeDasharray="9 6" strokeLinecap="round" />;
+        })()}
 
-        {/* decomposition cut lines + outer outline */}
-        {fig.cuts.map((c, i) => (
-          <line key={i} x1={sx(c[0][0])} y1={sy(c[0][1])} x2={sx(c[1][0])} y2={sy(c[1][1])}
-            stroke="var(--bdb-ink)" strokeWidth={2} strokeDasharray="6 5" />
-        ))}
-        <polygon points={pts} fill="none" stroke="var(--bdb-ink)" strokeWidth={3} strokeLinejoin="miter" />
+        {/* partial-walls animation: the parts slide onto the whole wall */}
+        {step?.type === "partial" && (() => {
+          const whole = edgeById(step.whole);
+          return step.parts.map((pid) => {
+            const e = edgeById(pid);
+            const l = edgeLine(e);
+            const [dx, dy] = partShift(whole, step.parts, pid);
+            const known = edgeKnown(e);
+            return (
+              <g key={`${pid}-${animKey}`} style={{ transition: "transform 1.1s cubic-bezier(.35,.8,.3,1) 0.15s", transform: animOn ? `translate(${dx}px, ${dy}px)` : "none" }}>
+                <line {...l} stroke={known ? "var(--bdb-green)" : "var(--bdb-coral)"} strokeWidth={7} strokeLinecap="round" opacity={0.85} />
+              </g>
+            );
+          });
+        })()}
+
+        {/* edge labels: given from the start, deduced ones as they're solved */}
+        {fig.edges.filter((e) => edgeKnown(e)).map((e) => {
+          const [x, y] = edgeMid(e);
+          return (
+            <text key={e.id} x={x} y={y} textAnchor="middle" dominantBaseline="central" fontSize={16} fontWeight={900}
+              fill={e.given ? "var(--bdb-ink)" : "var(--bdb-green)"} stroke="var(--bdb-ground)" strokeWidth={3.6} style={{ paintOrder: "stroke" }}>
+              {e.value}
+            </text>
+          );
+        })}
       </svg>
 
-      {done ? (
-        <>
-          <div className="ae-formula"><span>{pieceAreas.join(" + ")} = {totalArea}</span></div>
-          <div className="ae-bar"><button className="ae-btn" onClick={() => setIdx((i) => (i + 1) % COMP_FIGS.length)}>Next figure</button></div>
-        </>
-      ) : (
+      {phase === "deduce" && step && (
+        <div className="ae-bar">
+          {step.type === "partial" && <button className="ae-link" onClick={() => setAnimKey((k) => k + 1)}>Watch again</button>}
+          <input className="ae-slotin" value={stepEntry} inputMode="decimal" placeholder="?" aria-label="side length"
+            onChange={(e) => { setStepEntry(e.target.value.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1")); setNote(null); }}
+            onKeyDown={(e) => e.key === "Enter" && submitStep()} />
+          <button className="ae-btn" disabled={!stepEntry.trim()} onClick={submitStep}>Enter</button>
+        </div>
+      )}
+
+      {phase === "areas" && (
         <>
           <div className="ae-formula">
-            {fig.rects.map((r, i) => (
+            {pieces.map((p, i) => (
               <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                 {i > 0 && <span>+</span>}
-                <span style={{ display: "inline-grid", placeItems: "center", minWidth: 44, minHeight: 40, padding: "0 8px", border: `3px solid ${COMP_COLORS[i]}`, color: COMP_COLORS[i], fontSize: "1rem", background: "#fff" }}>{r.w}×{r.h}</span>
-                <input className="ae-answer" style={{ width: 66 }} value={entries[i]} inputMode="numeric"
-                  onChange={(e) => { const v = e.target.value.replace(/\D/g, ""); setEntries((es) => es.map((x, j) => (j === i ? v : x))); setNote(null); }}
-                  aria-label={`${COMP_COLOR_NAMES[i]} rectangle area`} />
+                <span style={{ display: "inline-grid", placeItems: "center", minWidth: 48, minHeight: 40, padding: "0 8px", border: `3px solid ${COMP_COLORS[i % COMP_COLORS.length]}`, color: COMP_COLORS[i % COMP_COLORS.length], fontSize: "0.95rem", background: "#fff" }}>
+                  {p.kind === "tri" ? `½×${p.w}×${p.h}` : `${p.w}×${p.h}`}
+                </span>
+                <input className="ae-answer" style={{ width: 64 }} value={pieceEntries[i] ?? ""} inputMode="numeric"
+                  onChange={(e) => { const v = e.target.value.replace(/\D/g, ""); setPieceEntries((es) => es.map((x, j) => (j === i ? v : x))); setNote(null); }}
+                  aria-label={`piece ${i + 1} area`} />
               </span>
             ))}
             <span>=</span>
-            <input className="ae-answer" style={{ width: 90 }} value={totalIn} inputMode="numeric"
-              onChange={(e) => { setTotalIn(e.target.value.replace(/\D/g, "")); setNote(null); }}
-              onKeyDown={(e) => e.key === "Enter" && check()} aria-label="total area" />
+            <input className="ae-answer" style={{ width: 84 }} value={totalEntry} inputMode="numeric"
+              onChange={(e) => { setTotalEntry(e.target.value.replace(/\D/g, "")); setNote(null); }}
+              onKeyDown={(e) => e.key === "Enter" && checkAreas()} aria-label="total area" />
           </div>
-          <div className="ae-bar">
-            <button className="ae-link" onClick={() => setShowCount((c) => !c)}>{showCount ? "Hide the squares" : "Count the squares"}</button>
-            <button className="ae-btn" onClick={check}>Check</button>
-          </div>
+          <div className="ae-bar"><button className="ae-btn" onClick={checkAreas}>Check</button></div>
         </>
+      )}
+
+      {phase === "done" && (
+        <div className="ae-bar">
+          {level + 1 < COMP_LEVELS.length
+            ? <button className="ae-btn" onClick={() => reset(level + 1)}>Next level</button>
+            : <button className="ae-btn ghost" onClick={() => reset(0)}>All 3 levels complete — start over</button>}
+        </div>
       )}
 
       <div className="ae-note">{note && <span key={note} className="ae-note-in">{note}</span>}</div>
