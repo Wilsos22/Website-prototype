@@ -11,7 +11,8 @@
 //                        with the division sign morphing and the second
 //                        fraction physically flipping. (For L5-D3 — the
 //                        algorithm is EARNED after the models, not before.)
-//   "Explore"          — open sandbox: tap to add pieces, drag on a shared whole.
+//   "Explore"          — fraction wall: one whole on top, rows of tapped-in
+//                        pieces laid end to end beneath it for comparison.
 
 import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { LiveToolBanner, useLiveToolConfig } from "./useLiveToolConfig";
@@ -57,19 +58,31 @@ const NTHS: Record<number, string> = {
 };
 const nths = (d: number) => NTHS[d] ?? `${d}ths`;
 
-// ── Explore-mode pieces ─────────────────────────────────────────────────────
-interface ExPiece { id: string; label: string; value: number; color: string; x: number; y: number }
-const EX_TEMPLATES = [
-  { label: "1", value: 1, color: "#674a40" },
-  { label: "1/2", value: 1 / 2, color: C_TEAL },
-  { label: "1/3", value: 1 / 3, color: "#7c5cd6" },
-  { label: "1/4", value: 1 / 4, color: C_AMBER },
-  { label: "1/6", value: 1 / 6, color: C_CORAL },
-  { label: "1/8", value: 1 / 8, color: C_GREEN },
-  { label: "1/12", value: 1 / 12, color: "#a06b2a" },
+// ── Explore-mode pieces (fraction wall) ─────────────────────────────────────
+const EX_PIECES = [
+  { den: 1, label: "1", color: "#674a40" },
+  { den: 2, label: "1/2", color: C_TEAL },
+  { den: 3, label: "1/3", color: "#7c5cd6" },
+  { den: 4, label: "1/4", color: C_AMBER },
+  { den: 5, label: "1/5", color: "#3f7fbf" },
+  { den: 6, label: "1/6", color: C_CORAL },
+  { den: 8, label: "1/8", color: C_GREEN },
+  { den: 10, label: "1/10", color: "#c25588" },
+  { den: 12, label: "1/12", color: "#a06b2a" },
 ];
-const EX_COLS = 24;
-const EX_ROW = 54;
+const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
+// Exact sum of a row of unit fractions, reduced: [numerator, denominator].
+const rowSum = (row: number[]): [number, number] => {
+  let n = 0, d = 1;
+  for (const den of row) {
+    n = n * den + d;
+    d = d * den;
+    const g = gcd(n, d);
+    n /= g; d /= g;
+  }
+  return [n, d];
+};
+const sumLabel = ([n, d]: [number, number]) => (d === 1 ? `${n}` : `${n}/${d}`);
 
 // Stacked fraction, written the way it looks in a problem. `flipped` swaps the
 // numerator and denominator with a sliding animation (Keep-Change-Flip).
@@ -224,43 +237,40 @@ export function FractionBarsBoard() {
     setKQ("");
   };
 
-  // ── explore state ──────────────────────────────────────────────────────────
-  const [pieces, setPieces] = useState<ExPiece[]>([]);
-  const [selId, setSelId] = useState<string>("");
-  const exRef = useRef<HTMLDivElement | null>(null);
-  const dragRef = useRef<{ id: string; offX: number; offY: number } | null>(null);
+  // ── explore state (fraction wall) ──────────────────────────────────────────
+  const [exRows, setExRows] = useState<number[][]>([[], []]);
+  const [exSel, setExSel] = useState(0);
 
-  const addPiece = (tpl: (typeof EX_TEMPLATES)[number]) => {
-    const id = `${tpl.label}-${crypto.randomUUID()}`;
-    setPieces((ps) => [...ps, { id, label: tpl.label, value: tpl.value, color: tpl.color, x: 0, y: ps.length % 8 }]);
-    setSelId(id);
+  const exAdd = (den: number) => {
+    const row = exRows[exSel] ?? [];
+    const [n, d] = rowSum(row);
+    if (n * den + d > d * den) {
+      setNote("That row already makes one whole. Add a row to keep comparing.");
+      return;
+    }
+    setNote(null);
+    setExRows((rs) => rs.map((r, i) => (i === exSel ? [...r, den] : r)));
   };
-  const removeSelected = () => { setPieces((ps) => ps.filter((p) => p.id !== selId)); setSelId(""); };
-  const duplicateSelected = () => {
-    setPieces((ps) => {
-      const src = ps.find((p) => p.id === selId);
-      if (!src) return ps;
-      const id = `${src.label}-${crypto.randomUUID()}`;
-      setSelId(id);
-      return [...ps, { ...src, id, y: Math.min(src.y + 1, 9) }];
-    });
+  const exRemovePiece = (ri: number, pi: number) => {
+    setExSel(ri);
+    setNote(null);
+    setExRows((rs) => rs.map((r, i) => (i === ri ? r.filter((_, j) => j !== pi) : r)));
   };
-  const exDown = (e: React.PointerEvent, p: ExPiece) => {
-    const r = exRef.current?.getBoundingClientRect();
-    if (!r) return;
-    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-    setSelId(p.id);
-    dragRef.current = { id: p.id, offX: e.clientX - r.left - (p.x / EX_COLS) * r.width, offY: e.clientY - r.top - p.y * EX_ROW };
+  const exAddRow = () => {
+    setExSel(exRows.length);
+    setNote(null);
+    setExRows((rs) => [...rs, []]);
   };
-  const exMove = (e: React.PointerEvent) => {
-    const r = exRef.current?.getBoundingClientRect();
-    const d = dragRef.current;
-    if (!r || !d) return;
-    const gx = Math.round(((e.clientX - r.left - d.offX) / r.width) * EX_COLS);
-    const gy = Math.round((e.clientY - r.top - d.offY) / EX_ROW);
-    setPieces((ps) => ps.map((p) => (p.id === d.id ? { ...p, x: Math.max(0, Math.min(EX_COLS, gx)), y: Math.max(0, Math.min(9, gy)) } : p)));
+  const exRemoveRow = () => {
+    if (exRows.length <= 1) return;
+    setExRows((rs) => rs.filter((_, i) => i !== exSel));
+    setExSel((s) => Math.min(s, exRows.length - 2));
+    setNote(null);
   };
-  const exUp = () => { dragRef.current = null; };
+  const exClearRow = () => {
+    setExRows((rs) => rs.map((r, i) => (i === exSel ? [] : r)));
+    setNote(null);
+  };
 
   const wholeTicks = (den: number) => Array.from({ length: den - 1 }, (_, i) => ((i + 1) / den) * 100);
 
@@ -309,12 +319,9 @@ export function FractionBarsBoard() {
         .fb-done { text-align:center; font-size:clamp(1.2rem,3.6vw,1.8rem); font-weight:900; margin-top:12px; }
         .fb-palette { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-bottom:10px; }
         .fb-pal { font:inherit; font-weight:900; font-size:1rem; min-height:44px; padding:0 16px; border:2px solid var(--bdb-ink); background:var(--bdb-card); color:var(--bdb-ink); cursor:pointer; }
-        .fb-exstage { position:relative; height:560px; border:2px solid var(--bdb-line); background:
-          linear-gradient(90deg, color-mix(in srgb, var(--bdb-line) 60%, transparent) 1px, transparent 1px) 0 0 / calc(100% / ${EX_COLS}) 100%,
-          var(--bdb-card); touch-action:none; }
-        .fb-expiece { position:absolute; height:44px; display:grid; place-items:center; color:#fff; font-weight:900; cursor:grab; box-shadow:inset 0 -3px 0 rgba(0,0,0,0.15); touch-action:none; }
-        .fb-expiece:active { cursor:grabbing; }
-        .fb-expiece.sel { outline:3px solid var(--bdb-ink); outline-offset:2px; }
+        .fb-track.exsel { border-style:solid; border-color:var(--bdb-ink); box-shadow:0 0 0 3px color-mix(in srgb, var(--bdb-amber) 55%, transparent); }
+        button.fb-piece { border-top:none; border-bottom:none; border-left:none; font:inherit; font-weight:900; font-size:0.95rem; padding:0; cursor:pointer; }
+        .fb-rowsum { font-weight:900; color:var(--bdb-ink); text-transform:none; letter-spacing:0; font-size:0.9rem; margin-left:6px; }
         .fb-tilenum { position:absolute; inset:0; display:grid; place-items:center; color:var(--bdb-ink); font-weight:900; }
         @media (prefers-reduced-motion: reduce) { .fb-piece.pop { animation:none; } .fb-fn, .fb-fd, .fb-op span, .fb-badge { transition:none; } }
       `}</style>
@@ -323,10 +330,10 @@ export function FractionBarsBoard() {
 
       <div className="fb-modebar">
         <div className="fb-modeseg">
-          <button className={mode === "divide" ? "on" : ""} onClick={() => setMode("divide")}>How many fit?</button>
-          <button className={mode === "mixed" ? "on" : ""} onClick={() => setMode("mixed")}>Mixed numbers</button>
-          <button className={mode === "kcf" ? "on" : ""} onClick={() => setMode("kcf")}>Keep Change Flip</button>
-          <button className={mode === "explore" ? "on" : ""} onClick={() => setMode("explore")}>Explore</button>
+          <button className={mode === "divide" ? "on" : ""} onClick={() => { setMode("divide"); setNote(null); }}>How many fit?</button>
+          <button className={mode === "mixed" ? "on" : ""} onClick={() => { setMode("mixed"); setNote(null); }}>Mixed numbers</button>
+          <button className={mode === "kcf" ? "on" : ""} onClick={() => { setMode("kcf"); setNote(null); }}>Keep Change Flip</button>
+          <button className={mode === "explore" ? "on" : ""} onClick={() => { setMode("explore"); setNote(null); }}>Explore</button>
         </div>
       </div>
 
@@ -614,35 +621,57 @@ export function FractionBarsBoard() {
 
       {mode === "explore" && (
         <>
-          <div className="fb-prompt">Build with fraction pieces</div>
-          <div className="fb-sub">Tap a fraction to add a piece, then drag it anywhere. Pieces snap to the same whole.</div>
+          <div className="fb-prompt">Compare fractions to one whole</div>
+          <div className="fb-sub">Tap a row to pick it, then tap fractions to lay pieces under the whole. Tap a piece to take it off.</div>
 
           <div className="fb-palette">
-            {EX_TEMPLATES.map((t) => (
-              <button key={t.label} className="fb-pal" style={{ borderColor: t.color, color: t.color }} onClick={() => addPiece(t)}>{t.label}</button>
+            {EX_PIECES.map((t) => (
+              <button key={t.den} className="fb-pal" style={{ borderColor: t.color, color: t.color }} onClick={() => exAdd(t.den)}>{t.label}</button>
             ))}
           </div>
           <div className="fb-probs">
-            <button className="fb-tbtn" disabled={!selId} onClick={duplicateSelected}>Duplicate</button>
-            <button className="fb-tbtn" disabled={!selId} onClick={removeSelected}>Delete</button>
-            <button className="fb-tbtn" onClick={() => { setPieces([]); setSelId(""); }}>Clear</button>
+            <button className="fb-tbtn" disabled={exRows.length >= 6} onClick={exAddRow}>Add a row</button>
+            <button className="fb-tbtn" disabled={exRows.length <= 1} onClick={exRemoveRow}>Remove row</button>
+            <button className="fb-tbtn" disabled={!(exRows[exSel] ?? []).length} onClick={exClearRow}>Clear row</button>
           </div>
 
-          <div ref={exRef} className="fb-exstage" onPointerMove={exMove} onPointerUp={exUp} onPointerCancel={exUp}>
-            {pieces.map((p) => (
-              <div key={p.id} className={`fb-expiece ${selId === p.id ? "sel" : ""}`}
-                onPointerDown={(e) => exDown(e, p)}
-                style={{ left: `${(p.x / EX_COLS) * 100}%`, width: `calc(${p.value * 100}% )`, top: p.y * EX_ROW + 8, background: p.color }}>
-                {p.label}
+          <div className="fb-stage">
+            <div>
+              <div className="fb-rowlbl">One whole</div>
+              <div className="fb-track solid">
+                <div className="fb-piece" style={{ left: 0, width: "100%", background: "#674a40" }}>1</div>
               </div>
-            ))}
+            </div>
+            {exRows.map((row, ri) => {
+              let acc = 0;
+              return (
+                <div key={ri}>
+                  <div className="fb-rowlbl">
+                    Row {ri + 1}
+                    {row.length > 0 && <span className="fb-rowsum">= {sumLabel(rowSum(row))}</span>}
+                  </div>
+                  <div className={`fb-track ${exSel === ri ? "exsel" : ""}`} onClick={() => setExSel(ri)}>
+                    {row.map((den, pi) => {
+                      const left = acc;
+                      acc += 1 / den;
+                      const t = EX_PIECES.find((p) => p.den === den);
+                      return (
+                        <button key={`${pi}-${den}`} className="fb-piece pop" aria-label={`remove 1/${den}`}
+                          style={{ left: `${left * 100}%`, width: `${100 / den}%`, background: t?.color }}
+                          onClick={(e) => { e.stopPropagation(); exRemovePiece(ri, pi); }}>
+                          {t?.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </>
       )}
 
-      {mode !== "explore" && (
-        <div className="fb-note">{note && <span key={note} className="fb-note-in">{note}</span>}</div>
-      )}
+      <div className="fb-note">{note && <span key={note} className="fb-note-in">{note}</span>}</div>
     </div>
   );
 }
