@@ -1334,7 +1334,7 @@ const COMP_LEVELS: CompLevel[] = [
       frame: { a: [2, 0], b: [5, 0] },
       whole: { w: 8, h: 5 },
       cutRect: { x: 2, y: 0, w: 3, h: 2 },
-      hint: "Close the whole rectangle — drag straight across the opening of the notch.",
+      hint: "Close the whole rectangle — line up the line straight across the opening of the notch, then click.",
     },
   },
 ];
@@ -1361,7 +1361,7 @@ function AreaComposite() {
   const [note, setNote] = useState<string | null>(null);
   const [animOn, setAnimOn] = useState(false);
   const [animKey, setAnimKey] = useState(0);
-  const [drag, setDrag] = useState<{ a: Pt; b: Pt } | null>(null);
+  const [hoverCut, setHoverCut] = useState<{ horizontal: boolean; line: number } | null>(null);
   const wrongRef = useRef(0);
   const solvedRef = useRef(false);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -1379,7 +1379,7 @@ function AreaComposite() {
     setPhase("cut"); setAcceptedCuts([]); setMatchedSet(null); setStepIdx(0);
     setSolvedEdges({}); setStepEntry(""); setPieceEntries([]); setTotalEntry("");
     setSubWhole(""); setSubCut(""); setSubTotal("");
-    setNote(null); setAnimOn(false); setAnimKey(0); setDrag(null);
+    setNote(null); setAnimOn(false); setAnimKey(0); setHoverCut(null);
     wrongRef.current = 0; solvedRef.current = false;
   }, []);
 
@@ -1395,58 +1395,57 @@ function AreaComposite() {
     return () => window.clearTimeout(t);
   }, [step, animKey]);
 
-  // ── Cut drawing: press, drag along a gridline, release ─────────────────────
-  const snapNode = (e: React.PointerEvent): Pt => {
+  // ── Cut placement: the line follows the cursor; a click solidifies it ──────
+  const hoverFromEvent = (e: React.PointerEvent): { horizontal: boolean; line: number } | null => {
     const r = svgRef.current?.getBoundingClientRect();
-    if (!r) return [0, 0];
-    const gx = Math.round(((e.clientX - r.left) * (W / r.width) - M) / U);
-    const gy = Math.round(((e.clientY - r.top) * (H / r.height) - M) / U);
-    return [clamp(gx, 0, cols), clamp(gy, 0, rows)];
-  };
-  const onCutDown = (e: React.PointerEvent) => {
-    if (phase !== "cut" && phase !== "frame") return;
-    const p = snapNode(e);
-    setDrag({ a: p, b: p });
-    svgRef.current?.setPointerCapture?.(e.pointerId);
+    if (!r) return null;
+    const gx = ((e.clientX - r.left) * (W / r.width) - M) / U;
+    const gy = ((e.clientY - r.top) * (H / r.height) - M) / U;
+    if (gx < -0.6 || gx > cols + 0.6 || gy < -0.6 || gy > rows + 0.6) return null;
+    const dxToV = Math.abs(gx - Math.round(gx));
+    const dyToH = Math.abs(gy - Math.round(gy));
+    const horizontal = dyToH <= dxToV;
+    if (phase === "cut") {
+      // interior gridlines only
+      const line = horizontal ? clamp(Math.round(gy), 1, rows - 1) : clamp(Math.round(gx), 1, cols - 1);
+      return { horizontal, line };
+    }
+    // frame phase: boundary lines allowed (the closing line sits on the bounding box)
+    const line = horizontal ? clamp(Math.round(gy), 0, rows) : clamp(Math.round(gx), 0, cols);
+    return { horizontal, line };
   };
   const onCutMove = (e: React.PointerEvent) => {
-    if ((phase !== "cut" && phase !== "frame") || !drag) return;
-    setDrag((d) => (d ? { ...d, b: snapNode(e) } : d));
+    if (phase !== "cut" && phase !== "frame") return;
+    setHoverCut(hoverFromEvent(e));
   };
-  const onCutUp = () => {
-    if ((phase !== "cut" && phase !== "frame") || !drag) return;
-    const { a, b } = drag;
-    setDrag(null);
-    const dx = Math.abs(b[0] - a[0]), dy = Math.abs(b[1] - a[1]);
+  const onCutLeave = () => setHoverCut(null);
+
+  const sameCut = (c1: CompCut, c2: CompCut) =>
+    c1.a[0] === c2.a[0] && c1.a[1] === c2.a[1] && c1.b[0] === c2.b[0] && c1.b[1] === c2.b[1];
+
+  const onCutClick = (e: React.PointerEvent) => {
+    if (phase !== "cut" && phase !== "frame") return;
+    const hov = hoverFromEvent(e) ?? hoverCut;
+    if (!hov) return;
+    const { horizontal, line } = hov;
+    const s0 = 0;
+    const s1 = horizontal ? cols : rows;
+
     if (phase === "frame") {
       const fr = fig.subtractive!.frame;
       const frHorizontal = fr.a[1] === fr.b[1];
-      const horizontal = dx >= dy;
-      const line = horizontal ? a[1] : a[0];
-      const s0 = horizontal ? Math.min(a[0], b[0]) : Math.min(a[1], b[1]);
-      const s1 = horizontal ? Math.max(a[0], b[0]) : Math.max(a[1], b[1]);
       const frLine = frHorizontal ? fr.a[1] : fr.a[0];
-      const f0 = frHorizontal ? Math.min(fr.a[0], fr.b[0]) : Math.min(fr.a[1], fr.b[1]);
-      const f1 = frHorizontal ? Math.max(fr.a[0], fr.b[0]) : Math.max(fr.a[1], fr.b[1]);
-      const ok = (dx >= 1 || dy >= 1) && horizontal === frHorizontal && line === frLine && s0 <= f0 + 1 && s1 >= f1 - 1;
-      if (!ok) {
+      if (horizontal !== frHorizontal || line !== frLine) {
         wrongRef.current += 1;
         setNote(`Not quite. ${fig.subtractive!.hint}`);
         return;
       }
-      setNote(null);
+      setNote(null); setHoverCut(null);
       setPhase("subareas");
       return;
     }
-    if (dx < 1 && dy < 1) { setNote(`Drag along a grid line to draw your cut. ${fig.hint}`); return; }
-    const horizontal = dx >= dy;
-    const line = horizontal ? a[1] : a[0];
-    const s0 = horizontal ? Math.min(a[0], b[0]) : Math.min(a[1], b[1]);
-    const s1 = horizontal ? Math.max(a[0], b[0]) : Math.max(a[1], b[1]);
 
     // candidate cuts = cuts in sets consistent with what's already accepted
-    const sameCut = (c1: CompCut, c2: CompCut) =>
-      c1.a[0] === c2.a[0] && c1.a[1] === c2.a[1] && c1.b[0] === c2.b[0] && c1.b[1] === c2.b[1];
     const eligibleSets = fig.cutSets.filter((set) => acceptedCuts.every((ac) => set.some((c) => sameCut(c, ac))));
     let matched: CompCut | null = null;
     for (const set of eligibleSets) {
@@ -1474,11 +1473,23 @@ function AreaComposite() {
       set.length === nextCuts.length && set.every((c) => nextCuts.some((ac) => sameCut(ac, c))));
     if (doneSet !== -1) {
       setMatchedSet(doneSet);
+      setHoverCut(null);
       setPhase("deduce");
       setStepIdx(0);
     } else {
       setNote("Good cut — the figure needs one more.");
     }
+  };
+
+  // Undo the last cut (for demoing add-a-line-then-undo); backs out of deduce too.
+  const undoCut = () => {
+    if (!acceptedCuts.length) return;
+    setAcceptedCuts((cs) => cs.slice(0, -1));
+    setMatchedSet(null);
+    setSolvedEdges({});
+    setStepIdx(0); setStepEntry("");
+    setNote(null);
+    setPhase("cut");
   };
 
   // ── Deduce: one side per step ──────────────────────────────────────────────
@@ -1592,10 +1603,10 @@ function AreaComposite() {
         {phase === "done" && `Total area = ${totalArea} square units`}
       </div>
       <div className="ae-sub">
-        {phase === "cut" && (acceptedCuts.length ? "Keep going — drag your next cut." : "Press and drag along a grid line to draw your cut.")}
+        {phase === "cut" && (acceptedCuts.length ? "Keep going — line up your next cut and click to lock it." : "Move your cursor to place the cut line, then click to lock it in.")}
         {phase === "deduce" && step?.prompt}
         {phase === "areas" && "Use the sides you marked. Add the pieces for the total."}
-        {phase === "frame" && "Same figure, different idea: close the WHOLE rectangle — drag across the notch opening."}
+        {phase === "frame" && "Same figure, different idea: close the WHOLE rectangle — line up the top edge and click to close it."}
         {phase === "subareas" && "Find the whole rectangle's area, the cutout's area, and subtract."}
         {phase === "compare" && "Adding the pieces and subtracting the cutout give the SAME area."}
         {phase === "done" && "Divided, deduced, and solved — same area either way you cut it."}
@@ -1606,14 +1617,18 @@ function AreaComposite() {
           <button key={i} className={`ae-tbtn ${i === level ? "ae-tbtn-on" : ""}`} onClick={() => reset(i)}>{l.label}</button>
         ))}
         <button className="ae-tbtn" onClick={() => reset(level)}>Reset</button>
+        {(phase === "cut" || phase === "deduce") && acceptedCuts.length > 0 && (
+          <button className="ae-tbtn" onClick={undoCut}>Undo</button>
+        )}
       </div>
 
       <svg ref={svgRef} className="ae-svg" viewBox={`0 0 ${W} ${H}`} style={{ touchAction: "none", cursor: phase === "cut" || phase === "frame" ? "crosshair" : "default" }}
-        onPointerDown={onCutDown} onPointerMove={onCutMove} onPointerUp={onCutUp} onPointerCancel={onCutUp}>
+        onPointerDown={onCutMove} onPointerMove={onCutMove} onPointerUp={onCutClick} onPointerLeave={onCutLeave}>
         <defs>
           <pattern id="ae-comp-cell" x={M} y={M} width={U} height={U} patternUnits="userSpaceOnUse">
             <path d={`M ${U} 0 L 0 0 0 ${U}`} fill="none" stroke="var(--bdb-line)" strokeWidth={1} opacity={0.8} />
           </pattern>
+          <clipPath id="ae-comp-clip"><polygon points={pts} /></clipPath>
         </defs>
         <rect x={M} y={M} width={cols * U} height={rows * U} fill="url(#ae-comp-cell)" />
 
@@ -1640,13 +1655,17 @@ function AreaComposite() {
           <line key={i} x1={sx(c.a[0])} y1={sy(c.a[1])} x2={sx(c.b[0])} y2={sy(c.b[1])} stroke="var(--bdb-ink)" strokeWidth={2.5} strokeDasharray="7 5" />
         ))}
 
-        {/* live cut preview */}
-        {drag && (() => {
-          const dx = Math.abs(drag.b[0] - drag.a[0]), dy = Math.abs(drag.b[1] - drag.a[1]);
-          const horizontal = dx >= dy;
-          const x2 = horizontal ? drag.b[0] : drag.a[0];
-          const y2 = horizontal ? drag.a[1] : drag.b[1];
-          return <line x1={sx(drag.a[0])} y1={sy(drag.a[1])} x2={sx(x2)} y2={sy(y2)} stroke="var(--bdb-coral)" strokeWidth={3} strokeDasharray="4 5" />;
+        {/* live cut preview: follows the cursor, clipped to the figure (cut) or
+            the bounding box (frame); a click locks it in */}
+        {hoverCut && (phase === "cut" || phase === "frame") && (() => {
+          const { horizontal, line } = hoverCut;
+          const l = horizontal
+            ? { x1: sx(0), y1: sy(line), x2: sx(cols), y2: sy(line) }
+            : { x1: sx(line), y1: sy(0), x2: sx(line), y2: sy(rows) };
+          return (
+            <line {...l} stroke="var(--bdb-coral)" strokeWidth={3.5} strokeDasharray="4 5"
+              clipPath={phase === "cut" ? "url(#ae-comp-clip)" : undefined} pointerEvents="none" />
+          );
         })()}
 
         {/* outline */}
@@ -1714,12 +1733,32 @@ function AreaComposite() {
         })}
       </svg>
 
+      {phase === "deduce" && step && step.type === "partial" && (
+        <div className="ae-formula" style={{ margin: "10px 0 0" }}>
+          {step.parts.map((pid, i) => (
+            <span key={pid} style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+              {i > 0 && <span>+</span>}
+              {pid === step.edge ? (
+                <input className="ae-slotin" value={stepEntry} inputMode="decimal" placeholder="?" aria-label="missing part length"
+                  autoFocus onChange={(e) => { setStepEntry(e.target.value.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1")); setNote(null); }}
+                  onKeyDown={(e) => e.key === "Enter" && submitStep()} />
+              ) : (
+                <span className="ae-slot ok" style={{ background: "var(--bdb-green)", borderColor: "var(--bdb-green)" }}>{edgeById(pid).value}</span>
+              )}
+            </span>
+          ))}
+          <span>=</span>
+          <span className="ae-slot ok" style={{ background: "var(--bdb-ink)", borderColor: "var(--bdb-ink)" }}>{edgeById(step.whole).value}</span>
+        </div>
+      )}
       {phase === "deduce" && step && (
         <div className="ae-bar">
           {step.type === "partial" && <button className="ae-link" onClick={() => setAnimKey((k) => k + 1)}>Watch again</button>}
-          <input className="ae-slotin" value={stepEntry} inputMode="decimal" placeholder="?" aria-label="side length"
-            onChange={(e) => { setStepEntry(e.target.value.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1")); setNote(null); }}
-            onKeyDown={(e) => e.key === "Enter" && submitStep()} />
+          {step.type !== "partial" && (
+            <input className="ae-slotin" value={stepEntry} inputMode="decimal" placeholder="?" aria-label="side length"
+              onChange={(e) => { setStepEntry(e.target.value.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1")); setNote(null); }}
+              onKeyDown={(e) => e.key === "Enter" && submitStep()} />
+          )}
           <button className="ae-btn" disabled={!stepEntry.trim()} onClick={submitStep}>Enter</button>
         </div>
       )}
