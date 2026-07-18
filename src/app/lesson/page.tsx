@@ -47,6 +47,7 @@ const TOOL_ROUTES: Record<string, string> = {
   "divisibility": "/divisibility", "divisibility rules": "/divisibility",
   "place value": "/place-value", "place value reader": "/place-value",
   "place value mirror": "/place-value-mirror", "place value chart": "/place-value-mirror",
+  "long division": "/long-division", "dividend in the house": "/long-division",
 };
 function lines(text?: string) {
   return (text || "").split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
