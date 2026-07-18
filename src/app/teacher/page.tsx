@@ -59,6 +59,7 @@ const TOOL_GROUPS: { label: string; tools: LinkItem[] }[] = [
       { href: "/fraction-bars", label: "Fraction Bars", letter: "F", color: "#fcaf38", desc: "Fractions, decimals, percents" },
       { href: "/divisibility", label: "Divisibility Rules", letter: "÷", color: "#2f9e6f", desc: "Test each divisor, sort the factors" },
       { href: "/place-value", label: "Place Value Reader", letter: ".", color: "#f95335", desc: "Odometer wheels roll and carry" },
+      { href: "/place-value-mirror", label: "Place Value Mirror", letter: "M", color: "#50a3a4", desc: "Places group in 3s and mirror" },
       { href: "/ladder-method", label: "Ladder Method", letter: "L", color: "#674a40", desc: "GCF, LCM, prime factors" },
     ],
   },

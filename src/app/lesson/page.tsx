@@ -46,6 +46,7 @@ const TOOL_ROUTES: Record<string, string> = {
   "ratio explainer": "/ratio-explainer", "ratios explainer": "/ratio-explainer",
   "divisibility": "/divisibility", "divisibility rules": "/divisibility",
   "place value": "/place-value", "place value reader": "/place-value",
+  "place value mirror": "/place-value-mirror", "place value chart": "/place-value-mirror",
 };
 function lines(text?: string) {
   return (text || "").split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
