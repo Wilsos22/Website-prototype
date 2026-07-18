@@ -182,12 +182,6 @@ export default function LongDivisionHouse() {
     const c = cellById(id);
     return c ? [cx(c.col), cy(c.row)] : [0, 0];
   };
-  function chunkPos(m: Move): [number, number] {
-    const ids = m.highlight.filter((h) => h !== "divisor");
-    if (!ids.length) return posOf("divisor");
-    const ps = ids.map(posOf);
-    return [ps.reduce((s, p) => s + p[0], 0) / ps.length, ps.reduce((s, p) => s + p[1], 0) / ps.length];
-  }
 
   const maxRow = cells.reduce((m, c) => Math.max(m, c.row), 1);
   const width = OX + nd * CW + 92;
@@ -221,7 +215,6 @@ export default function LongDivisionHouse() {
     return `M ${from[0]} ${from[1]} Q ${mx + bow} ${my - Math.abs(bow)} ${to[0]} ${to[1]}`;
   }
 
-  const divA = active && active.step === "divide" ? chunkPos(active) : [0, 0] as [number, number];
   const divQ = active && active.step === "divide" && active.reveal[0] ? posOf(active.reveal[0]) : [0, 0] as [number, number];
 
   return (
@@ -366,30 +359,27 @@ export default function LongDivisionHouse() {
             );
           })()}
 
-          {/* DIVIDE flourish: operands fly in (phase 1), then the quotient appears (phase 2) and travels (phase 3) */}
+          {/* DIVIDE flourish: 7 ÷ 6 appears left to right (phase 1), then = and 1 (phase 2),
+              then the 1 travels up over the house into the quotient (phase 3) */}
           {active && active.step === "divide" && showFlourish && !settled && (
             <g>
-              <path className="ld-trail" d={arc(divA, posOf("divisor"), 14)} fill="none" stroke={C_INK}
-                strokeWidth="2" strokeDasharray="1.5 7" strokeLinecap="round" opacity={phase === 1 ? 0.55 : 0} />
-              <path className="ld-trail" d={arc(posOf("divisor"), divQ, 20)} fill="none" stroke={C_TEAL}
-                strokeWidth="2.5" strokeDasharray="1.5 7" strokeLinecap="round" opacity={phase === 3 ? 0.7 : 0} />
-
               {phase >= PH.divide.ab && (
-                <text className="ld-appear" x={EQ.op} y={ey + 8} textAnchor="middle" fontSize="22" fontWeight="900" fill="var(--bdb-ink)">÷</text>
+                <>
+                  <text className="ld-appear" style={{ animationDelay: "0s" }} x={EQ.a} y={ey + 8} textAnchor="middle" fontSize="24" fontWeight="900" fill={C_TEAL}>{active.eq!.a}</text>
+                  <text className="ld-appear" style={{ animationDelay: "0.2s" }} x={EQ.op} y={ey + 8} textAnchor="middle" fontSize="22" fontWeight="900" fill="var(--bdb-ink)">÷</text>
+                  <text className="ld-appear" style={{ animationDelay: "0.4s" }} x={EQ.b} y={ey + 8} textAnchor="middle" fontSize="24" fontWeight="900" fill="var(--bdb-ink)">{active.eq!.b}</text>
+                </>
               )}
               {phase >= PH.divide.c && (
                 <text className="ld-appear" x={EQ.eq} y={ey + 8} textAnchor="middle" fontSize="22" fontWeight="900" fill="var(--bdb-ink)">=</text>
               )}
-
-              <text className="ld-fly" x={EQ.a} y={ey + 8} textAnchor="middle" fontSize="24" fontWeight="900" fill={C_TEAL}
-                opacity={phase >= PH.divide.ab ? 1 : 0}
-                style={{ transform: phase >= PH.divide.ab ? "translate(0px,0px)" : `translate(${divA[0] - EQ.a}px, ${divA[1] - ey}px)` }}>{active.eq!.a}</text>
-              <text className="ld-fly" x={EQ.b} y={ey + 8} textAnchor="middle" fontSize="24" fontWeight="900" fill={C_INK}
-                opacity={phase >= PH.divide.ab ? 1 : 0}
-                style={{ transform: phase >= PH.divide.ab ? "translate(0px,0px)" : `translate(${posOf("divisor")[0] - EQ.b}px, ${posOf("divisor")[1] - ey}px)` }}>{active.eq!.b}</text>
+              {/* dotted trail from the side equation up over the house */}
+              <path className="ld-trail" d={arc([EQ.c, ey], divQ, 22)} fill="none" stroke={C_TEAL}
+                strokeWidth="2.5" strokeDasharray="1.5 7" strokeLinecap="round" opacity={phase === PH.divide.travel ? 0.7 : 0} />
+              {/* the 1: appears at the side just after =, then travels up over the house */}
               <text className="ld-fly" x={divQ[0]} y={divQ[1] + 10} textAnchor="middle" fontSize="30" fontWeight="900" fill={C_TEAL}
                 opacity={phase >= PH.divide.c ? 1 : 0}
-                style={{ transform: phase >= PH.divide.travel ? "translate(0px,0px)" : `translate(${EQ.c - divQ[0]}px, ${ey - 2 - divQ[1]}px)` }}>{active.eq!.c}</text>
+                style={{ transform: phase >= PH.divide.travel ? "translate(0px,0px)" : `translate(${EQ.c - divQ[0]}px, ${ey - 2 - divQ[1]}px)`, transitionDelay: phase === PH.divide.c ? "0.2s" : "0s" }}>{active.eq!.c}</text>
             </g>
           )}
         </svg>
