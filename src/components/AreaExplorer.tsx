@@ -447,6 +447,10 @@ export default function AreaExplorer() {
         .ae-count-cell { animation:aeCountIn .34s var(--ae-carry) backwards; transform-box:fill-box; transform-origin:center; }
         @keyframes aeCountIn { from { opacity:0; transform:scale(.55); } 60% { opacity:1; transform:scale(1.09); } to { opacity:1; transform:scale(1); } }
         .ae-soon { font-size:0.72rem; font-weight:800; color:var(--bdb-ink-faint); }
+        .ae-compare { display:flex; flex-wrap:wrap; gap:14px; justify-content:center; align-items:stretch; margin-top:6px; }
+        .ae-compcard { display:grid; justify-items:center; gap:8px; padding:14px 16px; border:2px solid var(--bdb-line); background:var(--bdb-card); }
+        .ae-compname { font-size:0.78rem; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; color:var(--bdb-ink-soft); }
+        .ae-compsum { font-weight:900; font-size:1.15rem; }
         .ae-ptask { text-align:center; margin:0 auto 6px; width:max-content; max-width:100%; font-size:0.8rem; font-weight:800; letter-spacing:0.05em; text-transform:uppercase; color:var(--bdb-teal); border:2px solid color-mix(in srgb, var(--bdb-teal) 45%, transparent); border-radius:999px; padding:4px 14px; background:color-mix(in srgb, var(--bdb-teal) 10%, var(--bdb-card)); }
         .ae-plist { width:min(440px,100%); margin:6px auto 0; border:2px solid var(--bdb-line); background:var(--bdb-card); }
         .ae-prow { display:flex; justify-content:space-between; gap:10px; padding:9px 14px; border-bottom:1px solid var(--bdb-line); font-size:0.92rem; }
@@ -1205,6 +1209,15 @@ interface CompLevel {
   piecesBySet: CompPiece[][];
   steps: CompStep[];
   hint: string;
+  // Whole-minus-cutout: after the additive solve, the student closes the
+  // bounding rectangle across the notch and subtracts the cutout, then sees
+  // both methods side by side.
+  subtractive?: {
+    frame: CompCut;              // the segment that closes the whole
+    whole: { w: number; h: number };
+    cutRect: { x: number; y: number; w: number; h: number };
+    hint: string;
+  };
 }
 
 const COMP_LEVELS: CompLevel[] = [
@@ -1290,6 +1303,40 @@ const COMP_LEVELS: CompLevel[] = [
     ],
     hint: "Slice the roof off — one straight cut across where the roof meets the walls.",
   },
+  {
+    label: "Level 4",
+    name: "notch",
+    verts: [[0, 0], [2, 0], [2, 2], [5, 2], [5, 0], [8, 0], [8, 5], [0, 5]],
+    edges: [
+      { id: "A", a: [0, 0], b: [2, 0], value: 2, given: true, off: [0, -18] },
+      { id: "NL", a: [2, 0], b: [2, 2], value: 2, given: true, off: [-24, 0] },
+      { id: "NB", a: [2, 2], b: [5, 2], value: 3, given: false, off: [0, 22] },
+      { id: "NR", a: [5, 0], b: [5, 2], value: 2, given: false, off: [26, 0] },
+      { id: "B", a: [5, 0], b: [8, 0], value: 3, given: false, off: [0, -18] },
+      { id: "D", a: [8, 0], b: [8, 5], value: 5, given: false, off: [26, 0] },
+      { id: "E", a: [0, 5], b: [8, 5], value: 8, given: true, off: [0, 24] },
+      { id: "F", a: [0, 0], b: [0, 5], value: 5, given: true, off: [-26, 0] },
+    ],
+    cutSets: [
+      [{ a: [2, 2], b: [2, 5] }, { a: [5, 2], b: [5, 5] }],
+    ],
+    piecesBySet: [
+      [{ kind: "rect", x: 0, y: 0, w: 2, h: 5 }, { kind: "rect", x: 2, y: 2, w: 3, h: 3 }, { kind: "rect", x: 5, y: 0, w: 3, h: 5 }],
+    ],
+    steps: [
+      { type: "opposite", from: "F", edge: "D", prompt: "The left wall is 5 — the right wall must match. Type its length." },
+      { type: "opposite", from: "NL", edge: "NR", prompt: "The notch's left wall is 2 — its right wall must match. Type it." },
+      { type: "count", edge: "B", prompt: "Count the highlighted squares along this top edge, then type its length.", strip: [[5, 0], [6, 0], [7, 0]] },
+      { type: "partial", whole: "E", parts: ["A", "NB", "B"], edge: "NB", prompt: "The two top edges and the notch floor together match the bottom. Watch them slide down — then type the missing length." },
+    ],
+    hint: "Cut straight down each side of the notch — two cuts, three pieces.",
+    subtractive: {
+      frame: { a: [2, 0], b: [5, 0] },
+      whole: { w: 8, h: 5 },
+      cutRect: { x: 2, y: 0, w: 3, h: 2 },
+      hint: "Close the whole rectangle — drag straight across the opening of the notch.",
+    },
+  },
 ];
 
 const COMP_COLORS = [C_BASE, C_HEIGHT, C_B2];
@@ -1300,7 +1347,7 @@ function AreaComposite() {
   const cols = Math.max(...fig.verts.map((v) => v[0]));
   const rows = Math.max(...fig.verts.map((v) => v[1]));
 
-  const [phase, setPhase] = useState<"cut" | "deduce" | "areas" | "done">("cut");
+  const [phase, setPhase] = useState<"cut" | "deduce" | "areas" | "frame" | "subareas" | "compare" | "done">("cut");
   const [acceptedCuts, setAcceptedCuts] = useState<CompCut[]>([]);
   const [matchedSet, setMatchedSet] = useState<number | null>(null);
   const [stepIdx, setStepIdx] = useState(0);
@@ -1308,6 +1355,9 @@ function AreaComposite() {
   const [stepEntry, setStepEntry] = useState("");
   const [pieceEntries, setPieceEntries] = useState<string[]>([]);
   const [totalEntry, setTotalEntry] = useState("");
+  const [subWhole, setSubWhole] = useState("");
+  const [subCut, setSubCut] = useState("");
+  const [subTotal, setSubTotal] = useState("");
   const [note, setNote] = useState<string | null>(null);
   const [animOn, setAnimOn] = useState(false);
   const [animKey, setAnimKey] = useState(0);
@@ -1328,6 +1378,7 @@ function AreaComposite() {
     setLevel(lv);
     setPhase("cut"); setAcceptedCuts([]); setMatchedSet(null); setStepIdx(0);
     setSolvedEdges({}); setStepEntry(""); setPieceEntries([]); setTotalEntry("");
+    setSubWhole(""); setSubCut(""); setSubTotal("");
     setNote(null); setAnimOn(false); setAnimKey(0); setDrag(null);
     wrongRef.current = 0; solvedRef.current = false;
   }, []);
@@ -1353,20 +1404,40 @@ function AreaComposite() {
     return [clamp(gx, 0, cols), clamp(gy, 0, rows)];
   };
   const onCutDown = (e: React.PointerEvent) => {
-    if (phase !== "cut") return;
+    if (phase !== "cut" && phase !== "frame") return;
     const p = snapNode(e);
     setDrag({ a: p, b: p });
     svgRef.current?.setPointerCapture?.(e.pointerId);
   };
   const onCutMove = (e: React.PointerEvent) => {
-    if (phase !== "cut" || !drag) return;
+    if ((phase !== "cut" && phase !== "frame") || !drag) return;
     setDrag((d) => (d ? { ...d, b: snapNode(e) } : d));
   };
   const onCutUp = () => {
-    if (phase !== "cut" || !drag) return;
+    if ((phase !== "cut" && phase !== "frame") || !drag) return;
     const { a, b } = drag;
     setDrag(null);
     const dx = Math.abs(b[0] - a[0]), dy = Math.abs(b[1] - a[1]);
+    if (phase === "frame") {
+      const fr = fig.subtractive!.frame;
+      const frHorizontal = fr.a[1] === fr.b[1];
+      const horizontal = dx >= dy;
+      const line = horizontal ? a[1] : a[0];
+      const s0 = horizontal ? Math.min(a[0], b[0]) : Math.min(a[1], b[1]);
+      const s1 = horizontal ? Math.max(a[0], b[0]) : Math.max(a[1], b[1]);
+      const frLine = frHorizontal ? fr.a[1] : fr.a[0];
+      const f0 = frHorizontal ? Math.min(fr.a[0], fr.b[0]) : Math.min(fr.a[1], fr.b[1]);
+      const f1 = frHorizontal ? Math.max(fr.a[0], fr.b[0]) : Math.max(fr.a[1], fr.b[1]);
+      const ok = (dx >= 1 || dy >= 1) && horizontal === frHorizontal && line === frLine && s0 <= f0 + 1 && s1 >= f1 - 1;
+      if (!ok) {
+        wrongRef.current += 1;
+        setNote(`Not quite. ${fig.subtractive!.hint}`);
+        return;
+      }
+      setNote(null);
+      setPhase("subareas");
+      return;
+    }
     if (dx < 1 && dy < 1) { setNote(`Drag along a grid line to draw your cut. ${fig.hint}`); return; }
     const horizontal = dx >= dy;
     const line = horizontal ? a[1] : a[0];
@@ -1453,11 +1524,39 @@ function AreaComposite() {
       return;
     }
     setNote(null);
+    if (fig.subtractive) { setPhase("frame"); return; }
+    finishFigure();
+  }
+
+  function finishFigure() {
     setPhase("done");
     if (!solvedRef.current) {
       solvedRef.current = true;
       reportToolResult({ tool: "area-explorer", correct: wrongRef.current === 0, standardId: "6.G.A.1", misconception: null, problemId: `composite-l${level + 1}-${fig.name}` });
     }
+  }
+
+  function checkSubAreas() {
+    if (!fig.subtractive) return;
+    const wholeA = fig.subtractive.whole.w * fig.subtractive.whole.h;
+    const cutA = fig.subtractive.cutRect.w * fig.subtractive.cutRect.h;
+    if (Number(subWhole) !== wholeA) {
+      wrongRef.current += 1;
+      setNote(`The whole rectangle is ${fig.subtractive.whole.w} times ${fig.subtractive.whole.h}.`);
+      return;
+    }
+    if (Number(subCut) !== cutA) {
+      wrongRef.current += 1;
+      setNote(`The cutout is ${fig.subtractive.cutRect.w} times ${fig.subtractive.cutRect.h}.`);
+      return;
+    }
+    if (Number(subTotal) !== wholeA - cutA) {
+      wrongRef.current += 1;
+      setNote(`Subtract: ${wholeA} minus ${cutA} = ?`);
+      return;
+    }
+    setNote(null);
+    setPhase("compare");
   }
 
   // ── Rendering helpers ─────────────────────────────────────────────────────
@@ -1487,12 +1586,18 @@ function AreaComposite() {
         {phase === "cut" && "Divide the figure into simple shapes"}
         {phase === "deduce" && "Find every side length"}
         {phase === "areas" && "Find each piece's area"}
+        {phase === "frame" && "Method 2: whole minus cutout"}
+        {phase === "subareas" && "Whole minus cutout"}
+        {phase === "compare" && "Two methods, one area"}
         {phase === "done" && `Total area = ${totalArea} square units`}
       </div>
       <div className="ae-sub">
         {phase === "cut" && (acceptedCuts.length ? "Keep going — drag your next cut." : "Press and drag along a grid line to draw your cut.")}
         {phase === "deduce" && step?.prompt}
         {phase === "areas" && "Use the sides you marked. Add the pieces for the total."}
+        {phase === "frame" && "Same figure, different idea: close the WHOLE rectangle — drag across the notch opening."}
+        {phase === "subareas" && "Find the whole rectangle's area, the cutout's area, and subtract."}
+        {phase === "compare" && "Adding the pieces and subtracting the cutout give the SAME area."}
         {phase === "done" && "Divided, deduced, and solved — same area either way you cut it."}
       </div>
 
@@ -1503,7 +1608,7 @@ function AreaComposite() {
         <button className="ae-tbtn" onClick={() => reset(level)}>Reset</button>
       </div>
 
-      <svg ref={svgRef} className="ae-svg" viewBox={`0 0 ${W} ${H}`} style={{ touchAction: "none", cursor: phase === "cut" ? "crosshair" : "default" }}
+      <svg ref={svgRef} className="ae-svg" viewBox={`0 0 ${W} ${H}`} style={{ touchAction: "none", cursor: phase === "cut" || phase === "frame" ? "crosshair" : "default" }}
         onPointerDown={onCutDown} onPointerMove={onCutMove} onPointerUp={onCutUp} onPointerCancel={onCutUp}>
         <defs>
           <pattern id="ae-comp-cell" x={M} y={M} width={U} height={U} patternUnits="userSpaceOnUse">
@@ -1546,6 +1651,22 @@ function AreaComposite() {
 
         {/* outline */}
         <polygon points={pts} fill={phase === "cut" ? `color-mix(in srgb, ${C_BASE} 16%, transparent)` : "none"} stroke="var(--bdb-ink)" strokeWidth={3} strokeLinejoin="miter" />
+
+        {/* whole-minus-cutout: the closed whole and the hatched cutout */}
+        {fig.subtractive && (phase === "subareas" || phase === "compare") && (() => {
+          const sub = fig.subtractive;
+          const cr = sub.cutRect;
+          return (
+            <g>
+              <rect x={sx(0)} y={sy(0)} width={sub.whole.w * U} height={sub.whole.h * U}
+                fill="none" stroke={C_BASE} strokeWidth={4} strokeDasharray="10 6" />
+              <rect x={sx(cr.x)} y={sy(cr.y)} width={cr.w * U} height={cr.h * U}
+                fill={`color-mix(in srgb, ${C_B2} 34%, transparent)`} stroke={C_B2} strokeWidth={2.5} strokeDasharray="5 4" />
+              <line x1={sx(cr.x)} y1={sy(cr.y)} x2={sx(cr.x + cr.w)} y2={sy(cr.y + cr.h)} stroke={C_B2} strokeWidth={2} />
+              <line x1={sx(cr.x + cr.w)} y1={sy(cr.y)} x2={sx(cr.x)} y2={sy(cr.y + cr.h)} stroke={C_B2} strokeWidth={2} />
+            </g>
+          );
+        })()}
 
         {/* interior helper edges (roof base is the cut itself; roof height is dashed) */}
         {fig.edges.filter((e) => e.interior && (edgeKnown(e) || e.id === stepTargetId)).map((e) => {
@@ -1626,11 +1747,75 @@ function AreaComposite() {
         </>
       )}
 
+      {phase === "subareas" && fig.subtractive && (
+        <>
+          <div className="ae-formula">
+            <span style={{ display: "inline-grid", placeItems: "center", minWidth: 48, minHeight: 40, padding: "0 8px", border: `3px solid ${C_BASE}`, color: C_BASE, fontSize: "0.95rem", background: "#fff" }}>
+              {fig.subtractive.whole.w}×{fig.subtractive.whole.h}
+            </span>
+            <input className="ae-answer" style={{ width: 64 }} value={subWhole} inputMode="numeric"
+              onChange={(e) => { setSubWhole(e.target.value.replace(/\D/g, "")); setNote(null); }} aria-label="whole rectangle area" />
+            <span>−</span>
+            <span style={{ display: "inline-grid", placeItems: "center", minWidth: 48, minHeight: 40, padding: "0 8px", border: `3px solid ${C_B2}`, color: C_B2, fontSize: "0.95rem", background: "#fff" }}>
+              {fig.subtractive.cutRect.w}×{fig.subtractive.cutRect.h}
+            </span>
+            <input className="ae-answer" style={{ width: 64 }} value={subCut} inputMode="numeric"
+              onChange={(e) => { setSubCut(e.target.value.replace(/\D/g, "")); setNote(null); }} aria-label="cutout area" />
+            <span>=</span>
+            <input className="ae-answer" style={{ width: 84 }} value={subTotal} inputMode="numeric"
+              onChange={(e) => { setSubTotal(e.target.value.replace(/\D/g, "")); setNote(null); }}
+              onKeyDown={(e) => e.key === "Enter" && checkSubAreas()} aria-label="whole minus cutout total" />
+          </div>
+          <div className="ae-bar"><button className="ae-btn" onClick={checkSubAreas}>Check</button></div>
+        </>
+      )}
+
+      {phase === "compare" && fig.subtractive && (() => {
+        const sub = fig.subtractive;
+        const cr = sub.cutRect;
+        const mu = 22; // mini-figure unit
+        const mw = sub.whole.w * mu + 12, mh = sub.whole.h * mu + 12;
+        const mx = (g: number) => 6 + g * mu;
+        const my = (g: number) => 6 + g * mu;
+        const miniPts = fig.verts.map((v) => `${mx(v[0])},${my(v[1])}`).join(" ");
+        return (
+          <div className="ae-compare">
+            <div className="ae-compcard">
+              <div className="ae-compname">Add the pieces</div>
+              <svg width={mw} height={mh} viewBox={`0 0 ${mw} ${mh}`} aria-label="additive decomposition">
+                {pieces.map((pc, i) => (
+                  <rect key={i} x={mx(pc.x)} y={my(pc.y)} width={pc.w * mu} height={pc.h * mu}
+                    fill={`color-mix(in srgb, ${COMP_COLORS[i % COMP_COLORS.length]} 38%, transparent)`} stroke="var(--bdb-ink)" strokeWidth={1.5} />
+                ))}
+                <polygon points={miniPts} fill="none" stroke="var(--bdb-ink)" strokeWidth={2.5} />
+              </svg>
+              <div className="ae-compsum">{pieces.map((pc) => pieceArea(pc)).join(" + ")} = {totalArea}</div>
+            </div>
+            <div className="ae-compcard">
+              <div className="ae-compname">Whole minus cutout</div>
+              <svg width={mw} height={mh} viewBox={`0 0 ${mw} ${mh}`} aria-label="subtractive decomposition">
+                <rect x={mx(0)} y={my(0)} width={sub.whole.w * mu} height={sub.whole.h * mu}
+                  fill={`color-mix(in srgb, ${C_BASE} 30%, transparent)`} stroke={C_BASE} strokeWidth={2.5} strokeDasharray="7 4" />
+                <rect x={mx(cr.x)} y={my(cr.y)} width={cr.w * mu} height={cr.h * mu}
+                  fill={`color-mix(in srgb, ${C_B2} 40%, transparent)`} stroke={C_B2} strokeWidth={2} />
+                <line x1={mx(cr.x)} y1={my(cr.y)} x2={mx(cr.x + cr.w)} y2={my(cr.y + cr.h)} stroke={C_B2} strokeWidth={1.5} />
+                <line x1={mx(cr.x + cr.w)} y1={my(cr.y)} x2={mx(cr.x)} y2={my(cr.y + cr.h)} stroke={C_B2} strokeWidth={1.5} />
+                <polygon points={miniPts} fill="none" stroke="var(--bdb-ink)" strokeWidth={2.5} />
+              </svg>
+              <div className="ae-compsum">{sub.whole.w * sub.whole.h} − {cr.w * cr.h} = {sub.whole.w * sub.whole.h - cr.w * cr.h}</div>
+            </div>
+            <div className="ae-bar" style={{ width: "100%" }}>
+              <button className="ae-btn" onClick={finishFigure}>Same area both ways — finish</button>
+            </div>
+          </div>
+        );
+      })()}
+
       {phase === "done" && (
         <div className="ae-bar">
           {level + 1 < COMP_LEVELS.length
             ? <button className="ae-btn" onClick={() => reset(level + 1)}>Next level</button>
-            : <button className="ae-btn ghost" onClick={() => reset(0)}>All 3 levels complete — start over</button>}
+            : <button className="ae-btn ghost" onClick={() => reset(0)}>All levels complete — start over</button>}
         </div>
       )}
 
