@@ -29,6 +29,9 @@ Use Albert Sans with bold, direct hierarchy. The experience should feel inviting
 - Warm-up review is a brief look at answers and frequently missed problems. Do not design a digital correction flow.
 - Use the beginning halftime score problem for the launch scoreboard. This is not the Google Form.
 - Discussion must include the current prompt, round number, sentence stems, and vocabulary.
+- After the midlesson readiness check, design a private `City Routes` transition. The system chooses three names from an editable ten-city bank, rotates both the names and their instructional meanings between lessons, and lets the teacher shuffle, override, and release assignments from the iPad without calling names publicly.
+- The student route result shows only one city, its physical destination, required materials, and first action. Do not show a score, tier, misconception label, or ability-group language.
+- Public projectors may show an anonymous city-to-location key but never student names or route rosters.
 - Loading a lesson is a preview state. Pressing `Start lesson` turns on automatic pacing and starts the current timer.
 - The selected lesson's warm-up is available from the accepted-code homepage before `Start lesson`; student access never depends on the pacing timer.
 - Challenge activities unlock only after the assigned Google Form completes the current session's receipt; an identity link from a previous day is not enough.
@@ -91,6 +94,7 @@ Include reusable component specifications and at least one frame for each of the
 - reconnecting while preserving current work
 - editing, saving, saved, save failed, and submitted
 - command sending, received, failed, and disconnected
+- City Routes loading, teacher review, individual override, `Shuffle cities`, released, staggered release, student assignment, `Needs assignment`, and reconnect recovery
 - lesson loaded, automatic pacing started, paused, resumed, stopped, and `Time is up`
 - board panel closed and side-by-side board panel open
 - end-session confirmation and session ended
@@ -126,6 +130,7 @@ Name the export with the lesson code and revision date. Place the new package in
 - The iPad is both the remote and the writing surface without replacing the problem on the main projector.
 - Warm-up has no lesson target.
 - Midlesson has exactly one `I can` statement.
+- City Routes privately direct each student without exposing scores or permanent group labels, and both city names and route meanings rotate between lessons.
 - Discussion includes stems and vocabulary.
 - Start lesson enables automatic pacing; Pause holds the state, and timer zero advances after its transition.
 - Navigation reaches every phase through closeout.

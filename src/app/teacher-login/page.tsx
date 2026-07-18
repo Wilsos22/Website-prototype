@@ -3,12 +3,25 @@
 // The one teacher login. Password only; success sets a cookie that remembers
 // this device for ~6 months, then sends you where you were headed.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+const NOT_CONFIGURED =
+  "This deployment can't see TEACHER_PASSWORD, so the teacher area can't unlock — no password will work. " +
+  "On Vercel, check that the variable is enabled for this environment (Production AND Preview); locally, set it in .env.local. Then redeploy/restart.";
 
 export default function TeacherLogin() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // The proxy redirects here with ?error=configuration when the deployment has
+  // no TEACHER_PASSWORD. Surface that loudly — otherwise login "succeeds" and
+  // bounces straight back here, which reads as a wrong password.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("error") === "configuration") {
+      setError(NOT_CONFIGURED);
+    }
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -22,6 +35,7 @@ export default function TeacherLogin() {
       });
       const d = await res.json();
       if (!res.ok || d.error) { setError(d.error || "Login failed."); setBusy(false); return; }
+      if (d.note) { setError(NOT_CONFIGURED); setBusy(false); return; } // no password configured — don't redirect into the bounce loop
       const next = new URLSearchParams(window.location.search).get("next");
       const safe = next && next.startsWith("/") && !next.startsWith("//") ? next : "/teacher";
       window.location.href = safe;

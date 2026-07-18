@@ -18,9 +18,12 @@ export async function POST(req: Request) {
 
   const token = await teacherToken(password);
   const res = Response.json({ ok: true });
+  // Secure only in production: over plain http://localhost browsers refuse to
+  // store a Secure cookie, which made local login "succeed" then bounce back.
+  const secure = process.env.NODE_ENV === "production" ? " Secure;" : "";
   res.headers.append(
     "Set-Cookie",
-    `${TEACHER_COOKIE}=${token}; Path=/; Max-Age=${TEACHER_COOKIE_MAX_AGE}; HttpOnly; Secure; SameSite=Lax`,
+    `${TEACHER_COOKIE}=${token}; Path=/; Max-Age=${TEACHER_COOKIE_MAX_AGE}; HttpOnly;${secure} SameSite=Lax`,
   );
   return res;
 }

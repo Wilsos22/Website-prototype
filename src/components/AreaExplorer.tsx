@@ -49,7 +49,7 @@ interface Shape {
   verts: Pt[];
   base: Mark;
   height: HeightMark;
-  decoy: DecoyMark;
+  decoy?: DecoyMark; // slant trap on para/triangle/trapezoid; rectangles get none
   base2?: Mark;
   formula: Token[];
   slots: Slot[];
@@ -59,31 +59,39 @@ interface Shape {
 }
 
 // ── Shape generation ────────────────────────────────────────────────────────
-function makeShape(type: ShapeType): Shape {
-  const unit = UNITS[rand(0, UNITS.length - 1)];
+// Optional fixed dims make a shape deterministic — used by the Practice mode's
+// curated task set so every student works the same assigned builds.
+interface FixedDims { b?: number; h?: number; k?: number; a?: number; b1?: number; b2?: number; o?: number; unit?: string; problemId?: string }
+
+function makeShape(type: ShapeType, fixed?: FixedDims): Shape {
+  const unit = fixed?.unit ?? UNITS[rand(0, UNITS.length - 1)];
   const slot = (id: string, value: number, color: string, ghost: string, mark: MarkKind): Slot => ({ id, value, color, ghost, mark });
 
   if (type === "rectangle" || type === "square") {
-    const b = type === "square" ? rand(3, 8) : rand(3, 10);
-    const h = type === "square" ? b : rand(3, 8);
-    const diag = round1(Math.hypot(b, h));
+    let b = fixed?.b ?? (type === "square" ? rand(3, 8) : rand(3, 10));
+    let h = type === "square" ? b : fixed?.h ?? rand(3, 8);
+    // A random rectangle must READ as a rectangle — keep the sides at least
+    // 3 apart so it never looks like the square tile next door.
+    if (type === "rectangle" && fixed?.b == null) {
+      while (Math.abs(b - h) < 3) { b = rand(3, 10); h = rand(3, 8); }
+    }
     const slots: Slot[] = type === "square"
       ? [slot("s1", b, C_BASE, "s", "base"), slot("s2", b, C_HEIGHT, "s", "height")]
       : [slot("b", b, C_BASE, "b", "base"), slot("h", h, C_HEIGHT, "h", "height")];
     const formula: Token[] = [{ t: "text", v: "A =" }, { t: "slot", slot: slots[0] }, { t: "text", v: "×" }, { t: "slot", slot: slots[1] }];
-    const chips = shuffle(Array.from(new Set([b, h, diag])));
+    const chips = shuffle(Array.from(new Set([b, h])));
+    // No diagonal decoy here — rectangles don't need it, and it only confuses.
     return {
       type, unit, cols: b, rows: h,
       verts: [[0, 0], [b, 0], [b, h], [0, h]],
       base: { a: [0, h], b: [b, h], value: b, label: type === "square" ? "s" : "b" },
       height: { a: [0, 0], b: [0, h], foot: [0, h], value: h, label: type === "square" ? "s" : "h" },
-      decoy: { a: [0, 0], b: [b, h], value: diag, name: "diagonal" },
-      formula, slots, chips, area: b * h, problemId: `${type}-${b}x${h}-${unit}`,
+      formula, slots, chips, area: b * h, problemId: fixed?.problemId ?? `${type}-${b}x${h}-${unit}`,
     };
   }
 
   if (type === "parallelogram") {
-    const b = rand(4, 9), h = rand(3, 7), k = rand(1, 4);
+    const b = fixed?.b ?? rand(4, 9), h = fixed?.h ?? rand(3, 7), k = fixed?.k ?? rand(1, 4);
     const slant = round1(Math.hypot(k, h));
     const slots = [slot("b", b, C_BASE, "b", "base"), slot("h", h, C_HEIGHT, "h", "height")];
     const formula: Token[] = [{ t: "text", v: "A =" }, { t: "slot", slot: slots[0] }, { t: "text", v: "×" }, { t: "slot", slot: slots[1] }];
@@ -94,14 +102,14 @@ function makeShape(type: ShapeType): Shape {
       base: { a: [0, h], b: [b, h], value: b, label: "b" },
       height: { a: [k, 0], b: [k, h], foot: [k, h], value: h, label: "h" },
       decoy: { a: [0, h], b: [k, 0], value: slant, name: "slant" },
-      formula, slots, chips, area: b * h, problemId: `parallelogram-${b}x${h}s${k}-${unit}`,
+      formula, slots, chips, area: b * h, problemId: fixed?.problemId ?? `parallelogram-${b}x${h}s${k}-${unit}`,
     };
   }
 
   if (type === "triangle") {
-    let b = rand(4, 10), h = rand(3, 8);
-    while ((b * h) % 2 !== 0) { b = rand(4, 10); h = rand(3, 8); }
-    const a = rand(2, b - 1); // apex x — kept off the edges so the height sits clearly inside
+    let b = fixed?.b ?? rand(4, 10), h = fixed?.h ?? rand(3, 8);
+    while ((b * h) % 2 !== 0 && fixed?.b == null) { b = rand(4, 10); h = rand(3, 8); }
+    const a = fixed?.a ?? rand(2, b - 1); // apex x — kept off the edges so the height sits clearly inside
     const slant = round1(Math.hypot(b - a, h)); // right slant edge
     const slots = [slot("b", b, C_BASE, "b", "base"), slot("h", h, C_HEIGHT, "h", "height")];
     const formula: Token[] = [{ t: "text", v: "A = ½ ×" }, { t: "slot", slot: slots[0] }, { t: "text", v: "×" }, { t: "slot", slot: slots[1] }];
@@ -112,14 +120,14 @@ function makeShape(type: ShapeType): Shape {
       base: { a: [0, h], b: [b, h], value: b, label: "b" },
       height: { a: [a, 0], b: [a, h], foot: [a, h], value: h, label: "h" },
       decoy: { a: [b, h], b: [a, 0], value: slant, name: "slant" },
-      formula, slots, chips, area: (b * h) / 2, problemId: `triangle-${b}x${h}a${a}-${unit}`,
+      formula, slots, chips, area: (b * h) / 2, problemId: fixed?.problemId ?? `triangle-${b}x${h}a${a}-${unit}`,
     };
   }
 
   // trapezoid
-  let b1 = rand(5, 10), b2 = rand(2, b1 - 2), h = rand(3, 7);
-  while (((b1 + b2) * h) % 2 !== 0) { b1 = rand(5, 10); b2 = rand(2, b1 - 2); h = rand(3, 7); }
-  const o = rand(1, Math.max(1, b1 - b2));
+  let b1 = fixed?.b1 ?? rand(5, 10), b2 = fixed?.b2 ?? rand(2, b1 - 2), h = fixed?.h ?? rand(3, 7);
+  while (((b1 + b2) * h) % 2 !== 0 && fixed?.b1 == null) { b1 = rand(5, 10); b2 = rand(2, b1 - 2); h = rand(3, 7); }
+  const o = fixed?.o ?? rand(1, Math.max(1, b1 - b2));
   const slant = round1(Math.hypot(o, h)); // left leg
   const slots = [
     slot("b1", b1, C_BASE, "b₁", "base"),
@@ -137,8 +145,51 @@ function makeShape(type: ShapeType): Shape {
     height: { a: [o, 0], b: [o, h], foot: [o, h], value: h, label: "h" },
     decoy: { a: [0, h], b: [o, 0], value: slant, name: "slant" },
     base2: { a: [o, 0], b: [o + b2, 0], value: b2, label: "b₂" },
-    formula, slots, chips, area: ((b1 + b2) * h) / 2, problemId: `trapezoid-${b1}-${b2}x${h}o${o}-${unit}`,
+    formula, slots, chips, area: ((b1 + b2) * h) / 2, problemId: fixed?.problemId ?? `trapezoid-${b1}-${b2}x${h}o${o}-${unit}`,
   };
+}
+
+// ── Practice mode: the assigned task set (M1.T2-P1) ─────────────────────────
+// A curated, deterministic sequence every student completes in order: four
+// assigned builds (one per shape — copied onto the paper evidence card), one
+// slanted-side error analysis, and a final check. Progress and completion are
+// saved on the device so students can show the confirmed state before closing
+// the Chromebook.
+interface PracticeTask { title: string; type: ShapeType; fixed: FixedDims; note: string }
+
+const PRACTICE_TASKS: PracticeTask[] = [
+  { title: "Build 1 — Rectangle", type: "rectangle", fixed: { b: 7, h: 4, unit: "cm", problemId: "practice-1-rectangle-7x4" },
+    note: "Copy this figure onto your evidence card: mark the base, the height, and the square units." },
+  { title: "Build 2 — Parallelogram", type: "parallelogram", fixed: { b: 8, h: 5, k: 2, unit: "m", problemId: "practice-2-parallelogram-8x5" },
+    note: "Copy this figure onto your evidence card. Careful — one of those numbers is the slant." },
+  { title: "Build 3 — Triangle", type: "triangle", fixed: { b: 10, h: 4, a: 3, unit: "in", problemId: "practice-3-triangle-10x4" },
+    note: "Copy this figure onto your evidence card: mark the base and the PERPENDICULAR height." },
+  { title: "Build 4 — Trapezoid", type: "trapezoid", fixed: { b1: 9, b2: 5, h: 4, o: 2, unit: "ft", problemId: "practice-4-trapezoid-9-5x4" },
+    note: "Copy this figure onto your evidence card: label both bases and the height." },
+  { title: "Error analysis", type: "parallelogram", fixed: { b: 6, h: 4, k: 3, unit: "cm", problemId: "practice-5-error-slant" },
+    note: "A student used the slant side as the height. Put the CORRECT measurements in the formula, then write the fix on your card." },
+  { title: "Final check — Triangle", type: "triangle", fixed: { b: 8, h: 6, a: 5, unit: "m", problemId: "practice-6-triangle-8x6" },
+    note: "Last one. Every measurement, the right formula, the right unit." },
+];
+
+const PRACTICE_KEY = "bdm-area-practice-v1";
+const COUNT_INTRO_KEY = "bdm-area-count-intro-v1"; // first visit: count the squares before anything else
+interface PracticeResult { firstTry: boolean; wrongs: number }
+interface PracticeSave { idx: number; results: (PracticeResult | null)[]; confirmedAt: string | null }
+
+function loadPractice(): PracticeSave {
+  const empty: PracticeSave = { idx: 0, results: PRACTICE_TASKS.map(() => null), confirmedAt: null };
+  try {
+    const raw = window.localStorage.getItem(PRACTICE_KEY);
+    if (!raw) return empty;
+    const p = JSON.parse(raw) as PracticeSave;
+    if (typeof p.idx !== "number" || !Array.isArray(p.results)) return empty;
+    return {
+      idx: Math.max(0, Math.min(PRACTICE_TASKS.length, p.idx)),
+      results: PRACTICE_TASKS.map((_, i) => p.results[i] ?? null),
+      confirmedAt: typeof p.confirmedAt === "string" ? p.confirmedAt : null,
+    };
+  } catch { return empty; }
 }
 
 // point-in-polygon (ray cast) for the count-squares self-check
@@ -152,12 +203,11 @@ function inPoly(x: number, y: number, verts: Pt[]) {
 }
 
 export default function AreaExplorer() {
-  const [mode, setMode] = useState<"solve" | "sandbox">("solve");
+  const [mode, setMode] = useState<"solve" | "practice" | "sandbox" | "composite">("solve");
   const [phase, setPhase] = useState<Phase>("bank");
   const [shape, setShape] = useState<Shape | null>(null);
   const [placed, setPlaced] = useState<Record<string, number | null>>({});
-  const [picked, setPicked] = useState<number | null>(null);
-  const [focusSlot, setFocusSlot] = useState<string | null>(null);
+  const [slotEntry, setSlotEntry] = useState(""); // what the student is typing into the active blank
   const [answer, setAnswer] = useState("");
   const [note, setNote] = useState<string | null>(null);
   const [wrongSteps, setWrongSteps] = useState(0);
@@ -165,9 +215,38 @@ export default function AreaExplorer() {
   const [showCount, setShowCount] = useState(false);
   const [whySquared, setWhySquared] = useState(false);
   const [finePointer, setFinePointer] = useState(false);
+  // First visit ever: the count animation runs before the student can answer.
+  const [introCount, setIntroCount] = useState(false);
+  const [introReady, setIntroReady] = useState(false);
+  // A wrong side length re-counts that side's boxes on the figure.
+  const [sideCount, setSideCount] = useState<MarkKind | null>(null);
   const solvedRef = useRef(false);
 
+  // Practice mode: current task, per-task results, and the confirmed state —
+  // persisted on the device so completion survives a reload and can be shown
+  // to the teacher before the Chromebook closes.
+  const [pIdx, setPIdx] = useState(0);
+  const [pResults, setPResults] = useState<(PracticeResult | null)[]>(() => PRACTICE_TASKS.map(() => null));
+  const [pConfirmedAt, setPConfirmedAt] = useState<string | null>(null);
+  // Hydration gate as STATE, not a ref: the save effect must not run until the
+  // loaded values have actually rendered, or a remount can overwrite the saved
+  // progress with the initial empty state.
+  const [pHydrated, setPHydrated] = useState(false);
+
   useEffect(() => { setFinePointer(window.matchMedia?.("(pointer: fine)").matches ?? false); }, []);
+
+  useEffect(() => {
+    const saved = loadPractice();
+    setPIdx(saved.idx); setPResults(saved.results); setPConfirmedAt(saved.confirmedAt);
+    setPHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!pHydrated) return;
+    try {
+      window.localStorage.setItem(PRACTICE_KEY, JSON.stringify({ idx: pIdx, results: pResults, confirmedAt: pConfirmedAt } satisfies PracticeSave));
+    } catch { /* storage unavailable — practice still works, it just won't survive a reload */ }
+  }, [pHydrated, pIdx, pResults, pConfirmedAt]);
 
   const flagWrong = useCallback((tag: string) => {
     setWrongSteps((w) => w + 1);
@@ -177,15 +256,57 @@ export default function AreaExplorer() {
   const startShape = useCallback((s: Shape) => {
     setShape(s);
     setPlaced(Object.fromEntries(s.slots.map((sl) => [sl.id, null])));
-    setPicked(null); setFocusSlot(null); setAnswer(""); setNote(null);
+    setSlotEntry(""); setAnswer(""); setNote(null);
     setWrongSteps(0); setFirstTag(null); setShowCount(false); setWhySquared(false);
+    setSideCount(null);
     solvedRef.current = false;
     setPhase("substitute");
+  }, []);
+
+  // The very first shape a student ever opens starts with the counting
+  // animation — they count the squares before they can do anything else.
+  useEffect(() => {
+    if (!shape) return;
+    let seen = true;
+    try { seen = window.localStorage.getItem(COUNT_INTRO_KEY) === "yes"; } catch { seen = true; }
+    if (!seen) { setIntroCount(true); setIntroReady(false); setShowCount(true); }
+  }, [shape]);
+
+  useEffect(() => {
+    if (!introCount) return;
+    const t = window.setTimeout(() => setIntroReady(true), 2600); // let the numbered fill finish
+    return () => window.clearTimeout(t);
+  }, [introCount]);
+
+  const finishIntroCount = useCallback(() => {
+    try { window.localStorage.setItem(COUNT_INTRO_KEY, "yes"); } catch { /* fine */ }
+    setIntroCount(false); setShowCount(false);
   }, []);
 
   const pickShape = useCallback((type: ShapeType) => startShape(makeShape(type)), [startShape]);
   const resetProblem = useCallback(() => { if (shape) startShape({ ...shape }); }, [shape, startShape]);
   const randomSame = useCallback(() => { if (shape) startShape(makeShape(shape.type)); }, [shape, startShape]);
+
+  // Entering practice (or advancing to the next task) starts that task's shape.
+  useEffect(() => {
+    if (!pHydrated || mode !== "practice") return;
+    if (pIdx < PRACTICE_TASKS.length) {
+      const t = PRACTICE_TASKS[pIdx];
+      startShape(makeShape(t.type, t.fixed));
+    }
+  }, [pHydrated, mode, pIdx, startShape]);
+
+  const practiceAdvance = useCallback(() => {
+    setPIdx((i) => Math.min(PRACTICE_TASKS.length, i + 1));
+  }, []);
+  const practiceRestart = useCallback(() => {
+    if (!window.confirm("Start the whole practice set over? Your saved progress will be cleared.")) return;
+    setPResults(PRACTICE_TASKS.map(() => null));
+    setPConfirmedAt(null);
+    setPIdx(0);
+    // start task 1 directly — the pIdx effect won't re-fire if we were already on it
+    startShape(makeShape(PRACTICE_TASKS[0].type, PRACTICE_TASKS[0].fixed));
+  }, [startShape]);
 
   const back = useCallback(() => {
     setNote(null);
@@ -200,41 +321,43 @@ export default function AreaExplorer() {
     [shape, placed],
   );
 
-  function placeInSlot(slotId: string, value: number) {
-    if (!shape) return;
-    const sl = shape.slots.find((s) => s.id === slotId);
-    if (!sl) return;
-    if (value === shape.decoy.value) {
+  // Students type each measurement themselves, in formula order — the base
+  // before the height (and b1 before b2 before h on a trapezoid). The next
+  // blank only opens once the current one is right.
+  const activeSlot = useMemo(
+    () => (shape ? shape.slots.find((sl) => placed[sl.id] !== sl.value) ?? null : null),
+    [shape, placed],
+  );
+
+  function submitSlotEntry() {
+    if (!shape || !activeSlot) return;
+    const raw = slotEntry.trim();
+    if (!raw) return;
+    const value = Number(raw);
+    if (!Number.isFinite(value)) { setSlotEntry(""); return; }
+    if (shape.decoy && value === shape.decoy.value) {
       setNote(shape.decoy.name === "diagonal"
         ? "That's the diagonal, not a side you multiply. Use the base and the height."
         : "That's the slant side, not the height. The height has the right-angle mark — use the dashed length.");
       flagWrong("slant-for-height");
-      setPicked(null);
+      setSlotEntry("");
       return;
     }
-    if (value !== sl.value) {
-      setNote(sl.mark === "height"
-        ? "Check which side that is. The height goes straight up from the base."
+    if (value !== activeSlot.value) {
+      setNote(activeSlot.mark === "height"
+        ? "Not quite — count the highlighted squares along the height."
         : shape.type === "square"
         ? "A square's sides are equal — both blanks are the same number."
-        : "Not that measurement — look at what each side is labeled.");
+        : "Not quite — count the highlighted squares along that side.");
       flagWrong("swapped-dims");
-      setPicked(null);
+      setSideCount(activeSlot.mark); // re-count that side's boxes on the figure
+      setSlotEntry("");
       return;
     }
     setNote(null);
-    setPlaced((p) => ({ ...p, [slotId]: value }));
-    setPicked(null);
-    setFocusSlot(null);
-  }
-
-  function onChipTap(value: number) {
-    if (focusSlot) { placeInSlot(focusSlot, value); return; }
-    setPicked((cur) => (cur === value ? null : value));
-  }
-  function onSlotTap(slotId: string) {
-    if (picked != null) { placeInSlot(slotId, picked); return; }
-    setFocusSlot((cur) => (cur === slotId ? null : slotId));
+    setSideCount(null);
+    setPlaced((p) => ({ ...p, [activeSlot.id]: value }));
+    setSlotEntry("");
   }
 
   function submitCompute() {
@@ -253,6 +376,12 @@ export default function AreaExplorer() {
       if (!solvedRef.current) {
         solvedRef.current = true;
         reportToolResult({ tool: "area-explorer", correct: wrongSteps === 0, standardId: "6.G.A.1", misconception: firstTag, problemId: shape.problemId });
+        // Practice: record the task result the moment it's solved, so progress
+        // is saved even if the Chromebook closes on the done screen. The retry
+        // count is the "clicks until correct" look-for made visible.
+        if (mode === "practice" && pIdx < PRACTICE_TASKS.length) {
+          setPResults((rs) => rs.map((r, i) => (i === pIdx ? { firstTry: wrongSteps === 0, wrongs: wrongSteps } : r)));
+        }
       }
       setPhase("done");
       return;
@@ -261,11 +390,8 @@ export default function AreaExplorer() {
     else { setNote("That's for 3D solids. This shape is flat, so it's 2D."); flagWrong("cubed-unit"); }
   }
 
-  const activeMark: MarkKind | null = useMemo(() => {
-    const id = focusSlot ?? (picked != null ? null : null);
-    if (!id || !shape) return null;
-    return shape.slots.find((s) => s.id === id)?.mark ?? null;
-  }, [focusSlot, picked, shape]);
+  // Pulse the figure label for whichever measurement the student is typing now.
+  const activeMark: MarkKind | null = phase === "substitute" ? activeSlot?.mark ?? null : null;
 
   return (
     <div className="ae-wrap">
@@ -276,6 +402,7 @@ export default function AreaExplorer() {
         .ae-tools { display:flex; gap:8px; justify-content:center; margin-bottom:12px; }
         .ae-tbtn { font:inherit; font-weight:700; font-size:0.82rem; padding:6px 13px; border-radius:999px; border:1px solid var(--bdb-line); background:var(--bdb-card); color:var(--bdb-ink-soft); cursor:pointer; }
         .ae-tbtn:active, .ae-tbtn:focus-visible { color:var(--bdb-ink); }
+        .ae-tbtn-on { background:var(--bdb-ink); color:#fff; border-color:var(--bdb-ink); }
         .ae-bank { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; max-width:720px; margin:14px auto 0; }
         .ae-shapecard { display:grid; place-items:center; gap:8px; min-height:120px; padding:14px; border:2px solid var(--bdb-line); border-radius:0; background:var(--bdb-card); color:var(--bdb-ink); font-weight:800; font-size:1rem; cursor:pointer; }
         .ae-shapecard:active, .ae-shapecard:focus-visible { border-color:var(--bdb-ink); }
@@ -284,13 +411,12 @@ export default function AreaExplorer() {
         .ae-mark-pulse { animation:aePulse 1s ease-in-out infinite; transform-box:fill-box; transform-origin:center; }
         @keyframes aePulse { 0%,100% { opacity:1; } 50% { opacity:0.35; } }
         .ae-formula { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:8px; font-weight:900; font-size:clamp(1.3rem,4vw,1.9rem); margin:12px 0 4px; }
-        .ae-slot { display:inline-grid; place-items:center; min-width:56px; min-height:52px; padding:0 8px; border:3px solid var(--bdb-line); border-radius:0; background:#fff; color:var(--bdb-ink); cursor:pointer; }
+        .ae-slot { display:inline-grid; place-items:center; min-width:56px; min-height:52px; padding:0 8px; border:3px solid var(--bdb-line); border-radius:0; background:#fff; color:var(--bdb-ink); }
         .ae-slot .ghost { color:var(--bdb-ink-faint); font-weight:800; }
-        .ae-slot.on { outline:3px solid var(--bdb-ink); outline-offset:2px; }
         .ae-slot.ok { color:#fff; }
-        .ae-chips { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin:10px 0 2px; }
-        .ae-chip { min-width:58px; min-height:56px; padding:0 14px; border:2px solid var(--bdb-ink); border-radius:0; background:var(--bdb-card); color:var(--bdb-ink); font:inherit; font-weight:900; font-size:1.2rem; cursor:pointer; }
-        .ae-chip.picked { background:var(--bdb-ink); color:#fff; transform:scale(1.06); }
+        .ae-slot.dim { opacity:0.5; background:var(--bdb-ground-2); }
+        .ae-slotin { width:92px; min-height:52px; font:inherit; font-size:1.25rem; font-weight:900; text-align:center; padding:0 8px; border:3px solid var(--bdb-ink); border-radius:0; background:#fff; color:var(--bdb-ink); }
+        .ae-slotin::placeholder { color:var(--bdb-ink-faint); font-weight:800; }
         .ae-answer { width:120px; font:inherit; font-size:1.3rem; font-weight:900; text-align:center; padding:6px; border:3px solid var(--bdb-ink); border-radius:0; background:#fff; color:var(--bdb-ink); }
         .ae-unitchips { display:flex; gap:10px; justify-content:center; margin:8px 0; flex-wrap:wrap; }
         .ae-uchip { min-width:74px; min-height:56px; padding:0 16px; border:2px solid var(--bdb-ink); border-radius:0; background:var(--bdb-card); color:var(--bdb-ink); font:inherit; font-weight:900; font-size:1.25rem; cursor:pointer; }
@@ -321,17 +447,33 @@ export default function AreaExplorer() {
         .ae-count-cell { animation:aeCountIn .34s var(--ae-carry) backwards; transform-box:fill-box; transform-origin:center; }
         @keyframes aeCountIn { from { opacity:0; transform:scale(.55); } 60% { opacity:1; transform:scale(1.09); } to { opacity:1; transform:scale(1); } }
         .ae-soon { font-size:0.72rem; font-weight:800; color:var(--bdb-ink-faint); }
-        @media (prefers-reduced-motion: reduce) { .ae-mark-pulse, .ae-chip.picked { animation:none; } .ae-slide { animation:none; transform:translateX(var(--dx)); } .ae-flip { animation:none; } .ae-count-cell { animation:none; } }
+        .ae-compare { display:flex; flex-wrap:wrap; gap:14px; justify-content:center; align-items:stretch; margin-top:6px; }
+        .ae-compcard { display:grid; justify-items:center; gap:8px; padding:14px 16px; border:2px solid var(--bdb-line); background:var(--bdb-card); }
+        .ae-compname { font-size:0.78rem; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; color:var(--bdb-ink-soft); }
+        .ae-compsum { font-weight:900; font-size:1.15rem; }
+        .ae-ptask { text-align:center; margin:0 auto 6px; width:max-content; max-width:100%; font-size:0.8rem; font-weight:800; letter-spacing:0.05em; text-transform:uppercase; color:var(--bdb-teal); border:2px solid color-mix(in srgb, var(--bdb-teal) 45%, transparent); border-radius:999px; padding:4px 14px; background:color-mix(in srgb, var(--bdb-teal) 10%, var(--bdb-card)); }
+        .ae-plist { width:min(440px,100%); margin:6px auto 0; border:2px solid var(--bdb-line); background:var(--bdb-card); }
+        .ae-prow { display:flex; justify-content:space-between; gap:10px; padding:9px 14px; border-bottom:1px solid var(--bdb-line); font-size:0.92rem; }
+        .ae-prow:last-child { border-bottom:none; }
+        .ae-prow-name { font-weight:700; }
+        .ae-prow-res { font-weight:800; color:var(--bdb-ink-soft); }
+        .ae-prow-res.good { color:var(--bdb-green); }
+        .ae-pconfirm { max-width:460px; margin:12px auto 0; text-align:center; font-weight:700; font-size:0.95rem; color:var(--bdb-ink-soft); }
+        .ae-pconfirm.on { color:var(--bdb-green); font-weight:800; font-size:1.05rem; border:2px solid color-mix(in srgb, var(--bdb-green) 45%, transparent); background:color-mix(in srgb, var(--bdb-green) 10%, var(--bdb-card)); padding:12px 16px; }
+        @media (prefers-reduced-motion: reduce) { .ae-mark-pulse { animation:none; } .ae-slide { animation:none; transform:translateX(var(--dx)); } .ae-flip { animation:none; } .ae-count-cell { animation:none; } }
       `}</style>
 
       <div className="ae-modebar">
         <div className="ae-modeseg">
           <button className={mode === "solve" ? "on" : ""} onClick={() => setMode("solve")}>Solve</button>
+          <button className={mode === "practice" ? "on" : ""} onClick={() => setMode("practice")}>Practice</button>
+          <button className={mode === "composite" ? "on" : ""} onClick={() => setMode("composite")}>Composite</button>
           <button className={mode === "sandbox" ? "on" : ""} onClick={() => setMode("sandbox")}>Sandbox</button>
         </div>
       </div>
 
       {mode === "sandbox" && <AreaSandbox />}
+      {mode === "composite" && <AreaComposite />}
 
       {mode === "solve" && phase === "bank" && (
         <>
@@ -348,50 +490,75 @@ export default function AreaExplorer() {
         </>
       )}
 
-      {mode === "solve" && phase !== "bank" && shape && (
+      {(mode === "solve" || (mode === "practice" && pIdx < PRACTICE_TASKS.length)) && phase !== "bank" && shape && (
         <>
+          {mode === "practice" && (
+            <div className="ae-ptask">Task {pIdx + 1} of {PRACTICE_TASKS.length} — {PRACTICE_TASKS[pIdx].title}</div>
+          )}
           <div className="ae-prompt">
             {phase === "substitute" && "Put each measurement into the formula."}
             {phase === "compute" && "Now solve it."}
             {phase === "unit" && "What unit is the area measured in?"}
-            {phase === "done" && `${SHAPE_NAMES[shape.type]} solved`}
+            {phase === "done" && (mode === "practice" ? `Task ${pIdx + 1} complete` : `${SHAPE_NAMES[shape.type]} solved`)}
           </div>
           <div className="ae-sub">
-            {phase === "substitute" && (picked != null ? "Now tap the blank where it goes." : focusSlot ? "Now tap the measurement that belongs there." : "Tap a number, then tap where it goes.")}
+            {phase === "substitute" && (mode === "practice" ? PRACTICE_TASKS[pIdx].note : "Read the figure and type each measurement — base first.")}
             {phase === "compute" && "Work out the area, then enter it."}
             {phase === "unit" && "Length, area, or volume? Pick the unit."}
-            {phase === "done" && "Same area, however you measured it."}
+            {phase === "done" && (mode === "practice" ? (wrongSteps === 0 ? "First try. Copy anything you still need onto your evidence card." : "Solved — copy anything you still need onto your evidence card.") : "Same area, however you measured it.")}
           </div>
 
           <div className="ae-tools">
-            <button className="ae-tbtn" onClick={back}>Back</button>
+            {mode === "solve" && <button className="ae-tbtn" onClick={back}>Back</button>}
             <button className="ae-tbtn" onClick={resetProblem}>Reset</button>
-            <button className="ae-tbtn" onClick={randomSame}>Random</button>
+            {mode === "solve" && <button className="ae-tbtn" onClick={randomSame}>Random</button>}
           </div>
 
           <div className="ae-stage">
-            <ShapeSvg shape={shape} phase={phase} activeMark={activeMark} showCount={showCount} whySquared={whySquared} />
+            <ShapeSvg shape={shape} phase={phase} activeMark={activeMark} showCount={showCount} whySquared={whySquared} sideCount={sideCount} />
 
-            {phase === "substitute" && (
+            {phase === "substitute" && introCount && (
+              <div className="ae-bar" style={{ flexDirection: "column", gap: 10 }}>
+                <p className="ae-why">First: count along as the squares fill the shape. Area is the number of unit squares that cover it.</p>
+                <button className="ae-btn" disabled={!introReady} onClick={finishIntroCount}>I counted them</button>
+              </div>
+            )}
+
+            {phase === "substitute" && !introCount && (
               <>
                 <div className="ae-formula">
-                  {shape.formula.map((tok, i) =>
-                    tok.t === "text" ? <span key={i}>{tok.v}</span> : (
-                      <button key={i} className={`ae-slot ${focusSlot === tok.slot.id ? "on" : ""} ${placed[tok.slot.id] === tok.slot.value ? "ok" : ""}`}
-                        style={placed[tok.slot.id] === tok.slot.value ? { background: tok.slot.color, borderColor: tok.slot.color } : { borderColor: tok.slot.color }}
-                        onClick={() => onSlotTap(tok.slot.id)}>
-                        {placed[tok.slot.id] === tok.slot.value ? placed[tok.slot.id] : <span className="ghost">{tok.slot.ghost}</span>}
-                      </button>
-                    ))}
-                </div>
-                <div className="ae-chips">
-                  {shape.chips.map((v) => (
-                    <button key={v} className={`ae-chip ${picked === v ? "picked" : ""}`} onClick={() => onChipTap(v)}>{v}</button>
-                  ))}
+                  {shape.formula.map((tok, i) => {
+                    if (tok.t === "text") return <span key={i}>{tok.v}</span>;
+                    const filled = placed[tok.slot.id] === tok.slot.value;
+                    const isActive = activeSlot?.id === tok.slot.id;
+                    if (filled) {
+                      return (
+                        <span key={i} className="ae-slot ok" style={{ background: tok.slot.color, borderColor: tok.slot.color, color: "#fff" }}>
+                          {tok.slot.value}
+                        </span>
+                      );
+                    }
+                    if (isActive) {
+                      return (
+                        <input key={i} className="ae-slotin" style={{ borderColor: tok.slot.color }}
+                          value={slotEntry} inputMode="decimal" autoFocus={finePointer}
+                          placeholder={tok.slot.ghost} aria-label={`value for ${tok.slot.ghost}`}
+                          onChange={(e) => { setSlotEntry(e.target.value.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1")); setNote(null); }}
+                          onKeyDown={(e) => e.key === "Enter" && submitSlotEntry()} />
+                      );
+                    }
+                    return (
+                      <span key={i} className="ae-slot dim" style={{ borderColor: tok.slot.color }}>
+                        <span className="ghost">{tok.slot.ghost}</span>
+                      </span>
+                    );
+                  })}
                 </div>
                 <div className="ae-bar">
                   <button className="ae-link" onClick={() => setShowCount((c) => !c)}>{showCount ? "Hide the squares" : "Count the squares"}</button>
-                  <button className="ae-btn" disabled={!allFilled} onClick={() => { setNote(null); setPhase("compute"); }}>Compute</button>
+                  {allFilled
+                    ? <button className="ae-btn" onClick={() => { setNote(null); setPhase("compute"); }}>Compute</button>
+                    : <button className="ae-btn" disabled={!slotEntry.trim()} onClick={submitSlotEntry}>Enter</button>}
                 </div>
               </>
             )}
@@ -434,8 +601,16 @@ export default function AreaExplorer() {
               <div className="ae-done">
                 <div className="eq">A = {shape.area} {shape.unit}&sup2;</div>
                 <div className="ae-bar">
-                  <button className="ae-btn ghost" onClick={() => { setShape(null); setPhase("bank"); }}>New shape</button>
-                  <button className="ae-btn" onClick={randomSame}>Same shape again</button>
+                  {mode === "practice" ? (
+                    <button className="ae-btn" onClick={practiceAdvance}>
+                      {pIdx === PRACTICE_TASKS.length - 1 ? "Finish practice" : "Next task"}
+                    </button>
+                  ) : (
+                    <>
+                      <button className="ae-btn ghost" onClick={() => { setShape(null); setPhase("bank"); }}>New shape</button>
+                      <button className="ae-btn" onClick={randomSame}>Same shape again</button>
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -444,12 +619,50 @@ export default function AreaExplorer() {
           <div className="ae-note">{note && <span key={note} className="ae-note-in">{note}</span>}</div>
         </>
       )}
+
+      {mode === "practice" && pIdx >= PRACTICE_TASKS.length && (
+        <div className="ae-stage">
+          <div className="ae-prompt">Practice complete</div>
+          <div className="ae-sub">All {PRACTICE_TASKS.length} assigned tasks are done and saved on this device.</div>
+
+          <div className="ae-plist" role="list">
+            {PRACTICE_TASKS.map((t, i) => {
+              const r = pResults[i];
+              return (
+                <div key={i} className="ae-prow" role="listitem">
+                  <span className="ae-prow-name">{t.title}</span>
+                  <span className={`ae-prow-res ${r && r.firstTry ? "good" : ""}`}>
+                    {r ? (r.firstTry ? "first try" : `${r.wrongs} ${r.wrongs === 1 ? "retry" : "retries"}`) : "done"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          {pConfirmedAt ? (
+            <div className="ae-pconfirm on" role="status">
+              Submitted and confirmed — {pConfirmedAt}. Show this screen to your teacher before you close the Chromebook.
+            </div>
+          ) : (
+            <>
+              <div className="ae-pconfirm" role="status">Saved. One last step: confirm your work below.</div>
+              <div className="ae-bar">
+                <button className="ae-btn" onClick={() => setPConfirmedAt(new Date().toLocaleString())}>Confirm my practice is complete</button>
+              </div>
+            </>
+          )}
+
+          <div className="ae-bar">
+            <button className="ae-link" onClick={practiceRestart}>Start the practice set over</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // ── Shape rendering ─────────────────────────────────────────────────────────
-function ShapeSvg({ shape, phase, activeMark, showCount, whySquared }: { shape: Shape; phase: Phase; activeMark: MarkKind | null; showCount: boolean; whySquared: boolean }) {
+function ShapeSvg({ shape, phase, activeMark, showCount, whySquared, sideCount }: { shape: Shape; phase: Phase; activeMark: MarkKind | null; showCount: boolean; whySquared: boolean; sideCount?: MarkKind | null }) {
   const U = Math.max(28, Math.min(52, Math.floor(Math.min(460 / shape.cols, 300 / shape.rows))));
   // asymmetric margins so every measurement label sits OUTSIDE the shape:
   // room on the left for the height, below for the base, above for a top base.
@@ -486,7 +699,7 @@ function ShapeSvg({ shape, phase, activeMark, showCount, whySquared }: { shape: 
       fill={color} stroke="var(--bdb-ground)" strokeWidth={3.6} style={{ paintOrder: "stroke" }}>{text}</text>
   );
 
-  const dm = mid(shape.decoy.a, shape.decoy.b);
+  const dm = shape.decoy ? mid(shape.decoy.a, shape.decoy.b) : null;
   const b2m = shape.base2 ? mid(shape.base2.a, shape.base2.b) : null;
   const foot = shape.height.foot;
   const raSign = shape.height.a[0] <= shape.base.b[0] ? 1 : -1; // right-angle mark direction along base
@@ -497,7 +710,10 @@ function ShapeSvg({ shape, phase, activeMark, showCount, whySquared }: { shape: 
   return (
     <svg className="ae-svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${shape.type} on a grid`}>
       <defs>
-        <pattern id={`ae-cell-${shape.type}`} width={U} height={U} patternUnits="userSpaceOnUse">
+        {/* x/y anchor the tiling to the shape's corner so grid squares line up
+            exactly with the unit boundaries (otherwise the pattern tiles from
+            the svg origin and the grid lands mid-square) */}
+        <pattern id={`ae-cell-${shape.type}`} x={ML} y={MT} width={U} height={U} patternUnits="userSpaceOnUse">
           <path d={`M ${U} 0 L 0 0 0 ${U}`} fill="none" stroke="var(--bdb-line)" strokeWidth={1} opacity={0.85} />
         </pattern>
       </defs>
@@ -507,7 +723,9 @@ function ShapeSvg({ shape, phase, activeMark, showCount, whySquared }: { shape: 
       <polygon points={pts} fill={region} stroke="var(--bdb-ink)" strokeWidth={3} strokeLinejoin="miter" />
 
       {/* decoy edge (faint) */}
-      <line x1={sx(shape.decoy.a[0])} y1={sy(shape.decoy.a[1])} x2={sx(shape.decoy.b[0])} y2={sy(shape.decoy.b[1])} stroke="var(--bdb-ink-faint)" strokeWidth={2} strokeDasharray="2 4" />
+      {shape.decoy && (
+        <line x1={sx(shape.decoy.a[0])} y1={sy(shape.decoy.a[1])} x2={sx(shape.decoy.b[0])} y2={sy(shape.decoy.b[1])} stroke="var(--bdb-ink-faint)" strokeWidth={2} strokeDasharray="2 4" />
+      )}
 
       {/* count-the-squares: reveal + number one square at a time (staggered) */}
       {!whySquared && showCount && orderedCells.map(([gx, gy], i) => (
@@ -521,6 +739,32 @@ function ShapeSvg({ shape, phase, activeMark, showCount, whySquared }: { shape: 
       {whySquared && orderedCells.map(([gx, gy]) => (
         <rect key={`w-${gx}-${gy}`} x={sx(gx)} y={sy(gy)} width={U} height={U} fill={C_HEIGHT} opacity={0.6} />
       ))}
+
+      {/* wrong side length: re-count that side's boxes, one at a time */}
+      {(() => {
+        if (!sideCount) return null;
+        let cells: Pt[] = [];
+        let color = C_BASE;
+        if (sideCount === "base") {
+          const x0 = Math.min(shape.base.a[0], shape.base.b[0]);
+          cells = Array.from({ length: shape.base.value }, (_, i) => [x0 + i, shape.rows - 1] as Pt);
+          color = C_BASE;
+        } else if (sideCount === "b2" && shape.base2) {
+          const x0 = Math.min(shape.base2.a[0], shape.base2.b[0]);
+          cells = Array.from({ length: shape.base2.value }, (_, i) => [x0 + i, 0] as Pt);
+          color = C_B2;
+        } else if (sideCount === "height") {
+          const gx = Math.min(shape.height.foot[0], shape.cols - 1);
+          cells = Array.from({ length: shape.height.value }, (_, i) => [gx, i] as Pt);
+          color = C_HEIGHT;
+        }
+        return cells.map(([gx, gy], i) => (
+          <g key={`sc-${gx}-${gy}`} className="ae-count-cell" style={{ animationDelay: `${i * 150}ms` }}>
+            <rect x={sx(gx)} y={sy(gy)} width={U} height={U} fill={color} opacity={0.3} stroke={color} strokeWidth={2} />
+            <text x={sx(gx) + U / 2} y={sy(gy) + U / 2} textAnchor="middle" dominantBaseline="central" fontSize={numSize} fontWeight={900} fill="var(--bdb-ink)">{i + 1}</text>
+          </g>
+        ));
+      })()}
 
       {/* base — bracket + label below (outside) */}
       <g className={pulse("base")}>
@@ -547,7 +791,7 @@ function ShapeSvg({ shape, phase, activeMark, showCount, whySquared }: { shape: 
       )}
 
       {/* decoy label (muted, near its edge) */}
-      {dimLabel(sx(dm[0]) + DECOY_OFF[shape.type][0], sy(dm[1]) + DECOY_OFF[shape.type][1], `${shape.decoy.name} ${shape.decoy.value}`, "var(--bdb-ink-faint)")}
+      {shape.decoy && dm && dimLabel(sx(dm[0]) + DECOY_OFF[shape.type][0], sy(dm[1]) + DECOY_OFF[shape.type][1], `${shape.decoy.name} ${shape.decoy.value}`, "var(--bdb-ink-faint)")}
     </svg>
   );
 }
@@ -684,7 +928,7 @@ function SandboxPara({ onBack }: { onBack: () => void }) {
 
       <svg ref={svgRef} className="ae-svg" viewBox={`0 0 ${W} ${H}`} onPointerDown={onSvgDown} onPointerMove={onSvgMove} onPointerUp={onSvgUp} onPointerCancel={onSvgUp}>
         <defs>
-          <pattern id="ae-sb-cell" width={U} height={U} patternUnits="userSpaceOnUse">
+          <pattern id="ae-sb-cell" x={M} y={M} width={U} height={U} patternUnits="userSpaceOnUse">
             <path d={`M ${U} 0 L 0 0 0 ${U}`} fill="none" stroke="var(--bdb-line)" strokeWidth={1} opacity={0.75} />
           </pattern>
         </defs>
@@ -779,7 +1023,7 @@ function SandboxDouble({ kind, onBack }: { kind: "triangle" | "trapezoid"; onBac
 
       <svg className="ae-svg" viewBox={`0 0 ${W} ${H}`}>
         <defs>
-          <pattern id={`ae-db-cell-${kind}`} width={U} height={U} patternUnits="userSpaceOnUse">
+          <pattern id={`ae-db-cell-${kind}`} x={M} y={M} width={U} height={U} patternUnits="userSpaceOnUse">
             <path d={`M ${U} 0 L 0 0 0 ${U}`} fill="none" stroke="var(--bdb-line)" strokeWidth={1} opacity={0.75} />
           </pattern>
         </defs>
@@ -898,7 +1142,7 @@ function SandboxTriangleLock({ onBack }: { onBack: () => void }) {
 
       <svg ref={svgRef} className="ae-svg" viewBox={`0 0 ${W} ${H}`} onPointerMove={onSvgMove} onPointerUp={onSvgUp} onPointerCancel={onSvgUp}>
         <defs>
-          <pattern id="ae-lk-cell" width={U} height={U} patternUnits="userSpaceOnUse">
+          <pattern id="ae-lk-cell" x={M} y={M} width={U} height={U} patternUnits="userSpaceOnUse">
             <path d={`M ${U} 0 L 0 0 0 ${U}`} fill="none" stroke="var(--bdb-line)" strokeWidth={1} opacity={0.75} />
           </pattern>
         </defs>
@@ -935,6 +1179,686 @@ function SandboxTriangleLock({ onBack }: { onBack: () => void }) {
         <div className="ae-bar"><button className="ae-btn ghost" onClick={reset}>Pull it back out</button></div>
       )}
       {locked && <p className="ae-why">The parallelogram is base x height = 40. Your triangle is exactly half of it, so A = ½ x base x height.</p>}
+    </div>
+  );
+}
+
+// ── Composite mode: divide it yourself, deduce every side ───────────────────
+// Gradual release per level, same process each time: (1) the figure arrives
+// whole, with only a few sides labeled — the student DRAWS the cut(s); a cut
+// that doesn't split it into simple shapes gets "try again" plus a hint.
+// (2) A valid division colors the pieces, then every unlabeled side is deduced
+// one step at a time: count it on the grid, match the opposite side (the given
+// side flashes), or watch two offset parallel walls slide onto the straight
+// wall they add up to. (3) With every side marked, find each piece's area and
+// the total. Three levels: two rectangles, three-piece figure with multiple
+// valid divisions, then a figure with a triangle in it.
+interface CompEdge { id: string; a: Pt; b: Pt; value: number; given: boolean; off: [number, number]; interior?: boolean }
+interface CompCut { a: Pt; b: Pt }
+interface CompPiece { kind: "rect" | "tri"; x: number; y: number; w: number; h: number }
+type CompStep =
+  | { type: "count"; edge: string; prompt: string; strip: Pt[] }
+  | { type: "opposite"; from: string; edge: string; prompt: string }
+  | { type: "partial"; whole: string; parts: string[]; edge: string; prompt: string };
+interface CompLevel {
+  label: string;
+  name: string;
+  verts: Pt[];
+  edges: CompEdge[];
+  cutSets: CompCut[][];
+  piecesBySet: CompPiece[][];
+  steps: CompStep[];
+  hint: string;
+  // Whole-minus-cutout: after the additive solve, the student closes the
+  // bounding rectangle across the notch and subtracts the cutout, then sees
+  // both methods side by side.
+  subtractive?: {
+    frame: CompCut;              // the segment that closes the whole
+    whole: { w: number; h: number };
+    cutRect: { x: number; y: number; w: number; h: number };
+    hint: string;
+  };
+}
+
+const COMP_LEVELS: CompLevel[] = [
+  {
+    label: "Level 1",
+    name: "L-shape",
+    verts: [[0, 0], [3, 0], [3, 2], [7, 2], [7, 5], [0, 5]],
+    edges: [
+      { id: "A", a: [0, 0], b: [3, 0], value: 3, given: true, off: [0, -18] },
+      { id: "B", a: [3, 0], b: [3, 2], value: 2, given: false, off: [24, 0] },
+      { id: "C", a: [3, 2], b: [7, 2], value: 4, given: false, off: [0, -18] },
+      { id: "D", a: [7, 2], b: [7, 5], value: 3, given: false, off: [26, 0] },
+      { id: "E", a: [0, 5], b: [7, 5], value: 7, given: true, off: [0, 24] },
+      { id: "F", a: [0, 0], b: [0, 5], value: 5, given: true, off: [-26, 0] },
+    ],
+    cutSets: [
+      [{ a: [3, 2], b: [3, 5] }],
+      [{ a: [0, 2], b: [3, 2] }],
+    ],
+    piecesBySet: [
+      [{ kind: "rect", x: 0, y: 0, w: 3, h: 5 }, { kind: "rect", x: 3, y: 2, w: 4, h: 3 }],
+      [{ kind: "rect", x: 0, y: 0, w: 3, h: 2 }, { kind: "rect", x: 0, y: 2, w: 7, h: 3 }],
+    ],
+    steps: [
+      { type: "count", edge: "B", prompt: "This wall has no label. Count the highlighted squares along it, then type its length.", strip: [[2, 0], [2, 1]] },
+      { type: "partial", whole: "F", parts: ["B", "D"], edge: "D", prompt: "The two right-side walls together line up with the left wall. Watch them slide over — then type the missing length." },
+      { type: "partial", whole: "E", parts: ["A", "C"], edge: "C", prompt: "The two top edges together match the bottom. Watch them slide down — then type the missing length." },
+    ],
+    hint: "Cut straight across from the inside corner — one straight line from edge to edge.",
+  },
+  {
+    label: "Level 2",
+    name: "T-shape",
+    verts: [[2, 0], [5, 0], [5, 3], [7, 3], [7, 6], [0, 6], [0, 3], [2, 3]],
+    edges: [
+      { id: "A", a: [2, 0], b: [5, 0], value: 3, given: true, off: [0, -18] },
+      { id: "B", a: [5, 0], b: [5, 3], value: 3, given: false, off: [26, 0] },
+      { id: "C", a: [5, 3], b: [7, 3], value: 2, given: false, off: [0, -18] },
+      { id: "D", a: [7, 3], b: [7, 6], value: 3, given: true, off: [26, 0] },
+      { id: "E", a: [0, 6], b: [7, 6], value: 7, given: true, off: [0, 24] },
+      { id: "F", a: [0, 3], b: [0, 6], value: 3, given: false, off: [-26, 0] },
+      { id: "G", a: [0, 3], b: [2, 3], value: 2, given: false, off: [0, -18] },
+      { id: "H", a: [2, 0], b: [2, 3], value: 3, given: false, off: [-26, 0] },
+    ],
+    cutSets: [
+      [{ a: [2, 3], b: [5, 3] }],
+      [{ a: [2, 3], b: [2, 6] }, { a: [5, 3], b: [5, 6] }],
+    ],
+    piecesBySet: [
+      [{ kind: "rect", x: 2, y: 0, w: 3, h: 3 }, { kind: "rect", x: 0, y: 3, w: 7, h: 3 }],
+      [{ kind: "rect", x: 0, y: 3, w: 2, h: 3 }, { kind: "rect", x: 2, y: 0, w: 3, h: 6 }, { kind: "rect", x: 5, y: 3, w: 2, h: 3 }],
+    ],
+    steps: [
+      { type: "opposite", from: "D", edge: "F", prompt: "The right wall of the bar is 3. The bar's left wall must be the same — type its length." },
+      { type: "count", edge: "H", prompt: "Count the highlighted squares along the stem's wall, then type its height.", strip: [[2, 0], [2, 1], [2, 2]] },
+      { type: "opposite", from: "H", edge: "B", prompt: "The stem's left wall is 3 — its right wall must match. Type it." },
+      { type: "count", edge: "G", prompt: "Count the highlighted squares along this shelf, then type its length.", strip: [[0, 3], [1, 3]] },
+      { type: "partial", whole: "E", parts: ["G", "A", "C"], edge: "C", prompt: "The three top edges of the bar line up with the bottom. Watch them slide down — then type the missing length." },
+    ],
+    hint: "Split the bar from the stem with one straight cut, or cut straight down on both sides of the stem.",
+  },
+  {
+    label: "Level 3",
+    name: "house",
+    verts: [[0, 2], [3, 0], [6, 2], [6, 5], [0, 5]],
+    edges: [
+      { id: "D", a: [6, 2], b: [6, 5], value: 3, given: true, off: [26, 0] },
+      { id: "E", a: [0, 5], b: [6, 5], value: 6, given: true, off: [0, 24] },
+      { id: "F", a: [0, 2], b: [0, 5], value: 3, given: false, off: [-26, 0] },
+      { id: "ROOF", a: [0, 2], b: [6, 2], value: 6, given: false, off: [0, 22], interior: true },
+      { id: "RH", a: [3, 0], b: [3, 2], value: 2, given: false, off: [24, 0], interior: true },
+    ],
+    cutSets: [
+      [{ a: [0, 2], b: [6, 2] }],
+    ],
+    piecesBySet: [
+      [{ kind: "tri", x: 0, y: 0, w: 6, h: 2 }, { kind: "rect", x: 0, y: 2, w: 6, h: 3 }],
+    ],
+    steps: [
+      { type: "opposite", from: "D", edge: "F", prompt: "The right wall is 3 — the left wall must match. Type its length." },
+      { type: "opposite", from: "E", edge: "ROOF", prompt: "The bottom is 6, and the roof's base sits directly above it — same width. Type its length." },
+      { type: "count", edge: "RH", prompt: "The dashed line is the roof's height — straight up from its base to the peak. Count the highlighted squares and type it.", strip: [[2, 0], [2, 1]] },
+    ],
+    hint: "Slice the roof off — one straight cut across where the roof meets the walls.",
+  },
+  {
+    label: "Level 4",
+    name: "notch",
+    verts: [[0, 0], [2, 0], [2, 2], [5, 2], [5, 0], [8, 0], [8, 5], [0, 5]],
+    edges: [
+      { id: "A", a: [0, 0], b: [2, 0], value: 2, given: true, off: [0, -18] },
+      { id: "NL", a: [2, 0], b: [2, 2], value: 2, given: true, off: [-24, 0] },
+      { id: "NB", a: [2, 2], b: [5, 2], value: 3, given: false, off: [0, 22] },
+      { id: "NR", a: [5, 0], b: [5, 2], value: 2, given: false, off: [26, 0] },
+      { id: "B", a: [5, 0], b: [8, 0], value: 3, given: false, off: [0, -18] },
+      { id: "D", a: [8, 0], b: [8, 5], value: 5, given: false, off: [26, 0] },
+      { id: "E", a: [0, 5], b: [8, 5], value: 8, given: true, off: [0, 24] },
+      { id: "F", a: [0, 0], b: [0, 5], value: 5, given: true, off: [-26, 0] },
+    ],
+    cutSets: [
+      [{ a: [2, 2], b: [2, 5] }, { a: [5, 2], b: [5, 5] }],
+    ],
+    piecesBySet: [
+      [{ kind: "rect", x: 0, y: 0, w: 2, h: 5 }, { kind: "rect", x: 2, y: 2, w: 3, h: 3 }, { kind: "rect", x: 5, y: 0, w: 3, h: 5 }],
+    ],
+    steps: [
+      { type: "opposite", from: "F", edge: "D", prompt: "The left wall is 5 — the right wall must match. Type its length." },
+      { type: "opposite", from: "NL", edge: "NR", prompt: "The notch's left wall is 2 — its right wall must match. Type it." },
+      { type: "count", edge: "B", prompt: "Count the highlighted squares along this top edge, then type its length.", strip: [[5, 0], [6, 0], [7, 0]] },
+      { type: "partial", whole: "E", parts: ["A", "NB", "B"], edge: "NB", prompt: "The two top edges and the notch floor together match the bottom. Watch them slide down — then type the missing length." },
+    ],
+    hint: "Cut straight down each side of the notch — two cuts, three pieces.",
+    subtractive: {
+      frame: { a: [2, 0], b: [5, 0] },
+      whole: { w: 8, h: 5 },
+      cutRect: { x: 2, y: 0, w: 3, h: 2 },
+      hint: "Close the whole rectangle — line up the line straight across the opening of the notch, then click.",
+    },
+  },
+];
+
+const COMP_COLORS = [C_BASE, C_HEIGHT, C_B2];
+
+function AreaComposite() {
+  const [level, setLevel] = useState(0);
+  const fig = COMP_LEVELS[level];
+  const cols = Math.max(...fig.verts.map((v) => v[0]));
+  const rows = Math.max(...fig.verts.map((v) => v[1]));
+
+  const [phase, setPhase] = useState<"cut" | "deduce" | "areas" | "frame" | "subareas" | "compare" | "done">("cut");
+  const [acceptedCuts, setAcceptedCuts] = useState<CompCut[]>([]);
+  const [matchedSet, setMatchedSet] = useState<number | null>(null);
+  const [stepIdx, setStepIdx] = useState(0);
+  const [solvedEdges, setSolvedEdges] = useState<Record<string, boolean>>({});
+  const [stepEntry, setStepEntry] = useState("");
+  const [pieceEntries, setPieceEntries] = useState<string[]>([]);
+  const [totalEntry, setTotalEntry] = useState("");
+  const [subWhole, setSubWhole] = useState("");
+  const [subCut, setSubCut] = useState("");
+  const [subTotal, setSubTotal] = useState("");
+  const [note, setNote] = useState<string | null>(null);
+  const [animOn, setAnimOn] = useState(false);
+  const [animKey, setAnimKey] = useState(0);
+  const [hoverCut, setHoverCut] = useState<{ horizontal: boolean; line: number } | null>(null);
+  const wrongRef = useRef(0);
+  const solvedRef = useRef(false);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+
+  const U = Math.max(34, Math.min(56, Math.floor(Math.min(440 / cols, 300 / rows))));
+  const M = Math.round(1.3 * U);
+  const W = 2 * M + cols * U + 44; // extra right margin for outside labels
+  const H = 2 * M + rows * U;
+  const sx = (gx: number) => M + gx * U;
+  const sy = (gy: number) => M + gy * U;
+  const pts = fig.verts.map((v) => `${sx(v[0])},${sy(v[1])}`).join(" ");
+
+  const reset = useCallback((lv: number) => {
+    setLevel(lv);
+    setPhase("cut"); setAcceptedCuts([]); setMatchedSet(null); setStepIdx(0);
+    setSolvedEdges({}); setStepEntry(""); setPieceEntries([]); setTotalEntry("");
+    setSubWhole(""); setSubCut(""); setSubTotal("");
+    setNote(null); setAnimOn(false); setAnimKey(0); setHoverCut(null);
+    wrongRef.current = 0; solvedRef.current = false;
+  }, []);
+
+  const edgeById = useCallback((id: string) => fig.edges.find((e) => e.id === id)!, [fig]);
+  const step = phase === "deduce" ? fig.steps[stepIdx] : null;
+  const pieces = matchedSet != null ? fig.piecesBySet[matchedSet] : [];
+
+  // Kick the partial-walls slide a beat after the step (or a replay) starts.
+  useEffect(() => {
+    if (!step || step.type !== "partial") { setAnimOn(false); return; }
+    setAnimOn(false);
+    const t = window.setTimeout(() => setAnimOn(true), 500);
+    return () => window.clearTimeout(t);
+  }, [step, animKey]);
+
+  // ── Cut placement: the line follows the cursor; a click solidifies it ──────
+  const hoverFromEvent = (e: React.PointerEvent): { horizontal: boolean; line: number } | null => {
+    const r = svgRef.current?.getBoundingClientRect();
+    if (!r) return null;
+    const gx = ((e.clientX - r.left) * (W / r.width) - M) / U;
+    const gy = ((e.clientY - r.top) * (H / r.height) - M) / U;
+    if (gx < -0.6 || gx > cols + 0.6 || gy < -0.6 || gy > rows + 0.6) return null;
+    const dxToV = Math.abs(gx - Math.round(gx));
+    const dyToH = Math.abs(gy - Math.round(gy));
+    const horizontal = dyToH <= dxToV;
+    if (phase === "cut") {
+      // interior gridlines only
+      const line = horizontal ? clamp(Math.round(gy), 1, rows - 1) : clamp(Math.round(gx), 1, cols - 1);
+      return { horizontal, line };
+    }
+    // frame phase: boundary lines allowed (the closing line sits on the bounding box)
+    const line = horizontal ? clamp(Math.round(gy), 0, rows) : clamp(Math.round(gx), 0, cols);
+    return { horizontal, line };
+  };
+  const onCutMove = (e: React.PointerEvent) => {
+    if (phase !== "cut" && phase !== "frame") return;
+    setHoverCut(hoverFromEvent(e));
+  };
+  const onCutLeave = () => setHoverCut(null);
+
+  const sameCut = (c1: CompCut, c2: CompCut) =>
+    c1.a[0] === c2.a[0] && c1.a[1] === c2.a[1] && c1.b[0] === c2.b[0] && c1.b[1] === c2.b[1];
+
+  const onCutClick = (e: React.PointerEvent) => {
+    if (phase !== "cut" && phase !== "frame") return;
+    const hov = hoverFromEvent(e) ?? hoverCut;
+    if (!hov) return;
+    const { horizontal, line } = hov;
+    const s0 = 0;
+    const s1 = horizontal ? cols : rows;
+
+    if (phase === "frame") {
+      const fr = fig.subtractive!.frame;
+      const frHorizontal = fr.a[1] === fr.b[1];
+      const frLine = frHorizontal ? fr.a[1] : fr.a[0];
+      if (horizontal !== frHorizontal || line !== frLine) {
+        wrongRef.current += 1;
+        setNote(`Not quite. ${fig.subtractive!.hint}`);
+        return;
+      }
+      setNote(null); setHoverCut(null);
+      setPhase("subareas");
+      return;
+    }
+
+    // candidate cuts = cuts in sets consistent with what's already accepted
+    const eligibleSets = fig.cutSets.filter((set) => acceptedCuts.every((ac) => set.some((c) => sameCut(c, ac))));
+    let matched: CompCut | null = null;
+    for (const set of eligibleSets) {
+      for (const c of set) {
+        if (acceptedCuts.some((ac) => sameCut(ac, c))) continue;
+        const cHorizontal = c.a[1] === c.b[1];
+        if (cHorizontal !== horizontal) continue;
+        const cLine = cHorizontal ? c.a[1] : c.a[0];
+        if (cLine !== line) continue;
+        const c0 = cHorizontal ? Math.min(c.a[0], c.b[0]) : Math.min(c.a[1], c.b[1]);
+        const c1v = cHorizontal ? Math.max(c.a[0], c.b[0]) : Math.max(c.a[1], c.b[1]);
+        if (s0 <= c0 + 1 && s1 >= c1v - 1) { matched = c; break; }
+      }
+      if (matched) break;
+    }
+    if (!matched) {
+      wrongRef.current += 1;
+      setNote(`That cut doesn't split it into simple shapes. Try again — ${fig.hint}`);
+      return;
+    }
+    const nextCuts = [...acceptedCuts, matched];
+    setAcceptedCuts(nextCuts);
+    setNote(null);
+    const doneSet = fig.cutSets.findIndex((set) =>
+      set.length === nextCuts.length && set.every((c) => nextCuts.some((ac) => sameCut(ac, c))));
+    if (doneSet !== -1) {
+      setMatchedSet(doneSet);
+      setHoverCut(null);
+      setPhase("deduce");
+      setStepIdx(0);
+    } else {
+      setNote("Good cut — the figure needs one more.");
+    }
+  };
+
+  // Undo the last cut (for demoing add-a-line-then-undo); backs out of deduce too.
+  const undoCut = () => {
+    if (!acceptedCuts.length) return;
+    setAcceptedCuts((cs) => cs.slice(0, -1));
+    setMatchedSet(null);
+    setSolvedEdges({});
+    setStepIdx(0); setStepEntry("");
+    setNote(null);
+    setPhase("cut");
+  };
+
+  // ── Deduce: one side per step ──────────────────────────────────────────────
+  function submitStep() {
+    if (!step) return;
+    const target = edgeById(step.edge);
+    const v = Number(stepEntry.trim());
+    if (!stepEntry.trim() || !Number.isFinite(v)) return;
+    if (v !== target.value) {
+      wrongRef.current += 1;
+      setNote(step.type === "count"
+        ? "Count the highlighted squares one at a time — each square is 1 unit."
+        : step.type === "opposite"
+        ? "Look at the flashing side — this side must be the same length."
+        : "Watch the walls slide again — the pieces together cover the whole wall.");
+      if (step.type === "partial") setAnimKey((k) => k + 1);
+      setStepEntry("");
+      return;
+    }
+    setNote(null);
+    setSolvedEdges((m) => ({ ...m, [target.id]: true }));
+    setStepEntry("");
+    if (stepIdx + 1 < fig.steps.length) setStepIdx(stepIdx + 1);
+    else { setPhase("areas"); setPieceEntries(pieces.map(() => "")); }
+  }
+
+  // ── Areas ─────────────────────────────────────────────────────────────────
+  const pieceArea = (p: CompPiece) => (p.kind === "tri" ? (p.w * p.h) / 2 : p.w * p.h);
+  const totalArea = pieces.reduce((acc, p) => acc + pieceArea(p), 0);
+  function checkAreas() {
+    const bad = pieces.findIndex((p, i) => Number(pieceEntries[i]) !== pieceArea(p));
+    if (bad !== -1) {
+      wrongRef.current += 1;
+      const p = pieces[bad];
+      setNote(p.kind === "tri"
+        ? `Check the triangle piece: half of ${p.w} times ${p.h}.`
+        : `Check the highlighted piece: ${p.w} times ${p.h}.`);
+      return;
+    }
+    if (Number(totalEntry) !== totalArea) {
+      wrongRef.current += 1;
+      setNote(`Add the pieces: ${pieces.map((p) => pieceArea(p)).join(" + ")} = ?`);
+      return;
+    }
+    setNote(null);
+    if (fig.subtractive) { setPhase("frame"); return; }
+    finishFigure();
+  }
+
+  function finishFigure() {
+    setPhase("done");
+    if (!solvedRef.current) {
+      solvedRef.current = true;
+      reportToolResult({ tool: "area-explorer", correct: wrongRef.current === 0, standardId: "6.G.A.1", misconception: null, problemId: `composite-l${level + 1}-${fig.name}` });
+    }
+  }
+
+  function checkSubAreas() {
+    if (!fig.subtractive) return;
+    const wholeA = fig.subtractive.whole.w * fig.subtractive.whole.h;
+    const cutA = fig.subtractive.cutRect.w * fig.subtractive.cutRect.h;
+    if (Number(subWhole) !== wholeA) {
+      wrongRef.current += 1;
+      setNote(`The whole rectangle is ${fig.subtractive.whole.w} times ${fig.subtractive.whole.h}.`);
+      return;
+    }
+    if (Number(subCut) !== cutA) {
+      wrongRef.current += 1;
+      setNote(`The cutout is ${fig.subtractive.cutRect.w} times ${fig.subtractive.cutRect.h}.`);
+      return;
+    }
+    if (Number(subTotal) !== wholeA - cutA) {
+      wrongRef.current += 1;
+      setNote(`Subtract: ${wholeA} minus ${cutA} = ?`);
+      return;
+    }
+    setNote(null);
+    setPhase("compare");
+  }
+
+  // ── Rendering helpers ─────────────────────────────────────────────────────
+  const edgeLine = (e: CompEdge) => ({ x1: sx(e.a[0]), y1: sy(e.a[1]), x2: sx(e.b[0]), y2: sy(e.b[1]) });
+  const edgeMid = (e: CompEdge): [number, number] => [(sx(e.a[0]) + sx(e.b[0])) / 2 + e.off[0], (sy(e.a[1]) + sy(e.b[1])) / 2 + e.off[1]];
+  const edgeKnown = (e: CompEdge) => e.given || solvedEdges[e.id];
+  // Where a partial-step part slides to: stacked along the whole, in listed order.
+  const partShift = (whole: CompEdge, partIds: string[], id: string): [number, number] => {
+    const part = edgeById(id);
+    const horizontal = whole.a[1] === whole.b[1];
+    let cum = 0;
+    for (const pid of partIds) { if (pid === id) break; cum += edgeById(pid).value; }
+    if (horizontal) {
+      const x0 = Math.min(whole.a[0], whole.b[0]) + cum;
+      return [sx(x0) - sx(Math.min(part.a[0], part.b[0])), sy(whole.a[1]) - sy(part.a[1])];
+    }
+    const y0 = Math.min(whole.a[1], whole.b[1]) + cum;
+    return [sx(whole.a[0]) - sx(part.a[0]), sy(y0) - sy(Math.min(part.a[1], part.b[1]))];
+  };
+
+  const stepTargetId = step ? step.edge : null;
+  const flashFromId = step && step.type === "opposite" ? step.from : step && step.type === "partial" ? step.whole : null;
+
+  return (
+    <div className="ae-stage">
+      <div className="ae-prompt">
+        {phase === "cut" && "Divide the figure into simple shapes"}
+        {phase === "deduce" && "Find every side length"}
+        {phase === "areas" && "Find each piece's area"}
+        {phase === "frame" && "Method 2: whole minus cutout"}
+        {phase === "subareas" && "Whole minus cutout"}
+        {phase === "compare" && "Two methods, one area"}
+        {phase === "done" && `Total area = ${totalArea} square units`}
+      </div>
+      <div className="ae-sub">
+        {phase === "cut" && (acceptedCuts.length ? "Keep going — line up your next cut and click to lock it." : "Move your cursor to place the cut line, then click to lock it in.")}
+        {phase === "deduce" && step?.prompt}
+        {phase === "areas" && "Use the sides you marked. Add the pieces for the total."}
+        {phase === "frame" && "Same figure, different idea: close the WHOLE rectangle — line up the top edge and click to close it."}
+        {phase === "subareas" && "Find the whole rectangle's area, the cutout's area, and subtract."}
+        {phase === "compare" && "Adding the pieces and subtracting the cutout give the SAME area."}
+        {phase === "done" && "Divided, deduced, and solved — same area either way you cut it."}
+      </div>
+
+      <div className="ae-tools">
+        {COMP_LEVELS.map((l, i) => (
+          <button key={i} className={`ae-tbtn ${i === level ? "ae-tbtn-on" : ""}`} onClick={() => reset(i)}>{l.label}</button>
+        ))}
+        <button className="ae-tbtn" onClick={() => reset(level)}>Reset</button>
+        {(phase === "cut" || phase === "deduce") && acceptedCuts.length > 0 && (
+          <button className="ae-tbtn" onClick={undoCut}>Undo</button>
+        )}
+      </div>
+
+      <svg ref={svgRef} className="ae-svg" viewBox={`0 0 ${W} ${H}`} style={{ touchAction: "none", cursor: phase === "cut" || phase === "frame" ? "crosshair" : "default" }}
+        onPointerDown={onCutMove} onPointerMove={onCutMove} onPointerUp={onCutClick} onPointerLeave={onCutLeave}>
+        <defs>
+          <pattern id="ae-comp-cell" x={M} y={M} width={U} height={U} patternUnits="userSpaceOnUse">
+            <path d={`M ${U} 0 L 0 0 0 ${U}`} fill="none" stroke="var(--bdb-line)" strokeWidth={1} opacity={0.8} />
+          </pattern>
+          <clipPath id="ae-comp-clip"><polygon points={pts} /></clipPath>
+        </defs>
+        <rect x={M} y={M} width={cols * U} height={rows * U} fill="url(#ae-comp-cell)" />
+
+        {/* pieces (after a valid division) */}
+        {pieces.map((p, i) =>
+          p.kind === "rect" ? (
+            <rect key={i} x={sx(p.x)} y={sy(p.y)} width={p.w * U} height={p.h * U}
+              fill={`color-mix(in srgb, ${COMP_COLORS[i % COMP_COLORS.length]} ${phase === "done" ? 42 : 26}%, transparent)`} />
+          ) : (
+            <polygon key={i} points={`${sx(p.x)},${sy(p.y + p.h)} ${sx(p.x + p.w / 2)},${sy(p.y)} ${sx(p.x + p.w)},${sy(p.y + p.h)}`}
+              fill={`color-mix(in srgb, ${COMP_COLORS[i % COMP_COLORS.length]} ${phase === "done" ? 42 : 26}%, transparent)`} />
+          ))}
+
+        {/* count-step strip */}
+        {step?.type === "count" && step.strip.map(([gx, gy], i) => (
+          <g key={`cs-${gx}-${gy}`} className="ae-count-cell" style={{ animationDelay: `${i * 200}ms` }}>
+            <rect x={sx(gx)} y={sy(gy)} width={U} height={U} fill={C_HEIGHT} opacity={0.32} stroke={C_HEIGHT} strokeWidth={2} />
+            <text x={sx(gx) + U / 2} y={sy(gy) + U / 2} textAnchor="middle" dominantBaseline="central" fontSize={Math.round(U * 0.4)} fontWeight={900} fill="var(--bdb-ink)">{i + 1}</text>
+          </g>
+        ))}
+
+        {/* accepted cuts */}
+        {acceptedCuts.map((c, i) => (
+          <line key={i} x1={sx(c.a[0])} y1={sy(c.a[1])} x2={sx(c.b[0])} y2={sy(c.b[1])} stroke="var(--bdb-ink)" strokeWidth={2.5} strokeDasharray="7 5" />
+        ))}
+
+        {/* live cut preview: follows the cursor, clipped to the figure (cut) or
+            the bounding box (frame); a click locks it in */}
+        {hoverCut && (phase === "cut" || phase === "frame") && (() => {
+          const { horizontal, line } = hoverCut;
+          const l = horizontal
+            ? { x1: sx(0), y1: sy(line), x2: sx(cols), y2: sy(line) }
+            : { x1: sx(line), y1: sy(0), x2: sx(line), y2: sy(rows) };
+          return (
+            <line {...l} stroke="var(--bdb-coral)" strokeWidth={3.5} strokeDasharray="4 5"
+              clipPath={phase === "cut" ? "url(#ae-comp-clip)" : undefined} pointerEvents="none" />
+          );
+        })()}
+
+        {/* outline */}
+        <polygon points={pts} fill={phase === "cut" ? `color-mix(in srgb, ${C_BASE} 16%, transparent)` : "none"} stroke="var(--bdb-ink)" strokeWidth={3} strokeLinejoin="miter" />
+
+        {/* whole-minus-cutout: the closed whole and the hatched cutout */}
+        {fig.subtractive && (phase === "subareas" || phase === "compare") && (() => {
+          const sub = fig.subtractive;
+          const cr = sub.cutRect;
+          return (
+            <g>
+              <rect x={sx(0)} y={sy(0)} width={sub.whole.w * U} height={sub.whole.h * U}
+                fill="none" stroke={C_BASE} strokeWidth={4} strokeDasharray="10 6" />
+              <rect x={sx(cr.x)} y={sy(cr.y)} width={cr.w * U} height={cr.h * U}
+                fill={`color-mix(in srgb, ${C_B2} 34%, transparent)`} stroke={C_B2} strokeWidth={2.5} strokeDasharray="5 4" />
+              <line x1={sx(cr.x)} y1={sy(cr.y)} x2={sx(cr.x + cr.w)} y2={sy(cr.y + cr.h)} stroke={C_B2} strokeWidth={2} />
+              <line x1={sx(cr.x + cr.w)} y1={sy(cr.y)} x2={sx(cr.x)} y2={sy(cr.y + cr.h)} stroke={C_B2} strokeWidth={2} />
+            </g>
+          );
+        })()}
+
+        {/* interior helper edges (roof base is the cut itself; roof height is dashed) */}
+        {fig.edges.filter((e) => e.interior && (edgeKnown(e) || e.id === stepTargetId)).map((e) => {
+          const l = edgeLine(e);
+          return <line key={e.id} {...l} stroke="var(--bdb-ink-soft)" strokeWidth={2} strokeDasharray="5 5" />;
+        })}
+
+        {/* step flashes: the known side pulses in green; the asked side pulses coral */}
+        {flashFromId && (() => {
+          const e = edgeById(flashFromId);
+          const l = edgeLine(e);
+          return <line className="ae-mark-pulse" {...l} stroke="var(--bdb-green)" strokeWidth={6} strokeLinecap="round" />;
+        })()}
+        {stepTargetId && (() => {
+          const e = edgeById(stepTargetId);
+          const l = edgeLine(e);
+          return <line className="ae-mark-pulse" {...l} stroke="var(--bdb-coral)" strokeWidth={5} strokeDasharray="9 6" strokeLinecap="round" />;
+        })()}
+
+        {/* partial-walls animation: the parts slide onto the whole wall */}
+        {step?.type === "partial" && (() => {
+          const whole = edgeById(step.whole);
+          return step.parts.map((pid) => {
+            const e = edgeById(pid);
+            const l = edgeLine(e);
+            const [dx, dy] = partShift(whole, step.parts, pid);
+            const known = edgeKnown(e);
+            return (
+              <g key={`${pid}-${animKey}`} style={{ transition: "transform 1.1s cubic-bezier(.35,.8,.3,1) 0.15s", transform: animOn ? `translate(${dx}px, ${dy}px)` : "none" }}>
+                <line {...l} stroke={known ? "var(--bdb-green)" : "var(--bdb-coral)"} strokeWidth={7} strokeLinecap="round" opacity={0.85} />
+              </g>
+            );
+          });
+        })()}
+
+        {/* edge labels: given from the start, deduced ones as they're solved */}
+        {fig.edges.filter((e) => edgeKnown(e)).map((e) => {
+          const [x, y] = edgeMid(e);
+          return (
+            <text key={e.id} x={x} y={y} textAnchor="middle" dominantBaseline="central" fontSize={16} fontWeight={900}
+              fill={e.given ? "var(--bdb-ink)" : "var(--bdb-green)"} stroke="var(--bdb-ground)" strokeWidth={3.6} style={{ paintOrder: "stroke" }}>
+              {e.value}
+            </text>
+          );
+        })}
+      </svg>
+
+      {phase === "deduce" && step && step.type === "partial" && (
+        <div className="ae-formula" style={{ margin: "10px 0 0" }}>
+          {step.parts.map((pid, i) => (
+            <span key={pid} style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+              {i > 0 && <span>+</span>}
+              {pid === step.edge ? (
+                <input className="ae-slotin" value={stepEntry} inputMode="decimal" placeholder="?" aria-label="missing part length"
+                  autoFocus onChange={(e) => { setStepEntry(e.target.value.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1")); setNote(null); }}
+                  onKeyDown={(e) => e.key === "Enter" && submitStep()} />
+              ) : (
+                <span className="ae-slot ok" style={{ background: "var(--bdb-green)", borderColor: "var(--bdb-green)" }}>{edgeById(pid).value}</span>
+              )}
+            </span>
+          ))}
+          <span>=</span>
+          <span className="ae-slot ok" style={{ background: "var(--bdb-ink)", borderColor: "var(--bdb-ink)" }}>{edgeById(step.whole).value}</span>
+        </div>
+      )}
+      {phase === "deduce" && step && (
+        <div className="ae-bar">
+          {step.type === "partial" && <button className="ae-link" onClick={() => setAnimKey((k) => k + 1)}>Watch again</button>}
+          {step.type !== "partial" && (
+            <input className="ae-slotin" value={stepEntry} inputMode="decimal" placeholder="?" aria-label="side length"
+              onChange={(e) => { setStepEntry(e.target.value.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1")); setNote(null); }}
+              onKeyDown={(e) => e.key === "Enter" && submitStep()} />
+          )}
+          <button className="ae-btn" disabled={!stepEntry.trim()} onClick={submitStep}>Enter</button>
+        </div>
+      )}
+
+      {phase === "areas" && (
+        <>
+          <div className="ae-formula">
+            {pieces.map((p, i) => (
+              <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                {i > 0 && <span>+</span>}
+                <span style={{ display: "inline-grid", placeItems: "center", minWidth: 48, minHeight: 40, padding: "0 8px", border: `3px solid ${COMP_COLORS[i % COMP_COLORS.length]}`, color: COMP_COLORS[i % COMP_COLORS.length], fontSize: "0.95rem", background: "#fff" }}>
+                  {p.kind === "tri" ? `½×${p.w}×${p.h}` : `${p.w}×${p.h}`}
+                </span>
+                <input className="ae-answer" style={{ width: 64 }} value={pieceEntries[i] ?? ""} inputMode="numeric"
+                  onChange={(e) => { const v = e.target.value.replace(/\D/g, ""); setPieceEntries((es) => es.map((x, j) => (j === i ? v : x))); setNote(null); }}
+                  aria-label={`piece ${i + 1} area`} />
+              </span>
+            ))}
+            <span>=</span>
+            <input className="ae-answer" style={{ width: 84 }} value={totalEntry} inputMode="numeric"
+              onChange={(e) => { setTotalEntry(e.target.value.replace(/\D/g, "")); setNote(null); }}
+              onKeyDown={(e) => e.key === "Enter" && checkAreas()} aria-label="total area" />
+          </div>
+          <div className="ae-bar"><button className="ae-btn" onClick={checkAreas}>Check</button></div>
+        </>
+      )}
+
+      {phase === "subareas" && fig.subtractive && (
+        <>
+          <div className="ae-formula">
+            <span style={{ display: "inline-grid", placeItems: "center", minWidth: 48, minHeight: 40, padding: "0 8px", border: `3px solid ${C_BASE}`, color: C_BASE, fontSize: "0.95rem", background: "#fff" }}>
+              {fig.subtractive.whole.w}×{fig.subtractive.whole.h}
+            </span>
+            <input className="ae-answer" style={{ width: 64 }} value={subWhole} inputMode="numeric"
+              onChange={(e) => { setSubWhole(e.target.value.replace(/\D/g, "")); setNote(null); }} aria-label="whole rectangle area" />
+            <span>−</span>
+            <span style={{ display: "inline-grid", placeItems: "center", minWidth: 48, minHeight: 40, padding: "0 8px", border: `3px solid ${C_B2}`, color: C_B2, fontSize: "0.95rem", background: "#fff" }}>
+              {fig.subtractive.cutRect.w}×{fig.subtractive.cutRect.h}
+            </span>
+            <input className="ae-answer" style={{ width: 64 }} value={subCut} inputMode="numeric"
+              onChange={(e) => { setSubCut(e.target.value.replace(/\D/g, "")); setNote(null); }} aria-label="cutout area" />
+            <span>=</span>
+            <input className="ae-answer" style={{ width: 84 }} value={subTotal} inputMode="numeric"
+              onChange={(e) => { setSubTotal(e.target.value.replace(/\D/g, "")); setNote(null); }}
+              onKeyDown={(e) => e.key === "Enter" && checkSubAreas()} aria-label="whole minus cutout total" />
+          </div>
+          <div className="ae-bar"><button className="ae-btn" onClick={checkSubAreas}>Check</button></div>
+        </>
+      )}
+
+      {phase === "compare" && fig.subtractive && (() => {
+        const sub = fig.subtractive;
+        const cr = sub.cutRect;
+        const mu = 22; // mini-figure unit
+        const mw = sub.whole.w * mu + 12, mh = sub.whole.h * mu + 12;
+        const mx = (g: number) => 6 + g * mu;
+        const my = (g: number) => 6 + g * mu;
+        const miniPts = fig.verts.map((v) => `${mx(v[0])},${my(v[1])}`).join(" ");
+        return (
+          <div className="ae-compare">
+            <div className="ae-compcard">
+              <div className="ae-compname">Add the pieces</div>
+              <svg width={mw} height={mh} viewBox={`0 0 ${mw} ${mh}`} aria-label="additive decomposition">
+                {pieces.map((pc, i) => (
+                  <rect key={i} x={mx(pc.x)} y={my(pc.y)} width={pc.w * mu} height={pc.h * mu}
+                    fill={`color-mix(in srgb, ${COMP_COLORS[i % COMP_COLORS.length]} 38%, transparent)`} stroke="var(--bdb-ink)" strokeWidth={1.5} />
+                ))}
+                <polygon points={miniPts} fill="none" stroke="var(--bdb-ink)" strokeWidth={2.5} />
+              </svg>
+              <div className="ae-compsum">{pieces.map((pc) => pieceArea(pc)).join(" + ")} = {totalArea}</div>
+            </div>
+            <div className="ae-compcard">
+              <div className="ae-compname">Whole minus cutout</div>
+              <svg width={mw} height={mh} viewBox={`0 0 ${mw} ${mh}`} aria-label="subtractive decomposition">
+                <rect x={mx(0)} y={my(0)} width={sub.whole.w * mu} height={sub.whole.h * mu}
+                  fill={`color-mix(in srgb, ${C_BASE} 30%, transparent)`} stroke={C_BASE} strokeWidth={2.5} strokeDasharray="7 4" />
+                <rect x={mx(cr.x)} y={my(cr.y)} width={cr.w * mu} height={cr.h * mu}
+                  fill={`color-mix(in srgb, ${C_B2} 40%, transparent)`} stroke={C_B2} strokeWidth={2} />
+                <line x1={mx(cr.x)} y1={my(cr.y)} x2={mx(cr.x + cr.w)} y2={my(cr.y + cr.h)} stroke={C_B2} strokeWidth={1.5} />
+                <line x1={mx(cr.x + cr.w)} y1={my(cr.y)} x2={mx(cr.x)} y2={my(cr.y + cr.h)} stroke={C_B2} strokeWidth={1.5} />
+                <polygon points={miniPts} fill="none" stroke="var(--bdb-ink)" strokeWidth={2.5} />
+              </svg>
+              <div className="ae-compsum">{sub.whole.w * sub.whole.h} − {cr.w * cr.h} = {sub.whole.w * sub.whole.h - cr.w * cr.h}</div>
+            </div>
+            <div className="ae-bar" style={{ width: "100%" }}>
+              <button className="ae-btn" onClick={finishFigure}>Same area both ways — finish</button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {phase === "done" && (
+        <div className="ae-bar">
+          {level + 1 < COMP_LEVELS.length
+            ? <button className="ae-btn" onClick={() => reset(level + 1)}>Next level</button>
+            : <button className="ae-btn ghost" onClick={() => reset(0)}>All levels complete — start over</button>}
+        </div>
+      )}
+
+      <div className="ae-note">{note && <span key={note} className="ae-note-in">{note}</span>}</div>
     </div>
   );
 }
