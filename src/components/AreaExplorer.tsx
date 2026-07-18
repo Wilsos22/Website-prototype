@@ -49,7 +49,7 @@ interface Shape {
   verts: Pt[];
   base: Mark;
   height: HeightMark;
-  decoy: DecoyMark;
+  decoy?: DecoyMark; // slant trap on para/triangle/trapezoid; rectangles get none
   base2?: Mark;
   formula: Token[];
   slots: Slot[];
@@ -75,18 +75,17 @@ function makeShape(type: ShapeType, fixed?: FixedDims): Shape {
     if (type === "rectangle" && fixed?.b == null) {
       while (Math.abs(b - h) < 3) { b = rand(3, 10); h = rand(3, 8); }
     }
-    const diag = round1(Math.hypot(b, h));
     const slots: Slot[] = type === "square"
       ? [slot("s1", b, C_BASE, "s", "base"), slot("s2", b, C_HEIGHT, "s", "height")]
       : [slot("b", b, C_BASE, "b", "base"), slot("h", h, C_HEIGHT, "h", "height")];
     const formula: Token[] = [{ t: "text", v: "A =" }, { t: "slot", slot: slots[0] }, { t: "text", v: "×" }, { t: "slot", slot: slots[1] }];
-    const chips = shuffle(Array.from(new Set([b, h, diag])));
+    const chips = shuffle(Array.from(new Set([b, h])));
+    // No diagonal decoy here — rectangles don't need it, and it only confuses.
     return {
       type, unit, cols: b, rows: h,
       verts: [[0, 0], [b, 0], [b, h], [0, h]],
       base: { a: [0, h], b: [b, h], value: b, label: type === "square" ? "s" : "b" },
       height: { a: [0, 0], b: [0, h], foot: [0, h], value: h, label: type === "square" ? "s" : "h" },
-      decoy: { a: [0, 0], b: [b, h], value: diag, name: "diagonal" },
       formula, slots, chips, area: b * h, problemId: fixed?.problemId ?? `${type}-${b}x${h}-${unit}`,
     };
   }
@@ -174,6 +173,7 @@ const PRACTICE_TASKS: PracticeTask[] = [
 ];
 
 const PRACTICE_KEY = "bdm-area-practice-v1";
+const COUNT_INTRO_KEY = "bdm-area-count-intro-v1"; // first visit: count the squares before anything else
 interface PracticeResult { firstTry: boolean; wrongs: number }
 interface PracticeSave { idx: number; results: (PracticeResult | null)[]; confirmedAt: string | null }
 
@@ -215,6 +215,11 @@ export default function AreaExplorer() {
   const [showCount, setShowCount] = useState(false);
   const [whySquared, setWhySquared] = useState(false);
   const [finePointer, setFinePointer] = useState(false);
+  // First visit ever: the count animation runs before the student can answer.
+  const [introCount, setIntroCount] = useState(false);
+  const [introReady, setIntroReady] = useState(false);
+  // A wrong side length re-counts that side's boxes on the figure.
+  const [sideCount, setSideCount] = useState<MarkKind | null>(null);
   const solvedRef = useRef(false);
 
   // Practice mode: current task, per-task results, and the confirmed state —
@@ -253,8 +258,29 @@ export default function AreaExplorer() {
     setPlaced(Object.fromEntries(s.slots.map((sl) => [sl.id, null])));
     setSlotEntry(""); setAnswer(""); setNote(null);
     setWrongSteps(0); setFirstTag(null); setShowCount(false); setWhySquared(false);
+    setSideCount(null);
     solvedRef.current = false;
     setPhase("substitute");
+  }, []);
+
+  // The very first shape a student ever opens starts with the counting
+  // animation — they count the squares before they can do anything else.
+  useEffect(() => {
+    if (!shape) return;
+    let seen = true;
+    try { seen = window.localStorage.getItem(COUNT_INTRO_KEY) === "yes"; } catch { seen = true; }
+    if (!seen) { setIntroCount(true); setIntroReady(false); setShowCount(true); }
+  }, [shape]);
+
+  useEffect(() => {
+    if (!introCount) return;
+    const t = window.setTimeout(() => setIntroReady(true), 2600); // let the numbered fill finish
+    return () => window.clearTimeout(t);
+  }, [introCount]);
+
+  const finishIntroCount = useCallback(() => {
+    try { window.localStorage.setItem(COUNT_INTRO_KEY, "yes"); } catch { /* fine */ }
+    setIntroCount(false); setShowCount(false);
   }, []);
 
   const pickShape = useCallback((type: ShapeType) => startShape(makeShape(type)), [startShape]);
@@ -309,7 +335,7 @@ export default function AreaExplorer() {
     if (!raw) return;
     const value = Number(raw);
     if (!Number.isFinite(value)) { setSlotEntry(""); return; }
-    if (value === shape.decoy.value) {
+    if (shape.decoy && value === shape.decoy.value) {
       setNote(shape.decoy.name === "diagonal"
         ? "That's the diagonal, not a side you multiply. Use the base and the height."
         : "That's the slant side, not the height. The height has the right-angle mark — use the dashed length.");
@@ -319,15 +345,17 @@ export default function AreaExplorer() {
     }
     if (value !== activeSlot.value) {
       setNote(activeSlot.mark === "height"
-        ? "Check the figure again — the height goes straight up from the base."
+        ? "Not quite — count the highlighted squares along the height."
         : shape.type === "square"
         ? "A square's sides are equal — both blanks are the same number."
-        : "Check the figure again — find the labeled measurement for this blank.");
+        : "Not quite — count the highlighted squares along that side.");
       flagWrong("swapped-dims");
+      setSideCount(activeSlot.mark); // re-count that side's boxes on the figure
       setSlotEntry("");
       return;
     }
     setNote(null);
+    setSideCount(null);
     setPlaced((p) => ({ ...p, [activeSlot.id]: value }));
     setSlotEntry("");
   }
@@ -482,9 +510,16 @@ export default function AreaExplorer() {
           </div>
 
           <div className="ae-stage">
-            <ShapeSvg shape={shape} phase={phase} activeMark={activeMark} showCount={showCount} whySquared={whySquared} />
+            <ShapeSvg shape={shape} phase={phase} activeMark={activeMark} showCount={showCount} whySquared={whySquared} sideCount={sideCount} />
 
-            {phase === "substitute" && (
+            {phase === "substitute" && introCount && (
+              <div className="ae-bar" style={{ flexDirection: "column", gap: 10 }}>
+                <p className="ae-why">First: count along as the squares fill the shape. Area is the number of unit squares that cover it.</p>
+                <button className="ae-btn" disabled={!introReady} onClick={finishIntroCount}>I counted them</button>
+              </div>
+            )}
+
+            {phase === "substitute" && !introCount && (
               <>
                 <div className="ae-formula">
                   {shape.formula.map((tok, i) => {
@@ -622,7 +657,7 @@ export default function AreaExplorer() {
 }
 
 // ── Shape rendering ─────────────────────────────────────────────────────────
-function ShapeSvg({ shape, phase, activeMark, showCount, whySquared }: { shape: Shape; phase: Phase; activeMark: MarkKind | null; showCount: boolean; whySquared: boolean }) {
+function ShapeSvg({ shape, phase, activeMark, showCount, whySquared, sideCount }: { shape: Shape; phase: Phase; activeMark: MarkKind | null; showCount: boolean; whySquared: boolean; sideCount?: MarkKind | null }) {
   const U = Math.max(28, Math.min(52, Math.floor(Math.min(460 / shape.cols, 300 / shape.rows))));
   // asymmetric margins so every measurement label sits OUTSIDE the shape:
   // room on the left for the height, below for the base, above for a top base.
@@ -659,7 +694,7 @@ function ShapeSvg({ shape, phase, activeMark, showCount, whySquared }: { shape: 
       fill={color} stroke="var(--bdb-ground)" strokeWidth={3.6} style={{ paintOrder: "stroke" }}>{text}</text>
   );
 
-  const dm = mid(shape.decoy.a, shape.decoy.b);
+  const dm = shape.decoy ? mid(shape.decoy.a, shape.decoy.b) : null;
   const b2m = shape.base2 ? mid(shape.base2.a, shape.base2.b) : null;
   const foot = shape.height.foot;
   const raSign = shape.height.a[0] <= shape.base.b[0] ? 1 : -1; // right-angle mark direction along base
@@ -670,7 +705,10 @@ function ShapeSvg({ shape, phase, activeMark, showCount, whySquared }: { shape: 
   return (
     <svg className="ae-svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${shape.type} on a grid`}>
       <defs>
-        <pattern id={`ae-cell-${shape.type}`} width={U} height={U} patternUnits="userSpaceOnUse">
+        {/* x/y anchor the tiling to the shape's corner so grid squares line up
+            exactly with the unit boundaries (otherwise the pattern tiles from
+            the svg origin and the grid lands mid-square) */}
+        <pattern id={`ae-cell-${shape.type}`} x={ML} y={MT} width={U} height={U} patternUnits="userSpaceOnUse">
           <path d={`M ${U} 0 L 0 0 0 ${U}`} fill="none" stroke="var(--bdb-line)" strokeWidth={1} opacity={0.85} />
         </pattern>
       </defs>
@@ -680,7 +718,9 @@ function ShapeSvg({ shape, phase, activeMark, showCount, whySquared }: { shape: 
       <polygon points={pts} fill={region} stroke="var(--bdb-ink)" strokeWidth={3} strokeLinejoin="miter" />
 
       {/* decoy edge (faint) */}
-      <line x1={sx(shape.decoy.a[0])} y1={sy(shape.decoy.a[1])} x2={sx(shape.decoy.b[0])} y2={sy(shape.decoy.b[1])} stroke="var(--bdb-ink-faint)" strokeWidth={2} strokeDasharray="2 4" />
+      {shape.decoy && (
+        <line x1={sx(shape.decoy.a[0])} y1={sy(shape.decoy.a[1])} x2={sx(shape.decoy.b[0])} y2={sy(shape.decoy.b[1])} stroke="var(--bdb-ink-faint)" strokeWidth={2} strokeDasharray="2 4" />
+      )}
 
       {/* count-the-squares: reveal + number one square at a time (staggered) */}
       {!whySquared && showCount && orderedCells.map(([gx, gy], i) => (
@@ -694,6 +734,32 @@ function ShapeSvg({ shape, phase, activeMark, showCount, whySquared }: { shape: 
       {whySquared && orderedCells.map(([gx, gy]) => (
         <rect key={`w-${gx}-${gy}`} x={sx(gx)} y={sy(gy)} width={U} height={U} fill={C_HEIGHT} opacity={0.6} />
       ))}
+
+      {/* wrong side length: re-count that side's boxes, one at a time */}
+      {(() => {
+        if (!sideCount) return null;
+        let cells: Pt[] = [];
+        let color = C_BASE;
+        if (sideCount === "base") {
+          const x0 = Math.min(shape.base.a[0], shape.base.b[0]);
+          cells = Array.from({ length: shape.base.value }, (_, i) => [x0 + i, shape.rows - 1] as Pt);
+          color = C_BASE;
+        } else if (sideCount === "b2" && shape.base2) {
+          const x0 = Math.min(shape.base2.a[0], shape.base2.b[0]);
+          cells = Array.from({ length: shape.base2.value }, (_, i) => [x0 + i, 0] as Pt);
+          color = C_B2;
+        } else if (sideCount === "height") {
+          const gx = Math.min(shape.height.foot[0], shape.cols - 1);
+          cells = Array.from({ length: shape.height.value }, (_, i) => [gx, i] as Pt);
+          color = C_HEIGHT;
+        }
+        return cells.map(([gx, gy], i) => (
+          <g key={`sc-${gx}-${gy}`} className="ae-count-cell" style={{ animationDelay: `${i * 150}ms` }}>
+            <rect x={sx(gx)} y={sy(gy)} width={U} height={U} fill={color} opacity={0.3} stroke={color} strokeWidth={2} />
+            <text x={sx(gx) + U / 2} y={sy(gy) + U / 2} textAnchor="middle" dominantBaseline="central" fontSize={numSize} fontWeight={900} fill="var(--bdb-ink)">{i + 1}</text>
+          </g>
+        ));
+      })()}
 
       {/* base — bracket + label below (outside) */}
       <g className={pulse("base")}>
@@ -720,7 +786,7 @@ function ShapeSvg({ shape, phase, activeMark, showCount, whySquared }: { shape: 
       )}
 
       {/* decoy label (muted, near its edge) */}
-      {dimLabel(sx(dm[0]) + DECOY_OFF[shape.type][0], sy(dm[1]) + DECOY_OFF[shape.type][1], `${shape.decoy.name} ${shape.decoy.value}`, "var(--bdb-ink-faint)")}
+      {shape.decoy && dm && dimLabel(sx(dm[0]) + DECOY_OFF[shape.type][0], sy(dm[1]) + DECOY_OFF[shape.type][1], `${shape.decoy.name} ${shape.decoy.value}`, "var(--bdb-ink-faint)")}
     </svg>
   );
 }
@@ -857,7 +923,7 @@ function SandboxPara({ onBack }: { onBack: () => void }) {
 
       <svg ref={svgRef} className="ae-svg" viewBox={`0 0 ${W} ${H}`} onPointerDown={onSvgDown} onPointerMove={onSvgMove} onPointerUp={onSvgUp} onPointerCancel={onSvgUp}>
         <defs>
-          <pattern id="ae-sb-cell" width={U} height={U} patternUnits="userSpaceOnUse">
+          <pattern id="ae-sb-cell" x={M} y={M} width={U} height={U} patternUnits="userSpaceOnUse">
             <path d={`M ${U} 0 L 0 0 0 ${U}`} fill="none" stroke="var(--bdb-line)" strokeWidth={1} opacity={0.75} />
           </pattern>
         </defs>
@@ -952,7 +1018,7 @@ function SandboxDouble({ kind, onBack }: { kind: "triangle" | "trapezoid"; onBac
 
       <svg className="ae-svg" viewBox={`0 0 ${W} ${H}`}>
         <defs>
-          <pattern id={`ae-db-cell-${kind}`} width={U} height={U} patternUnits="userSpaceOnUse">
+          <pattern id={`ae-db-cell-${kind}`} x={M} y={M} width={U} height={U} patternUnits="userSpaceOnUse">
             <path d={`M ${U} 0 L 0 0 0 ${U}`} fill="none" stroke="var(--bdb-line)" strokeWidth={1} opacity={0.75} />
           </pattern>
         </defs>
@@ -1071,7 +1137,7 @@ function SandboxTriangleLock({ onBack }: { onBack: () => void }) {
 
       <svg ref={svgRef} className="ae-svg" viewBox={`0 0 ${W} ${H}`} onPointerMove={onSvgMove} onPointerUp={onSvgUp} onPointerCancel={onSvgUp}>
         <defs>
-          <pattern id="ae-lk-cell" width={U} height={U} patternUnits="userSpaceOnUse">
+          <pattern id="ae-lk-cell" x={M} y={M} width={U} height={U} patternUnits="userSpaceOnUse">
             <path d={`M ${U} 0 L 0 0 0 ${U}`} fill="none" stroke="var(--bdb-line)" strokeWidth={1} opacity={0.75} />
           </pattern>
         </defs>
@@ -1213,7 +1279,7 @@ function AreaComposite() {
 
       <svg className="ae-svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`composite ${fig.name} figure on a grid`}>
         <defs>
-          <pattern id="ae-comp-cell" width={U} height={U} patternUnits="userSpaceOnUse">
+          <pattern id="ae-comp-cell" x={M} y={M} width={U} height={U} patternUnits="userSpaceOnUse">
             <path d={`M ${U} 0 L 0 0 0 ${U}`} fill="none" stroke="var(--bdb-line)" strokeWidth={1} opacity={0.8} />
           </pattern>
         </defs>
