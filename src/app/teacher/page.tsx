@@ -58,6 +58,7 @@ const TOOL_GROUPS: { label: string; tools: LinkItem[] }[] = [
       { href: "/multiplication-fluency", label: "Multiplication", letter: "x", color: "#3b7fc4", desc: "Fast-facts practice" },
       { href: "/fraction-bars", label: "Fraction Bars", letter: "F", color: "#fcaf38", desc: "Fractions, decimals, percents" },
       { href: "/divisibility", label: "Divisibility Rules", letter: "÷", color: "#2f9e6f", desc: "Test each divisor, sort the factors" },
+      { href: "/place-value", label: "Place Value Reader", letter: ".", color: "#f95335", desc: "Odometer wheels roll and carry" },
       { href: "/ladder-method", label: "Ladder Method", letter: "L", color: "#674a40", desc: "GCF, LCM, prime factors" },
     ],
   },
