@@ -325,8 +325,10 @@ export default function GrudgeBoardPage() {
                 <div key={t.id} className="gb-col" data-out={t.out} style={{ ["--tc" as string]: t.color }}>
                   <div className="gb-colname">{t.name}</div>
                   <div className="gb-pips">
+                    {/* Any pip works - lives is just a count, so a kid can tap
+                        anywhere on a live team and one X comes off the top. */}
                     {Array.from({ length: Math.max(t.lives, 0) }, (_, i) => (
-                      <button key={i} className="gb-pip" disabled={budget === 0 || t.out || i !== t.lives - 1}
+                      <button key={i} className="gb-pip" disabled={budget === 0 || t.out}
                         aria-label={`Erase an X from ${t.name}`}
                         onClick={() => void act({ action: "erase", roundId: round.id, targetId: t.id })}>&times;</button>
                     ))}
