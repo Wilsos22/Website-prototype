@@ -69,6 +69,16 @@ cross-day memory note in the console woven into her context; personality tuned
 to complaining-teen, less Red Bull, shorter replies)
 
 ## In progress
+- **Grudge Ball** — second live team review game, forked from BRUH's engine (shares
+  the question loop, grading, and `bruh_sets` banks; separate `grudge_*` tables so
+  BRUH cannot regress). Same answer/reveal/explain, then the reward beat becomes
+  shoot + steal: the teacher taps a correct team, they explain, shoot a real hoop
+  for ~30s (a teammate taps MAKE per basket), then walk to the panel and knock X's
+  off rivals by hand. Erase model (anti-snowball); zero X's = out of the shooting
+  but still answering + immune; "back with a grudge" revives after 2 wilds-while-out
+  wins, taking 3 from the nemesis. `/teacher/grudge` (+`/board`,`/scoreboard`,
+  `/remote`), `/grudge` student. Code + migration done; waiting on Steele to run
+  `supabase/grudge.sql` and a live run. Deliberately not on the proficiency spine.
 - **Week builder** — code shipped (warmup-pools-data.gs + warmup-week-builder.gs +
   sidebar button); waiting on Steele's Apps Script paste-in. Builds the week from
   published Notion lessons: pool-backed Q4/Q5 (verified tags), AI openers only.
