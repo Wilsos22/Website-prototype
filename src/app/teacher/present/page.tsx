@@ -1,20 +1,31 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties } from "react";
+import ClassroomSpinner from "@/components/ClassroomSpinner";
 import InkBoard from "@/components/InkBoard";
 import LessonVisual from "@/components/LessonVisual";
+import { CLOSEOUT_DIRECTIONS } from "@/lib/classStates";
 import { CLASSROOM_STAGE_THEMES, classroomStageTheme, discussionSupportsForLesson } from "@/lib/classroomPilot";
 import { resolveLessonVisual } from "@/lib/lessonVisuals";
+import { publicSuccessCriterion } from "@/lib/successCriterion";
 import { teacherApiRequest } from "@/lib/teacherApi";
-import { LIVE_FLOW_MODE, getStoredTeacherSessionId, liveTimerSeconds, type LiveClassFlowSnapshot } from "@/lib/liveClassFlow";
+import {
+  LIVE_FLOW_MODE,
+  getStoredTeacherSessionId,
+  liveTimerSeconds,
+  type LiveClassFlowSnapshot,
+  type TeacherRemoteCommand,
+} from "@/lib/liveClassFlow";
 
 interface StageSession {
   id: string;
+  period_id: string;
   status: string;
   join_code: string | null;
   started_at: string;
   broadcast: string | null;
   live_flow: LiveClassFlowSnapshot | null;
+  remote_command: TeacherRemoteCommand | null;
 }
 
 interface PollAnswer {
@@ -43,13 +54,6 @@ function requestedSessionId() {
   } catch {
     return null;
   }
-}
-
-function discussionRounds(text: string) {
-  return text
-    .split(/(?=Round\s+\d+:)/i)
-    .map((line) => line.trim())
-    .filter(Boolean);
 }
 
 const INDEPENDENT_SECTION_LABELS = [
@@ -100,18 +104,13 @@ function independentSections(text: string) {
 
 function structuredWorkSections(
   lesson: NonNullable<LiveClassFlowSnapshot["lesson"]> | null,
-  closeout: boolean,
 ) {
   if (!lesson) return [];
   const sections: Array<{ label: IndependentSectionLabel; body: string }> = [
     { label: "Required Paper Work", body: lesson.requiredPaperWork || "" },
-    ...(closeout ? [
-      { label: "Required Digital Work" as IndependentSectionLabel, body: lesson.requiredDigitalWork || "" },
-    ] : []),
-    ...(!closeout ? [
-      { label: "Due and Turn In" as IndependentSectionLabel, body: lesson.dueAndTurnIn || "" },
-      { label: "Help path" as IndependentSectionLabel, body: lesson.helpPath || "" },
-    ] : []),
+    { label: "Required Digital Work" as IndependentSectionLabel, body: lesson.requiredDigitalWork || "" },
+    { label: "Due and Turn In" as IndependentSectionLabel, body: lesson.dueAndTurnIn || "" },
+    { label: "Help path" as IndependentSectionLabel, body: lesson.helpPath || "" },
     { label: "Optional Support", body: lesson.optionalSupport || "" },
     { label: "Challenge", body: lesson.bigDogChallenge || "" },
   ];
@@ -126,26 +125,36 @@ export default function ClassroomStagePage() {
 
   useEffect(() => {
     let stopped = false;
+    let checking = false;
+    const requested = requestedSessionId();
     const load = async () => {
-      const result = await teacherApiRequest<{ sessions: StageSession[] }>("/api/teacher/session")
-        .catch(() => ({ sessions: [] }));
-      const liveSessions = result.sessions.filter((candidate) => candidate.status === "open" && candidate.broadcast === LIVE_FLOW_MODE);
-      const requested = requestedSessionId();
-      const selected = requested
-        ? liveSessions.find((candidate) => candidate.id === requested) ?? null
-        : liveSessions.length === 1 ? liveSessions[0] : null;
-      if (!stopped) {
-        setSession(selected);
-        setSessionMessage(selected
-          ? "Connected to the confirmed class session."
-          : liveSessions.length > 1
-            ? "Choose the intended session from the private teacher Remote."
-            : "Start Live Class Flow or open this projector from the private teacher Remote.");
-        setLoading(false);
+      if (checking) return;
+      checking = true;
+      try {
+        const endpoint = requested
+          ? `/api/teacher/session?liveSessionId=${encodeURIComponent(requested)}`
+          : "/api/teacher/session";
+        const result = await teacherApiRequest<{ sessions: StageSession[] }>(endpoint)
+          .catch(() => ({ sessions: [] }));
+        const liveSessions = result.sessions.filter((candidate) => candidate.status === "open" && candidate.broadcast === LIVE_FLOW_MODE);
+        const selected = requested
+          ? liveSessions.find((candidate) => candidate.id === requested) ?? null
+          : liveSessions.length === 1 ? liveSessions[0] : null;
+        if (!stopped) {
+          setSession(selected);
+          setSessionMessage(selected
+            ? "Connected to the confirmed class session."
+            : liveSessions.length > 1
+              ? "Choose the intended session from the private teacher Remote."
+              : "Start Live Class Flow or open this projector from the private teacher Remote.");
+          setLoading(false);
+        }
+      } finally {
+        checking = false;
       }
     };
     void load();
-    const interval = window.setInterval(load, 1000);
+    const interval = window.setInterval(load, requested ? 500 : 1000);
     return () => {
       stopped = true;
       window.clearInterval(interval);
@@ -187,7 +196,13 @@ export default function ClassroomStagePage() {
   const theme = state?.semantic
     ? CLASSROOM_STAGE_THEMES[state.semantic]
     : classroomStageTheme(state?.id, state?.label);
-  const showLessonTargets = theme.id === "learning-check";
+  const showReaderSpinner = state?.id === "learning-target-readers";
+  const showIpadKidSpinner = state?.id === "ipad-kid";
+  const routineConfig = presentation?.routineConfig || null;
+  const spinnerSyncScope = `${flow?.sequence?.currentIndex ?? -1}:${presentation?.notionStepId || state?.id || "spinner"}`;
+  const showLessonTargets = theme.id === "lesson-targets" || theme.id === "learning-check";
+  const isLearningCheck = theme.id === "learning-check";
+  const selectedCriterion = publicSuccessCriterion(lesson?.selectedSuccessCriterion);
   const embeddedResourceUrl = resource?.url.includes("docs.google.com/forms")
     ? `${resource.url}${resource.url.includes("?") ? "&" : "?"}embedded=true`
     : null;
@@ -197,7 +212,9 @@ export default function ClassroomStagePage() {
     : null;
   const liveToolUrl = flow ? toolUrl(flow) : null;
   const showBoardPanel = Boolean(session && presentation?.boardOpen && presentation.mode !== "board");
-  const slideBody = presentation?.mainDisplay || presentation?.body || state?.description || "";
+  const slideBody = theme.id === "closeout"
+    ? CLOSEOUT_DIRECTIONS
+    : presentation?.mainDisplay || presentation?.body || state?.description || "";
   const activeSequenceStep = flow?.sequence?.steps?.[flow.sequence.currentIndex] || null;
   const lessonVisual = flow ? resolveLessonVisual({
     lessonCode: lesson?.code || activeSequenceStep?.lessonCode,
@@ -230,9 +247,8 @@ export default function ClassroomStagePage() {
       : phase?.keyVocabulary?.filter(Boolean).length
         ? phase.keyVocabulary
         : configuredDiscussionSupports.keyVocabulary;
-  const rounds = discussionRounds(slideBody);
-  const structuredSections = structuredWorkSections(lesson, theme.id === "closeout");
-  const paperSections = theme.id === "independent" || theme.id === "closeout"
+  const structuredSections = structuredWorkSections(lesson);
+  const paperSections = theme.id === "independent"
     ? structuredSections.length ? structuredSections : independentSections(slideBody)
     : [];
   const assignedToolActive = presentation?.responseMode?.trim().toLowerCase() === "assigned tool";
@@ -267,6 +283,21 @@ export default function ClassroomStagePage() {
         .stage-empty p { margin:14px 0 0; color:var(--stage-muted); font-size:clamp(1rem,2vw,1.4rem); font-weight:700; }
         .stage-directions-inner { width:min(100%,1200px); display:grid; gap:18px; justify-items:center; }
         .stage-directions p { margin:0; max-width:54ch; border-left:8px solid var(--stage-accent); background:color-mix(in srgb,var(--stage-base) 58%,transparent); padding:15px 20px; color:var(--stage-muted); text-align:left; white-space:pre-wrap; font-size:clamp(1.15rem,2.5vw,2rem); line-height:1.35; font-weight:760; }
+        .stage-routine { position:absolute; inset:0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:clamp(12px,2vw,22px); align-content:center; padding:clamp(24px,4vw,60px); }
+        .stage-routine article { display:grid; align-content:center; gap:8px; min-height:120px; border:1px solid var(--stage-line); border-top:5px solid var(--stage-accent); border-radius:16px; background:color-mix(in srgb,var(--stage-panel) 92%,transparent); padding:clamp(16px,2.4vw,28px); }
+        .stage-routine .stage-routine-lead { grid-column:1 / -1; min-height:100px; grid-template-columns:1fr auto; align-items:end; }
+        .stage-routine p { margin:0; color:var(--stage-accent); font-size:0.72rem; font-weight:900; letter-spacing:0.13em; text-transform:uppercase; }
+        .stage-routine h2 { margin:0; color:#fff; font-size:clamp(2.2rem,4.5vw,4.7rem); line-height:0.95; }
+        .stage-routine span { color:var(--stage-muted); font-size:clamp(1rem,1.7vw,1.35rem); font-weight:780; }
+        .stage-routine strong { color:#fff; font-size:clamp(1.15rem,2.25vw,1.8rem); line-height:1.28; text-wrap:balance; }
+        .stage-routine.small-group { grid-template-columns:minmax(240px,0.7fr) minmax(0,1.3fr); }
+        .stage-routine.small-group .stage-routine-lead { grid-column:auto; }
+        .stage-targets { position:absolute; inset:0; display:grid; align-content:center; justify-items:center; gap:clamp(20px,3.5vw,38px); padding:clamp(34px,6vw,88px); text-align:center; }
+        .stage-targets-label { margin:0; color:var(--stage-accent); font-size:clamp(0.72rem,1.25vw,0.95rem); font-weight:950; letter-spacing:0.15em; text-transform:uppercase; }
+        .stage-targets-intention { margin:0; max-width:28ch; color:#fff; font-size:clamp(2rem,4.8vw,5rem); line-height:1.04; font-weight:900; letter-spacing:-0.035em; text-wrap:balance; }
+        .stage-targets-criterion { width:min(100%,980px); display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:16px; border:1px solid var(--stage-line); border-left:7px solid var(--stage-accent); border-radius:16px; background:color-mix(in srgb,var(--stage-panel) 90%,transparent); padding:clamp(16px,2.3vw,25px); color:#fff; text-align:left; box-shadow:0 18px 46px rgba(0,0,0,0.24); }
+        .stage-targets-check { display:grid; place-items:center; min-width:58px; height:42px; border:2px solid var(--stage-accent); border-radius:12px; color:var(--stage-accent); padding:0 8px; font-size:0.7rem; font-weight:950; letter-spacing:0.08em; text-transform:uppercase; }
+        .stage-targets-criterion strong { font-size:clamp(1.25rem,2.6vw,2.3rem); line-height:1.2; }
         .stage-resource, .stage-tool { position:absolute; inset:0; width:100%; height:100%; border:0; background:#fff; }
         .stage-resource-link { padding-top:clamp(34px,6vw,88px); }
         .stage-resource-link a { display:flex; min-height:72px; align-items:center; justify-content:center; border:2px solid var(--stage-accent); border-radius:14px; background:var(--stage-accent); color:#111813; padding:0 30px; text-decoration:none; font-size:1.25rem; font-weight:900; }
@@ -290,6 +321,9 @@ export default function ClassroomStagePage() {
         .stage-score-copy p { margin:0; max-width:46ch; border-left:8px solid var(--stage-accent); padding:14px 0 14px 20px; color:var(--stage-muted); font-size:clamp(1.1rem,2.2vw,1.8rem); line-height:1.38; font-weight:780; }
         .stage-discussion { position:absolute; inset:0; display:grid; grid-template-columns:minmax(0,1.35fr) minmax(300px,0.65fr); gap:clamp(18px,3vw,36px); padding:clamp(28px,4.2vw,58px); }
         .stage-discussion-main { min-width:0; display:grid; align-content:center; gap:14px; }
+        .stage-share-callout { width:min(100%,720px); display:grid; gap:6px; border:1px solid var(--stage-line); border-left:7px solid var(--stage-accent); border-radius:16px; background:color-mix(in srgb,var(--stage-panel) 84%,#000); padding:16px 20px; }
+        .stage-share-callout span { color:var(--stage-accent); font-size:0.7rem; font-weight:950; letter-spacing:0.13em; text-transform:uppercase; }
+        .stage-share-callout strong { color:#fff; font-size:clamp(2.2rem,5vw,5rem); line-height:1; font-weight:950; }
         .stage-discussion-main h2 { margin:0 0 6px; color:#fff; font-size:clamp(2.1rem,4.7vw,4.8rem); line-height:1; letter-spacing:-0.035em; }
         .stage-round { margin:0; border-left:6px solid var(--stage-accent); background:color-mix(in srgb,var(--stage-panel) 72%,transparent); padding:11px 15px; color:#fff; font-size:clamp(1rem,1.65vw,1.35rem); line-height:1.32; font-weight:780; }
         .stage-supports { min-height:0; display:grid; grid-template-rows:auto auto; align-content:center; gap:14px; }
@@ -315,6 +349,7 @@ export default function ClassroomStagePage() {
         .stage-work.board-open .stage-lesson-visual,
         .stage-work.board-open .stage-score-scene,
         .stage-work.board-open .stage-discussion,
+        .stage-work.board-open .stage-routine,
         .stage-work.board-open .stage-independent { right:42%; }
         .stage-work.board-open .stage-resource,
         .stage-work.board-open .stage-tool { width:58%; }
@@ -327,6 +362,7 @@ export default function ClassroomStagePage() {
         .stage-work.board-open .stage-independent { overflow:auto; padding:18px; }
         .stage-work.board-open .stage-independent-grid { grid-template-columns:1fr; align-content:start; }
         .stage-work.board-open .stage-independent-card { grid-column:1; }
+        .stage-work.board-open .classroom-spinner { right:42%; }
         .stage-board-panel { position:absolute; z-index:5; inset:0 0 0 auto; width:42%; overflow:hidden; border-left:5px solid var(--stage-accent); background:#fff; box-shadow:-18px 0 40px rgba(0,0,0,0.28); }
         @media (max-width:900px) { .stage-success { width:40vw; } .stage-score-scene, .stage-discussion { grid-template-columns:1fr; overflow:auto; } }
         @media (max-height:650px) {
@@ -375,16 +411,71 @@ export default function ClassroomStagePage() {
         </div>
 
         <section className={`stage-work${showBoardPanel ? " board-open" : ""}`}>
-          {showLessonTargets && !resource ? (
-            <aside className="stage-success" aria-label="Success criteria">
-              <p className="stage-success-label">Success criteria</p>
-              <p className="stage-success-text">{lesson?.selectedSuccessCriterion || lesson?.successCriteria || "Success criteria will appear when the lesson is loaded."}</p>
+          {showLessonTargets && !isLearningCheck && !resource && !showReaderSpinner ? (
+            <aside className="stage-success" aria-label="Success criterion">
+              <p className="stage-success-label">Success criterion</p>
+              <p className="stage-success-text">{selectedCriterion}</p>
             </aside>
           ) : null}
           {loading ? (
             <div className="stage-empty"><div><h1>Connecting to the classroom</h1><p>{sessionMessage}</p></div></div>
           ) : !session || !flow || !state ? (
             <div className="stage-empty"><div><h1>Ready for class</h1><p>{sessionMessage}</p></div></div>
+          ) : showReaderSpinner ? (
+            <ClassroomSpinner
+              key={`${session.id}:${spinnerSyncScope}:controller`}
+              mode="readers"
+              sessionId={session.id}
+              syncKey={session.join_code}
+              periodId={session.period_id}
+              stateId="learning-target-readers"
+              syncScope={spinnerSyncScope}
+              role="controller"
+              learningIntention={lesson?.learningIntention}
+              successCriterion={selectedCriterion}
+              remoteCommand={session.remote_command}
+            />
+          ) : showIpadKidSpinner ? (
+            <ClassroomSpinner
+              key={`${session.id}:${spinnerSyncScope}:controller`}
+              mode="ipad"
+              sessionId={session.id}
+              syncKey={session.join_code}
+              periodId={session.period_id}
+              stateId="ipad-kid"
+              syncScope={spinnerSyncScope}
+              role="controller"
+              remoteCommand={session.remote_command}
+            />
+          ) : isLearningCheck ? (
+            <section className="stage-targets" aria-label="Today's learning intention and success criterion">
+              <p className="stage-targets-label">Today&apos;s learning intention</p>
+              <h2 className="stage-targets-intention">{lesson?.learningIntention || "Add the Learning Intention in Notion."}</h2>
+              <div className="stage-targets-criterion">
+                <span className="stage-targets-check">Success criterion</span>
+                <strong>{selectedCriterion}</strong>
+              </div>
+            </section>
+          ) : routineConfig?.kind === "gallery-walk" ? (
+            <section className="stage-routine" aria-label="Gallery Walk directions">
+              <article className="stage-routine-lead">
+                <p>Gallery Walk</p>
+                <h2>{routineConfig.stationCount} stations</h2>
+                <span>{routineConfig.rotationMinutes} minutes per rotation</span>
+              </article>
+              <article><p>Notice</p><strong>{routineConfig.observationPrompt}</strong></article>
+              <article><p>Record</p><strong>{routineConfig.recordPrompt}</strong></article>
+              <article><p>Move</p><strong>{routineConfig.movementDirections}</strong></article>
+              <article><p>Share</p><strong>{routineConfig.sharePrompt}</strong></article>
+            </section>
+          ) : routineConfig?.kind === "small-group" ? (
+            <section className="stage-routine small-group" aria-label="Small Group directions">
+              <article className="stage-routine-lead">
+                <p>Small Group Rotations</p>
+                <h2>{routineConfig.rotationMinutes} minute rotations</h2>
+              </article>
+              <article><p>Group task</p><strong>{routineConfig.publicTask}</strong></article>
+            </section>
           ) : showPollPanel && poll ? (
             <div className="stage-poll">
               {showLessonTargets && lesson?.learningIntention ? <p className="stage-learning">{lesson.learningIntention}</p> : null}
@@ -418,14 +509,22 @@ export default function ClassroomStagePage() {
             <InkBoard room={session.id} interactive problem={presentation.body} />
           ) : lessonVisual ? (
             <section className="stage-lesson-visual">
-              <LessonVisual visual={lessonVisual} variant="projector" accent={theme.accent} />
+              <LessonVisual
+                visual={lessonVisual}
+                variant="projector"
+                accent={theme.accent}
+                scoreboardStage={presentation?.scoreboardStage}
+              />
             </section>
           ) : theme.id === "discussion" ? (
             <section className="stage-discussion" aria-label="Discussion prompt and supports">
               <div className="stage-discussion-main">
-                <p className="stage-kicker">{phase?.label || "Three two-minute rounds"}</p>
-                <h2>{phase?.subtitle || "Discuss, justify, and revise"}</h2>
-                {(rounds.length ? rounds : [slideBody]).map((round) => <p className="stage-round" key={round}>{round}</p>)}
+                <p className="stage-kicker">{phase?.label || "Think, write, discuss, revise, share"}</p>
+                <h2>{phase?.subtitle || "Think first. Then explain and revise."}</h2>
+                {phase?.id === "share" && phase.selectedSharer ? (
+                  <p className="stage-share-callout"><span>Ready to share</span><strong>{phase.selectedSharer}</strong></p>
+                ) : null}
+                {slideBody ? <p className="stage-round">{slideBody}</p> : null}
               </div>
               <aside className="stage-supports">
                 <section className="stage-support-card">
@@ -438,8 +537,8 @@ export default function ClassroomStagePage() {
                 </section>
               </aside>
             </section>
-          ) : theme.id === "independent" || theme.id === "closeout" ? (
-            <section className="stage-independent" aria-label={theme.id === "closeout" ? "Closeout assignment summary" : "Independent paper work directions"}>
+          ) : theme.id === "independent" ? (
+            <section className="stage-independent" aria-label="Independent paper work directions">
               <div className="stage-independent-grid">
                 {paperSections.map((section) => (
                   <article

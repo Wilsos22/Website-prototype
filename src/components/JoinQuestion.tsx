@@ -104,6 +104,7 @@ export function JoinQuestion() {
             sessionId: row.id,
             studentId: "",
             name: cleanName,
+            syncKey: cleanCode,
           }));
         } catch {
           /* ignore */
@@ -589,7 +590,7 @@ export function JoinQuestion() {
                 onClick={() => setAnonOpen(true)}
                 type="button"
               >
-                🔒 Ask a question anonymously
+                Ask a question anonymously
               </button>
             </div>
           )}
@@ -629,7 +630,7 @@ export function JoinQuestion() {
                 onClick={() => setAnonOpen(true)}
                 type="button"
               >
-                🔒 Ask a question anonymously
+                Ask a question anonymously
               </button>
             </form>
           )}
@@ -637,7 +638,7 @@ export function JoinQuestion() {
           {step === "done" && (
             <div style={{ display: "grid", gap: "20px", textAlign: "center" }}>
               <div className="done-icon">
-                {submittedRating !== null && submittedRating >= 4 ? "🙌" : submittedRating !== null && submittedRating <= 1 ? "✊" : "👍"}
+                Saved
               </div>
               <p className="done-text">
                 {submittedRating !== null
@@ -666,7 +667,7 @@ export function JoinQuestion() {
                 onClick={() => setAnonOpen(true)}
                 type="button"
               >
-                🔒 Ask a question anonymously
+                Ask a question anonymously
               </button>
             </div>
           )}

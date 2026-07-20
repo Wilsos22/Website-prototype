@@ -1,9 +1,11 @@
+import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const require = createRequire(import.meta.url);
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const routines = require(path.join(root, ".tmp-mastery", "lessonRoutineConfig.js"));
 
 const rich = (value) => ({ type: "rich_text", rich_text: [{ plain_text: value }] });
 const title = (value) => ({ type: "title", title: [{ plain_text: value }] });
@@ -11,14 +13,31 @@ const select = (value) => ({ type: "select", select: { name: value } });
 const checkbox = (value) => ({ type: "checkbox", checkbox: value });
 const number = (value) => ({ type: "number", number: value });
 
+const privateSmallGroupRoutine = {
+  kind: "small-group",
+  rotationMinutes: 7,
+  publicTask: "Complete the assigned comparison and show your reasoning on paper.",
+  teacherPlan: {
+    pull: "Pull the teacher-selected group after the opening example.",
+    focus: "Connect ratio language to multiplicative comparison.",
+    activity: "Build one comparison, then revise a second example.",
+    check: "Ask each learner to explain the next move before returning.",
+    materials: ["Ratio cards", "Counters"],
+  },
+};
+const rawSmallGroupAiContext = routines.withLessonRoutineConfig(
+  "Do not solve it.\n\n[BDM_PUBLIC_SURFACES:linked]",
+  privateSmallGroupRoutine,
+);
+
 const stepPage = {
   id: "step-1",
   properties: {
-    "Step": title("1. Launch"),
+    "Step": title("1. Small Group"),
     "Order": number(1),
     "Start Minute": number(0),
     "Duration": number(4),
-    "State ID": rich("launch"),
+    "State ID": rich("small-group"),
     "Student Directions": rich("Legacy student direction"),
     "Teacher Notes": rich("Teacher note"),
     "Paper Task": rich(""),
@@ -28,7 +47,7 @@ const stepPage = {
     "Choices": rich(""),
     "Correct Answer": rich(""),
     "Standard": rich("6.NS.4"),
-    "AI Context": rich("Do not solve it."),
+    "AI Context": rich(rawSmallGroupAiContext),
     "Advance": select("Automatic"),
     "Required": checkbox(true),
     "Main Display": rich("The score is 24 to 36."),
@@ -105,5 +124,28 @@ for (const field of ["mainDisplay", "paceDirections", "studentAction", "remoteAc
   if (!step[field]) throw new Error(`Step field ${field} did not map.`);
 }
 if (!step.workSpaceAvailable) throw new Error("Work Space Available did not map.");
+
+assert.equal(step.aiContext, "Do not solve it.", "Internal routine metadata must not enter public AI Context.");
+assert.equal(step.publicSurfaceMode, "linked");
+assert.deepEqual(step.routineConfig, {
+  kind: "small-group",
+  rotationMinutes: 7,
+  publicTask: "Complete the assigned comparison and show your reasoning on paper.",
+});
+assert.equal(
+  Object.hasOwn(step.routineConfig, "teacherPlan"),
+  false,
+  "Public LessonStepData must never expose the private Small Group teacher plan.",
+);
+
+const publicStepJson = JSON.stringify(step);
+assert.equal(publicStepJson.includes("BDM_ROUTINE_CONFIG"), false, "Encoded internal metadata must not reach public fixtures.");
+for (const privateValue of Object.values(privateSmallGroupRoutine.teacherPlan).flat()) {
+  assert.equal(
+    publicStepJson.includes(String(privateValue)),
+    false,
+    "Private pull, focus, activity, check, and materials must not leak into public LessonStepData.",
+  );
+}
 
 console.log("PASS - Notion lesson and step fields map into the four-surface contract.");

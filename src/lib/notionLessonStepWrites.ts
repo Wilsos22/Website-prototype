@@ -1,9 +1,31 @@
+import { DEFAULT_STATES, classStateStepDefaults } from "./classStates";
+import {
+  defaultLessonRoutineConfig,
+  lessonRoutineConfigFromAiContext,
+  stripLessonRoutineConfig,
+  validateLessonRoutineConfig,
+  withLessonRoutineConfig,
+  type LessonRoutineConfig,
+} from "./lessonRoutineConfig";
+import {
+  isPublicSurfaceMode,
+  parseLessonStepAiContext,
+  replaceLessonStepAiContextText,
+  defaultPublicSurfaceModeForState,
+  resolvePublicSurfaceMode,
+  setPublicSurfaceMode,
+  type PublicSurfaceMode,
+} from "./lessonStepMetadata";
+
 const LESSON_DATA_SOURCE_ID = "e367e541-c0c7-4613-8066-d2e61b6fee64";
 const LESSON_STEP_DATA_SOURCE_ID = "8e467c1b-8937-4902-811e-ca0a2e15af4d";
 const NOTION_API = "https://api.notion.com/v1";
 const NOTION_VERSION = "2025-09-03";
 const NOTION_TEXT_LIMIT = 2_000;
 const NOTION_URL_LIMIT = 2_000;
+const CREATE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{16,100}$/;
+const CREATE_TOKEN_PREFIX = "BDM_CREATE_TOKEN:";
+const CREATE_TOKEN_MARKER_PATTERN = /(?:\r?\n){0,2}\[BDM_CREATE_TOKEN:([A-Za-z0-9_-]{16,100})\]\s*$/;
 
 // Notion does not expose an atomic last-edited precondition for page updates.
 // Serialize same-step saves within this server instance, then verify the
@@ -11,6 +33,8 @@ const NOTION_URL_LIMIT = 2_000;
 // protects normal multi-device edits, while the post-write read detects most
 // cross-instance collisions and preserves the caller's draft on conflict.
 const stepWriteTails = new Map<string, Promise<void>>();
+const lessonWriteTails = new Map<string, Promise<void>>();
+const CLASS_STATE_BY_ID = new Map(DEFAULT_STATES.map((state) => [state.id, state]));
 
 const POLL_KINDS = ["", "short-answer", "multiple-choice", "fist-to-five"] as const;
 const ADVANCE_MODES = ["", "Automatic", "Manual"] as const;
@@ -58,6 +82,12 @@ interface NotionPage {
   properties: Record<string, NotionProperty>;
 }
 
+interface NotionQueryResponse {
+  results?: NotionPage[];
+  has_more?: boolean;
+  next_cursor?: string | null;
+}
+
 export interface EditableLessonStep {
   id: string;
   lessonId: string;
@@ -77,6 +107,8 @@ export interface EditableLessonStep {
   correctAnswer: string;
   standard: string;
   aiContext: string;
+  publicSurfaceMode: PublicSurfaceMode;
+  routineConfig: LessonRoutineConfig | null;
   advance: AdvanceMode;
   required: boolean;
   linkUrl: string;
@@ -148,6 +180,8 @@ const EDITABLE_KEYS = new Set<string>([
   ...Object.keys(BOOLEAN_PROPERTIES),
   "choices",
   "linkUrl",
+  "publicSurfaceMode",
+  "routineConfig",
 ]);
 
 function compactNotionId(value: string | undefined): string {
@@ -181,6 +215,22 @@ async function withSerializedStepWrite<T>(stepId: string, task: () => Promise<T>
   } finally {
     release();
     if (stepWriteTails.get(stepId) === tail) stepWriteTails.delete(stepId);
+  }
+}
+
+async function withSerializedLessonWrite<T>(lessonId: string, task: () => Promise<T>): Promise<T> {
+  const previous = lessonWriteTails.get(lessonId) ?? Promise.resolve();
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const tail = previous.catch(() => undefined).then(() => gate);
+  lessonWriteTails.set(lessonId, tail);
+
+  await previous.catch(() => undefined);
+  try {
+    return await task();
+  } finally {
+    release();
+    if (lessonWriteTails.get(lessonId) === tail) lessonWriteTails.delete(lessonId);
   }
 }
 
@@ -269,8 +319,71 @@ function propertyRelationIds(property: NotionProperty | undefined): string[] {
   return (property?.relation || []).map((relation) => compactNotionId(relation.id)).filter(Boolean);
 }
 
+function createTokenMarker(token: string): string {
+  return `[${CREATE_TOKEN_PREFIX}${token}]`;
+}
+
+function extractCreateToken(value: string): string {
+  return value.match(CREATE_TOKEN_MARKER_PATTERN)?.[1] || "";
+}
+
+function stripCreateToken(value: string): string {
+  return value.replace(CREATE_TOKEN_MARKER_PATTERN, "").trimEnd();
+}
+
+function appendCreateToken(value: string, token: string): string {
+  const content = stripCreateToken(value);
+  return `${content}${content ? "\n\n" : ""}${createTokenMarker(token)}`;
+}
+
+function richTextWithCreateToken(value: string, token: string): { rich_text: ReturnType<typeof textValue> } {
+  const combined = appendCreateToken(value, token);
+  if (combined.length > NOTION_TEXT_LIMIT) {
+    throw new LessonStepApiError(
+      `AI Context must leave room for its internal create token and stay within ${NOTION_TEXT_LIMIT.toLocaleString()} characters.`,
+      400,
+      "FIELD_TOO_LONG",
+    );
+  }
+  return { rich_text: textValue(combined) };
+}
+
+function validateMutationToken(value: unknown): string {
+  if (typeof value !== "string" || !CREATE_TOKEN_PATTERN.test(value.trim())) {
+    throw new LessonStepApiError(
+      "Start this add action again so it has a valid mutation token.",
+      400,
+      "INVALID_MUTATION_TOKEN",
+    );
+  }
+  return value.trim();
+}
+
+interface RoutineConfigInspection {
+  config: LessonRoutineConfig | null;
+  invalid: boolean;
+}
+
+function inspectRoutineConfigFromRawAiContext(value: string): RoutineConfigInspection {
+  try {
+    return { config: lessonRoutineConfigFromAiContext(value), invalid: false };
+  } catch {
+    return { config: null, invalid: true };
+  }
+}
+
+function invalidRoutineConfigError(): LessonStepApiError {
+  return new LessonStepApiError(
+    "This lesson step has invalid internal routine configuration. Replace the state or save a complete routine configuration to repair it.",
+    409,
+    "INVALID_ROUTINE_CONFIG",
+  );
+}
+
 function mapEditableStep(page: NotionPage, lessonId: string): EditableLessonStep {
   const p = page.properties;
+  const stateId = propertyText(p["State ID"]);
+  const rawAiContext = propertyText(p["AI Context"]);
   return {
     id: normalizeNotionPageId(page.id, "Step ID"),
     lessonId,
@@ -279,7 +392,7 @@ function mapEditableStep(page: NotionPage, lessonId: string): EditableLessonStep
     order: propertyNumber(p["Order"]),
     startMinute: propertyNumber(p["Start Minute"]),
     duration: propertyNumber(p["Duration"]),
-    stateId: propertyText(p["State ID"]),
+    stateId,
     studentDirections: propertyText(p["Student Directions"]),
     teacherNotes: propertyText(p["Teacher Notes"]),
     paperTask: propertyText(p["Paper Task"]),
@@ -289,7 +402,9 @@ function mapEditableStep(page: NotionPage, lessonId: string): EditableLessonStep
     choices: propertyText(p["Choices"]).split(/\r?\n/).map((choice) => choice.trim()).filter(Boolean),
     correctAnswer: propertyText(p["Correct Answer"]),
     standard: propertyText(p["Standard"]),
-    aiContext: propertyText(p["AI Context"]),
+    aiContext: parseLessonStepAiContext(stripLessonRoutineConfig(rawAiContext)).userText,
+    publicSurfaceMode: resolvePublicSurfaceMode(rawAiContext, stateId),
+    routineConfig: inspectRoutineConfigFromRawAiContext(rawAiContext).config,
     advance: propertySelect(p["Advance"], ADVANCE_MODES),
     required: p["Required"]?.checkbox === true,
     linkUrl: p["Link"]?.url || "",
@@ -336,6 +451,157 @@ async function fetchAuthorizedStep(lessonIdInput: unknown, stepIdInput: unknown)
   return { lessonId, stepPage, step: mapEditableStep(stepPage, lessonId) };
 }
 
+async function fetchAuthorizedLesson(lessonIdInput: unknown): Promise<{ lessonId: string; lessonPage: NotionPage }> {
+  const lessonId = normalizeNotionPageId(lessonIdInput, "Lesson ID");
+  const lessonPage = await fetchNotionPage(lessonId);
+  const published = lessonPage.properties["Publish Workflow"]?.select?.name === "Published";
+  if (pageIsDeleted(lessonPage) || !pageBelongsTo(lessonPage, LESSON_DATA_SOURCE_ID) || !published) {
+    throw new LessonStepApiError("That published lesson could not be found.", 404, "LESSON_NOT_FOUND");
+  }
+  return { lessonId, lessonPage };
+}
+
+async function queryStepsByMutationToken(token: string): Promise<NotionPage[]> {
+  const matches: NotionPage[] = [];
+  let startCursor: string | undefined;
+
+  do {
+    const response = await fetch(`${NOTION_API}/data_sources/${LESSON_STEP_DATA_SOURCE_ID}/query`, {
+      method: "POST",
+      headers: notionHeaders(notionToken(), true),
+      body: JSON.stringify({
+        filter: {
+          property: "AI Context",
+          rich_text: { contains: `${CREATE_TOKEN_PREFIX}${token}` },
+        },
+        page_size: 100,
+        ...(startCursor ? { start_cursor: startCursor } : {}),
+      }),
+      cache: "no-store",
+    });
+    if (!response.ok) throw notionFailure(response.status, response.headers.get("retry-after"));
+    const payload = await response.json().catch(() => null) as NotionQueryResponse | null;
+    if (!payload || !Array.isArray(payload.results)) {
+      throw new LessonStepApiError(
+        "Notion returned an incomplete lesson-step query response.",
+        502,
+        "NOTION_INVALID_RESPONSE",
+      );
+    }
+    matches.push(...payload.results.filter((page) => (
+      page?.id
+      && page.properties
+      && page.last_edited_time
+      && extractCreateToken(propertyText(page.properties["AI Context"])) === token
+    )));
+    startCursor = payload.has_more && payload.next_cursor ? payload.next_cursor : undefined;
+  } while (startCursor);
+
+  return matches;
+}
+
+function reconcileMutationMatch(
+  pages: NotionPage[],
+  lessonId: string,
+  stateId: string,
+  mutationToken: string,
+): NotionPage | null {
+  if (!pages.length) return null;
+  if (pages.length > 1) {
+    throw new LessonStepApiError(
+      "This add action matched more than one lesson step. Reload the lesson before trying again.",
+      409,
+      "DUPLICATE_MUTATION",
+    );
+  }
+
+  const page = pages[0];
+  const stepLessonIds = propertyRelationIds(page.properties["Lesson"]);
+  const sameLesson = stepLessonIds.length === 1 && stepLessonIds[0] === compactNotionId(lessonId);
+  const sameState = propertyText(page.properties["State ID"]) === stateId;
+  if (
+    pageIsDeleted(page)
+    || !pageBelongsTo(page, LESSON_STEP_DATA_SOURCE_ID)
+    || !sameLesson
+    || !sameState
+    || extractCreateToken(propertyText(page.properties["AI Context"])) !== mutationToken
+  ) {
+    throw new LessonStepApiError(
+      "That mutation token was already used for a different lesson state. Start the add action again.",
+      409,
+      "MUTATION_TOKEN_REUSED",
+    );
+  }
+  return page;
+}
+
+async function findStepByMutationToken(
+  lessonId: string,
+  stateId: string,
+  mutationToken: string,
+): Promise<NotionPage | null> {
+  return reconcileMutationMatch(
+    await queryStepsByMutationToken(mutationToken),
+    lessonId,
+    stateId,
+    mutationToken,
+  );
+}
+
+async function findStepByMutationTokenWithRetry(
+  lessonId: string,
+  stateId: string,
+  mutationToken: string,
+): Promise<NotionPage | null> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const match = await findStepByMutationToken(lessonId, stateId, mutationToken);
+    if (match || attempt === 2) return match;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  return null;
+}
+
+async function fetchLessonStepSequence(lessonId: string): Promise<Array<{
+  page: NotionPage;
+  step: EditableLessonStep;
+}>> {
+  const { lessonPage } = await fetchAuthorizedLesson(lessonId);
+  const relatedStepIds = propertyRelationIds(lessonPage.properties["Lesson Steps"])
+    .map((stepId) => normalizeNotionPageId(stepId, "Related Step ID"));
+  const relatedPages = await Promise.all(relatedStepIds.map((stepId) => fetchNotionPage(stepId)));
+  return relatedPages
+    .filter((page) => {
+      const stepLessonIds = propertyRelationIds(page.properties["Lesson"]);
+      return !pageIsDeleted(page)
+        && pageBelongsTo(page, LESSON_STEP_DATA_SOURCE_ID)
+        && stepLessonIds.length === 1
+        && stepLessonIds[0] === compactNotionId(lessonId);
+    })
+    .map((page) => ({ page, step: mapEditableStep(page, lessonId) }))
+    .sort((left, right) => (
+      left.step.order - right.step.order
+      || left.step.startMinute - right.step.startMinute
+      || left.step.title.localeCompare(right.step.title)
+    ));
+}
+
+async function verifyCreatedStep(lessonId: string, stepId: string): Promise<EditableLessonStep> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return (await fetchAuthorizedStep(lessonId, stepId)).step;
+    } catch (error) {
+      lastError = error;
+      const relationMayStillBeSyncing = error instanceof LessonStepApiError
+        && error.code === "STEP_NOT_FOUND"
+        && attempt < 2;
+      if (!relationMayStillBeSyncing) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    }
+  }
+  throw lastError;
+}
+
 function validateText(field: string, value: unknown): string {
   if (typeof value !== "string") {
     throw new LessonStepApiError(`${field} must be text.`, 400, "INVALID_FIELD_VALUE");
@@ -366,6 +632,28 @@ function validateChanges(input: unknown): Record<string, unknown> {
 
   const properties: Record<string, unknown> = {};
   for (const [key, rawValue] of entries) {
+    if (key === "publicSurfaceMode") {
+      if (!isPublicSurfaceMode(rawValue)) {
+        throw new LessonStepApiError("Public screens must use split or linked mode.", 400, "INVALID_FIELD_VALUE");
+      }
+      continue;
+    }
+
+    if (key === "routineConfig") {
+      if (rawValue !== null) {
+        try {
+          validateLessonRoutineConfig(rawValue);
+        } catch (error) {
+          throw new LessonStepApiError(
+            error instanceof Error ? error.message : "Lesson routine configuration is invalid.",
+            400,
+            "INVALID_FIELD_VALUE",
+          );
+        }
+      }
+      continue;
+    }
+
     if (key in TEXT_PROPERTIES) {
       const config = TEXT_PROPERTIES[key as keyof typeof TEXT_PROPERTIES];
       const value = validateText(config.notionName, rawValue);
@@ -465,8 +753,132 @@ async function patchNotionStep(stepId: string, properties: Record<string, unknow
   return page;
 }
 
+async function reflowLessonStartMinutes(
+  lessonId: string,
+  pivotStepId: string,
+  alignPivotToPreviousStep: boolean,
+): Promise<void> {
+  const sequence = await fetchLessonStepSequence(lessonId);
+  const pivotIndex = sequence.findIndex(({ step }) => compactNotionId(step.id) === compactNotionId(pivotStepId));
+  if (pivotIndex < 0) {
+    throw new LessonStepApiError(
+      "The lesson sequence changed while its timing was being updated. Reload the lesson before trying again.",
+      409,
+      "SEQUENCE_CHANGED",
+    );
+  }
+
+  let priorStart = pivotIndex > 0 ? sequence[pivotIndex - 1].step.startMinute : 0;
+  let priorDuration = pivotIndex > 0 ? sequence[pivotIndex - 1].step.duration : 0;
+  for (let index = pivotIndex; index < sequence.length; index += 1) {
+    const entry = sequence[index];
+    const targetStart = index === pivotIndex && !alignPivotToPreviousStep
+      ? entry.step.startMinute
+      : priorStart + priorDuration;
+    if (Math.abs(entry.step.startMinute - targetStart) > Number.EPSILON) {
+      const updatedPage = await patchNotionStep(entry.step.id, { "Start Minute": { number: targetStart } });
+      entry.page = updatedPage;
+      entry.step = mapEditableStep(updatedPage, lessonId);
+    }
+    priorStart = targetStart;
+    priorDuration = entry.step.duration;
+  }
+}
+
+async function createNotionStep(properties: Record<string, unknown>): Promise<NotionPage> {
+  const response = await fetch(`${NOTION_API}/pages`, {
+    method: "POST",
+    headers: notionHeaders(notionToken(), true),
+    body: JSON.stringify({
+      parent: { type: "data_source_id", data_source_id: LESSON_STEP_DATA_SOURCE_ID },
+      properties,
+    }),
+    cache: "no-store",
+  });
+  if (!response.ok) throw notionFailure(response.status, response.headers.get("retry-after"));
+  const page = await response.json().catch(() => null) as NotionPage | null;
+  if (!page?.id || !page.properties || !page.last_edited_time) {
+    throw new LessonStepApiError("Notion returned an incomplete new lesson-step response.", 502, "NOTION_INVALID_RESPONSE");
+  }
+  return page;
+}
+
 export async function getPublishedLessonStep(lessonId: unknown, stepId: unknown): Promise<EditableLessonStep> {
   return (await fetchAuthorizedStep(lessonId, stepId)).step;
+}
+
+export async function createPublishedLessonStep(input: {
+  lessonId: unknown;
+  insertAfterStepId?: unknown;
+  stateId: unknown;
+  mutationToken: unknown;
+}): Promise<EditableLessonStep> {
+  const requestedStateId = typeof input.stateId === "string" ? input.stateId.trim() : "";
+  const state = CLASS_STATE_BY_ID.get(requestedStateId);
+  if (!state) {
+    throw new LessonStepApiError("Choose a lesson state from the classroom state bank.", 400, "INVALID_STATE_ID");
+  }
+  const mutationToken = validateMutationToken(input.mutationToken);
+
+  const serializedLessonId = normalizeNotionPageId(input.lessonId, "Lesson ID");
+  return withSerializedLessonWrite(serializedLessonId, async () => {
+    const { lessonId } = await fetchAuthorizedLesson(serializedLessonId);
+    const existingPage = await findStepByMutationToken(lessonId, requestedStateId, mutationToken);
+    if (existingPage) {
+      const existingId = normalizeNotionPageId(existingPage.id, "Step ID");
+      await verifyCreatedStep(lessonId, existingId);
+      await reflowLessonStartMinutes(lessonId, existingId, true);
+      return (await fetchAuthorizedStep(lessonId, existingId)).step;
+    }
+
+    const steps = (await fetchLessonStepSequence(lessonId)).map(({ step }) => step);
+
+    let anchorIndex = steps.length - 1;
+    if (input.insertAfterStepId !== undefined && input.insertAfterStepId !== null && input.insertAfterStepId !== "") {
+      const anchorId = normalizeNotionPageId(input.insertAfterStepId, "Insert-after Step ID");
+      anchorIndex = steps.findIndex((step) => compactNotionId(step.id) === compactNotionId(anchorId));
+      if (anchorIndex < 0) {
+        throw new LessonStepApiError("The selected lesson step changed. Reload the lesson before adding a state.", 409, "INSERT_ANCHOR_CHANGED");
+      }
+    }
+
+    const anchor = anchorIndex >= 0 ? steps[anchorIndex] : null;
+    const next = anchorIndex >= 0 ? steps[anchorIndex + 1] : null;
+    const order = anchor
+      ? next && next.order > anchor.order
+        ? anchor.order + ((next.order - anchor.order) / 2)
+        : anchor.order + 0.001
+      : 1;
+    const startMinute = anchor ? anchor.startMinute + anchor.duration : 0;
+    const defaults = classStateStepDefaults(state);
+    const properties = validateChanges({
+      ...defaults,
+      startMinute,
+    });
+    properties["Order"] = { number: order };
+    properties["Lesson"] = { relation: [{ id: lessonId }] };
+    const routineConfig = defaultLessonRoutineConfig(state.id);
+    const contextWithRoutine = routineConfig ? withLessonRoutineConfig("", routineConfig) : "";
+    const initialAiContext = setPublicSurfaceMode(
+      contextWithRoutine,
+      defaultPublicSurfaceModeForState(state.id),
+    );
+    properties["AI Context"] = richTextWithCreateToken(initialAiContext, mutationToken);
+
+    let createdId: string;
+    try {
+      const createdPage = await createNotionStep(properties);
+      createdId = normalizeNotionPageId(createdPage.id, "Step ID");
+    } catch (error) {
+      const reconciled = await findStepByMutationTokenWithRetry(lessonId, requestedStateId, mutationToken).catch(() => null);
+      if (!reconciled) throw error;
+      createdId = normalizeNotionPageId(reconciled.id, "Step ID");
+    }
+
+    await verifyCreatedStep(lessonId, createdId);
+    await reflowLessonStartMinutes(lessonId, createdId, true);
+    return (await fetchAuthorizedStep(lessonId, createdId)).step;
+  });
 }
 
 export async function updatePublishedLessonStep(input: {
@@ -484,8 +896,12 @@ export async function updatePublishedLessonStep(input: {
 
   const properties = validateChanges(input.changes);
   const serializedStepId = normalizeNotionPageId(input.stepId, "Step ID");
+  const serializedLessonId = normalizeNotionPageId(input.lessonId, "Lesson ID");
+  const changes = input.changes as Record<string, unknown>;
+  const timingChanged = Object.prototype.hasOwnProperty.call(changes, "duration")
+    || Object.prototype.hasOwnProperty.call(changes, "startMinute");
 
-  return withSerializedStepWrite(serializedStepId, async () => {
+  const write = () => withSerializedStepWrite(serializedStepId, async () => {
     const current = await fetchAuthorizedStep(input.lessonId, serializedStepId);
     if (current.step.lastEditedTime !== input.expectedLastEditedTime) {
       throw new LessonStepApiError(
@@ -495,6 +911,62 @@ export async function updatePublishedLessonStep(input: {
         undefined,
         current.step,
       );
+    }
+    const currentRawAiContext = propertyText(current.stepPage.properties["AI Context"]);
+    const currentRoutineInspection = inspectRoutineConfigFromRawAiContext(currentRawAiContext);
+    const routineConfigWillBeReplaced = Object.prototype.hasOwnProperty.call(changes, "routineConfig");
+    if (currentRoutineInspection.invalid && !routineConfigWillBeReplaced) {
+      throw invalidRoutineConfigError();
+    }
+    if (
+      Object.prototype.hasOwnProperty.call(changes, "aiContext")
+      || Object.prototype.hasOwnProperty.call(changes, "publicSurfaceMode")
+      || Object.prototype.hasOwnProperty.call(changes, "routineConfig")
+    ) {
+      let nextRawAiContext = currentRawAiContext;
+      try {
+        if (Object.prototype.hasOwnProperty.call(changes, "aiContext")) {
+          const routineConfig = routineConfigWillBeReplaced
+            ? changes.routineConfig === null
+              ? null
+              : validateLessonRoutineConfig(changes.routineConfig)
+            : currentRoutineInspection.config;
+          nextRawAiContext = replaceLessonStepAiContextText(
+            stripLessonRoutineConfig(currentRawAiContext),
+            changes.aiContext as string,
+          );
+          nextRawAiContext = withLessonRoutineConfig(nextRawAiContext, routineConfig);
+        }
+        if (Object.prototype.hasOwnProperty.call(changes, "publicSurfaceMode")) {
+          nextRawAiContext = setPublicSurfaceMode(
+            nextRawAiContext,
+            changes.publicSurfaceMode as PublicSurfaceMode,
+          );
+        }
+        if (Object.prototype.hasOwnProperty.call(changes, "routineConfig")) {
+          nextRawAiContext = withLessonRoutineConfig(
+            nextRawAiContext,
+            changes.routineConfig === null
+              ? null
+              : validateLessonRoutineConfig(changes.routineConfig),
+          );
+        }
+      } catch (error) {
+        if (error instanceof LessonStepApiError) throw error;
+        throw new LessonStepApiError(
+          error instanceof Error ? error.message : "Lesson-step metadata is invalid.",
+          400,
+          "INVALID_FIELD_VALUE",
+        );
+      }
+      if (nextRawAiContext.length > NOTION_TEXT_LIMIT) {
+        throw new LessonStepApiError(
+          `AI Context and internal lesson settings must total ${NOTION_TEXT_LIMIT.toLocaleString()} characters or fewer.`,
+          400,
+          "FIELD_TOO_LONG",
+        );
+      }
+      properties["AI Context"] = { rich_text: textValue(nextRawAiContext) };
     }
 
     try {
@@ -513,6 +985,10 @@ export async function updatePublishedLessonStep(input: {
           verified.step,
         );
       }
+      if (timingChanged) {
+        await reflowLessonStartMinutes(current.lessonId, current.step.id, false);
+        return (await fetchAuthorizedStep(current.lessonId, current.step.id)).step;
+      }
       return verified.step;
     } catch (error) {
       if (!(error instanceof LessonStepApiError) || error.status !== 409) throw error;
@@ -526,4 +1002,8 @@ export async function updatePublishedLessonStep(input: {
       );
     }
   });
+
+  return timingChanged
+    ? withSerializedLessonWrite(serializedLessonId, write)
+    : write();
 }

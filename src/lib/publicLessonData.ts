@@ -1,4 +1,5 @@
 import type { LessonData } from "./notionLessons";
+import { publicSuccessCriterion } from "./successCriterion";
 
 // The current-day student page may use these lesson-level fields. Lesson Steps
 // stay private because the live session releases one state at a time.
@@ -81,8 +82,11 @@ function pickFields<T extends object, K extends keyof T>(
 }
 
 export function toPublicLessonData(lesson: LessonData): PublicLessonData {
+  const criterion = publicSuccessCriterion(lesson.selectedSuccessCriterion);
   return {
     ...pickFields(lesson, PUBLIC_TODAY_LESSON_FIELDS),
+    successCriteria: criterion,
+    selectedSuccessCriterion: criterion,
     steps: [],
   };
 }

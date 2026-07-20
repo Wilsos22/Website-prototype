@@ -127,9 +127,6 @@ export default function WarmupPage() {
   const circumference = 2 * Math.PI * 52;
   const offset = circumference * (1 - Math.max(0, secondsLeft) / total);
 
-  const li = lesson?.learningIntention || lesson?.essentialIdeas || "";
-  const sc = lesson?.successCriteria || "";
-
   return (
     <main className="wu-page" style={{ background: bg, ["--wu-accent" as string]: accent } as CSSProperties}>
       <style>{`
@@ -156,8 +153,6 @@ export default function WarmupPage() {
         @keyframes wu-pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
         .wu-banner { position:absolute; top:13%; left:0; right:0; text-align:center; font-size:clamp(1.4rem,4vh,2.4rem); font-weight:900; color:var(--wu-accent); letter-spacing:0.02em; animation:wu-flash 1s steps(2,start) infinite; }
         @keyframes wu-flash { 50%{opacity:.18} }
-        .wu-li { position:absolute; left:24px; bottom:24px; width:min(44%,560px); background:#141a27; border-left:4px solid #5eead4; padding:16px 20px; border-radius:0 14px 14px 0; }
-        .wu-li-l { font-size:0.76rem; font-weight:800; letter-spacing:0.05em; text-transform:uppercase; }
         .wu-abbie { position:absolute; right:24px; bottom:24px; width:min(34%,420px); display:grid; gap:10px; }
         .wu-say { background:#141a27; border-radius:14px; padding:14px 18px; font-size:clamp(0.98rem,2.1vh,1.25rem); line-height:1.4; }
         .wu-chip { background:#1b2233; padding:6px 11px; border-radius:8px; font-size:0.8rem; color:#9fb0c8; }
@@ -173,7 +168,7 @@ export default function WarmupPage() {
           </div>
         </div>
         <div className="wu-ctrls">
-          <span className="wu-pill">♪ {music ? "lo-fi on" : "music off"}</span>
+          <span className="wu-pill">{music ? "Music on" : "Music off"}</span>
           <button className="wu-btn" onClick={() => setMusic((v) => !v)}>Music</button>
           <button className="wu-btn" onClick={() => adjustMinutes(-1)}>−</button>
           <span className="wu-mins">{minutes}m</span>
@@ -204,19 +199,6 @@ export default function WarmupPage() {
           </div>
         </div>
       </div>
-
-      {li && (
-        <div className="wu-li">
-          <div className="wu-li-l" style={{ color: "#5eead4" }}>Learning intention</div>
-          <div style={{ fontSize: "clamp(1rem,2.4vh,1.55rem)", lineHeight: 1.3, marginTop: 4 }}>{li}</div>
-          {sc && (
-            <>
-              <div className="wu-li-l" style={{ color: "#f5b915", marginTop: 14 }}>Success criteria</div>
-              <div style={{ fontSize: "clamp(0.9rem,2vh,1.3rem)", lineHeight: 1.3, color: "#c8cedd", marginTop: 4 }}>{sc}</div>
-            </>
-          )}
-        </div>
-      )}
 
       <div className="wu-abbie">
         <div className="wu-say">{finished ? "Time. Pencils up, eyes on Mr. Wilson." : LINES[lineIdx]}</div>

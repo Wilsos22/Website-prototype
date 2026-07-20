@@ -15,7 +15,7 @@ interface LinkItem { href: string; label: string; letter: string; color: string;
 
 // Run the live class.
 const RUN: LinkItem[] = [
-  { href: "/control", label: "Control panel", letter: "C", color: "#f95335", desc: "Run the timed class sequence on the board" },
+  { href: "/control", label: "Live class host", letter: "H", color: "#f95335", desc: "Keep this open on your laptop for timers, audio, and screen sync" },
   { href: "/session", label: "Live session", letter: "S", color: "#50a3a4", desc: "Join code, live joins, push screens, polls" },
   { href: "/spinner", label: "Student spinner", letter: "R", color: "#7c5cd6", desc: "Random picker from the roster" },
   { href: "/timer", label: "Timer", letter: "T", color: "#674a40", desc: "Big classroom countdown" },
@@ -40,6 +40,7 @@ const LEARN: LinkItem[] = [
 // Manage the class.
 const MANAGE: LinkItem[] = [
   { href: "/teacher/studio", label: "Screen studio", letter: "S", color: "#cf6b42", desc: "Preview and edit every lesson screen" },
+  { href: "/teacher/audio", label: "Audio library", letter: "A", color: "#7c5cd6", desc: "Upload music and timer sounds for this classroom laptop" },
   { href: "/roster", label: "Rosters", letter: "R", color: "#50a3a4", desc: "Periods and students" },
   { href: "/teacher/parent-outreach", label: "Parent outreach", letter: "@", color: "#f95335", desc: "Draft notes home — nudges and praise" },
   { href: "/teacher/checkpoint-upload", label: "Upload checkpoints", letter: "U", color: "#fcaf38", desc: "Import checkpoint CSVs" },
@@ -388,7 +389,7 @@ export default function TeacherHome() {
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search tools and lessons" aria-label="Search tools and lessons" />
         </div>
         <div className="bd-top-spacer" />
-        <Link href="/control" className="bd-present">Open control panel</Link>
+        <Link href="/control" className="bd-present">Open Live class host</Link>
       </header>
 
       <div className="bd-body">
@@ -419,7 +420,7 @@ export default function TeacherHome() {
                   )}
                   <p className="bd-stat-title">{today.lesson.title || "Published lesson"}</p>
                   <div className="bd-stat-actions">
-                    <Link href="/control" className="bd-btn p">Open in control</Link>
+                    <Link href="/control" className="bd-btn p">Open Live class host</Link>
                     <Link href="/lesson" className="bd-btn">Student view</Link>
                   </div>
                 </>

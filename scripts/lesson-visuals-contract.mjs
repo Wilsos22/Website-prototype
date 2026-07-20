@@ -4,7 +4,7 @@ import path from "node:path";
 
 const require = createRequire(import.meta.url);
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const { resolveLessonVisual } = require(path.join(root, ".tmp-mastery", "lessonVisuals.js"));
+const { resolveLessonVisual, scoreboardTeamsForStage } = require(path.join(root, ".tmp-mastery", "lessonVisuals.js"));
 
 const lessonCode = "M2.T1.L1-D1";
 const launchText = "The Crusaders lead the Blue Jays 30 to 20 at halftime. Predict the final score. Decide whether the relationship stayed the same.";
@@ -22,6 +22,13 @@ if (scoreboard.teams[1].label !== "Blue Jays" || scoreboard.teams[1].score !== 2
 }
 if (!scoreboard.prompt.startsWith("Predict the final score")) {
   throw new Error("The scoreboard must separate the current math prompt from the score statement.");
+}
+const finalTeams = scoreboardTeamsForStage(scoreboard.teams, "final");
+if (finalTeams[0].score !== 60 || finalTeams[1].score !== 40) {
+  throw new Error("The final scoreboard reveal must change 30 to 20 into 60 to 40.");
+}
+if (scoreboard.prompt !== "Predict the final score. Decide whether the relationship stayed the same.") {
+  throw new Error("Revealing the final score must not replace the launch prompt.");
 }
 
 const customScoreboard = resolveLessonVisual({
@@ -105,6 +112,25 @@ if (unsafeScore !== null) {
 
 if (resolveLessonVisual({ lessonCode: "M1.T1.L1", stateId: "launch", text: launchText }) !== null) {
   throw new Error("Unrelated lessons must not receive inferred M2.T1.L1 visuals.");
+}
+
+const imageMarkup = "![Trail mix model](https://example.com/trail-mix.jpg)";
+const launchWithImage = resolveLessonVisual({
+  lessonCode,
+  stateId: "launch",
+  text: `${imageMarkup}\n${launchText}`,
+});
+if (launchWithImage?.kind !== "scoreboard" || launchWithImage.storyImages?.[0]?.alt !== "Trail mix model") {
+  throw new Error("Launch story images must compose with the scoreboard instead of replacing it.");
+}
+
+const discussionWithImage = resolveLessonVisual({
+  lessonCode,
+  stateId: "error-analysis",
+  text: `${imageMarkup}\nExplain the error and revise your thinking.`,
+});
+if (discussionWithImage !== null) {
+  throw new Error("Story images must not replace the structured Error Analysis discussion routine.");
 }
 
 console.log("PASS - lesson visuals follow the live M2.T1.L1 quantities and screen states.");

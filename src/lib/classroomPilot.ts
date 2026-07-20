@@ -4,6 +4,7 @@ export type ClassroomStageId =
   | "concrete"
   | "representational"
   | "abstract"
+  | "lesson-targets"
   | "learning-check"
   | "discussion"
   | "independent"
@@ -61,6 +62,11 @@ export function discussionSupportsForLesson(lessonCode: string | null | undefine
     : DEFAULT_DISCUSSION_SUPPORTS;
 }
 
+export function usesDiscussionProtocol(stateId: string | null | undefined, label = ""): boolean {
+  const value = `${stateId || ""} ${label}`.toLowerCase();
+  return value.includes("discussion") || value.includes("error analysis") || value.includes("error-analysis");
+}
+
 export const CLASSROOM_STAGE_THEMES: Record<ClassroomStageId, ClassroomStageTheme> = {
   evergreen: {
     id: "evergreen",
@@ -111,6 +117,16 @@ export const CLASSROOM_STAGE_THEMES: Record<ClassroomStageId, ClassroomStageThem
     projectorLine: "#3d4778",
     projectorMuted: "#b8c0e2",
     projectorGlow: "rgba(86, 101, 190, 0.34)",
+  },
+  "lesson-targets": {
+    id: "lesson-targets",
+    label: "Learning intention and success criterion",
+    accent: "#d2a74f",
+    projectorBase: "#241329",
+    projectorPanel: "#321a38",
+    projectorLine: "#68446d",
+    projectorMuted: "#d4bdd8",
+    projectorGlow: "rgba(130, 68, 140, 0.34)",
   },
   "learning-check": {
     id: "learning-check",
@@ -166,12 +182,19 @@ export const CLASSROOM_STAGE_THEMES: Record<ClassroomStageId, ClassroomStageThem
 
 export function inferClassroomStage(stateId: string | null | undefined, label = ""): ClassroomStageId {
   const value = `${stateId || ""} ${label}`.toLowerCase();
+  if (usesDiscussionProtocol(stateId, label)) return "discussion";
+  if (
+    value.includes("learning-target")
+    || value.includes("learning intention + success criterion")
+    || value.includes("learning intention + success criteria")
+  ) return "lesson-targets";
+  if (value.includes("ipad-kid") || value.includes("ipad kid")) return "evergreen";
   if (value.includes("warm") || value.includes("review")) return "evergreen";
   if (value.includes("learning-check") || value.includes("midlesson") || value.includes("fist") || value.includes("poll")) return "learning-check";
   if (value.includes("represent")) return "representational";
   if (value.includes("abstract")) return "abstract";
   if (value.includes("concrete") || value.includes("manip")) return "concrete";
-  if (value.includes("discussion") || value.includes("partner") || value.includes("group")) return "discussion";
+  if (value.includes("partner") || value.includes("group")) return "discussion";
   if (value.includes("independent") || value.includes("you-do") || value.includes("you do")) return "independent";
   if (value.includes("exit")) return "exit";
   if (value.includes("closeout") || value.includes("clean") || value.includes("pack")) return "closeout";

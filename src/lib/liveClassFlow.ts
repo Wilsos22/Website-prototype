@@ -2,11 +2,18 @@
 
 import type { ClassroomStageId } from "@/lib/classroomPilot";
 import type { LivePollKind } from "@/lib/liveFlowContract";
+import type { PublicLessonRoutineConfig } from "@/lib/lessonRoutineConfig";
+import type { PublicSurfaceMode } from "@/lib/lessonStepMetadata";
 
 export {
   LIVE_RESPONSE_MODES,
+  canRevealM2T1L1FinalScore,
   liveAssignedToolRoute,
+  liveIndependentSupportItems,
   liveResponseModePollKind,
+  pickRemoteSharerName,
+  resolveLiveStepPollKind,
+  resolveRemoteNextBehavior,
   splitLiveFlowLines,
   splitLiveFlowVocabulary,
 } from "@/lib/liveFlowContract";
@@ -17,8 +24,22 @@ export const LIVE_FLOW_ROUTE = "/live-flow";
 export const STUDENT_SESSION_KEY = "bdm-student-session";
 export const TEACHER_SESSION_KEY = "bdm-teacher-session";
 export const CLASS_MODE_EXIT_KEY = "bdm-class-mode-exited";
+export const REMOTE_COMMAND_STALE_MS = 15_000;
 
 export type DiscussionPhaseId = "think" | "marker" | "table" | "revise" | "share";
+export const DISCUSSION_REMOTE_ACTIONS = [
+  "discussion-think",
+  "discussion-write",
+  "discussion-discuss",
+  "discussion-revise",
+  "discussion-share",
+  "discussion-pick-sharer",
+  "discussion-previous",
+  "discussion-next",
+  "discussion-restart",
+  "discussion-toggle",
+] as const;
+export type DiscussionRemoteAction = (typeof DISCUSSION_REMOTE_ACTIONS)[number];
 export const TEACHER_REMOTE_ACTIONS = [
   "next",
   "previous",
@@ -28,6 +49,10 @@ export const TEACHER_REMOTE_ACTIONS = [
   "reset-timer",
   "show-board",
   "hide-board",
+  "spin-spinner",
+  ...DISCUSSION_REMOTE_ACTIONS,
+  "reveal-results",
+  "reveal-final-score",
   "play-warning",
   "play-countdown",
   "play-times-up",
@@ -39,6 +64,12 @@ export const TEACHER_REMOTE_ACTIONS = [
   "abbie-stuck",
 ] as const;
 export type TeacherRemoteAction = (typeof TEACHER_REMOTE_ACTIONS)[number];
+
+const DISCUSSION_REMOTE_ACTION_SET = new Set<string>(DISCUSSION_REMOTE_ACTIONS);
+
+export function isDiscussionRemoteAction(action: TeacherRemoteAction): action is DiscussionRemoteAction {
+  return DISCUSSION_REMOTE_ACTION_SET.has(action);
+}
 export type LiveToolRoute =
   | "/whiteboard"
   | "/number-line-plus"
@@ -130,6 +161,7 @@ export interface DiscussionPhaseSnapshot {
   } | null;
   sentenceStems?: string[];
   keyVocabulary?: string[];
+  selectedSharer?: string | null;
 }
 
 export interface LiveFlowSequenceStep {
@@ -157,6 +189,8 @@ export interface LiveFlowSequenceStep {
   vocabulary?: string[];
   responseMode?: string;
   workSpaceAvailable?: boolean;
+  publicSurfaceMode?: PublicSurfaceMode;
+  routineConfig?: PublicLessonRoutineConfig | null;
 }
 
 export interface LiveClassFlowSnapshot {
@@ -187,6 +221,7 @@ export interface LiveClassFlowSnapshot {
     question: string;
     choices: string[] | null;
     stage: "responding" | "results";
+    awaitingTeacherAdvance?: boolean;
   } | null;
   resource: {
     label: string;
@@ -204,8 +239,11 @@ export interface LiveClassFlowSnapshot {
     remoteActions?: string;
     responseMode?: string;
     workSpaceAvailable?: boolean;
+    publicSurfaceMode?: PublicSurfaceMode;
+    routineConfig?: PublicLessonRoutineConfig | null;
     discussionStems?: string[];
     vocabulary?: string[];
+    scoreboardStage?: "halftime" | "final";
   } | null;
   tool: LiveToolConfig | null;
   lesson?: {
@@ -254,6 +292,7 @@ export interface TeacherRemoteCommand {
   action: TeacherRemoteAction;
   issuedAt: string;
   receivedAt?: string;
+  stateId?: string;
 }
 
 // A single thing Abbie says, broadcast to joined student screens. `nonce` is
@@ -270,6 +309,7 @@ export interface StoredStudentSession {
   sessionId: string;
   studentId: string;
   name: string;
+  syncKey?: string;
 }
 
 export function getStoredStudentSession(): StoredStudentSession | null {
@@ -280,7 +320,14 @@ export function getStoredStudentSession(): StoredStudentSession | null {
     return typeof session.sessionId === "string"
       && typeof session.studentId === "string"
       && typeof session.name === "string"
-      ? { sessionId: session.sessionId, studentId: session.studentId, name: session.name }
+      ? {
+          sessionId: session.sessionId,
+          studentId: session.studentId,
+          name: session.name,
+          ...(typeof session.syncKey === "string" && session.syncKey.trim()
+            ? { syncKey: session.syncKey.trim() }
+            : {}),
+        }
       : null;
   } catch {
     return null;

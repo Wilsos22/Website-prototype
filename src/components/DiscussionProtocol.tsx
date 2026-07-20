@@ -1,23 +1,27 @@
 "use client";
 
-// Discussion Protocol — a guided multi-phase routine launched from the
+// Discussion Protocol - a guided multi-phase routine launched from the
 // Discussion state in the control panel:
-//   1. Thinking Time (silent, 1 min, Abbie-thinking visual, optional music)
-//   2. Marker to the Board (1 min, uploadable image)
+//   1. Thinking Time (silent, 1 min, optional music)
+//   2. Write (1 min, uploadable image)
 //   3. Discuss with Your Table (30s, uploadable image/video)
 //   4. Revise (30s)
-//   5. Share — random single-student picker
+//   5. Share - random single-student picker
 // Each phase alerts at the end and waits for you to tap "Next phase".
 // Durations, images/videos, and music are uploadable and saved on this computer.
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import type { DiscussionPhaseSnapshot } from "@/lib/liveClassFlow";
+import {
+  isDiscussionRemoteAction,
+  type DiscussionPhaseSnapshot,
+  type TeacherRemoteCommand,
+} from "@/lib/liveClassFlow";
 
 interface Phase {
   id: string;
   label: string;
   sub: string;
-  icon: string;
+  visual: string;
   defaultSecs: number;
   timed: boolean;
 }
@@ -28,11 +32,11 @@ type StudentSupports = {
 };
 
 const PHASES: Phase[] = [
-  { id: "think", label: "Thinking Time", sub: "Silent — think on your own", icon: "🧠", defaultSecs: 60, timed: true },
-  { id: "marker", label: "Marker to the Board", sub: "Show your thinking", icon: "✍️", defaultSecs: 60, timed: true },
-  { id: "table", label: "Discuss with Your Table", sub: "Talk it through together", icon: "💬", defaultSecs: 30, timed: true },
-  { id: "revise", label: "Revise Your Answer", sub: "Update your thinking", icon: "✏️", defaultSecs: 30, timed: true },
-  { id: "share", label: "Share Out", sub: "Who's sharing?", icon: "🎤", defaultSecs: 0, timed: false },
+  { id: "think", label: "Think", sub: "Think quietly for one minute.", visual: "01", defaultSecs: 60, timed: true },
+  { id: "marker", label: "Write", sub: "Record one idea or strategy.", visual: "02", defaultSecs: 60, timed: true },
+  { id: "table", label: "Discuss", sub: "Use the stems and vocabulary with your group.", visual: "03", defaultSecs: 30, timed: true },
+  { id: "revise", label: "Revise", sub: "Change or strengthen your response.", visual: "04", defaultSecs: 30, timed: true },
+  { id: "share", label: "Share", sub: "Prepare to explain your thinking.", visual: "05", defaultSecs: 0, timed: false },
 ];
 
 const LS_DUR = "bdm-disc-durations-v1";
@@ -144,31 +148,51 @@ function parseVocabulary(rawText: string): string[] {
 export default function DiscussionProtocol({
   onClose,
   onFlowChange,
+  initialFlow,
+  remoteCommand,
+  onRemoteCommandHandled,
 }: {
   onClose?: () => void;
   onFlowChange?: (snapshot: DiscussionPhaseSnapshot) => void;
+  initialFlow?: DiscussionPhaseSnapshot | null;
+  remoteCommand?: TeacherRemoteCommand | null;
+  onRemoteCommandHandled?: (command: TeacherRemoteCommand) => void;
 }) {
-  const [durations, setDurations] = useState<Record<string, number>>({});
-  const [idx, setIdx] = useState(0);
-  const [secondsLeft, setSecondsLeft] = useState(PHASES[0].defaultSecs);
-  const [running, setRunning] = useState(false);
-  const [finished, setFinished] = useState(false);
+  const initialIndex = initialFlow
+    ? Math.max(0, PHASES.findIndex((candidate) => candidate.id === initialFlow.id))
+    : 0;
+  const initialPhase = PHASES[initialIndex];
+  const initialSeconds = initialFlow?.timed
+    ? initialFlow.secondsLeft ?? initialFlow.totalSeconds ?? initialPhase.defaultSecs
+    : initialPhase.defaultSecs;
+  const [durations, setDurations] = useState<Record<string, number>>(() => (
+    initialFlow?.timed && initialFlow.totalSeconds !== null
+      ? { [initialFlow.id]: initialFlow.totalSeconds }
+      : {}
+  ));
+  const [idx, setIdx] = useState(initialIndex);
+  const [secondsLeft, setSecondsLeft] = useState(initialSeconds);
+  const [running, setRunning] = useState(Boolean(initialFlow?.timed && initialFlow.running));
+  const [finished, setFinished] = useState(Boolean(initialFlow?.finished));
   const [setup, setSetup] = useState(false);
   const [media, setMedia] = useState<Record<string, { url: string; type: string }>>({});
   const [studentMediaUrls, setStudentMediaUrls] = useState<Record<string, string>>({});
   const [studentSupports, setStudentSupports] = useState<Record<string, StudentSupports>>(DEFAULT_STUDENT_SUPPORTS);
 
   // share picker
-  const [shareName, setShareName] = useState<string>("—");
+  const [shareName, setShareName] = useState<string>(initialFlow?.selectedSharer || "Waiting");
+  const [selectedSharer, setSelectedSharer] = useState<string | null>(initialFlow?.selectedSharer || null);
   const [shareSpinning, setShareSpinning] = useState(false);
   const [shareClass, setShareClass] = useState<string>("");
 
-  const secRef = useRef(0);
+  const secRef = useRef(initialSeconds);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioRef = useRef<AudioContext | null>(null);
   const musicRef = useRef<HTMLAudioElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const shareTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const handledRemoteCommandRef = useRef<string | null>(null);
+  const preserveInitialPhaseRef = useRef(Boolean(initialFlow));
 
   const phase = PHASES[idx];
   const phaseSecs = (id: string) => durations[id] ?? PHASES.find((p) => p.id === id)?.defaultSecs ?? 60;
@@ -189,8 +213,16 @@ export default function DiscussionProtocol({
       media: studentMediaUrl ? { url: studentMediaUrl, type: inferStudentMediaType(studentMediaUrl) } : null,
       sentenceStems: parseSentenceStems(currentSupport.sentenceStems),
       keyVocabulary: parseVocabulary(currentSupport.keyVocabulary),
+      selectedSharer: phase.id === "share" ? selectedSharer : null,
     });
-  }, [currentSupport.keyVocabulary, currentSupport.sentenceStems, finished, onFlowChange, phase.id, phase.label, phase.sub, phase.timed, phaseTotalSeconds, running, secondsLeft, studentMediaUrls]);
+  }, [currentSupport.keyVocabulary, currentSupport.sentenceStems, finished, onFlowChange, phase.id, phase.label, phase.sub, phase.timed, phaseTotalSeconds, running, secondsLeft, selectedSharer, studentMediaUrls]);
+
+  useEffect(() => {
+    const incomingSharer = initialFlow?.id === "share" ? initialFlow.selectedSharer || null : null;
+    if (!incomingSharer || incomingSharer === selectedSharer) return;
+    setSelectedSharer(incomingSharer);
+    setShareName(incomingSharer);
+  }, [initialFlow?.id, initialFlow?.selectedSharer, selectedSharer]);
 
   // load durations + media + share class
   useEffect(() => {
@@ -222,7 +254,12 @@ export default function DiscussionProtocol({
     };
   }, []);
 
-  useEffect(() => { secRef.current = phaseSecs(phase.id); setSecondsLeft(secRef.current); setRunning(false); setFinished(false);
+  useEffect(() => {
+    if (preserveInitialPhaseRef.current) {
+      preserveInitialPhaseRef.current = false;
+      return;
+    }
+    secRef.current = phaseSecs(phase.id); setSecondsLeft(secRef.current); setRunning(false); setFinished(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idx]);
 
@@ -282,6 +319,35 @@ export default function DiscussionProtocol({
   function adjust(d: number) { secRef.current = Math.max(0, secRef.current + d); setSecondsLeft(secRef.current); if (d > 0) setFinished(false); }
   function goPhase(n: number) { stopMusic(); if (n >= 0 && n < PHASES.length) setIdx(n); }
 
+  useEffect(() => {
+    if (
+      !remoteCommand
+      || remoteCommand.nonce === handledRemoteCommandRef.current
+      || !isDiscussionRemoteAction(remoteCommand.action)
+    ) return;
+    handledRemoteCommandRef.current = remoteCommand.nonce;
+
+    const goRemotePhase = (targetIndex: number) => {
+      if (targetIndex === idx) reset();
+      else goPhase(targetIndex);
+    };
+
+    if (remoteCommand.action === "discussion-think") goRemotePhase(0);
+    else if (remoteCommand.action === "discussion-write") goRemotePhase(1);
+    else if (remoteCommand.action === "discussion-discuss") goRemotePhase(2);
+    else if (remoteCommand.action === "discussion-revise") goRemotePhase(3);
+    else if (remoteCommand.action === "discussion-share") goRemotePhase(4);
+    else if (remoteCommand.action === "discussion-previous") goPhase(idx - 1);
+    else if (remoteCommand.action === "discussion-next") goPhase(idx + 1);
+    else if (remoteCommand.action === "discussion-restart") reset();
+    else if (remoteCommand.action === "discussion-toggle") toggleRun();
+
+    onRemoteCommandHandled?.(remoteCommand);
+    // The command nonce is the event identity. The phase handlers intentionally
+    // operate on the current render's phase and timer state exactly once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remoteCommand?.nonce]);
+
   function saveDurations(id: string, secs: number) {
     const clamped = Math.max(5, Math.min(600, Math.round(secs) || 5));
     const next = { ...durations, [id]: clamped }; setDurations(next);
@@ -331,14 +397,22 @@ export default function DiscussionProtocol({
     try {
       const c = localStorage.getItem(LS_CLASSES);
       const classes = c ? JSON.parse(c) as Record<string, { names: string[] }> : {};
-      names = classes[shareClass]?.names ?? [];
+      const selectedClass = shareClass || localStorage.getItem(LS_CURRENT) || "";
+      names = classes[selectedClass]?.names ?? [];
+      if (selectedClass && selectedClass !== shareClass) setShareClass(selectedClass);
     } catch { /* ignore */ }
     if (names.length === 0) return;
     setShareSpinning(true);
     const pick = sample(names) ?? "—";
     shareTimers.current.forEach(clearTimeout); shareTimers.current = [];
     const cyc = setInterval(() => setShareName(sample(names) ?? "—"), 70);
-    const stop = setTimeout(() => { clearInterval(cyc); setShareName(pick); setShareSpinning(false); tone([880, 0]); }, 1600);
+    const stop = setTimeout(() => {
+      clearInterval(cyc);
+      setShareName(pick);
+      setSelectedSharer(pick);
+      setShareSpinning(false);
+      tone([880, 0]);
+    }, 1600);
     shareTimers.current.push(stop as unknown as ReturnType<typeof setTimeout>);
   }
 
@@ -363,7 +437,7 @@ export default function DiscussionProtocol({
         .dp-phase { font-size:clamp(1.6rem,4.5vw,3rem); font-weight:900; color:${accent}; }
         .dp-sub { font-size:clamp(1rem,2.4vw,1.4rem); color:#8a93ad; font-weight:700; margin-top:-8px; }
         .dp-media { max-width:min(70vw,560px); max-height:42vh; border-radius:16px; border:1px solid #1f2332; }
-        .dp-icon { font-size:clamp(5rem,16vw,11rem); line-height:1; }
+        .dp-visual { display:grid; place-items:center; width:clamp(120px,22vw,220px); aspect-ratio:1; border:2px solid rgba(6,182,212,0.55); border-radius:50%; background:rgba(6,182,212,0.08); color:${accent}; font-size:clamp(3.5rem,10vw,7rem); font-weight:950; line-height:1; letter-spacing:-0.08em; }
         .dp-clock { font-variant-numeric:tabular-nums; font-weight:900; font-size:clamp(3.5rem,12vw,8rem); line-height:0.9; color:${finished ? "#34d399" : secondsLeft <= 5 && running ? "#fbbf24" : "#fff"}; animation:${finished ? "dpFlash 0.7s steps(1) infinite" : "none"}; }
         @keyframes dpFlash { 50%{opacity:0.2;} }
         .dp-note { min-height:1.3em; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; color:#34d399; }
@@ -406,24 +480,24 @@ export default function DiscussionProtocol({
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button className="dp-btn" onClick={() => setSetup((v) => !v)}>{setup ? "Done" : "Set up"}</button>
-          {onClose && <button className="dp-btn" onClick={() => { stopMusic(); onClose(); }}>✕ Close</button>}
+          {onClose && <button className="dp-btn" onClick={() => { stopMusic(); onClose(); }}>Close</button>}
         </div>
       </header>
 
       <main className="dp-main">
-        <div className="dp-phase">{phase.icon} {phase.label}</div>
+        <div className="dp-phase">{phase.label}</div>
         <div className="dp-sub">{phase.sub}</div>
 
         {phase.id === "share" ? (
           <>
             <div className="dp-row" style={{ justifyContent: "center" }}>
               <select className="dp-sel" value={shareClass} onChange={(e) => setShareClass(e.target.value)}>
-                {classNames.length === 0 && <option value="">No class — add in Spinner</option>}
+                {classNames.length === 0 && <option value="">No class - add in Spinner</option>}
                 {classNames.map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
             </div>
             <div className="dp-share-reel"><span className="dp-share-name">{shareName}</span></div>
-            <button className="dp-a pri" onClick={spinShare} disabled={shareSpinning || classNames.length === 0}>{shareSpinning ? "Spinning…" : "🎤 Pick a sharer"}</button>
+            <button className="dp-a pri" onClick={spinShare} disabled={shareSpinning || classNames.length === 0}>{shareSpinning ? "Spinning..." : "Pick a sharer"}</button>
           </>
         ) : (
           <>
@@ -434,34 +508,34 @@ export default function DiscussionProtocol({
                 <img className="dp-media" src={m.url} alt={phase.label} />
               )
             ) : (
-              <div className="dp-icon">{phase.icon}</div>
+              <div className="dp-visual" aria-hidden="true">{phase.visual}</div>
             )}
             <div className="dp-clock">{fmt(secondsLeft)}</div>
-            <div className="dp-note">{finished ? "⏰ Time — tap Next phase" : ""}</div>
+            <div className="dp-note">{finished ? "Time. Tap Next phase." : ""}</div>
             <div className="dp-actions">
-              <button className="dp-a pri" onClick={toggleRun}>{running ? "⏸ Pause" : secondsLeft <= 0 ? "↻ Restart" : "▶ Start"}</button>
+              <button className="dp-a pri" onClick={toggleRun}>{running ? "Pause" : secondsLeft <= 0 ? "Restart" : "Start"}</button>
               <button className="dp-a" onClick={reset}>Reset</button>
               <button className="dp-a" onClick={() => adjust(15)}>+15s</button>
-              <button className="dp-a" onClick={() => adjust(-15)} disabled={secondsLeft < 15}>−15s</button>
+              <button className="dp-a" onClick={() => adjust(-15)} disabled={secondsLeft < 15}>-15s</button>
             </div>
           </>
         )}
 
         <div className="dp-actions">
-          <button className="dp-a" onClick={() => goPhase(idx - 1)} disabled={idx === 0}>‹ Back</button>
-          <button className="dp-a next" onClick={() => goPhase(idx + 1)} disabled={idx + 1 >= PHASES.length}>Next phase ▶</button>
+          <button className="dp-a" onClick={() => goPhase(idx - 1)} disabled={idx === 0}>Back</button>
+          <button className="dp-a next" onClick={() => goPhase(idx + 1)} disabled={idx + 1 >= PHASES.length}>Next phase</button>
         </div>
       </main>
 
       {setup && (
         <section className="dp-setup">
-          <h3>Set up the discussion — durations, teacher media, and student screen media</h3>
+          <h3>Set up the discussion - durations, teacher media, and student screen media</h3>
           {PHASES.map((p) => {
             const has = !!media[p.id];
             const support = studentSupports[p.id] ?? { sentenceStems: "", keyVocabulary: "" };
             return (
               <div className="dp-row" key={p.id}>
-                <span className="dp-rlabel">{p.icon} {p.label}</span>
+                <span className="dp-rlabel">{p.visual} {p.label}</span>
                 {p.timed && (
                   <label className="dp-hint">seconds
                     <input className="dp-num" type="number" min={5} max={600} value={phaseSecs(p.id)}

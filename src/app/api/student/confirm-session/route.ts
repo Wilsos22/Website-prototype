@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     if (!db) throw new StudentIdentityError("Live sessions are not configured.", 503, "sessions_not_configured");
     const { data: session, error } = await db
       .from("sessions")
-      .select("id,period_id,status")
+      .select("id,period_id,status,join_code")
       .eq("id", sessionId)
       .maybeSingle();
     if (error) throw new StudentIdentityError("The class session could not be checked.", 500, "session_lookup_failed");
@@ -37,7 +37,12 @@ export async function POST(request: Request) {
 
     return Response.json(
       {
-        session: { sessionId: session.id, studentId: student.id, name: student.fullName },
+        session: {
+          sessionId: session.id,
+          studentId: student.id,
+          name: student.fullName,
+          syncKey: session.join_code,
+        },
         student: { id: student.id, name: student.fullName, email: student.email },
       },
       { headers: { "cache-control": "no-store" } },

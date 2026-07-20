@@ -1,12 +1,21 @@
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
-import { DEFAULT_STATES } from "@/lib/classStates";
-import { inferClassroomStage } from "@/lib/classroomPilot";
+import { CLOSEOUT_DIRECTIONS, DEFAULT_STATES } from "@/lib/classStates";
+import { discussionSupportsForLesson, inferClassroomStage, usesDiscussionProtocol } from "@/lib/classroomPilot";
 import { getLessonByCode, type LessonData } from "@/lib/notionLessons";
+import { defaultPublicSurfaceModeForState } from "@/lib/lessonStepMetadata";
+import { normalizePublicLessonRoutineConfig } from "@/lib/lessonRoutineConfig";
+import { publicLiveLessonSnapshot } from "@/lib/liveFlowPrivacy";
+import { publicSuccessCriterion } from "@/lib/successCriterion";
 import {
   LIVE_FLOW_MODE,
+  REMOTE_COMMAND_STALE_MS,
   TEACHER_REMOTE_ACTIONS,
+  canRevealM2T1L1FinalScore,
+  isDiscussionRemoteAction,
   liveAssignedToolRoute,
-  liveResponseModePollKind,
+  pickRemoteSharerName,
+  resolveLiveStepPollKind,
+  resolveRemoteNextBehavior,
   liveTimerSeconds,
   splitLiveFlowLines,
   splitLiveFlowVocabulary,
@@ -22,12 +31,21 @@ export const dynamic = "force-dynamic";
 const ACTIONS = new Set<string>(TEACHER_REMOTE_ACTIONS);
 const DIRECT_TIMER_ACTIONS = new Set<TeacherRemoteAction>(["toggle-timer", "add-30", "subtract-30", "reset-timer"]);
 const DIRECT_BOARD_ACTIONS = new Set<TeacherRemoteAction>(["show-board", "hide-board"]);
+const CLAIMED_FLOW_ACTIONS = new Set<TeacherRemoteAction>([
+  "next",
+  "previous",
+  "reveal-results",
+  "reveal-final-score",
+  "discussion-pick-sharer",
+]);
+const SPINNER_STATE_IDS = new Set(["learning-target-readers", "ipad-kid"]);
 const REMOTE_TRANSITION_TIMEOUT_MS = 10_000;
 const AUTO_ADVANCE_HOLD_MS = 2_600;
 const POLL_RESULTS_HOLD_MS = 6_000;
 
 interface RemoteSessionRow {
   id: string;
+  period_id: string;
   join_code: string | null;
   remote_command: TeacherRemoteCommand | null;
   started_at: string;
@@ -44,15 +62,18 @@ interface HydratedFlowContract {
   lesson: LiveClassFlowSnapshot["lesson"];
 }
 
-async function openSessions() {
+async function openSessions(sessionId = "") {
   const db = getSupabaseAdmin();
   if (!db) return { db: null, sessions: [] as RemoteSessionRow[], error: "Database not configured." };
-  const { data, error } = await db
+  let query = db
     .from("sessions")
-    .select("id,join_code,remote_command,started_at,live_flow")
+    .select("id,period_id,join_code,remote_command,started_at,live_flow")
     .eq("status", "open")
-    .eq("broadcast", LIVE_FLOW_MODE)
-    .order("started_at", { ascending: false });
+    .eq("broadcast", LIVE_FLOW_MODE);
+  query = sessionId
+    ? query.eq("id", sessionId)
+    : query.order("started_at", { ascending: false });
+  const { data, error } = await query;
   return { db, sessions: (data ?? []) as RemoteSessionRow[], error: error?.message || null };
 }
 
@@ -69,6 +90,8 @@ function serializeSession(session: RemoteSessionRow) {
 function stepsFromLesson(lesson: LessonData): LiveFlowSequenceStep[] {
   return lesson.steps.map((step) => {
     const state = DEFAULT_STATES.find((candidate) => candidate.id === step.stateId);
+    const isDiscussion = usesDiscussionProtocol(step.stateId, step.title || state?.label || "");
+    const configuredDiscussionSupports = discussionSupportsForLesson(lesson.lessonCode);
     const resourceUrl = (step.responseMode.trim().toLowerCase() === "assigned tool" ? liveAssignedToolRoute(step.tool) : null)
       || step.linkUrl
       || (step.stateId === "warmup" ? lesson.warmUpLink : "")
@@ -82,7 +105,9 @@ function stepsFromLesson(lesson: LessonData): LiveFlowSequenceStep[] {
       semantic: inferClassroomStage(step.stateId, step.title || state?.label || ""),
       durationSeconds: Math.max(60, step.duration * 60),
       question: step.question || "",
-      pollKind: step.pollKind || null,
+      pollKind: isDiscussion
+        ? null
+        : resolveLiveStepPollKind(step.responseMode, step.pollKind, step.stateId),
       choices: step.choices || [],
       correctAnswer: step.correctAnswer || "",
       standard: step.standard || "",
@@ -92,29 +117,37 @@ function stepsFromLesson(lesson: LessonData): LiveFlowSequenceStep[] {
       notionLessonId: lesson.id || null,
       lessonCode: lesson.lessonCode || "",
       mainDisplay: step.mainDisplay || "",
-      paceDirections: step.paceDirections || step.studentDirections || state?.desc || "",
-      studentAction: step.studentAction || step.studentDirections || state?.desc || "",
-      remoteActions: step.remoteActions || step.paceDirections || step.studentDirections || state?.desc || "",
-      discussionStems: step.stateId === "discussion"
+      paceDirections: step.stateId === "closeout"
+        ? CLOSEOUT_DIRECTIONS
+        : step.paceDirections || state?.paceAction || step.studentDirections || state?.desc || "",
+      studentAction: step.stateId === "closeout"
+        ? CLOSEOUT_DIRECTIONS
+        : step.studentAction || state?.studentAction || step.studentDirections || state?.desc || "",
+      discussionStems: isDiscussion
         ? splitLiveFlowLines(step.discussionStems || lesson.discussionStems)
+          .concat(step.discussionStems || lesson.discussionStems ? [] : configuredDiscussionSupports.sentenceStems)
         : [],
-      vocabulary: step.stateId === "discussion"
+      vocabulary: isDiscussion
         ? splitLiveFlowVocabulary(step.vocabulary || lesson.discussionVocabulary)
+          .concat(step.vocabulary || lesson.discussionVocabulary ? [] : configuredDiscussionSupports.keyVocabulary)
         : [],
       responseMode: step.responseMode || "",
       workSpaceAvailable: step.workSpaceAvailable,
+      publicSurfaceMode: step.publicSurfaceMode,
+      routineConfig: step.routineConfig,
     };
   });
 }
 
 function lessonSnapshotFromNotion(lesson: LessonData): NonNullable<LiveClassFlowSnapshot["lesson"]> {
+  const criterion = publicSuccessCriterion(lesson.selectedSuccessCriterion);
   return {
     id: lesson.id || null,
     code: lesson.lessonCode,
     title: lesson.title,
     learningIntention: lesson.learningIntention,
-    successCriteria: lesson.successCriteria,
-    selectedSuccessCriterion: lesson.selectedSuccessCriterion || lesson.successCriteria,
+    successCriteria: criterion,
+    selectedSuccessCriterion: criterion,
     classroomMode: lesson.classroomMode,
     discussionStems: splitLiveFlowLines(lesson.discussionStems),
     discussionVocabulary: splitLiveFlowVocabulary(lesson.discussionVocabulary),
@@ -143,12 +176,37 @@ async function hydrateFlowContract(flow: LiveClassFlowSnapshot): Promise<Hydrate
 
 async function fullyHydrateFlow(flow: LiveClassFlowSnapshot): Promise<LiveClassFlowSnapshot> {
   const contract = await hydrateFlowContract(flow);
+  const publicSteps = contract.steps.map(({
+    remoteActions: _privateRemoteActions,
+    routineConfig,
+    ...step
+  }) => ({
+    ...step,
+    routineConfig: normalizePublicLessonRoutineConfig(routineConfig),
+  }));
+  const nextPublicStep = flow.sequence ? publicSteps[flow.sequence.currentIndex + 1] : null;
+  const presentation = flow.presentation
+    ? (({
+        remoteActions: _privateRemoteActions,
+        routineConfig,
+        ...publicPresentation
+      }) => ({
+        ...publicPresentation,
+        routineConfig: normalizePublicLessonRoutineConfig(routineConfig),
+      }))(flow.presentation)
+    : null;
   return {
     ...flow,
     version: 2,
-    lesson: contract.lesson,
+    presentation,
+    lesson: publicLiveLessonSnapshot(contract.lesson),
     sequence: flow.sequence
-      ? { ...flow.sequence, totalSteps: contract.steps.length, steps: contract.steps }
+      ? {
+          ...flow.sequence,
+          totalSteps: publicSteps.length,
+          nextDirections: nextPublicStep?.paceDirections || nextPublicStep?.description || null,
+          steps: publicSteps,
+        }
       : flow.sequence,
   };
 }
@@ -168,9 +226,10 @@ async function navigateFlow(
   if (!step) throw new Error(action === "next" ? "This is the last lesson state." : "This is the first lesson state.");
 
   let poll: LiveClassFlowSnapshot["poll"] = null;
-  const pollKind = step.responseMode?.trim()
-    ? liveResponseModePollKind(step.responseMode)
-    : step.pollKind;
+  const isDiscussion = usesDiscussionProtocol(step.stateId, step.label);
+  const pollKind = isDiscussion
+    ? null
+    : resolveLiveStepPollKind(step.responseMode, step.pollKind || undefined, step.stateId);
   if (step.question && pollKind) {
     const choices = pollKind === "fist-to-five" ? ["0", "1", "2", "3", "4", "5"] : step.choices;
     const inserted = await db
@@ -209,9 +268,11 @@ async function navigateFlow(
         url: step.resourceUrl,
       }
     : null;
-  const body = step.mainDisplay || (step.stateId === "independent" || step.stateId === "closeout"
-    ? step.paperTask || step.question || step.description
-    : step.question || step.description || step.paperTask);
+  const body = step.stateId === "closeout"
+    ? CLOSEOUT_DIRECTIONS
+    : step.mainDisplay || (step.stateId === "independent"
+      ? step.paperTask || step.question || step.description
+      : step.question || step.description || step.paperTask);
   const nextStep = steps[targetIndex + 1] || null;
   const continuePacing = flow.sequence.advanceMode === "automatic"
     && Boolean(flow.timer?.running || flow.timer?.finished || flow.poll?.stage === "results");
@@ -230,7 +291,7 @@ async function navigateFlow(
       ...flow,
       version: 2,
       updatedAt: new Date().toISOString(),
-      lesson: contract.lesson,
+      lesson: publicLiveLessonSnapshot(contract.lesson),
       state: {
         id: step.stateId,
         label: step.label,
@@ -257,20 +318,24 @@ async function navigateFlow(
         boardOpen: false,
         paceDirections: step.paceDirections || step.description,
         studentAction: step.studentAction || step.description,
-        remoteActions: step.remoteActions || step.paceDirections || step.description,
         responseMode: step.responseMode || "",
         workSpaceAvailable: step.workSpaceAvailable,
+        publicSurfaceMode: step.publicSurfaceMode || defaultPublicSurfaceModeForState(step.stateId),
+        routineConfig: step.routineConfig || null,
         discussionStems: step.discussionStems || [],
         vocabulary: step.vocabulary || [],
+        scoreboardStage: canRevealM2T1L1FinalScore(step.lessonCode, step.stateId, step.semantic)
+          ? "halftime"
+          : undefined,
       },
       tool: null,
       sequence: {
         currentIndex: targetIndex,
         totalSteps: steps.length,
         nextLabel: nextStep?.label || null,
-        nextDirections: nextStep?.remoteActions || nextStep?.paceDirections || nextStep?.description || null,
+        nextDirections: nextStep?.paceDirections || nextStep?.description || null,
         advanceMode: flow.sequence.advanceMode,
-        steps,
+        steps: steps.map(({ remoteActions: _privateRemoteActions, ...publicStep }) => publicStep),
       },
       paper: step.paperTask ? { task: step.paperTask } : null,
     },
@@ -322,13 +387,92 @@ function updateTimer(flow: LiveClassFlowSnapshot, action: TeacherRemoteAction): 
 
 function updateBoard(flow: LiveClassFlowSnapshot, open: boolean): LiveClassFlowSnapshot {
   if (!flow.presentation) throw new Error("Load a lesson state before opening the work space.");
-  if (open && flow.presentation.workSpaceAvailable === false) {
-    throw new Error("This lesson state does not use the side work space.");
-  }
   return {
     ...flow,
     updatedAt: new Date().toISOString(),
     presentation: { ...flow.presentation, boardOpen: open },
+  };
+}
+
+function revealPollResults(flow: LiveClassFlowSnapshot): LiveClassFlowSnapshot {
+  if (
+    resolveRemoteNextBehavior(flow.state?.id, flow.state?.semantic, flow.poll?.stage) !== "reveal-results"
+    || !flow.poll
+  ) {
+    throw new Error("Open a responding Learning Check before revealing anonymous results.");
+  }
+  return {
+    ...flow,
+    updatedAt: new Date().toISOString(),
+    timer: null,
+    poll: { ...flow.poll, stage: "results", awaitingTeacherAdvance: true },
+  };
+}
+
+function revealFinalScore(flow: LiveClassFlowSnapshot): LiveClassFlowSnapshot {
+  if (!flow.presentation || !canRevealM2T1L1FinalScore(flow.lesson?.code, flow.state?.id, flow.state?.semantic)) {
+    throw new Error("Open the M2.T1.L1 launch scoreboard before revealing its final score.");
+  }
+  if (flow.presentation.scoreboardStage === "final") {
+    throw new Error("The final score is already showing.");
+  }
+  return {
+    ...flow,
+    updatedAt: new Date().toISOString(),
+    presentation: { ...flow.presentation, scoreboardStage: "final" },
+  };
+}
+
+async function chooseSharerName(
+  db: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  session: RemoteSessionRow,
+): Promise<string> {
+  const joinedResult = await db
+    .from("session_joins")
+    .select("student_id")
+    .eq("session_id", session.id)
+    .not("student_id", "is", null);
+  if (joinedResult.error) throw new Error("The joined student list could not be loaded.");
+
+  const joinedIds = [...new Set((joinedResult.data ?? [])
+    .map((row) => row.student_id)
+    .filter((studentId): studentId is string => typeof studentId === "string" && Boolean(studentId)))];
+  let joinedNames: string[] = [];
+  if (joinedIds.length) {
+    const joinedStudentsResult = await db
+      .from("students")
+      .select("full_name")
+      .eq("period_id", session.period_id)
+      .in("id", joinedIds)
+      .order("full_name");
+    if (joinedStudentsResult.error) throw new Error("The joined student roster could not be loaded.");
+    joinedNames = (joinedStudentsResult.data ?? []).map((student) => student.full_name || "");
+  }
+
+  let rosterNames: string[] = [];
+  if (!joinedNames.length) {
+    const rosterResult = await db
+      .from("students")
+      .select("full_name")
+      .eq("period_id", session.period_id)
+      .order("full_name");
+    if (rosterResult.error) throw new Error("The class roster could not be loaded.");
+    rosterNames = (rosterResult.data ?? []).map((student) => student.full_name || "");
+  }
+
+  const selectedName = pickRemoteSharerName(joinedNames, rosterNames);
+  if (!selectedName) throw new Error("Add at least one student to this class roster before choosing a sharer.");
+  return selectedName;
+}
+
+function selectDiscussionSharer(flow: LiveClassFlowSnapshot, selectedName: string): LiveClassFlowSnapshot {
+  if (!flow.phase || flow.phase.id !== "share") {
+    throw new Error("Open the Share phase before choosing a sharer.");
+  }
+  return {
+    ...flow,
+    updatedAt: new Date().toISOString(),
+    phase: { ...flow.phase, selectedSharer: selectedName },
   };
 }
 
@@ -359,8 +503,11 @@ async function claimRemoteFlow(
   update = flow.updatedAt
     ? update.filter("live_flow->>updatedAt", "eq", flow.updatedAt)
     : update.is("live_flow", null);
+  update = session.remote_command?.nonce
+    ? update.filter("remote_command->>nonce", "eq", session.remote_command.nonce)
+    : update.is("remote_command", null);
   const { data, error } = await update
-    .select("id,join_code,remote_command,started_at,live_flow")
+    .select("id,period_id,join_code,remote_command,started_at,live_flow")
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) throw new Error("The lesson changed before this Remote action arrived. Try again.");
@@ -379,16 +526,56 @@ async function persistClaimedFlow(
   }
   const finalFlow = await fullyHydrateFlow(liveFlow);
   delete finalFlow.transition;
-  const { data, error } = await db
+  let update = db
     .from("sessions")
     .update({ live_flow: finalFlow, remote_command: command })
     .eq("id", claimedSession.id)
     .eq("status", "open")
-    .filter("live_flow->>updatedAt", "eq", claimedSession.live_flow.updatedAt)
+    .filter("live_flow->>updatedAt", "eq", claimedSession.live_flow.updatedAt);
+  update = claimedSession.remote_command?.nonce
+    ? update.filter("remote_command->>nonce", "eq", claimedSession.remote_command.nonce)
+    : update.is("remote_command", null);
+  const { data, error } = await update
     .select("live_flow")
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data?.live_flow) throw new Error("The lesson changed while the Remote action was finishing. Try again.");
+  return data.live_flow as LiveClassFlowSnapshot;
+}
+
+async function persistDirectFlow(
+  db: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  session: RemoteSessionRow,
+  liveFlow: LiveClassFlowSnapshot,
+  command: TeacherRemoteCommand,
+): Promise<LiveClassFlowSnapshot> {
+  const currentFlow = session.live_flow;
+  if (!currentFlow) throw new Error("Load a lesson before using the Remote.");
+  if (currentFlow.transition) {
+    const startedAt = Date.parse(currentFlow.transition.startedAt);
+    if (Number.isFinite(startedAt) && Date.now() - startedAt < REMOTE_TRANSITION_TIMEOUT_MS) {
+      throw new Error("Another Remote action is still finishing. Try again.");
+    }
+  }
+
+  const finalFlow = await fullyHydrateFlow(liveFlow);
+  delete finalFlow.transition;
+  let update = db
+    .from("sessions")
+    .update({ live_flow: finalFlow, remote_command: command })
+    .eq("id", session.id)
+    .eq("status", "open");
+  update = currentFlow.updatedAt
+    ? update.filter("live_flow->>updatedAt", "eq", currentFlow.updatedAt)
+    : update.is("live_flow", null);
+  update = session.remote_command?.nonce
+    ? update.filter("remote_command->>nonce", "eq", session.remote_command.nonce)
+    : update.is("remote_command", null);
+  const { data, error } = await update
+    .select("live_flow")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data?.live_flow) throw new Error("The lesson changed before this Remote action arrived. Try again.");
   return data.live_flow as LiveClassFlowSnapshot;
 }
 
@@ -443,7 +630,7 @@ async function reloadRemoteSession(
 ): Promise<RemoteSessionRow | null> {
   const { data } = await db
     .from("sessions")
-    .select("id,join_code,remote_command,started_at,live_flow")
+    .select("id,period_id,join_code,remote_command,started_at,live_flow")
     .eq("id", sessionId)
     .eq("status", "open")
     .eq("broadcast", LIVE_FLOW_MODE)
@@ -458,6 +645,7 @@ function automaticTransitionDue(flow: LiveClassFlowSnapshot, now: number): "resu
   const hasNext = sequence.currentIndex + 1 < sequence.totalSteps;
 
   if (flow.poll?.stage === "results") {
+    if (flow.poll.awaitingTeacherAdvance) return null;
     if (!hasNext) return null;
     const resultsStartedAt = Date.parse(flow.updatedAt);
     return Number.isFinite(resultsStartedAt) && now - resultsStartedAt >= POLL_RESULTS_HOLD_MS ? "next" : null;
@@ -524,10 +712,10 @@ async function applyLazyAutomaticTransition(
 }
 
 export async function GET(request: Request) {
-  const result = await openSessions();
+  const requestedSessionId = new URL(request.url).searchParams.get("sessionId") || "";
+  const result = await openSessions(requestedSessionId);
   if (!result.db) return Response.json({ connected: false, error: result.error }, { status: 503 });
   if (result.error) return Response.json({ connected: false, error: result.error }, { status: 500 });
-  const requestedSessionId = new URL(request.url).searchParams.get("sessionId") || "";
   let requestedSession = requestedSessionId
     ? result.sessions.find((session) => session.id === requestedSessionId) ?? null
     : null;
@@ -540,10 +728,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const result = await openSessions();
-  if (!result.db) return Response.json({ error: result.error }, { status: 503 });
-  if (result.error) return Response.json({ error: result.error }, { status: 500 });
-  let body: { action?: string; sessionId?: string };
+  let body: { action?: string; sessionId?: string; expectedStateId?: string; expectedSequenceIndex?: number };
   try {
     body = await request.json();
   } catch {
@@ -551,33 +736,96 @@ export async function POST(request: Request) {
   }
   const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
   if (!sessionId) return Response.json({ error: "Confirm a class session before sending a command." }, { status: 400 });
-  const session = result.sessions.find((candidate) => candidate.id === sessionId) ?? null;
-  if (!session) return Response.json({ error: "The selected Live Class Flow session is not open." }, { status: 404 });
   if (!body.action || !ACTIONS.has(body.action as TeacherRemoteAction)) {
     return Response.json({ error: "Unknown remote action." }, { status: 400 });
   }
+  const result = await openSessions(sessionId);
+  if (!result.db) return Response.json({ error: result.error }, { status: 503 });
+  if (result.error) return Response.json({ error: result.error }, { status: 500 });
+  const session = result.sessions.find((candidate) => candidate.id === sessionId) ?? null;
+  if (!session) return Response.json({ error: "The selected Live Class Flow session is not open." }, { status: 404 });
+  const action = body.action as TeacherRemoteAction;
+  if (
+    isDiscussionRemoteAction(action)
+    && !usesDiscussionProtocol(session.live_flow?.state?.id, session.live_flow?.state?.label || "")
+  ) {
+    return Response.json({ error: "Open a Discussion or Error Analysis state before using these controls." }, { status: 409 });
+  }
+  let spinnerStateId: string | null = null;
+  if (action === "spin-spinner") {
+    const expectedStateId = typeof body.expectedStateId === "string" ? body.expectedStateId.trim() : "";
+    const expectedSequenceIndex = typeof body.expectedSequenceIndex === "number" && Number.isInteger(body.expectedSequenceIndex)
+      ? body.expectedSequenceIndex
+      : null;
+    const currentStateId = session.live_flow?.state?.id || "";
+    const currentSequenceIndex = session.live_flow?.sequence?.currentIndex ?? null;
+    if (!expectedStateId || !SPINNER_STATE_IDS.has(expectedStateId)) {
+      return Response.json({ error: "Open a spinner lesson state before using this control." }, { status: 409 });
+    }
+    if (
+      !SPINNER_STATE_IDS.has(currentStateId)
+      || currentStateId !== expectedStateId
+      || currentSequenceIndex === null
+      || currentSequenceIndex !== expectedSequenceIndex
+      || !session.live_flow?.updatedAt
+    ) {
+      return Response.json({ error: "The lesson moved before the spinner command arrived. Use the current state controls." }, { status: 409 });
+    }
+    spinnerStateId = currentStateId;
+  }
+  if (session.remote_command && !session.remote_command.receivedAt) {
+    const issuedAt = Date.parse(session.remote_command.issuedAt);
+    const stillDelivering = Number.isFinite(issuedAt) && Date.now() - issuedAt < REMOTE_COMMAND_STALE_MS;
+    if (stillDelivering) {
+      return Response.json({ error: "The previous classroom command is still being delivered." }, { status: 409 });
+    }
+  }
   const command: TeacherRemoteCommand = {
     nonce: crypto.randomUUID(),
-    action: body.action as TeacherRemoteAction,
+    action,
     issuedAt: new Date().toISOString(),
+    ...(spinnerStateId ? { stateId: spinnerStateId } : {}),
   };
-  const action = command.action;
   let workingSession = session;
   let liveFlow = workingSession.live_flow;
   let handledDirectly = false;
   let claimToken: string | null = null;
   let createdPollId: string | null = null;
+  let revealedPollId: string | null = null;
   try {
-    if (action === "next" || action === "previous" || DIRECT_TIMER_ACTIONS.has(action) || DIRECT_BOARD_ACTIONS.has(action)) {
+    if (CLAIMED_FLOW_ACTIONS.has(action)) {
       const claim = await claimRemoteFlow(result.db, workingSession);
       workingSession = claim.session;
       liveFlow = workingSession.live_flow;
       claimToken = claim.token;
     }
     if (action === "next" || action === "previous") {
-      const navigation = await navigateFlow(result.db, workingSession, action);
-      liveFlow = navigation.liveFlow;
-      createdPollId = navigation.createdPollId;
+      if (
+        action === "next"
+        && liveFlow
+        && resolveRemoteNextBehavior(liveFlow.state?.id, liveFlow.state?.semantic, liveFlow.poll?.stage) === "reveal-results"
+      ) {
+        revealedPollId = liveFlow.poll?.id || null;
+        liveFlow = revealPollResults(liveFlow);
+      } else {
+        const navigation = await navigateFlow(result.db, workingSession, action);
+        liveFlow = navigation.liveFlow;
+        createdPollId = navigation.createdPollId;
+      }
+      handledDirectly = true;
+    } else if (action === "reveal-results") {
+      if (!liveFlow) throw new Error("Load a lesson before revealing results.");
+      revealedPollId = liveFlow.poll?.id || null;
+      liveFlow = revealPollResults(liveFlow);
+      handledDirectly = true;
+    } else if (action === "reveal-final-score") {
+      if (!liveFlow) throw new Error("Load a lesson before revealing the final score.");
+      liveFlow = revealFinalScore(liveFlow);
+      handledDirectly = true;
+    } else if (action === "discussion-pick-sharer") {
+      if (!liveFlow) throw new Error("Load a discussion before choosing a sharer.");
+      const selectedName = await chooseSharerName(result.db, workingSession);
+      liveFlow = selectDiscussionSharer(liveFlow, selectedName);
       handledDirectly = true;
     } else if (DIRECT_TIMER_ACTIONS.has(action)) {
       if (!liveFlow) throw new Error("Load a lesson before controlling its timer.");
@@ -604,20 +852,43 @@ export async function POST(request: Request) {
   }
 
   if (handledDirectly) {
-    if (!claimToken || !liveFlow) return Response.json({ error: "The Remote action did not secure the live lesson state." }, { status: 409 });
+    if (!liveFlow) return Response.json({ error: "The Remote action did not secure the live lesson state." }, { status: 409 });
     command.receivedAt = new Date().toISOString();
     try {
-      liveFlow = await persistClaimedFlow(result.db, workingSession, claimToken, liveFlow, command);
+      liveFlow = claimToken
+        ? await persistClaimedFlow(result.db, workingSession, claimToken, liveFlow, command)
+        : await persistDirectFlow(result.db, workingSession, liveFlow, command);
     } catch (error) {
       await closePollById(result.db, createdPollId);
-      await releaseRemoteFlowClaim(result.db, workingSession, claimToken, session.live_flow);
+      if (claimToken) await releaseRemoteFlowClaim(result.db, workingSession, claimToken, session.live_flow);
       return Response.json({ error: error instanceof Error ? error.message : "The Remote action could not be saved." }, { status: 409 });
     }
-    await closeOpenPolls(result.db, session.id, liveFlow.poll?.id || null);
+    if (claimToken) await closeOpenPolls(result.db, session.id, liveFlow.poll?.id || null);
+    if (revealedPollId) await closePollById(result.db, revealedPollId);
     return Response.json({ ok: true, command, liveFlow });
   }
 
-  const { error } = await result.db.from("sessions").update({ remote_command: command }).eq("id", session.id);
+  let commandUpdate = result.db
+    .from("sessions")
+    .update({ remote_command: command })
+    .eq("id", session.id)
+    .eq("status", "open");
+  if (action === "spin-spinner" && session.live_flow?.updatedAt) {
+    commandUpdate = commandUpdate.filter("live_flow->>updatedAt", "eq", session.live_flow.updatedAt);
+  }
+  commandUpdate = session.remote_command?.nonce
+    ? commandUpdate.filter("remote_command->>nonce", "eq", session.remote_command.nonce)
+    : commandUpdate.is("remote_command", null);
+  const { data, error } = await commandUpdate
+    .select("remote_command")
+    .maybeSingle();
   if (error) return Response.json({ error: error.message }, { status: 500 });
+  if (!data) {
+    return Response.json({
+      error: action === "spin-spinner"
+        ? "The lesson state changed before the spinner command arrived. Use the current state controls."
+        : "Another classroom command arrived first. Tap again.",
+    }, { status: 409 });
+  }
   return Response.json({ ok: true, command });
 }

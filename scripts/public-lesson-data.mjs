@@ -31,7 +31,7 @@ const lesson = {
   warmUpLink: "https://example.com/warm-up",
   exitTicketLink: "https://example.com/exit-ticket",
   learningIntention: "We are learning to reason about ratios.",
-  successCriteria: "I can explain a ratio.",
+  successCriteria: "Legacy option one\nLegacy option two",
   selectedSuccessCriterion: "I can explain a ratio.",
   classroomMode: "Academic lesson",
   discussionStems: "I noticed...",
@@ -120,6 +120,24 @@ for (const privateField of [
 
 if (publicLesson.title !== lesson.title || publicLesson.warmUpLink !== lesson.warmUpLink) {
   throw new Error("Public lesson fields were not preserved.");
+}
+
+if (publicLesson.successCriteria !== lesson.selectedSuccessCriterion
+  || publicLesson.selectedSuccessCriterion !== lesson.selectedSuccessCriterion) {
+  throw new Error("Public lessons must expose only the one selected success criterion.");
+}
+
+if (JSON.stringify(publicLesson).includes("Legacy option")) {
+  throw new Error("Public lessons must not expose the multi-option legacy Success Criteria field.");
+}
+
+const unconfiguredPublicLesson = toPublicLessonData({
+  ...lesson,
+  selectedSuccessCriterion: "I can model a ratio.\nI can explain a ratio.",
+});
+if (unconfiguredPublicLesson.selectedSuccessCriterion !== "Choose one I can statement in Notion."
+  || unconfiguredPublicLesson.successCriteria !== unconfiguredPublicLesson.selectedSuccessCriterion) {
+  throw new Error("Invalid selected criteria must become concise setup guidance on public lesson snapshots.");
 }
 
 if (!Array.isArray(publicLesson.steps) || publicLesson.steps.length !== 0) {

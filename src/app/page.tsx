@@ -7,7 +7,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
-import { clearClassModeExitMarker, markStudentTab } from "@/lib/liveClassFlow";
+import { clearClassModeExitMarker, markStudentTab, type StoredStudentSession } from "@/lib/liveClassFlow";
 import {
   ensureAnonymousStudentSession,
   getStudentAuthUserId,
@@ -28,7 +28,7 @@ export default function StudentLanding() {
   const supabase = getSupabase();
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
-  const [joinSess, setJoinSess] = useState<{ id: string; periodId: string } | null>(null);
+  const [joinSess, setJoinSess] = useState<{ id: string; periodId: string; syncKey: string } | null>(null);
   const [roster, setRoster] = useState<{ id: string; full_name: string }[]>([]);
   const [joinErr, setJoinErr] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
@@ -172,7 +172,7 @@ export default function StudentLanding() {
     setAdmissionError(null);
   }
 
-  function finishJoin(result: { session: { sessionId: string; studentId: string; name: string } }) {
+  function finishJoin(result: { session: StoredStudentSession }) {
     clearClassModeExitMarker();
     localStorage.setItem("bdm-student-name", result.session.name);
     localStorage.setItem("bdm-student-session", JSON.stringify(result.session));
@@ -192,7 +192,7 @@ export default function StudentLanding() {
       if (checking || stopped) return;
       checking = true;
       try {
-        const result = await studentApiRequest<{ session: { sessionId: string; studentId: string; name: string } }>(
+        const result = await studentApiRequest<{ session: StoredStudentSession }>(
           "/api/student/join",
           { method: "POST", body: JSON.stringify({ code: pendingCode }) },
         );
@@ -238,7 +238,7 @@ export default function StudentLanding() {
         }
         await ensureAnonymousStudentSession();
         const result = await studentApiRequest<{
-          session: { sessionId: string; studentId: string; name: string };
+          session: StoredStudentSession;
         }>("/api/student/join", {
           method: "POST",
           body: JSON.stringify({ code: c }),
@@ -265,7 +265,7 @@ export default function StudentLanding() {
     if (!sess) { setJoinErr("That code isn't open right now — check with your teacher."); return; }
     const s = sess as { id: string; period_id: string };
     const { data: studs } = await supabase.from("students").select("id,full_name").eq("period_id", s.period_id).order("full_name");
-    setJoinSess({ id: s.id, periodId: s.period_id });
+    setJoinSess({ id: s.id, periodId: s.period_id, syncKey: c });
     setRoster((studs as { id: string; full_name: string }[]) || []);
   }
 
@@ -277,7 +277,12 @@ export default function StudentLanding() {
       clearClassModeExitMarker();
       localStorage.setItem("bdm-student-name", s.full_name);
       if (joinSess) {
-        localStorage.setItem("bdm-student-session", JSON.stringify({ sessionId: joinSess.id, studentId: s.id, name: s.full_name }));
+        localStorage.setItem("bdm-student-session", JSON.stringify({
+          sessionId: joinSess.id,
+          studentId: s.id,
+          name: s.full_name,
+          syncKey: joinSess.syncKey,
+        }));
         markStudentTab();
       }
     } catch { /* ignore */ }

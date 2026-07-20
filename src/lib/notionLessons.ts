@@ -3,6 +3,18 @@
 // Parent database ID: 613d13a5-ac90-4ab3-9f5f-b7da95911ec3
 // Child data source IDs returned by Notion for this database.
 
+import {
+  lessonRoutineConfigFromAiContext,
+  publicLessonRoutineConfig,
+  stripLessonRoutineConfig,
+  type PublicLessonRoutineConfig,
+} from "./lessonRoutineConfig";
+import {
+  parseLessonStepAiContext,
+  resolvePublicSurfaceMode,
+  type PublicSurfaceMode,
+} from "./lessonStepMetadata";
+
 const DATA_SOURCE_IDS = [
   "e367e541-c0c7-4613-8066-d2e61b6fee64",
   "3282eba1-de37-8069-a043-000b7c36799d",
@@ -29,6 +41,8 @@ export interface LessonStepData {
   correctAnswer: string;
   standard: string;
   aiContext: string;
+  publicSurfaceMode: PublicSurfaceMode;
+  routineConfig: PublicLessonRoutineConfig | null;
   advance: string;
   required: boolean;
   linkUrl: string;
@@ -167,6 +181,15 @@ function extractText(prop: NotionProperty | undefined): string {
     if (prop.rollup?.type === "date") return prop.rollup.date?.start ?? "";
   }
   return "";
+}
+
+function extractPublicRoutineConfig(rawAiContext: string): PublicLessonRoutineConfig | null {
+  try {
+    const config = lessonRoutineConfigFromAiContext(rawAiContext);
+    return config ? publicLessonRoutineConfig(config) : null;
+  } catch {
+    return null;
+  }
 }
 
 function extractNumber(prop: NotionProperty | undefined): number {
@@ -418,13 +441,15 @@ async function mapPage(
     const pollKind = rawKind === "short-answer" || rawKind === "multiple-choice" || rawKind === "fist-to-five"
       ? rawKind
       : "";
+    const stateId = extractText(step["State ID"]);
+    const rawAiContext = extractText(step["AI Context"]);
     return {
       id: related.id,
       title: extractFirstText(step, ["Step title", "Name", "Step"]),
       order: extractNumber(step["Order"]),
       startMinute: extractNumber(step["Start Minute"]),
       duration: extractNumber(step["Duration"]),
-      stateId: extractText(step["State ID"]),
+      stateId,
       studentDirections: extractText(step["Student Directions"]),
       teacherNotes: extractText(step["Teacher Notes"]),
       paperTask: extractText(step["Paper Task"]),
@@ -434,7 +459,9 @@ async function mapPage(
       choices: splitList(extractText(step["Choices"])),
       correctAnswer: extractText(step["Correct Answer"]),
       standard: extractText(step["Standard"]),
-      aiContext: extractText(step["AI Context"]),
+      aiContext: parseLessonStepAiContext(stripLessonRoutineConfig(rawAiContext)).userText,
+      publicSurfaceMode: resolvePublicSurfaceMode(rawAiContext, stateId),
+      routineConfig: extractPublicRoutineConfig(rawAiContext),
       advance: extractText(step["Advance"]),
       required: step["Required"]?.checkbox ?? false,
       linkUrl: extractFirstText(step, ["Link", "Link URL"])

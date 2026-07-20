@@ -1,0 +1,17 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2021",
+    "lib": ["ES2021", "DOM"],
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "noEmit": false,
+    "outDir": "../.tmp-mastery",
+    "rootDir": "../src/lib",
+    "incremental": false,
+    "isolatedModules": false,
+    "plugins": []
+  },
+  "include": ["../src/lib/liveFlowPrivacy.ts"],
+  "exclude": ["../node_modules"]
+}
