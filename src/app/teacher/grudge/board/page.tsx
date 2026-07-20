@@ -149,6 +149,8 @@ export default function GrudgeBoardPage() {
         {round && phase !== "done" && (
           <button className="gb-link" onClick={() => void act({ action: "end-round", roundId: round.id })}>Back to board</button>
         )}
+        {/* The persistent panel screen - follows whatever game is on. */}
+        <a className="gb-link" href="/teacher/scoreboard">Scoreboard</a>
       </header>
 
       <main className="gb-view">

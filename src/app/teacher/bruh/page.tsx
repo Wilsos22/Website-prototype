@@ -423,7 +423,7 @@ export default function BruhAdminPage() {
           </button>
           {note && <span className="br-note">{note}</span>}
           <span className="br-links">
-            <a href="/teacher/bruh/scoreboard">Scoreboard</a>
+            <a href="/teacher/scoreboard">Scoreboard</a>
             <a href="/teacher/bruh/remote">Remote</a>
           </span>
         </div>

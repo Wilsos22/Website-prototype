@@ -258,7 +258,9 @@ export default function BruhBoardPage() {
             Back to board
           </button>
         )}
-        <a className="br-link" href={`/teacher/bruh/scoreboard?game=${encodeURIComponent(gameId)}`}>Scoreboard</a>
+        {/* The persistent panel screen - it follows whatever game is on, so it
+            never needs a game id. */}
+        <a className="br-link" href="/teacher/scoreboard">Scoreboard</a>
       </header>
 
       <main className="br-view">

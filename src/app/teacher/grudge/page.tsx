@@ -293,7 +293,7 @@ export default function GrudgeAdminPage() {
           </button>
           {note && <span className="gb-note">{note}</span>}
           <span className="gb-links">
-            <a href="/teacher/grudge/scoreboard">Scoreboard</a>
+            <a href="/teacher/scoreboard">Scoreboard</a>
             <a href="/teacher/grudge/remote">Remote</a>
           </span>
         </div>
