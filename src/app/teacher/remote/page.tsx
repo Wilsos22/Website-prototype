@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import CityRoutesPanel from "@/components/CityRoutesPanel";
 import {
   REMOTE_COMMAND_STALE_MS,
   canRevealM2T1L1FinalScore,
@@ -1255,6 +1256,8 @@ export default function TeacherRemotePage() {
                     ) : null}
                   </section>
                 ) : null}
+
+                <CityRoutesPanel sessionId={session.id} />
 
                 <details
                   className="remote-utilities"

@@ -69,6 +69,23 @@ cross-day memory note in the console woven into her context; personality tuned
 to complaining-teen, less Red Bull, shorter replies)
 
 ## In progress
+- **City Routes v1** (7/19) — the private differentiated release every M1.T1 lesson
+  references. After the two-question readiness check, students split into three
+  temporary support routes announced only as rotating park names (Yosemite,
+  Acadia, ... — a deliberately connotation-free ten-name bank in
+  `src/lib/cityRoutes.ts`), so no public screen ever shows a score, tier, or
+  ability label. Pure engine (deterministic name+meaning rotation per lesson code
+  + shuffle salt; 2/2 = independent, 1/2 = partner, 0/2 = teacher-guided;
+  correct-but-low-Fist-to-Five flags a teacher check, never demotes; no answers =
+  needs assignment). Server-only tables (`supabase/city-routes.sql`, mastery-style
+  lockdown), teacher API `/api/live/city-routes` (gated), student card API
+  `/api/session/city-route` (returns city/destination/materials/first action
+  only), review/override/shuffle/release panel on the iPad Remote, and the
+  student card on `/live-flow` during small-group and independent states.
+  Code + migration done; waiting on Steele to run `supabase/city-routes.sql`
+  and a live run. Deferred: projector city-to-location key, timed stagger
+  (encoded in first-action copy for now), per-lesson destination/materials
+  editing, arrival receipts.
 - **Grudge Ball** — second live team review game, forked from BRUH's engine (shares
   the question loop, grading, and `bruh_sets` banks; separate `grudge_*` tables so
   BRUH cannot regress). Same answer/reveal/explain, then the reward beat becomes

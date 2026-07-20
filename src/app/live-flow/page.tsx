@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import ClassroomSpinner from "@/components/ClassroomSpinner";
+import CityRouteCard from "@/components/CityRouteCard";
 import { getSupabase } from "@/lib/supabase";
 import { SECURE_STUDENT_DATA, studentApiRequest } from "@/lib/studentApi";
 import { CLOSEOUT_DIRECTIONS } from "@/lib/classStates";
@@ -653,6 +654,14 @@ export default function LiveFlowPage() {
                   </article>
                 ))}
               </section>
+            ) : null}
+            {!activePoll && liveSessionId && hasStudentSession ? (
+              <CityRouteCard
+                sessionId={liveSessionId}
+                studentId={getStoredStudentSession()?.studentId || null}
+                studentName={studentName}
+                active={flow?.state?.id === "small-group" || flow?.state?.id === "independent"}
+              />
             ) : null}
             {activePoll ? activePoll.stage === "responding" ? (
               <section className="lf-poll">
