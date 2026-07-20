@@ -6,6 +6,7 @@
 // teacher releases routes.
 
 import { useEffect, useRef, useState } from "react";
+import { SECURE_STUDENT_DATA, studentApiRequest } from "@/lib/studentApi";
 
 interface CityCard {
   city: string;
@@ -13,6 +14,11 @@ interface CityCard {
   materials: string;
   firstAction: string;
   releasedAt: string | null;
+}
+
+interface CardResponse {
+  status?: string;
+  card?: CityCard;
 }
 
 interface Props {
@@ -35,15 +41,23 @@ export default function CityRouteCard({ sessionId, studentId, studentName, activ
     const fetchCard = async () => {
       try {
         const params = new URLSearchParams({ sessionId });
-        if (studentId) params.set("studentId", studentId);
-        if (studentName) params.set("name", studentName);
-        const res = await fetch(`/api/session/city-route?${params.toString()}`);
-        if (!res.ok) return;
-        const body = await res.json();
+        let body: CardResponse;
+        if (SECURE_STUDENT_DATA) {
+          // Secure rollout: identity comes from the verified student token,
+          // never from claimed query params.
+          body = await studentApiRequest<CardResponse>(`/api/student/city-route?${params.toString()}`);
+        } else {
+          if (studentId) params.set("studentId", studentId);
+          if (studentName) params.set("name", studentName);
+          const res = await fetch(`/api/student/city-route?${params.toString()}`, { cache: "no-store" });
+          if (!res.ok) return;
+          body = await res.json();
+        }
         if (!alive) return;
         setCard(body.status === "released" && body.card ? body.card : null);
       } catch {
-        // Network blip - keep whatever we last knew and try again next tick.
+        // Network blip or expired student session - keep whatever we last
+        // knew and try again next tick.
       }
     };
 

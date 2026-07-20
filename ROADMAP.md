@@ -79,8 +79,10 @@ to complaining-teen, less Red Bull, shorter replies)
   correct-but-low-Fist-to-Five flags a teacher check, never demotes; no answers =
   needs assignment). Server-only tables (`supabase/city-routes.sql`, mastery-style
   lockdown), teacher API `/api/live/city-routes` (gated), student card API
-  `/api/session/city-route` (returns city/destination/materials/first action
-  only), review/override/shuffle/release panel on the iPad Remote, and the
+  `/api/student/city-route` (dual-mode like session-state: verified identity
+  under the secure rollout, claimed id in transitional mode; returns
+  city/destination/materials/first action only), review/override/shuffle/release
+  panel on the iPad Remote, and the
   student card on `/live-flow` during small-group and independent states.
   Code + migration done; waiting on Steele to run `supabase/city-routes.sql`
   and a live run. Deferred: projector city-to-location key, timed stagger
