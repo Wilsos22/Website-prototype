@@ -13,6 +13,7 @@ const TEACHER = [
   { href: "/teacher/challenges", label: "Games" },
   { href: "/teacher/bruh", label: "BRUH" },
   { href: "/teacher/grudge", label: "Grudge" },
+  { href: "/teacher/scoreboard", label: "Scoreboard" },
   { href: "/teacher/assignments", label: "Practice" },
   { href: "/teacher/exit-tickets", label: "Exit" },
   { href: "/teacher/checkpoints", label: "Checks" },
