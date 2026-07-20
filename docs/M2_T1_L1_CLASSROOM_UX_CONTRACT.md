@@ -39,7 +39,7 @@ This contract freezes the classroom roles and layout rules that must survive lat
 
 - Warm-up remains the assigned Google Form: three fluency and two prior-learning retrieval questions. The class code opens the student homepage; the amber Warm-up action opens the Form. No teacher-by-teacher admission is required in the normal path.
 - Warm-up and review do not show the learning intention or success criterion. Review is teacher-led and does not ask students to correct or resubmit work.
-- The learning check shows the learning intention and exactly one selected `I can` success criterion.
+- The learning intention and exactly one selected `I can` success criterion are revealed immediately after the launch hook, read aloud by two spinner-selected students. The same target returns on screen at the midlesson learning check, before the Fist-to-Five. It never appears during warm-up or review.
 - Discussion and Error Analysis use three two-minute rounds that include Think and Write, Discuss and Revise, then Share. Sentence stems and vocabulary remain visible on the support surface.
 - Independent work is paper-first. The website shows required work, due and turn-in information, help path, optional support, and challenge without duplicating the paper problems. A linked resource must not replace the Main instructional screen.
 - Exit ticket is a separate formative state. Closeout only directs students to put away supplies and clean their area.

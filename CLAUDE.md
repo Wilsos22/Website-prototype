@@ -176,6 +176,12 @@ Design is locked (Steele's "Independent Proficiency System") - build it, do not 
   pattern; there is no shared CSS module beyond `globals.css`.
 - `SiteNav` has `teacher` and `student` variants (hardcoded link arrays). Per-class-state accent colors
   live in `src/lib/classStates.ts`.
+- Manipulative layout convention: when a tool pairs a reference set (rules, steps, vocabulary) with a
+  workspace, put the reference in a LARGE LEFT RAIL, the thing being acted on in the center, and the
+  product the student is building on the right. Never stack reference material under the workspace or
+  pile it into the middle - repeated classroom feedback is "too much stuff in the center, I don't know
+  where to look." `/divisibility` is the reference implementation; `/ladder-method` and `/area-model`
+  are queued to follow it.
 - Copy tone: friendly, playful, second person ("Hey {firstName}!", "Today's plan", "Start the warm-up").
   Teach how to think, not what to think. Still: no emojis.
 

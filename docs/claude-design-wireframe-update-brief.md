@@ -20,8 +20,8 @@ Use Albert Sans with bold, direct hierarchy. The experience should feel inviting
 - Remove every floating timer pill from the working area. Put time in a fixed top frame.
 - Remove projector timer toolbars and lists of possible lesson states.
 - The Pace projector shows the timer and only the current directions.
-- Remove the learning intention and success criterion from warm-up, review, launch, concrete, representational, and abstract frames.
-- First reveal the learning intention and one selected `I can` success criterion at the midlesson learning check.
+- Remove the learning intention and success criterion from warm-up and review frames.
+- Reveal the learning intention and one selected `I can` success criterion immediately after the launch hook, read aloud by two spinner-selected students. Show the same target again at the midlesson learning check, before the Fist-to-Five.
 - Never show multiple success-criteria choices to students.
 - Make Chromebook type compact and readable rather than projector-sized.
 - The Chromebook arrival sequence is class code, `Code accepted`, student homepage, assigned Google Form warm-up, return to the homepage with solo challenge activities unlocked, then automatic live-lesson entry when the teacher advances beyond Warm-Up.
@@ -79,7 +79,9 @@ Create synchronized frames for all four roles across this exact sequence:
 10. Exit ticket, 3 minutes
 11. Closeout, 1 minute
 
-For each phase, label what appears on the Main projector, Pace projector, Chromebook, and iPad Remote. Do not add extra timed phases.
+Insert a one-minute learning intention and success criterion reveal immediately after Launch, read by two spinner-selected students. Take that minute from whichever phase the lesson can best afford; M1.T1.L2-D1 takes it from Concrete and M1.T1.L2-D2 takes it from independent work.
+
+For each phase, label what appears on the Main projector, Pace projector, Chromebook, and iPad Remote. Do not add other extra timed phases.
 
 ## Required component and state frames
 
@@ -128,8 +130,8 @@ Name the export with the lesson code and revision date. Place the new package in
 - The two projectors are visibly different roles.
 - The Chromebook has one current action and no persistent code.
 - The iPad is both the remote and the writing surface without replacing the problem on the main projector.
-- Warm-up has no lesson target.
-- Midlesson has exactly one `I can` statement.
+- Warm-up and review have no lesson target.
+- The target appears exactly twice, after the hook and at midlesson, and carries exactly one `I can` statement both times.
 - City Routes privately direct each student without exposing scores or permanent group labels, and both city names and route meanings rotate between lessons.
 - Discussion includes stems and vocabulary.
 - Start lesson enables automatic pacing; Pause holds the state, and timer zero advances after its transition.
