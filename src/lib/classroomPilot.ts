@@ -190,10 +190,25 @@ export function inferClassroomStage(stateId: string | null | undefined, label = 
   ) return "lesson-targets";
   if (value.includes("ipad-kid") || value.includes("ipad kid")) return "evergreen";
   if (value.includes("warm") || value.includes("review")) return "evergreen";
-  if (value.includes("learning-check") || value.includes("midlesson") || value.includes("fist") || value.includes("poll")) return "learning-check";
+  if (
+    value.includes("learning-check")
+    || value.includes("midlesson")
+    || value.includes("fist")
+    || value.includes("poll")
+    || value.includes("question")
+  ) return "learning-check";
   if (value.includes("represent")) return "representational";
   if (value.includes("abstract")) return "abstract";
   if (value.includes("concrete") || value.includes("manip")) return "concrete";
+  // Small-group rotations and gallery walks are release routines: students work the
+  // required set along different routes. Match them before the generic "group" test,
+  // which would otherwise theme a 12-minute work block as a discussion.
+  if (
+    value.includes("small-group")
+    || value.includes("small group")
+    || value.includes("gallery")
+    || value.includes("rotation")
+  ) return "independent";
   if (value.includes("partner") || value.includes("group")) return "discussion";
   if (value.includes("independent") || value.includes("you-do") || value.includes("you do")) return "independent";
   if (value.includes("exit")) return "exit";
