@@ -203,8 +203,15 @@ export default function ClassroomStagePage() {
   const showIpadKidSpinner = state?.id === "ipad-kid";
   const routineConfig = presentation?.routineConfig || null;
   const spinnerSyncScope = `${flow?.sequence?.currentIndex ?? -1}:${presentation?.notionStepId || state?.id || "spinner"}`;
-  const showLessonTargets = theme.id === "lesson-targets" || theme.id === "learning-check";
-  const isLearningCheck = theme.id === "learning-check";
+  // Same reason: the target belongs to the two reveal states, not to every state
+  // that borrows their accent.
+  const showLessonTargets = state?.id === "learning-target-readers" || state?.id === "learning-check";
+  // Colour and content are separate concerns. Several states share the
+  // learning-check THEME for its accent (question, poll, fist-to-five), but only
+  // the dedicated learning-check STATE renders the bare learning-target view.
+  // Keying this off the theme would make a readiness question display the
+  // learning intention instead of its own question.
+  const isLearningCheck = state?.id === "learning-check";
   const selectedCriterion = publicSuccessCriterion(lesson?.selectedSuccessCriterion);
   const embeddedResourceUrl = resource?.url.includes("docs.google.com/forms")
     ? `${resource.url}${resource.url.includes("?") ? "&" : "?"}embedded=true`
