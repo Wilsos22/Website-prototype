@@ -42,13 +42,20 @@ const CLASS_MODE_TARGETS = new Set([
   "/term-identifier",
   "/exit-ticket",
   "/checkpoint",
+  "/bruh",
+  "/grudge",
 ]);
 
 type StudentSessionState = {
   broadcast: string | null;
   status: string;
-  live_flow: { tool?: { route?: string } | null } | null;
+  live_flow: {
+    state?: { id?: string | null } | null;
+    tool?: { route?: string } | null;
+  } | null;
 };
+
+export const STUDENT_SESSION_READY_EVENT = "bdm-student-session-ready";
 
 function isTeacherRoute(pathname: string) {
   return TEACHER_ROUTE_PREFIXES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
@@ -84,16 +91,15 @@ export default function ClassSync() {
       router.replace(currentPath === LIVE_FLOW_ROUTE ? "/" : currentPath);
       return;
     }
-    // A device that's running the teacher session shouldn't be controlled by
-    // its own broadcast — UNLESS this specific tab joined as a student (lets one
-    // browser test teacher + student side by side).
-    if (getStoredTeacherSessionId() && !isStudentTab()) return;
-    if (hasClassModeExitMarker()) return;
-    const sessionId = getStoredStudentSessionId();
-    if (!sessionId) return;
-
     let stop = false;
     const tick = async () => {
+      // Re-read browser state on every tick. A Chromebook can become verified
+      // after this component mounts, when the warm-up response links it to the
+      // roster and the student homepage stores the joined session.
+      if (getStoredTeacherSessionId() && !isStudentTab()) return;
+      if (hasClassModeExitMarker()) return;
+      const sessionId = getStoredStudentSessionId();
+      if (!sessionId) return;
       const currentPath = pathRef.current || "";
       if (isStudentSwitchRoute(currentPath)) return;
       if (isTeacherRoute(currentPath)) return;
@@ -138,7 +144,14 @@ export default function ClassSync() {
       // only thing that fully releases them.
       let target: string | null;
       if (d.broadcast === LIVE_FLOW_MODE) {
-        target = d.live_flow?.tool?.route || LIVE_FLOW_ROUTE;
+        // Warm-up stays on the student homepage. The assigned Google Form opens
+        // in a second tab, and verified students may use solo challenge games
+        // until the teacher advances into the instructional lesson flow. Also
+        // hold the homepage during the brief handoff before state zero arrives.
+        const liveStateId = d.live_flow?.state?.id || null;
+        target = !liveStateId || liveStateId === "warmup"
+          ? (currentPath === LIVE_FLOW_ROUTE ? "/" : null)
+          : d.live_flow?.tool?.route || LIVE_FLOW_ROUTE;
       } else if (d.broadcast === "free") {
         target = null; // teacher released students to browse on their own
       } else if (d.broadcast && CLASS_MODE_TARGETS.has(d.broadcast)) {
@@ -152,9 +165,15 @@ export default function ClassSync() {
         router.push("/lesson");
       }
     };
-    tick();
+    const handleStudentSessionReady = () => { void tick(); };
+    void tick();
     const id = setInterval(tick, 3000);
-    return () => { stop = true; clearInterval(id); };
+    window.addEventListener(STUDENT_SESSION_READY_EVENT, handleStudentSessionReady);
+    return () => {
+      stop = true;
+      clearInterval(id);
+      window.removeEventListener(STUDENT_SESSION_READY_EVENT, handleStudentSessionReady);
+    };
   }, [supabase, router, pathname]);
 
   return null;

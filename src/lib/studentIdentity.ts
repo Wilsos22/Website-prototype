@@ -21,6 +21,11 @@ export type AnonymousStudentAuth = {
   authUserId: string;
 };
 
+export type StudentAuth = {
+  authUserId: string;
+  isAnonymous: boolean;
+};
+
 type StudentRow = {
   id: string;
   full_name: string;
@@ -102,13 +107,18 @@ async function claimGoogleRosterRow(user: User): Promise<StudentRow> {
   const email = verifiedGoogleEmail(user);
   const { data, error } = await db
     .from("students")
-    .select("id,full_name,period_id,email,auth_user_id")
-    .ilike("email", email)
-    .maybeSingle();
+    .select("id,full_name,period_id,email,auth_user_id");
   if (error) throw new StudentIdentityError("Student account lookup failed.", 500, "roster_lookup_failed");
-  if (!data) throw new StudentIdentityError("This Google account is not on a class roster.", 403, "not_on_roster");
+  const matches = (data ?? []).filter((row) => row.email?.trim().toLowerCase() === email);
+  if (matches.length !== 1) {
+    throw new StudentIdentityError(
+      matches.length ? "This Google email appears more than once on the roster." : "This Google account is not on a class roster.",
+      matches.length ? 409 : 403,
+      matches.length ? "duplicate_roster_email" : "not_on_roster",
+    );
+  }
 
-  const candidate = data as StudentRow;
+  const candidate = matches[0] as StudentRow;
   if (candidate.auth_user_id === user.id) return candidate;
 
   if (candidate.auth_user_id) {
@@ -181,6 +191,16 @@ export async function requireVerifiedStudent(request: Request): Promise<Verified
     email: student.email,
     authUserId: user.id,
     identityMethod,
+  };
+}
+
+export async function requireStudentAuth(request: Request): Promise<StudentAuth> {
+  const user = await authenticatedUser(request);
+  if (!user.is_anonymous) verifiedGoogleEmail(user);
+
+  return {
+    authUserId: user.id,
+    isAnonymous: Boolean(user.is_anonymous),
   };
 }
 

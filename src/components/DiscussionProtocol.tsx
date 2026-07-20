@@ -1,45 +1,34 @@
 "use client";
 
-// Discussion Protocol - a guided multi-phase routine launched from the
+// Discussion Protocol - a guided three-round routine launched from the
 // Discussion state in the control panel:
-//   1. Thinking Time (silent, 1 min, optional music)
-//   2. Write (1 min, uploadable image)
-//   3. Discuss with Your Table (30s, uploadable image/video)
-//   4. Revise (30s)
-//   5. Share - random single-student picker
-// Each phase alerts at the end and waits for you to tap "Next phase".
-// Durations, images/videos, and music are uploadable and saved on this computer.
+//   1. Think + Write (2 min)
+//   2. Discuss + Revise (2 min)
+//   3. Share with the spinner (2 min)
+// Each round advances automatically while lesson pacing is on and holds at zero
+// when pacing is manual. Images, videos, and music are saved on this computer.
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
   isDiscussionRemoteAction,
+  shouldRunNavigationDestination,
   type DiscussionPhaseSnapshot,
   type TeacherRemoteCommand,
 } from "@/lib/liveClassFlow";
-
-interface Phase {
-  id: string;
-  label: string;
-  sub: string;
-  visual: string;
-  defaultSecs: number;
-  timed: boolean;
-}
+import {
+  DISCUSSION_ROUND_COUNT,
+  DISCUSSION_ROUNDS,
+  discussionRoundForAction,
+  discussionRoundIndex,
+  nextDiscussionRound,
+  normalizeDiscussionPhaseSnapshot,
+} from "@/lib/discussionProtocol";
 
 type StudentSupports = {
   sentenceStems: string;
   keyVocabulary: string;
 };
 
-const PHASES: Phase[] = [
-  { id: "think", label: "Think", sub: "Think quietly for one minute.", visual: "01", defaultSecs: 60, timed: true },
-  { id: "marker", label: "Write", sub: "Record one idea or strategy.", visual: "02", defaultSecs: 60, timed: true },
-  { id: "table", label: "Discuss", sub: "Use the stems and vocabulary with your group.", visual: "03", defaultSecs: 30, timed: true },
-  { id: "revise", label: "Revise", sub: "Change or strengthen your response.", visual: "04", defaultSecs: 30, timed: true },
-  { id: "share", label: "Share", sub: "Prepare to explain your thinking.", visual: "05", defaultSecs: 0, timed: false },
-];
-
-const LS_DUR = "bdm-disc-durations-v1";
 const LS_CLASSES = "bdm-spinner-classes-v1";
 const LS_CURRENT = "bdm-spinner-current-v1";
 const LS_STUDENT_MEDIA = "bdm-disc-student-media-v1";
@@ -148,40 +137,36 @@ function parseVocabulary(rawText: string): string[] {
 export default function DiscussionProtocol({
   onClose,
   onFlowChange,
+  onComplete,
+  automaticPacing = false,
   initialFlow,
   remoteCommand,
   onRemoteCommandHandled,
 }: {
   onClose?: () => void;
   onFlowChange?: (snapshot: DiscussionPhaseSnapshot) => void;
+  onComplete?: () => void;
+  automaticPacing?: boolean;
   initialFlow?: DiscussionPhaseSnapshot | null;
   remoteCommand?: TeacherRemoteCommand | null;
   onRemoteCommandHandled?: (command: TeacherRemoteCommand) => void;
 }) {
-  const initialIndex = initialFlow
-    ? Math.max(0, PHASES.findIndex((candidate) => candidate.id === initialFlow.id))
-    : 0;
-  const initialPhase = PHASES[initialIndex];
-  const initialSeconds = initialFlow?.timed
-    ? initialFlow.secondsLeft ?? initialFlow.totalSeconds ?? initialPhase.defaultSecs
-    : initialPhase.defaultSecs;
-  const [durations, setDurations] = useState<Record<string, number>>(() => (
-    initialFlow?.timed && initialFlow.totalSeconds !== null
-      ? { [initialFlow.id]: initialFlow.totalSeconds }
-      : {}
-  ));
+  const normalizedInitialFlow = normalizeDiscussionPhaseSnapshot(initialFlow);
+  const initialIndex = normalizedInitialFlow ? discussionRoundIndex(normalizedInitialFlow.id) : 0;
+  const initialPhase = DISCUSSION_ROUNDS[initialIndex];
+  const initialSeconds = normalizedInitialFlow?.secondsLeft ?? initialPhase.defaultSeconds;
   const [idx, setIdx] = useState(initialIndex);
   const [secondsLeft, setSecondsLeft] = useState(initialSeconds);
-  const [running, setRunning] = useState(Boolean(initialFlow?.timed && initialFlow.running));
-  const [finished, setFinished] = useState(Boolean(initialFlow?.finished));
+  const [running, setRunning] = useState(Boolean(normalizedInitialFlow?.running));
+  const [finished, setFinished] = useState(Boolean(normalizedInitialFlow?.finished));
   const [setup, setSetup] = useState(false);
   const [media, setMedia] = useState<Record<string, { url: string; type: string }>>({});
   const [studentMediaUrls, setStudentMediaUrls] = useState<Record<string, string>>({});
   const [studentSupports, setStudentSupports] = useState<Record<string, StudentSupports>>(DEFAULT_STUDENT_SUPPORTS);
 
   // share picker
-  const [shareName, setShareName] = useState<string>(initialFlow?.selectedSharer || "Waiting");
-  const [selectedSharer, setSelectedSharer] = useState<string | null>(initialFlow?.selectedSharer || null);
+  const [shareName, setShareName] = useState<string>(normalizedInitialFlow?.selectedSharer || "Waiting");
+  const [selectedSharer, setSelectedSharer] = useState<string | null>(normalizedInitialFlow?.selectedSharer || null);
   const [shareSpinning, setShareSpinning] = useState(false);
   const [shareClass, setShareClass] = useState<string>("");
 
@@ -191,44 +176,49 @@ export default function DiscussionProtocol({
   const musicRef = useRef<HTMLAudioElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const shareTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const autoProgressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handledRemoteCommandRef = useRef<string | null>(null);
-  const preserveInitialPhaseRef = useRef(Boolean(initialFlow));
+  const onCompleteRef = useRef(onComplete);
 
-  const phase = PHASES[idx];
-  const phaseSecs = (id: string) => durations[id] ?? PHASES.find((p) => p.id === id)?.defaultSecs ?? 60;
-  const phaseTotalSeconds = durations[phase.id] ?? phase.defaultSecs;
+  const phase = DISCUSSION_ROUNDS[idx];
+  const phaseTotalSeconds = phase.defaultSeconds;
   const currentSupport = studentSupports[phase.id] ?? { sentenceStems: "", keyVocabulary: "" };
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   useEffect(() => {
     const studentMediaUrl = normalizeStudentMediaUrl(studentMediaUrls[phase.id] || "");
     onFlowChange?.({
-      id: phase.id as DiscussionPhaseSnapshot["id"],
+      id: phase.id,
       label: phase.label,
-      subtitle: phase.sub,
-      timed: phase.timed,
-      totalSeconds: phase.timed ? phaseTotalSeconds : null,
-      secondsLeft: phase.timed ? secondsLeft : null,
+      subtitle: phase.subtitle,
+      timed: true,
+      totalSeconds: phaseTotalSeconds,
+      secondsLeft,
       running,
       finished,
       media: studentMediaUrl ? { url: studentMediaUrl, type: inferStudentMediaType(studentMediaUrl) } : null,
       sentenceStems: parseSentenceStems(currentSupport.sentenceStems),
       keyVocabulary: parseVocabulary(currentSupport.keyVocabulary),
       selectedSharer: phase.id === "share" ? selectedSharer : null,
+      roundNumber: phase.roundNumber,
+      roundCount: DISCUSSION_ROUND_COUNT,
     });
-  }, [currentSupport.keyVocabulary, currentSupport.sentenceStems, finished, onFlowChange, phase.id, phase.label, phase.sub, phase.timed, phaseTotalSeconds, running, secondsLeft, selectedSharer, studentMediaUrls]);
+  }, [currentSupport.keyVocabulary, currentSupport.sentenceStems, finished, onFlowChange, phase.id, phase.label, phase.roundNumber, phase.subtitle, phaseTotalSeconds, running, secondsLeft, selectedSharer, studentMediaUrls]);
 
   useEffect(() => {
-    const incomingSharer = initialFlow?.id === "share" ? initialFlow.selectedSharer || null : null;
+    const incomingFlow = normalizeDiscussionPhaseSnapshot(initialFlow);
+    const incomingSharer = incomingFlow?.id === "share" ? incomingFlow.selectedSharer || null : null;
     if (!incomingSharer || incomingSharer === selectedSharer) return;
     setSelectedSharer(incomingSharer);
     setShareName(incomingSharer);
-  }, [initialFlow?.id, initialFlow?.selectedSharer, selectedSharer]);
+  }, [initialFlow, selectedSharer]);
 
-  // load durations + media + share class
+  // Load media, student supports, and the share class.
   useEffect(() => {
     try {
-      const d = localStorage.getItem(LS_DUR);
-      if (d) setDurations(JSON.parse(d));
       const studentMedia = localStorage.getItem(LS_STUDENT_MEDIA);
       if (studentMedia) setStudentMediaUrls(JSON.parse(studentMedia) as Record<string, string>);
       const supports = localStorage.getItem(LS_STUDENT_SUPPORTS);
@@ -242,7 +232,7 @@ export default function DiscussionProtocol({
     } catch { /* ignore */ }
     (async () => {
       const next: Record<string, { url: string; type: string }> = {};
-      for (const p of PHASES) {
+      for (const p of DISCUSSION_ROUNDS) {
         const blob = await idbGet(`disc:${p.id}`).catch(() => undefined);
         if (blob) next[p.id] = { url: URL.createObjectURL(blob), type: blob.type };
       }
@@ -250,18 +240,10 @@ export default function DiscussionProtocol({
     })();
     return () => {
       if (tickRef.current) clearInterval(tickRef.current);
+      if (autoProgressTimerRef.current) clearTimeout(autoProgressTimerRef.current);
       shareTimers.current.forEach(clearTimeout);
     };
   }, []);
-
-  useEffect(() => {
-    if (preserveInitialPhaseRef.current) {
-      preserveInitialPhaseRef.current = false;
-      return;
-    }
-    secRef.current = phaseSecs(phase.id); setSecondsLeft(secRef.current); setRunning(false); setFinished(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idx]);
 
   const tone = useCallback((freqs: number[], gap = 0.22, dur = 0.18) => {
     try {
@@ -296,7 +278,7 @@ export default function DiscussionProtocol({
   useEffect(() => {
     if (!running) return;
     tickRef.current = setInterval(() => {
-      const n = secRef.current - 1; secRef.current = n; setSecondsLeft(n);
+      const n = Math.max(0, secRef.current - 1); secRef.current = n; setSecondsLeft(n);
       if (n <= 5 && n >= 1) tone([660], 0, 0.07);
       if (n <= 0) {
         if (tickRef.current) clearInterval(tickRef.current);
@@ -308,16 +290,53 @@ export default function DiscussionProtocol({
     return () => { if (tickRef.current) clearInterval(tickRef.current); };
   }, [running, tone, stopMusic]);
 
+  useEffect(() => {
+    if (!finished || !automaticPacing) return;
+    autoProgressTimerRef.current = setTimeout(() => {
+      autoProgressTimerRef.current = null;
+      const nextRound = nextDiscussionRound(phase.id);
+      if (nextRound) {
+        goPhase(discussionRoundIndex(nextRound.id), true);
+        return;
+      }
+      onCompleteRef.current?.();
+    }, 2600);
+    return () => {
+      if (autoProgressTimerRef.current) clearTimeout(autoProgressTimerRef.current);
+      autoProgressTimerRef.current = null;
+    };
+    // The canonical round transition is driven only by the completed round.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [automaticPacing, finished, idx, phase.id]);
+
   function toggleRun() {
-    if (!phase.timed) return;
-    if (secondsLeft <= 0) { secRef.current = phaseSecs(phase.id); setSecondsLeft(secRef.current); setFinished(false); }
+    if (secondsLeft <= 0) { secRef.current = phase.defaultSeconds; setSecondsLeft(secRef.current); setFinished(false); }
     const willRun = !running; setRunning(willRun);
     if (willRun) { playPhaseMusic(phase.id); if (videoRef.current) videoRef.current.play().catch(() => {}); }
     else { if (musicRef.current) musicRef.current.pause(); if (videoRef.current) videoRef.current.pause(); }
   }
-  function reset() { secRef.current = phaseSecs(phase.id); setSecondsLeft(secRef.current); setRunning(false); setFinished(false); stopMusic(); }
+  function reset() { goPhase(idx, false); }
   function adjust(d: number) { secRef.current = Math.max(0, secRef.current + d); setSecondsLeft(secRef.current); if (d > 0) setFinished(false); }
-  function goPhase(n: number) { stopMusic(); if (n >= 0 && n < PHASES.length) setIdx(n); }
+  function goPhase(n: number, startImmediately = false) {
+    if (n < 0 || n >= DISCUSSION_ROUNDS.length) return;
+    stopMusic();
+    const nextPhase = DISCUSSION_ROUNDS[n];
+    setIdx(n);
+    secRef.current = nextPhase.defaultSeconds;
+    setSecondsLeft(secRef.current);
+    setRunning(startImmediately);
+    setFinished(false);
+    if (startImmediately) void playPhaseMusic(nextPhase.id);
+  }
+  function goAdjacentPhase(n: number) {
+    const keepRunning = shouldRunNavigationDestination(
+      automaticPacing ? "automatic" : "manual",
+      running,
+      finished,
+      null,
+    );
+    goPhase(n, keepRunning);
+  }
 
   useEffect(() => {
     if (
@@ -328,17 +347,23 @@ export default function DiscussionProtocol({
     handledRemoteCommandRef.current = remoteCommand.nonce;
 
     const goRemotePhase = (targetIndex: number) => {
-      if (targetIndex === idx) reset();
-      else goPhase(targetIndex);
+      if (targetIndex === idx) {
+        reset();
+        return;
+      }
+      const keepRunning = shouldRunNavigationDestination(
+        automaticPacing ? "automatic" : "manual",
+        running,
+        finished,
+        null,
+      );
+      goPhase(targetIndex, keepRunning);
     };
 
-    if (remoteCommand.action === "discussion-think") goRemotePhase(0);
-    else if (remoteCommand.action === "discussion-write") goRemotePhase(1);
-    else if (remoteCommand.action === "discussion-discuss") goRemotePhase(2);
-    else if (remoteCommand.action === "discussion-revise") goRemotePhase(3);
-    else if (remoteCommand.action === "discussion-share") goRemotePhase(4);
-    else if (remoteCommand.action === "discussion-previous") goPhase(idx - 1);
-    else if (remoteCommand.action === "discussion-next") goPhase(idx + 1);
+    const requestedRound = discussionRoundForAction(remoteCommand.action);
+    if (requestedRound) goRemotePhase(discussionRoundIndex(requestedRound.id));
+    else if (remoteCommand.action === "discussion-previous") goAdjacentPhase(idx - 1);
+    else if (remoteCommand.action === "discussion-next") goAdjacentPhase(idx + 1);
     else if (remoteCommand.action === "discussion-restart") reset();
     else if (remoteCommand.action === "discussion-toggle") toggleRun();
 
@@ -348,12 +373,6 @@ export default function DiscussionProtocol({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remoteCommand?.nonce]);
 
-  function saveDurations(id: string, secs: number) {
-    const clamped = Math.max(5, Math.min(600, Math.round(secs) || 5));
-    const next = { ...durations, [id]: clamped }; setDurations(next);
-    try { localStorage.setItem(LS_DUR, JSON.stringify(next)); } catch { /* ignore */ }
-    if (id === phase.id && !running) { secRef.current = clamped; setSecondsLeft(clamped); }
-  }
   function saveStudentMediaUrl(id: string, url: string) {
     const next = { ...studentMediaUrls, [id]: url };
     if (!url.trim()) delete next[id];
@@ -472,9 +491,9 @@ export default function DiscussionProtocol({
       <header className="dp-top">
         <p className="dp-mark">Discussion</p>
         <div className="dp-steps">
-          {PHASES.map((p, i) => (
-            <span key={p.id} className={`dp-step${i === idx ? " cur" : i < idx ? " done" : ""}`} onClick={() => goPhase(i)}>
-              {i + 1}. {p.label}
+          {DISCUSSION_ROUNDS.map((p, i) => (
+            <span key={p.id} className={`dp-step${i === idx ? " cur" : i < idx ? " done" : ""}`} onClick={() => goAdjacentPhase(i)}>
+              {p.buttonLabel}
             </span>
           ))}
         </div>
@@ -486,9 +505,9 @@ export default function DiscussionProtocol({
 
       <main className="dp-main">
         <div className="dp-phase">{phase.label}</div>
-        <div className="dp-sub">{phase.sub}</div>
+        <div className="dp-sub">{phase.subtitle}</div>
 
-        {phase.id === "share" ? (
+        {phase.spinner ? (
           <>
             <div className="dp-row" style={{ justifyContent: "center" }}>
               <select className="dp-sel" value={shareClass} onChange={(e) => setShareClass(e.target.value)}>
@@ -500,60 +519,54 @@ export default function DiscussionProtocol({
             <button className="dp-a pri" onClick={spinShare} disabled={shareSpinning || classNames.length === 0}>{shareSpinning ? "Spinning..." : "Pick a sharer"}</button>
           </>
         ) : (
-          <>
-            {m ? (
-              m.type.startsWith("video") ? (
-                <video ref={videoRef} className="dp-media" src={m.url} loop playsInline />
-              ) : (
-                <img className="dp-media" src={m.url} alt={phase.label} />
-              )
+          m ? (
+            m.type.startsWith("video") ? (
+              <video ref={videoRef} className="dp-media" src={m.url} loop playsInline />
             ) : (
-              <div className="dp-visual" aria-hidden="true">{phase.visual}</div>
-            )}
-            <div className="dp-clock">{fmt(secondsLeft)}</div>
-            <div className="dp-note">{finished ? "Time. Tap Next phase." : ""}</div>
-            <div className="dp-actions">
-              <button className="dp-a pri" onClick={toggleRun}>{running ? "Pause" : secondsLeft <= 0 ? "Restart" : "Start"}</button>
-              <button className="dp-a" onClick={reset}>Reset</button>
-              <button className="dp-a" onClick={() => adjust(15)}>+15s</button>
-              <button className="dp-a" onClick={() => adjust(-15)} disabled={secondsLeft < 15}>-15s</button>
-            </div>
-          </>
+              <img className="dp-media" src={m.url} alt={phase.label} />
+            )
+          ) : (
+            <div className="dp-visual" aria-hidden="true">{phase.visual}</div>
+          )
         )}
 
+        <div className="dp-clock">{fmt(secondsLeft)}</div>
+        <div className="dp-note">{finished
+          ? automaticPacing
+            ? idx + 1 < DISCUSSION_ROUNDS.length ? "Time. Moving to the next round." : "Time. Moving to the next state."
+            : idx + 1 < DISCUSSION_ROUNDS.length ? "Time. Tap Next round." : "Time. Continue when the class is ready."
+          : ""}</div>
         <div className="dp-actions">
-          <button className="dp-a" onClick={() => goPhase(idx - 1)} disabled={idx === 0}>Back</button>
-          <button className="dp-a next" onClick={() => goPhase(idx + 1)} disabled={idx + 1 >= PHASES.length}>Next phase</button>
+          <button className="dp-a pri" onClick={toggleRun}>{running ? "Pause" : secondsLeft <= 0 ? "Restart" : "Start"}</button>
+          <button className="dp-a" onClick={reset}>Reset</button>
+          <button className="dp-a" onClick={() => adjust(15)}>+15s</button>
+          <button className="dp-a" onClick={() => adjust(-15)} disabled={secondsLeft < 15}>-15s</button>
+        </div>
+
+        <div className="dp-actions">
+          <button className="dp-a" onClick={() => goAdjacentPhase(idx - 1)} disabled={idx === 0}>Back</button>
+          <button className="dp-a next" onClick={() => goAdjacentPhase(idx + 1)} disabled={idx + 1 >= DISCUSSION_ROUNDS.length}>Next round</button>
         </div>
       </main>
 
       {setup && (
         <section className="dp-setup">
-          <h3>Set up the discussion - durations, teacher media, and student screen media</h3>
-          {PHASES.map((p) => {
+          <h3>Set up the discussion - teacher media and student screen media</h3>
+          {DISCUSSION_ROUNDS.map((p) => {
             const has = !!media[p.id];
             const support = studentSupports[p.id] ?? { sentenceStems: "", keyVocabulary: "" };
             return (
               <div className="dp-row" key={p.id}>
-                <span className="dp-rlabel">{p.visual} {p.label}</span>
-                {p.timed && (
-                  <label className="dp-hint">seconds
-                    <input className="dp-num" type="number" min={5} max={600} value={phaseSecs(p.id)}
-                      onChange={(e) => saveDurations(p.id, Number(e.target.value))} style={{ marginLeft: 8 }} />
-                  </label>
-                )}
-                {p.timed && (
-                  <>
-                    <label className="dp-up">{has ? "Replace teacher image/video" : "Upload teacher image/video"}
-                      <input type="file" accept="image/*,video/*" style={{ display: "none" }} onChange={(e) => uploadMedia(`disc:${p.id}`, e.target.files?.[0])} />
-                    </label>
-                    {has && <button className="dp-clr" onClick={() => clearMedia(`disc:${p.id}`)}>Remove teacher media</button>}
-                    <label className="dp-up">Teacher music
-                      <input type="file" accept="audio/*" style={{ display: "none" }} onChange={(e) => uploadMedia(`disc:${p.id}:music`, e.target.files?.[0], true)} />
-                    </label>
-                    <button className="dp-clr" onClick={() => clearMedia(`disc:${p.id}:music`, true)}>Clear music</button>
-                  </>
-                )}
+                <span className="dp-rlabel">{p.buttonLabel}</span>
+                <span className="dp-hint">120 seconds</span>
+                <label className="dp-up">{has ? "Replace teacher image/video" : "Upload teacher image/video"}
+                  <input type="file" accept="image/*,video/*" style={{ display: "none" }} onChange={(e) => uploadMedia(`disc:${p.id}`, e.target.files?.[0])} />
+                </label>
+                {has && <button className="dp-clr" onClick={() => clearMedia(`disc:${p.id}`)}>Remove teacher media</button>}
+                <label className="dp-up">Teacher music
+                  <input type="file" accept="audio/*" style={{ display: "none" }} onChange={(e) => uploadMedia(`disc:${p.id}:music`, e.target.files?.[0], true)} />
+                </label>
+                <button className="dp-clr" onClick={() => clearMedia(`disc:${p.id}:music`, true)}>Clear music</button>
                 <input
                   className="dp-url"
                   value={studentMediaUrls[p.id] || ""}

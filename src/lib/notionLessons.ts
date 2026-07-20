@@ -152,6 +152,10 @@ interface NotionQueryResponse {
   next_cursor?: string | null;
 }
 
+export function isExplicitlySkippedLesson(skipValue: string | null | undefined): boolean {
+  return String(skipValue || "").trim().toLowerCase() === "yes";
+}
+
 export class LessonLookupConflictError extends Error {
   readonly lessonCode: string;
 
@@ -583,7 +587,11 @@ async function queryLessons(
       const data = (await res.json()) as NotionQueryResponse;
       lessons.push(...await Promise.all(
         data.results
-          .filter((page) => !page.archived && !page.in_trash)
+          .filter((page) => (
+            !page.archived
+            && !page.in_trash
+            && !isExplicitlySkippedLesson(extractText(page.properties.Skip))
+          ))
           .map((page) => mapPage(page, token, relatedPageCache, { includeRelations: options.includeRelations })),
       ));
 
@@ -694,6 +702,7 @@ export async function getPublishedLessonById(pageId: string): Promise<LessonData
     || page.in_trash
     || !belongsToLessonDatabase(page)
     || extractText(page.properties["Publish Workflow"]) !== "Published"
+    || isExplicitlySkippedLesson(extractText(page.properties.Skip))
   ) {
     return null;
   }

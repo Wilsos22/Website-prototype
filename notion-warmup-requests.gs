@@ -17,6 +17,7 @@ const WARMUP_REQUEST_LESSON_RELATION_PROP = "Math 6 Lessons";
 const WARMUP_REQUEST_MAX_PER_RUN = 3;
 const WARMUP_REQUEST_HANDLER = "processWarmupBuildRequests";
 const WARMUP_LINKS_DATA_SOURCE_DEFAULT = "3142eba1-de37-8024-b6cc-000b38db5d17";
+const WARMUP_REQUEST_LINKS_EXPORT_SHEET = "Warm Up Links Export";
 
 function installWarmupRequestTrigger() {
   deleteTriggersForHandler_(WARMUP_REQUEST_HANDLER);
@@ -298,7 +299,7 @@ function canOpenWarmupForm_(formId) {
 
 function findWarmupExportRecordByDate_(isoDate, lessonTopic) {
   const spreadsheet = SpreadsheetApp.openById(RESPONSE_SS_ID);
-  const sheet = spreadsheet.getSheetByName(BDM_WARMUP_LINKS_EXPORT_SHEET);
+  const sheet = spreadsheet.getSheetByName(WARMUP_REQUEST_LINKS_EXPORT_SHEET);
   if (!sheet || sheet.getLastRow() < 2 || sheet.getLastColumn() < 1) return null;
 
   const range = sheet.getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn());

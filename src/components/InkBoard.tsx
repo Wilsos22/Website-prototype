@@ -7,7 +7,14 @@
 //   the iPad and the board can be different sizes and still match.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { joinInkRoom, type InkChannel, type InkMessage, type InkPoint, type InkStroke } from "@/lib/inkSync";
+import {
+  joinInkRoom,
+  type InkChannel,
+  type InkConnectionStatus,
+  type InkMessage,
+  type InkPoint,
+  type InkStroke,
+} from "@/lib/inkSync";
 
 // Smoothing + pressure helpers (module scope so render callbacks stay stable).
 function midPoint(a: InkPoint, b: InkPoint): InkPoint { return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
@@ -24,6 +31,7 @@ interface InkBoardProps {
   clearSignal?: number; // bump to clear
   exportSignal?: number; // bump to export the board as a PNG
   onExport?: (dataUrl: string) => void; // receives the flattened PNG; if absent, downloads
+  onConnectionChange?: (status: InkConnectionStatus) => void;
 }
 
 export default function InkBoard({
@@ -37,6 +45,7 @@ export default function InkBoard({
   clearSignal = 0,
   exportSignal = 0,
   onExport,
+  onConnectionChange,
 }: InkBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const bgImgRef = useRef<HTMLImageElement | null>(null);
@@ -191,7 +200,7 @@ export default function InkBoard({
         setProblemText(m.problem);
         redraw();
       }
-    });
+    }, onConnectionChange);
     channelRef.current = channel;
     if (!interactive) channel.send({ t: "hello" }); // ask the pen for current state
     return () => channel.close();
@@ -320,6 +329,37 @@ export default function InkBoard({
   }, []);
 
   const penSeenRef = useRef(false);
+  const queuedSegmentRef = useRef<Extract<InkMessage, { t: "seg" }> | null>(null);
+  const sendFrameRef = useRef<number | null>(null);
+  const flushQueuedSegment = useCallback(() => {
+    if (sendFrameRef.current !== null) {
+      window.cancelAnimationFrame(sendFrameRef.current);
+      sendFrameRef.current = null;
+    }
+    const queued = queuedSegmentRef.current;
+    queuedSegmentRef.current = null;
+    if (queued) channelRef.current?.send(queued);
+  }, []);
+  const queueSegment = useCallback((seg: Extract<InkMessage, { t: "seg" }>) => {
+    const queued = queuedSegmentRef.current;
+    if (queued && queued.id === seg.id && !queued.end && !seg.start) {
+      queued.pts.push(...seg.pts);
+    } else {
+      flushQueuedSegment();
+      queuedSegmentRef.current = { ...seg, pts: [...seg.pts] };
+    }
+    if (sendFrameRef.current === null) {
+      sendFrameRef.current = window.requestAnimationFrame(() => {
+        sendFrameRef.current = null;
+        const next = queuedSegmentRef.current;
+        queuedSegmentRef.current = null;
+        if (next) channelRef.current?.send(next);
+      });
+    }
+  }, [flushQueuedSegment]);
+
+  useEffect(() => () => flushQueuedSegment(), [flushQueuedSegment]);
+
   const onDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!interactive) return;
     if (e.pointerType === "pen") penSeenRef.current = true;
@@ -356,8 +396,8 @@ export default function InkBoard({
       t: "seg", id, color: stroke.color, erase: stroke.erase, widthFrac: stroke.widthFrac, pts,
     };
     applySeg(seg);
-    channelRef.current?.send(seg);
-  }, [interactive, toNorm, applySeg]);
+    queueSegment(seg);
+  }, [interactive, applySeg, queueSegment]);
 
   const onUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
@@ -368,6 +408,7 @@ export default function InkBoard({
     if (interactive && wasDrawing && id) {
       const stroke = byIdRef.current.get(id);
       if (stroke) {
+        flushQueuedSegment();
         const endSeg: Extract<InkMessage, { t: "seg" }> = {
           t: "seg", id, color: stroke.color, erase: stroke.erase, widthFrac: stroke.widthFrac, pts: [], end: true,
         };
@@ -375,7 +416,7 @@ export default function InkBoard({
         channelRef.current?.send(endSeg);
       }
     }
-  }, [interactive, applySeg]);
+  }, [interactive, applySeg, flushQueuedSegment]);
 
   return (
     <div style={{ position: "absolute", inset: 0, background: "#ffffff", overflow: "hidden" }}>

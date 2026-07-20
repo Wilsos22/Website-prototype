@@ -5,12 +5,25 @@
 `56ee55bb-c067-4613-8f3b-6d5810a82ced`). Steele checks things off there; agents
 should update BOTH that database and this mirror when a feature ships.
 
-Snapshot (2026-07-15):
+Snapshot (2026-07-16):
 
 ## Live
 Student home/join · Lesson page (Notion-fed) · Manipulative tools suite ·
 Live polls (stuck-poll trap fixed) · Class mode broadcast · Challenge games ·
 Today's boards · Control panel · Session controls · Rosters ·
+**BRUH, the live team review game** (7/16 — ran in class and ran well. Replaces
+the 46-slide Canva deck + buzzer receiver: the board itself shows who is in, who
+is locked out and who is right. Teacher tool only; students arrive by broadcast.
+`/teacher/bruh` setup with saved banks + 9 presets (270 questions, each
+double-verified), `/teacher/bruh/board` projector, `/teacher/bruh/remote` iPad,
+`/teacher/bruh/scoreboard` second screen, `/bruh` student. Server-authoritative
+round clock and grading; units are required when the answer names one. Tables are
+server-only. Deliberately does NOT feed the proficiency spine — it is about
+teamwork and effort, not assessment) ·
+**Weekly classroom display** (7/16 — separately launched projector display with
+five weekday themes and four 20-second screens: Notion-fed learning intention,
+success criteria, weekly topics with the current day highlighted, and the bell
+schedule) ·
 **Lesson Screen Studio** (7/15 — one private editing surface for every lesson
 state with synchronized Main, Pace + Support, Student Chromebook, and iPad
 Remote previews; guarded Notion saves with revision conflicts; no active-session
@@ -56,6 +69,16 @@ cross-day memory note in the console woven into her context; personality tuned
 to complaining-teen, less Red Bull, shorter replies)
 
 ## In progress
+- **Grudge Ball** — second live team review game, forked from BRUH's engine (shares
+  the question loop, grading, and `bruh_sets` banks; separate `grudge_*` tables so
+  BRUH cannot regress). Same answer/reveal/explain, then the reward beat becomes
+  shoot + steal: the teacher taps a correct team, they explain, shoot a real hoop
+  for ~30s (a teammate taps MAKE per basket), then walk to the panel and knock X's
+  off rivals by hand. Erase model (anti-snowball); zero X's = out of the shooting
+  but still answering + immune; "back with a grudge" revives after 2 wilds-while-out
+  wins, taking 3 from the nemesis. `/teacher/grudge` (+`/board`,`/scoreboard`,
+  `/remote`), `/grudge` student. Code + migration done; waiting on Steele to run
+  `supabase/grudge.sql` and a live run. Deliberately not on the proficiency spine.
 - **Week builder** — code shipped (warmup-pools-data.gs + warmup-week-builder.gs +
   sidebar button); waiting on Steele's Apps Script paste-in. Builds the week from
   published Notion lessons: pool-backed Q4/Q5 (verified tags), AI openers only.
@@ -76,6 +99,7 @@ Infinite Campus push · Scan/OCR checkpoint pipeline · Google student sign-in
 (CCSD OAuth question first)
 
 ## Steele's open setup items
+0. (done) supabase/bruh.sql has been applied - BRUH is live.
 1. Reseed mock fixtures (`seed2_part_1…4`, `iready_seed2`) → verify colored bars.
 2. Add `Misconception Plans` text property to the Lessons DB; author `tag :: move` lines.
 3. Vercel envs: `NOTION_ROSTER_DB_ID`, `CRON_SECRET`, later `EVIDENCE_INGEST_KEY`;

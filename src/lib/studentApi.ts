@@ -54,10 +54,10 @@ export async function getStudentAuthUserId(): Promise<string> {
   return data.session.user.id;
 }
 
-export function personalizeWarmupLink(link: string, authUserId: string): string {
+export function personalizeWarmupLink(link: string, connectionToken: string): string {
   return link
-    .replaceAll("BDM_AUTH_USER_ID", encodeURIComponent(authUserId))
-    .replaceAll(encodeURIComponent("BDM_AUTH_USER_ID"), encodeURIComponent(authUserId));
+    .replaceAll("BDM_AUTH_USER_ID", encodeURIComponent(connectionToken))
+    .replaceAll(encodeURIComponent("BDM_AUTH_USER_ID"), encodeURIComponent(connectionToken));
 }
 
 export async function studentApiRequest<T>(path: string, init?: RequestInit): Promise<T> {

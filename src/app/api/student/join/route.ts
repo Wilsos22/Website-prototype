@@ -5,6 +5,8 @@ import {
   StudentIdentityError,
   studentIdentityResponse,
 } from "@/lib/studentIdentity";
+import type { LiveClassFlowSnapshot } from "@/lib/liveClassFlow";
+import { currentWarmupResourceKey } from "@/lib/warmupResource";
 
 export const dynamic = "force-dynamic";
 
@@ -15,10 +17,6 @@ type JoinResolution = {
   resolved_display_name: string | null;
   resolved_joined_at: string | null;
 };
-
-function isMissingJoinResolver(code?: string): boolean {
-  return code === "42883" || code === "PGRST202";
-}
 
 export async function POST(request: Request) {
   try {
@@ -34,7 +32,7 @@ export async function POST(request: Request) {
 
     const { data: session, error: sessionError } = await db
       .from("sessions")
-      .select("id,period_id")
+      .select("id,period_id,live_flow")
       .eq("join_code", code)
       .eq("status", "open")
       .maybeSingle();
@@ -52,27 +50,44 @@ export async function POST(request: Request) {
       throw new StudentIdentityError("That code belongs to a different class.", 403, "wrong_period");
     }
 
-    const resolutionResult = await db.rpc("bdm_complete_verified_student_join", {
+    // A roster link proves who is using this Chromebook; it does not prove the
+    // assigned warm-up was completed for this class session. Enforce that
+    // second boundary on the server so a direct join request cannot bypass it.
+    const { data: warmupReceipt, error: warmupReceiptError } = await db
+      .from("student_warmup_sessions")
+      .select("completed_at,warmup_resource_key")
+      .eq("auth_user_id", student.authUserId)
+      .eq("session_id", session.id)
+      .maybeSingle();
+    if (warmupReceiptError) {
+      throw new StudentIdentityError("Warm-up status could not be checked.", 500, "receipt_lookup_failed");
+    }
+    const currentResourceKey = currentWarmupResourceKey(session.live_flow as LiveClassFlowSnapshot | null);
+    if (!currentResourceKey
+      || !warmupReceipt?.completed_at
+      || warmupReceipt.warmup_resource_key !== currentResourceKey) {
+      throw new StudentIdentityError(
+        "Complete today's warm-up before joining the live lesson.",
+        428,
+        "warmup_not_complete",
+      );
+    }
+
+    const resolutionResult = await db.rpc("bdm_complete_verified_student_join_with_warmup", {
       p_session_id: session.id,
       p_student_id: student.id,
       p_auth_user_id: student.authUserId,
       p_display_name: student.fullName,
     });
 
-    if (resolutionResult.error && isMissingJoinResolver(resolutionResult.error.code)) {
-      const { error: fallbackError } = await db.from("session_joins").upsert(
-        {
-          session_id: session.id,
-          student_id: student.id,
-          display_name: student.fullName,
-        },
-        { onConflict: "session_id,student_id" },
+    if (resolutionResult.error) {
+      const schemaMissing = resolutionResult.error.code === "42883"
+        || resolutionResult.error.code === "PGRST202";
+      throw new StudentIdentityError(
+        schemaMissing ? "Secure warm-up joining is not configured yet." : "The class session could not be joined.",
+        schemaMissing ? 503 : 500,
+        schemaMissing ? "join_schema_missing" : "join_save_failed",
       );
-      if (fallbackError) {
-        throw new StudentIdentityError("The class session could not be joined.", 500, "join_save_failed");
-      }
-    } else if (resolutionResult.error) {
-      throw new StudentIdentityError("The class session could not be joined.", 500, "join_save_failed");
     } else {
       const resolution = ((resolutionResult.data as JoinResolution[] | null) ?? [])[0];
       if (!resolution || resolution.outcome !== "joined") {

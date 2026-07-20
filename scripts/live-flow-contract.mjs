@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -6,6 +7,17 @@ const require = createRequire(import.meta.url);
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const contract = require(path.join(root, ".tmp-mastery", "liveFlowContract.js"));
 const classroomPilot = require(path.join(root, ".tmp-mastery", "classroomPilot.js"));
+const discussion = require(path.join(root, ".tmp-mastery", "discussionProtocol.js"));
+const studioSource = fs.readFileSync(path.join(root, "src/app/teacher/studio/page.tsx"), "utf8");
+
+for (const legacyStudioLabel of ["Think - 1 minute", "Previous phase", "Restart phase", "Next phase"]) {
+  if (studioSource.includes(legacyStudioLabel)) {
+    throw new Error(`The Lesson Screen Studio still previews the legacy discussion label: ${legacyStudioLabel}`);
+  }
+}
+if (!studioSource.includes("DISCUSSION_ROUNDS.map") || !studioSource.includes('const previewTimer = isDiscussion ? "02:00"')) {
+  throw new Error("The Lesson Screen Studio must preview the shared three-round, two-minute discussion contract.");
+}
 
 const expectedPollKinds = new Map([
   ["Short Answer", "short-answer"],
@@ -48,6 +60,105 @@ for (const testCase of discussionProtocolCases) {
   if (actual !== testCase.expected) {
     throw new Error(`${testCase.state}/${testCase.label || "blank"}: expected discussion=${testCase.expected}, received ${actual}`);
   }
+}
+
+const navigationCases = [
+  { label: "running automatic timer", mode: "automatic", running: true, finished: false, pollStage: null, expected: true },
+  { label: "paused automatic timer", mode: "automatic", running: false, finished: false, pollStage: null, expected: false },
+  { label: "finished automatic timer", mode: "automatic", running: false, finished: true, pollStage: null, expected: true },
+  { label: "automatic results hold", mode: "automatic", running: false, finished: false, pollStage: "results", expected: true },
+  { label: "stopped manual timer", mode: "manual", running: false, finished: false, pollStage: null, expected: false },
+  { label: "running manual timer", mode: "manual", running: true, finished: false, pollStage: null, expected: true },
+  { label: "finished manual timer", mode: "manual", running: false, finished: true, pollStage: null, expected: false },
+];
+for (const testCase of navigationCases) {
+  const actual = contract.shouldRunNavigationDestination(
+    testCase.mode,
+    testCase.running,
+    testCase.finished,
+    testCase.pollStage,
+  );
+  if (actual !== testCase.expected) {
+    throw new Error(`${testCase.label}: expected destination running=${testCase.expected}, received ${actual}`);
+  }
+}
+
+const runningDiscussionFlow = {
+  state: { id: "discussion", label: "Discussion" },
+  timer: { running: false, finished: false },
+  phase: discussion.createDiscussionRoundSnapshot("table", true),
+};
+if (!contract.shouldRunFlowNavigationDestination("automatic", runningDiscussionFlow, null)) {
+  throw new Error("Navigation from a running discussion round must preserve automatic pacing.");
+}
+const pausedDiscussionFlow = {
+  ...runningDiscussionFlow,
+  phase: discussion.createDiscussionRoundSnapshot("table", false),
+};
+if (contract.shouldRunFlowNavigationDestination("automatic", pausedDiscussionFlow, null)) {
+  throw new Error("Navigation from a paused discussion round must keep the destination paused.");
+}
+
+if (discussion.DISCUSSION_ROUNDS.length !== 3) {
+  throw new Error("Discussion and Error Analysis must use exactly three rounds.");
+}
+if (discussion.DISCUSSION_ROUNDS.some((round) => round.defaultSeconds !== 120)) {
+  throw new Error("Every discussion round must be exactly 120 seconds.");
+}
+if (discussion.DISCUSSION_TOTAL_SECONDS !== 360) {
+  throw new Error("The three discussion rounds must total six minutes.");
+}
+const discussionLabels = discussion.DISCUSSION_ROUNDS.map((round) => round.label).join(" ");
+for (const requiredMove of ["Think", "Write", "Discuss", "Revise", "Share"]) {
+  if (!discussionLabels.includes(requiredMove)) {
+    throw new Error(`The canonical discussion rounds are missing ${requiredMove}.`);
+  }
+}
+if (discussion.DISCUSSION_ROUNDS.filter((round) => round.spinner).map((round) => round.id).join() !== "share") {
+  throw new Error("Only the two-minute Share round should expose the spinner.");
+}
+if (discussion.discussionRoundForAction("discussion-write").id !== "think"
+  || discussion.discussionRoundForAction("discussion-revise").id !== "table") {
+  throw new Error("Legacy Write and Revise commands must normalize to their containing rounds.");
+}
+const legacyWrite = discussion.normalizeDiscussionPhaseSnapshot({
+  id: "marker",
+  label: "Write",
+  subtitle: "Record one idea.",
+  timed: true,
+  totalSeconds: 60,
+  secondsLeft: 37,
+  running: false,
+  finished: false,
+  media: null,
+});
+if (legacyWrite.id !== "think" || legacyWrite.roundNumber !== 1 || legacyWrite.roundCount !== 3
+  || legacyWrite.secondsLeft !== 37 || !legacyWrite.label.includes("Round 1 of 3")) {
+  throw new Error("Legacy discussion snapshots must normalize without restarting a paused timer.");
+}
+const legacyShare = discussion.normalizeDiscussionPhaseSnapshot({
+  id: "share",
+  label: "Share",
+  subtitle: "Share out.",
+  timed: false,
+  totalSeconds: null,
+  secondsLeft: null,
+  running: false,
+  finished: false,
+  media: null,
+});
+if (!legacyShare.timed || legacyShare.totalSeconds !== 120 || legacyShare.secondsLeft !== 120
+  || discussion.nextDiscussionRound(legacyShare.id) !== null) {
+  throw new Error("Legacy Share snapshots must become the final timed spinner round.");
+}
+if (discussion.nextDiscussionRound("think")?.id !== "table"
+  || discussion.nextDiscussionRound("table")?.id !== "share") {
+  throw new Error("Automatic discussion pacing must advance Round 1 to Round 2 to Round 3.");
+}
+if (discussion.discussionRoundCompletesState("think")
+  || discussion.discussionRoundCompletesState("table")
+  || !discussion.discussionRoundCompletesState("share")) {
+  throw new Error("Only a completed Share round may advance the lesson to the next state.");
 }
 
 if (contract.liveAssignedToolRoute("Big Dog Math Ladder Method") !== "/ladder-method") {

@@ -229,6 +229,7 @@ function upgradePublishedWarmupForBigDog(formId) {
   if (!safeFormId) throw new Error("A Google Form ID is required.");
 
   const form = FormApp.openById(safeFormId);
+  form.setCollectEmail(true);
   const publishedUrl = buildBigDogWarmupUrl_(form, getOrCreateBigDogIdentityItem_(form));
   Logger.log("Paste this URL into the lesson's Warm up link field: " + publishedUrl);
   SpreadsheetApp.getUi().alert(

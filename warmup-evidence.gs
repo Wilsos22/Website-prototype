@@ -81,7 +81,7 @@ function getWarmupPerQuestionDetail_(response) {
 // --- The bridge: build events and POST them to /api/evidence ---
 
 function postWarmupEvidenceSafely_(data, form, response) {
-  const identityResult = postWarmupIdentitySafely_(data, response);
+  const identityResult = postWarmupIdentitySafely_(data, form, response);
   try {
     const evidenceResult = postWarmupEvidence_(data, form, response);
     return {
@@ -99,20 +99,23 @@ function postWarmupEvidenceSafely_(data, form, response) {
   }
 }
 
-function postWarmupIdentitySafely_(data, response) {
+function postWarmupIdentitySafely_(data, form, response) {
   try {
-    return postWarmupIdentity_(data, response);
+    return postWarmupIdentity_(data, form, response);
   } catch (err) {
     Logger.log("Warm-up identity post error: " + (err && err.message ? err.message : err));
     return { ok: false, error: String(err && err.message ? err.message : err) };
   }
 }
 
-function postWarmupIdentity_(data, response) {
-  const email = String(data && data.email || "").trim().toLowerCase();
-  const authUserId = getWarmupIdentityValue_(data, response);
-  if (!email || !isWarmupIdentityUuid_(authUserId)) {
-    return { ok: false, skipped: true, error: "verified email or Big Dog connection missing" };
+function postWarmupIdentity_(data, form, response) {
+  const email = String(response && response.getRespondentEmail ? response.getRespondentEmail() : "")
+    .trim()
+    .toLowerCase();
+  const warmupToken = getWarmupIdentityValue_(data, response);
+  const formUrl = String(form && form.getPublishedUrl ? form.getPublishedUrl() : "").trim();
+  if (!email || !formUrl || !isWarmupIdentityUuid_(warmupToken)) {
+    return { ok: false, skipped: true, error: "verified respondent email, assigned Form, or Big Dog connection missing" };
   }
 
   const props = PropertiesService.getScriptProperties();
@@ -128,7 +131,7 @@ function postWarmupIdentity_(data, response) {
     contentType: "application/json",
     muteHttpExceptions: true,
     headers: { "x-bdm-key": key },
-    payload: JSON.stringify({ email: email, authUserId: authUserId })
+    payload: JSON.stringify({ email: email, warmupToken: warmupToken, formUrl: formUrl })
   });
   const code = res.getResponseCode();
   Logger.log("Warm-up identity post " + code + ": " + res.getContentText().slice(0, 200));
@@ -136,7 +139,7 @@ function postWarmupIdentity_(data, response) {
 }
 
 function getWarmupIdentityValue_(data, response) {
-  const direct = String(data && data.authUserId || "").trim();
+  const direct = String(data && (data.warmupToken || data.authUserId) || "").trim();
   if (direct) return direct;
   if (!response) return "";
 

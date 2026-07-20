@@ -457,6 +457,7 @@ export default function TeacherHome() {
                   <p className="bd-stat-meta">{live.sessions[0].joined} joined{live.sessions.length > 1 ? ` - +${live.sessions.length - 1} more open` : ""}</p>
                   <div className="bd-stat-actions">
                     <Link href={`/session?sessionId=${encodeURIComponent(live.sessions[0].id)}`} className="bd-btn p">Manage session</Link>
+                    <Link href={`/session?sessionId=${encodeURIComponent(live.sessions[0].id)}#classroom-screens-title`} className="bd-btn">Set up screens</Link>
                   </div>
                 </>
               ) : (
