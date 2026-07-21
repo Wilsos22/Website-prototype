@@ -256,4 +256,15 @@ Design is locked (Steele's "Independent Proficiency System") - build it, do not 
 - Deploy: edit -> commit (explicit paths) -> Steele pushes -> Vercel builds `main`. Env-var changes need
   a redeploy to take effect. `vercel.json` has one cron: `/api/roster/sync` at 13:00 UTC daily.
 - `.next` `ENOTEMPTY` build errors are a Google Drive cloud-sync artifact (`rm -rf .next` and rebuild),
-  not a code bug. Ignore `aistudio_*` and ` 2`-suffixed sync duplicates; never stage them.
+  not a code bug. Ignore `aistudio_*` and ` 2`-suffixed sync duplicates; never stage them. The same
+  sync artifact also lands INSIDE `.git` and `.next/types`: duplicated files like
+  `refs/remotes/origin/HEAD 2`, `index 2`, or `routes.d 3.ts` cause
+  `fatal: bad object refs/remotes/origin/HEAD 2` on fetch and duplicate-identifier typecheck errors.
+  Fix: delete the ` 2`/` 3`-suffixed files (`find .git .next -name "* 2" -o -name "* 3"`), then retry.
+- Student digital responses: Response Mode on a Lesson Step drives the Chromebook input.
+  "Multiple Choice + Explain" (added 2026-07-21) shows tappable choices plus a required written
+  explanation; the choice stays in `poll_answers.answer` (tallies, correctness, and City Routes
+  exact-match it) and the explanation lives in `poll_answers.explanation`
+  (`supabase/poll-explanations.sql`). An unknown/blank Response Mode falls back to `Poll Kind`, then
+  to state-id defaults (`question` short-answer, `learning-check` fist-to-five); `exit` has NO
+  fallback, so exit steps must always carry an explicit Response Mode.
