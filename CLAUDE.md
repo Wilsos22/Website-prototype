@@ -289,8 +289,8 @@ Design is locked (Steele's "Independent Proficiency System") - build it, do not 
   workspace, put the reference in a LARGE LEFT RAIL, the thing being acted on in the center, and the
   product the student is building on the right. Never stack reference material under the workspace or
   pile it into the middle - repeated classroom feedback is "too much stuff in the center, I don't know
-  where to look." `/divisibility` is the reference implementation; `/ladder-method` and `/area-model`
-  are queued to follow it.
+  where to look." `/divisibility` is the reference implementation; `/ladder-method` followed it
+  2026-07-21 (rule rail + Ladder/Factor Trees modes); `/area-model` is still queued.
 - Copy tone: friendly, playful, second person ("Hey {firstName}!", "Today's plan", "Start the warm-up").
   Teach how to think, not what to think. Still: no emojis.
 
