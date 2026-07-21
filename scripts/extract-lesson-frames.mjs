@@ -21,7 +21,8 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const turnId = process.argv[2] || "t11";
+// t12 is the canonical turn: Warm Notebook standardized, all four surfaces.
+const turnId = process.argv[2] || "t12";
 
 const SRC = join(root, "Claude Design Wireframe", "Lesson Frame Wireframes.dc.html");
 const OUT = join(root, "public", "frame-preview.html");
@@ -77,8 +78,12 @@ function readTurn(id) {
 // the SOURCE .dc.html stays verbatim (it is the fidelity reference), but the
 // generated page must not carry them. Already flagged upstream to Design.
 function stripGlyphs(markup) {
-  // Browsers collapse the leftover whitespace, so removal alone is enough.
-  return markup.replace(/[←-⇿①-⓿☀-➿⬀-⯿\u{1F000}-\u{1FAFF}]️?/gu, "");
+  // Arrows carry meaning ("warm-up → closeout"), so they become the word
+  // rather than a hole. Everything else is decoration; browsers collapse the
+  // leftover whitespace, so removal alone is enough.
+  return markup
+    .replace(/\s*(?:→|➜|⇒)\s*/gu, " to ")
+    .replace(/[←-⇿①-⓿☀-➿⬀-⯿\u{1F000}-\u{1FAFF}]️?/gu, "");
 }
 
 const turn = stripGlyphs(readTurn(turnId));
@@ -169,21 +174,34 @@ body { background: #e7e2d8; margin: 0; }
   color: var(--ink-900); letter-spacing: -0.02em; }
 .fp-role { font-size: 13px; color: var(--ink-500); }
 .fp-note { max-width: 90ch; margin-top: 12px; }
-/* Scale a 1440px stage down to whatever the room's projector actually is,
-   without touching the design's own pixel geometry. */
-.fp-stage { transform-origin: top left; }
-@media (max-width: 1560px) { .fp-stage { zoom: 0.86; } }
-@media (max-width: 1340px) { .fp-stage { zoom: 0.72; } }
-@media (max-width: 1120px) { .fp-stage { zoom: 0.58; } }
+/* The stages are authored at fixed 1440px geometry. No zoom/scale tricks:
+   zoom desynchronizes scroll coordinates from layout (anchor nav lands on
+   blank space), and a projector check should see true pixels anyway. On a
+   narrower window the stage scrolls sideways inside its own row. */
+.fp-stage { overflow-x: auto; }
 </style>
 </head>
 <body>
 <div class="fp-bar">
   <h1>Lesson frames - ${turnId}</h1>
   ${nav}
+  <a href="?">All</a>
 </div>
 <p class="fp-blurb">${blurb}</p>
 ${screens}
+<script>
+// Solo mode: ?solo=12c (or #12c) shows one screen alone at the top of the
+// page - the view you want when putting a single frame on the projector.
+(function () {
+  var id = new URLSearchParams(location.search).get("solo") || location.hash.slice(1);
+  if (!id || !document.getElementById(id)) return;
+  document.querySelectorAll(".fp-screen").forEach(function (s) {
+    if (s.id !== id) s.style.display = "none";
+  });
+  var blurb = document.querySelector(".fp-blurb");
+  if (blurb) blurb.style.display = "none";
+})();
+</script>
 </body>
 </html>
 `;
