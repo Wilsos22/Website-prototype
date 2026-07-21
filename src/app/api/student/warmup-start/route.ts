@@ -52,18 +52,41 @@ async function todaysWarmupFlow(): Promise<{ url: string; lessonCode: string; le
 }
 
 /**
+ * The instant-access window: school-day mornings through the afternoon,
+ * classroom time. Outside it a class code does nothing on its own, so an
+ * off-hours code can neither open sessions nor reach the form. The teacher
+ * path is unaffected - a session he starts works at any hour.
+ */
+function withinSchoolHours(date = new Date()): boolean {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: CLASSROOM_TIME_ZONE,
+    weekday: "short",
+    hour: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  if (values.weekday === "Sat" || values.weekday === "Sun") return false;
+  const hour = Number(values.hour);
+  return hour >= 6 && hour < 16;
+}
+
+/**
  * Instant warm-up access: when no session is open for the typed code, treat
  * the code as a period's permanent class code and open the day's session
  * server-side. The session row anchors the existing receipt/verification
  * chain unchanged, and the teacher's /session page later finds and inherits
- * this same open session. Tolerant of the period-class-codes.sql migration
- * not having run yet: every failure falls through to null and the caller
- * raises the original "not open" error.
+ * this same open session. Two guards keep the permanent code defensible:
+ * only a signed-in district account (never anonymous auth) can trigger it,
+ * and only during school hours. Tolerant of the period-class-codes.sql
+ * migration not having run yet: every failure falls through to null and the
+ * caller raises the original "not open" error.
  */
 async function sessionFromPeriodCode(
   db: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
   code: string,
+  isAnonymous: boolean,
 ): Promise<{ id: string; live_flow: LiveClassFlowSnapshot | null } | null> {
+  if (isAnonymous || !withinSchoolHours()) return null;
   try {
     const periodResult = await db
       .from("periods")
@@ -142,7 +165,7 @@ export async function POST(request: Request) {
     }
     // Instant access: a period's permanent class code works before the
     // teacher has started anything - it opens the day's session on demand.
-    const session = openSession || await sessionFromPeriodCode(db, code);
+    const session = openSession || await sessionFromPeriodCode(db, code, identity.isAnonymous);
     if (!session) {
       throw new StudentIdentityError("That code is not open right now.", 404, "session_not_open");
     }

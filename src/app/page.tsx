@@ -379,17 +379,23 @@ export default function StudentLanding() {
   return (
     <main className="st-page">
       <style>{`
-        .st-page { min-height:100vh; background:var(--bdb-ground); font-family:var(--bdb-font); color:var(--bdb-ink);
+        /* Warm Notebook skin (Design canvas turn 12): the same dotted paper
+           every classroom surface stands on. */
+        .st-page { min-height:100vh;
+          background-color:#F3F0E7;
+          background-image:radial-gradient(circle,#CBC4B2 1px,transparent 1.3px);
+          background-size:18px 18px;
+          font-family:var(--bdb-font); color:var(--bdb-ink);
           padding:clamp(18px,4vw,44px) 16px; box-sizing:border-box; display:flex; flex-direction:column; align-items:center; }
         .st-banner { width:100%; max-width:min(320px, 74vw); margin-top:clamp(2px,1vw,8px); }
         .st-banner img { width:100%; height:auto; display:block; }
-        .st-hello { margin:4px 0 2px; font-size:clamp(1.35rem,3vw,1.8rem); font-weight:700; letter-spacing:-0.02em; color:var(--bdb-ink); text-align:center; }
+        .st-hello { margin:4px 0 2px; font-size:clamp(1.35rem,3vw,1.8rem); font-weight:800; letter-spacing:-0.02em; color:#2E4A54; text-align:center; }
         .st-hello-sub { margin:0 0 clamp(14px,2.4vw,20px); color:var(--bdb-ink-soft); font-weight:500; font-size:clamp(0.94rem,1.8vw,1.04rem); text-align:center; }
 
         .st-cards { width:100%; max-width:${pendingCode ? "680px" : "440px"}; display:grid; gap:16px; }
-        .st-join { border:none; border-radius:var(--bdb-r-lg); background:var(--bdb-card); padding:22px 22px 24px;
-          box-shadow:0 18px 36px -22px rgba(80,163,164,0.55); border:2px solid color-mix(in srgb, var(--bdb-teal) 30%, transparent); }
-        .st-join-h { margin:0 0 4px; font-size:1.25rem; font-weight:800; letter-spacing:-0.01em; color:var(--bdb-ink); }
+        .st-join { border:1px solid #E3D9C2; border-radius:var(--bdb-r-lg); background:#fff; padding:22px 22px 24px;
+          box-shadow:0 2px 10px rgba(40,32,20,0.06); }
+        .st-join-h { margin:0 0 4px; font-size:1.25rem; font-weight:800; letter-spacing:-0.015em; color:#2E4A54; }
         .st-join-sub { margin:0 0 14px; font-size:0.92rem; font-weight:500; color:var(--bdb-ink-soft); }
         .st-codebox { display:flex; gap:8px; }
         .st-code-in { flex:1; min-width:0; border:2px solid var(--bdb-teal); border-radius:12px; padding:14px 16px;
@@ -399,13 +405,13 @@ export default function StudentLanding() {
         .st-code-btn:hover { filter:brightness(1.04); }
         .st-joinerr { color:var(--bdb-coral); font-weight:600; font-size:0.9rem; margin-top:10px; }
         .st-warmup { display:grid; gap:10px; text-align:left; }
-        .st-lesson-card { display:grid; gap:10px; border:1px solid color-mix(in srgb,var(--bdb-teal) 28%,white); border-radius:16px;
-          background:linear-gradient(135deg,color-mix(in srgb,var(--bdb-teal) 9%,white),#fff); padding:16px; }
-        .st-lesson-kicker { margin:0; color:var(--bdb-teal); font-size:0.7rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
-        .st-lesson-title { margin:0; color:var(--bdb-ink); font-size:clamp(1.35rem,3vw,1.8rem); font-weight:850; line-height:1.12; }
+        .st-lesson-card { display:grid; gap:10px; border:1px solid #E3D9C2; border-left:5px solid var(--bdb-teal); border-radius:16px;
+          background:#fff; padding:16px; box-shadow:0 2px 10px rgba(40,32,20,0.05); }
+        .st-lesson-kicker { margin:0; color:#2A6162; font-size:0.7rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
+        .st-lesson-title { margin:0; color:#2E4A54; font-size:clamp(1.35rem,3vw,1.8rem); font-weight:800; line-height:1.12; }
         .st-lesson-meta { display:flex; flex-wrap:wrap; gap:7px; }
-        .st-lesson-pill { border:1px solid color-mix(in srgb,var(--bdb-teal) 30%,white); border-radius:999px; background:#fff;
-          color:#0f5e5f; padding:6px 10px; font-size:0.76rem; font-weight:850; }
+        .st-lesson-pill { border:1px solid #E3D9C2; border-radius:999px; background:#F6F3EC;
+          color:var(--bdb-ink); padding:6px 10px; font-size:0.76rem; font-weight:800; }
         .st-warmup-label { margin:0; color:var(--bdb-teal); font-size:0.72rem; font-weight:850; letter-spacing:0.1em; text-transform:uppercase; }
         .st-warmup-copy { margin:0; color:var(--bdb-ink-soft); font-size:0.94rem; font-weight:600; line-height:1.45; }
         .st-warmup-wait { margin:2px 0 0; color:var(--bdb-ink-faint); font-size:0.86rem; font-weight:700; }
@@ -439,8 +445,9 @@ export default function StudentLanding() {
         .st-signout { border:0; background:transparent; color:var(--bdb-ink-soft); text-decoration:underline; cursor:pointer; font:inherit; font-size:0.8rem; }
 
         .st-explore { display:flex; align-items:center; justify-content:center; gap:8px; text-decoration:none;
-          border:1px solid var(--bdb-line); border-radius:var(--bdb-r); background:var(--bdb-card); color:var(--bdb-ink-soft);
-          padding:14px 16px; font-weight:600; font-size:0.95rem; transition:border-color 120ms, color 120ms; }
+          border:1px solid #E3D9C2; border-radius:var(--bdb-r); background:#fff; color:var(--bdb-ink-soft);
+          padding:14px 16px; font-weight:600; font-size:0.95rem; box-shadow:0 2px 10px rgba(40,32,20,0.05);
+          transition:border-color 120ms, color 120ms; }
         .st-explore:hover { border-color:var(--bdb-coral); color:var(--bdb-ink); }
         .st-explore b { color:var(--bdb-ink); font-weight:700; }
 
