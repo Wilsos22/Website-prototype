@@ -94,6 +94,15 @@ bars and live misconception grouping).
 Adding a tool: also add a lowercase entry to `TOOL_ROUTES` in `src/app/lesson/page.tsx` or the Notion
 `Tool:` name renders as a dead pill. SiteNav link sets are hardcoded arrays - add nav entries manually.
 
+Same trap on the live-session side: listing a route in `LiveToolRoute` (`src/lib/liveClassFlow.ts`)
+only lets the teacher PUBLISH a task to it. The tool component must also call
+`useLiveToolConfig("/route")` and render `<LiveToolBanner tool={...} />`, or the published directions
+are silently dropped and students see nothing. As of 2026-07-20 only 7 of 18 tool routes are wired -
+`/balance-beam`, `/distributive-area`, `/area-explorer`, `/area-model`, `/multiplication-fluency`,
+`/combine-like-terms`, `/ladder-method`, `/group-bars`, `/proportions`, `/coordinate-grid` and
+`/term-identifier` accept a task and show nothing. `LiveToolBanner` styles itself from `--bdb-*`
+tokens for the cream tool surfaces; it is shared, so do not hardcode a hex into it.
+
 ## Auth
 
 The only enforced gate is `src/proxy.ts` (formerly `middleware.ts` at the repo root - update stale
