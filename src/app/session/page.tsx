@@ -39,6 +39,7 @@ interface TeacherSessionRow {
   join_code: string | null;
   broadcast: string | null;
 }
+interface TodayLesson { id: string; lessonCode?: string; title?: string }
 
 const TEACHER_SERVER_CLIENT = {} as never;
 
@@ -53,6 +54,42 @@ function makeCode() {
   let c = "DOG";
   for (let i = 0; i < 3; i++) c += chars[Math.floor(Math.random() * chars.length)];
   return c;
+}
+
+// A live, scaled-down look at one classroom surface. The iframe renders the
+// real page (they poll on their own, so the thumbnail stays current) at a
+// fixed 1280x800 logical size, scaled to the card. Clicks fall through to the
+// card link, which opens the surface full size in its own window.
+const PREVIEW_LOGICAL_WIDTH = 1280;
+const PREVIEW_LOGICAL_HEIGHT = 800;
+
+function ScreenPreview({ label, note, href, src }: { label: string; note: string; href: string; src: string }) {
+  const frameRef = useRef<HTMLSpanElement | null>(null);
+  const [scale, setScale] = useState(0.15);
+  useEffect(() => {
+    const measure = () => {
+      const width = frameRef.current?.clientWidth;
+      if (width) setScale(width / PREVIEW_LOGICAL_WIDTH);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+  return (
+    <a className="se-screen-link se-screen-prev" href={href} target="_blank" rel="noreferrer">
+      <span className="se-screen-prev-frame" ref={frameRef} aria-hidden="true">
+        <iframe
+          className="se-screen-prev-iframe"
+          src={src}
+          title={`${label} live preview`}
+          loading="lazy"
+          tabIndex={-1}
+          style={{ transform: `scale(${scale})` }}
+        />
+      </span>
+      <strong>{label}</strong><span>{note}</span>
+    </a>
+  );
 }
 
 export default function SessionPage() {
@@ -72,13 +109,11 @@ export default function SessionPage() {
   const [ending, setEnding] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const [question, setQuestion] = useState("");
-  const [mc, setMc] = useState(false);
-  const [choices, setChoices] = useState(["", "", "", ""]);
   const [poll, setPoll] = useState<{ id: string; question: string; choices: string[] | null } | null>(null);
   const [answers, setAnswers] = useState<Answer[]>([]);
   const ansRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [broadcast, setBroadcast] = useState<string | null>(null);
+  const [todayLesson, setTodayLesson] = useState<TodayLesson | null>(null);
 
   // Live challenge (game) state
   const [chSkill, setChSkill] = useState(SKILLS[0].key);
@@ -145,6 +180,19 @@ export default function SessionPage() {
         if (!cancelled) setInitializing(false);
       }
     })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Today's published lesson powers the Begin button - straight into the
+  // live class host with the lesson loaded and running.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/today", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data: { lesson: TodayLesson | null }) => {
+        if (!cancelled && data.lesson?.id) setTodayLesson(data.lesson);
+      })
+      .catch(() => { /* the Begin button simply stays hidden */ });
     return () => { cancelled = true; };
   }, []);
 
@@ -290,26 +338,13 @@ export default function SessionPage() {
     { label: "Live Class Flow", value: LIVE_FLOW_MODE },
   ];
 
-  async function pushPoll() {
-    if (!session || !question.trim()) return;
-    setError(null);
-    const ch = mc ? choices.map((c) => c.trim()).filter(Boolean) : null;
-    try {
-      const result = await teacherPost<{ poll: { id: string } }>("/api/teacher/poll", {
-        action: "create",
-        sessionId: session.id,
-        question: question.trim(),
-        choices: ch,
-        kind: ch && ch.length ? "multiple-choice" : "short-answer",
-      });
-      setPoll({ id: result.poll.id, question: question.trim(), choices: ch && ch.length ? ch : null });
-    } catch (actionError) { setError(actionError instanceof Error ? actionError.message : "Question could not be sent."); return; }
-    setAnswers([]);
-  }
+  // Ad-hoc questions now come from the lesson steps, so this page no longer
+  // composes polls. The open-question card below survives purely as the
+  // off-switch: an orphaned open poll otherwise blocks every student who joins.
   async function closePoll() {
     if (!poll) return;
     await teacherPost("/api/teacher/poll", { action: "close", pollId: poll.id });
-    setPoll(null); setAnswers([]); setQuestion(""); setMc(false); setChoices(["", "", "", ""]);
+    setPoll(null); setAnswers([]);
   }
 
   useEffect(() => {
@@ -340,6 +375,9 @@ export default function SessionPage() {
         .se-code-wrap { text-align:center; padding:8px 0; }
         .se-code-label { font-size:0.8rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; color:#a89f8c; }
         .se-code { font-size:clamp(3rem,12vw,6rem); font-weight:900; letter-spacing:0.12em; color:#14b8a6; line-height:1.1; }
+        .se-begin-wrap { display:grid; justify-items:center; gap:7px; margin:6px 0 14px; }
+        .se-begin-lesson { color:#5a5346; font-size:0.92rem; font-weight:800; }
+        .se-begin-wrap .se-start { display:inline-block; text-decoration:none; font-size:1.1rem; padding:15px 34px; }
         .se-screen-intro { margin:0 0 14px; color:#5a5346; font-size:0.92rem; font-weight:650; line-height:1.5; }
         .se-screen-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
         .se-screen-link { min-height:82px; box-sizing:border-box; display:flex; flex-direction:column; justify-content:center; gap:5px;
@@ -347,6 +385,12 @@ export default function SessionPage() {
         .se-screen-link:hover, .se-screen-link:focus-visible { border-color:#14b8a6; outline:3px solid rgba(20,184,166,0.18); outline-offset:2px; }
         .se-screen-link strong { font-size:0.98rem; font-weight:900; }
         .se-screen-link span { color:#7a7468; font-size:0.78rem; font-weight:700; line-height:1.35; }
+        .se-screen-prev { justify-content:flex-start; gap:7px; padding:10px 10px 12px; }
+        .se-screen-prev-frame { position:relative; display:block; width:100%; aspect-ratio:${PREVIEW_LOGICAL_WIDTH} / ${PREVIEW_LOGICAL_HEIGHT}; overflow:hidden;
+          border:1px solid #e7dec9; border-radius:9px; background:#fff; }
+        .se-screen-prev-iframe { position:absolute; top:0; left:0; width:${PREVIEW_LOGICAL_WIDTH}px; height:${PREVIEW_LOGICAL_HEIGHT}px; border:0; transform-origin:top left; pointer-events:none; }
+        .se-remote-link { display:block; margin-top:10px; color:#5a5346; font-size:0.86rem; font-weight:800; text-decoration:underline; }
+        .se-remote-link:hover { color:#14b8a6; }
         .se-count { font-size:1rem; font-weight:800; color:#5a5346; margin-bottom:10px; }
         .se-joins { display:flex; flex-wrap:wrap; gap:8px; }
         .se-chip { background:#e7f8f3; border:1px solid #b9ebdf; color:#0f766e; border-radius:999px; padding:9px 16px; font-weight:800; animation:sePop 0.3s ease; }
@@ -361,10 +405,6 @@ export default function SessionPage() {
         .se-warn { background:#fff7e6; border:1px solid #ffe2a8; color:#92660a; border-radius:14px; padding:16px 18px; font-weight:700; line-height:1.6; }
         .se-err { background:#fdecea; border:1px solid #f5c6c0; color:#b91c1c; border-radius:12px; padding:12px 16px; font-weight:700; }
         .se-qh { margin:0 0 12px; font-size:1.1rem; font-weight:900; color:#2a2a2e; }
-        .se-qin { width:100%; min-height:66px; border:2px solid #e7dec9; border-radius:12px; padding:12px 14px; font-size:1.05rem; font-weight:700; color:#2a2a2e; background:#fbf7ef; resize:vertical; box-sizing:border-box; }
-        .se-mc { display:flex; align-items:center; gap:8px; font-weight:800; color:#5a5346; margin:12px 0; font-size:0.95rem; }
-        .se-choices { display:grid; gap:8px; margin-bottom:12px; }
-        .se-choice { border:2px solid #e7dec9; border-radius:11px; padding:10px 13px; font-weight:700; color:#2a2a2e; background:#fbf7ef; }
         .se-tally { display:grid; gap:12px; margin-top:14px; }
         .se-tallylabel { font-weight:800; color:#2a2a2e; margin-bottom:5px; }
         .se-bar { height:16px; background:#f0ece1; border-radius:999px; overflow:hidden; }
@@ -395,7 +435,7 @@ export default function SessionPage() {
 
       <SiteNav variant="teacher" />
       <div className="se-wrap">
-        <h1 className="se-h1">Join with a code</h1>
+        <h1 className="se-h1">Live session</h1>
 
         {!supabase && <div className="se-warn">Supabase isn&apos;t connected yet — add your keys in Vercel and redeploy.</div>}
         {error && <div className="se-err">{error}</div>}
@@ -422,22 +462,49 @@ export default function SessionPage() {
             <div className="se-card se-code-wrap">
               <div className="se-code-label">{session.periodName} · code</div>
               <div className="se-code">{session.code}</div>
+              {todayLesson && (
+                <div className="se-begin-wrap">
+                  <div className="se-begin-lesson">
+                    {[todayLesson.lessonCode, todayLesson.title].filter(Boolean).join(" · ") || "Today's published lesson"}
+                  </div>
+                  <a className="se-start" href={`/control?notionLessonId=${encodeURIComponent(todayLesson.id)}&run=1`}>
+                    Begin today&apos;s lesson
+                  </a>
+                </div>
+              )}
               <button className="se-end" onClick={end} disabled={ending}>{ending ? "Ending session" : "End session"}</button>
             </div>
             <section className="se-card" aria-labelledby="classroom-screens-title">
               <h2 className="se-qh" id="classroom-screens-title">Classroom screens</h2>
-              <p className="se-screen-intro">Keep Live class host on the laptop. Open Main on panel 1, Pace + Support on panel 2, and Remote on the signed-in iPad.</p>
+              <p className="se-screen-intro">
+                Live previews of what the room sees. Tap one to open it full size:
+                Main on panel 1, Pace + Support on panel 2. Keep Live class host on the laptop.
+              </p>
               <div className="se-screen-grid">
-                <a className="se-screen-link" href={`/teacher/present?session=${encodeURIComponent(session.id)}`} target="_blank" rel="noreferrer">
-                  <strong>Open Main</strong><span>Problem, story, visuals, and live writing</span>
-                </a>
-                <a className="se-screen-link" href={`/teacher/pace?session=${encodeURIComponent(session.id)}`} target="_blank" rel="noreferrer">
-                  <strong>Open Pace + Support</strong><span>Timer and the current student directions</span>
-                </a>
-                <a className="se-screen-link" href={`/teacher/remote?session=${encodeURIComponent(session.id)}`} target="_blank" rel="noreferrer">
-                  <strong>Open iPad Remote</strong><span>Private controls, notes, Abbie, sound, and writing</span>
-                </a>
+                <ScreenPreview
+                  label="Main"
+                  note="Problem, story, visuals, and live writing"
+                  href={`/teacher/present?session=${encodeURIComponent(session.id)}`}
+                  src={`/teacher/present?session=${encodeURIComponent(session.id)}`}
+                />
+                <ScreenPreview
+                  label="Pace + Support"
+                  note="Timer and the current student directions"
+                  href={`/teacher/pace?session=${encodeURIComponent(session.id)}`}
+                  src={`/teacher/pace?session=${encodeURIComponent(session.id)}`}
+                />
+                <ScreenPreview
+                  label="Student"
+                  note={broadcast && broadcast !== "free" && broadcast.startsWith("/")
+                    ? `Following ${SENDS.find((mode) => mode.value === broadcast)?.label || broadcast}`
+                    : "The students' default lesson view"}
+                  href={broadcast?.startsWith("/") ? broadcast : "/lesson"}
+                  src={`${broadcast?.startsWith("/") ? broadcast : "/lesson"}?teacherPreview=1`}
+                />
               </div>
+              <a className="se-remote-link" href={`/teacher/remote?session=${encodeURIComponent(session.id)}`} target="_blank" rel="noreferrer">
+                Open iPad Remote - private controls, notes, Abbie, sound, and writing
+              </a>
             </section>
             {admissionRequests.length > 0 && (
               <div className="se-card">
@@ -568,22 +635,7 @@ export default function SessionPage() {
               )}
             </div>
 
-            {!poll ? (
-              <div className="se-card">
-                <h3 className="se-qh">Ask a question</h3>
-                <textarea className="se-qin" value={question} placeholder="Type your question…" onChange={(e) => setQuestion(e.target.value)} />
-                <label className="se-mc"><input type="checkbox" checked={mc} onChange={(e) => setMc(e.target.checked)} /> Multiple choice</label>
-                {mc && (
-                  <div className="se-choices">
-                    {choices.map((c, i) => (
-                      <input key={i} className="se-choice" value={c} placeholder={`Choice ${i + 1}`}
-                        onChange={(e) => setChoices((cs) => cs.map((x, j) => (j === i ? e.target.value : x)))} />
-                    ))}
-                  </div>
-                )}
-                <button className="se-start" onClick={pushPoll} disabled={!question.trim()}>Push to class</button>
-              </div>
-            ) : (
+            {poll && (
               <div className="se-card">
                 <div className="se-row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
                   <h3 className="se-qh" style={{ margin: 0 }}>{poll.question}</h3>
