@@ -1,6 +1,5 @@
 "use client";
 
-import "@/styles/classroom-frames.css";
 import { useEffect, useState, type CSSProperties } from "react";
 import ClassroomSpinner from "@/components/ClassroomSpinner";
 import { CLOSEOUT_DIRECTIONS } from "@/lib/classStates";
@@ -9,6 +8,30 @@ import { normalizeDiscussionPhaseSnapshot } from "@/lib/discussionProtocol";
 import { publicSuccessCriterion } from "@/lib/successCriterion";
 import { teacherApiRequest } from "@/lib/teacherApi";
 import { LIVE_FLOW_MODE, getStoredTeacherSessionId, liveTimerSeconds, type LiveClassFlowSnapshot } from "@/lib/liveClassFlow";
+import { WARM_ACCENTS } from "@/lib/warmNotebook";
+
+// ?preview=<stage id> renders the shell with sample content and no session.
+const PREVIEW_SAMPLES: Record<string, { label: string; action: string; steps: string[] }> = {
+  evergreen: { label: "Warm-up", action: "Screens up. Open the warm-up.", steps: ["Work silently", "Five questions plus the bonus", "Submit when finished"] },
+  scenario: { label: "Launch", action: "Screens low - not closed.", steps: ["Think silently for 10 seconds", "Tell your partner one sum", "What changed? What stayed the same?"] },
+  concrete: { label: "Concrete", action: "Build it with counters.", steps: ["Trackpads parked", "Predict", "Build", "Freeze"] },
+  discussion: { label: "Discussion", action: "Talk in rounds.", steps: ["Think first", "Use a stem", "Revise your answer"] },
+  independent: { label: "Independent", action: "Paper first.", steps: ["Attempt the problem", "Need help? Open the Area Tool", "Return to paper"] },
+};
+
+function previewStageParam() {
+  try {
+    return new URLSearchParams(window.location.search).get("preview")?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+// Vocabulary entries are authored as "term - definition" (em dash in Notion).
+function splitVocab(entry: string): { term: string; def: string } {
+  const match = entry.match(/^(.{1,40}?)\s+[-–—]\s+(.+)$/);
+  return match ? { term: match[1], def: match[2] } : { term: entry, def: "" };
+}
 
 interface PaceSession {
   id: string;
@@ -44,6 +67,11 @@ export default function PaceSupportPage() {
   const [loading, setLoading] = useState(true);
   const [sessionMessage, setSessionMessage] = useState("Connecting to the confirmed class session.");
   const [pollAnswers, setPollAnswers] = useState<PollAnswer[]>([]);
+  const [previewStage, setPreviewStage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPreviewStage(previewStageParam());
+  }, []);
 
   useEffect(() => {
     let stopped = false;
@@ -148,20 +176,16 @@ export default function PaceSupportPage() {
         : routineConfig?.kind === "small-group"
           ? `${routineConfig.publicTask} Rotate every ${routineConfig.rotationMinutes} minutes.`
       : flow?.presentation?.paceDirections || state?.description;
-  // The empty shell shows the design system's neutral phase; a connected flow
-  // themes the wireframe frame straight from the stage theme (same hexes the
-  // handoff's ph-* classes carry).
   const connected = Boolean(!loading && session && flow && state);
+  const previewSample = !connected && !loading && previewStage
+    ? PREVIEW_SAMPLES[previewStage] || PREVIEW_SAMPLES[classroomStageTheme(previewStage).id] || null
+    : null;
+  const previewTheme = previewStage ? classroomStageTheme(previewStage) : null;
+  const activeThemeId = previewSample && previewTheme ? previewTheme.id : theme.id;
+  // Warm Notebook stage (turn 12b): paper ground, one semantic accent.
+  const accent = WARM_ACCENTS[activeThemeId] || theme.accent;
   const style = {
-    "--acc": connected ? theme.accent : "#FCAF38",
-    "--base": connected ? theme.projectorBase : "#181310",
-    "--panel": connected ? theme.projectorPanel : "#241c15",
-    "--pace-accent": theme.accent,
-    "--pace-base": theme.projectorBase,
-    "--pace-panel": theme.projectorPanel,
-    "--pace-line": theme.projectorLine,
-    "--pace-muted": theme.projectorMuted,
-    "--pace-glow": theme.projectorGlow,
+    "--acc": accent,
   } as CSSProperties;
 
   // The wireframe's pace body is an action headline plus numbered steps:
@@ -171,157 +195,226 @@ export default function PaceSupportPage() {
   const paceAction = directionLines[0] || "";
   const paceSteps = directionLines.slice(1, 7);
 
+  const vocabCards = discussionVocabulary.slice(0, 3).map(splitVocab);
+
   return (
-    <main className="pace-page dcw" style={style}>
+    <main className="pace-page" style={style}>
       <style>{`
-        /* The look is the extracted wireframe stylesheet (classroom-frames.css).
-           This block only bridges it to a live viewport and keeps the state
-           layouts (check, discussion, spinner) that ride inside the frame. */
-        .pace-page { position:fixed; inset:0; overflow:hidden; box-sizing:border-box; font-family:var(--bdb-font); }
-        .pace-page .pj { width:100%; height:100%; border-radius:0; }
-        .pace-page .tt.finished, .pace-page .bigtimer.finished { color:#ffd5dc; }
-        .pace-page .pace-current { flex:1; min-height:0; position:relative; z-index:1; display:grid; place-items:center; padding:clamp(28px,5vw,72px); text-align:center; }
-        .pace-current.spinner-linked { overflow:hidden; padding:0; }
-        .pace-check { width:min(100%,1120px); display:grid; align-content:center; gap:20px; }
-        .pace-check-title { margin:0; color:var(--pace-accent); font-size:clamp(0.78rem,1.4vw,1rem); font-weight:950; letter-spacing:0.14em; text-transform:uppercase; }
-        .pace-check-prompt { margin:0; color:#fff; font-size:clamp(2rem,4.6vw,4.8rem); line-height:1.05; font-weight:900; text-wrap:balance; }
-        .pace-check-count { margin:0; color:var(--pace-muted); font-size:clamp(1rem,1.8vw,1.35rem); font-weight:800; }
-        .pace-bars { height:min(42vh,330px); display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); align-items:end; gap:clamp(10px,1.8vw,22px); padding-top:20px; }
-        .pace-bar-column { height:100%; display:grid; grid-template-rows:minmax(0,1fr) auto; gap:9px; align-items:end; }
-        .pace-bar-track { height:100%; display:flex; align-items:flex-end; overflow:hidden; border:1px solid var(--pace-line); border-radius:12px 12px 6px 6px; background:color-mix(in srgb,var(--pace-base) 72%,#000); }
-        .pace-bar-fill { width:100%; min-height:4px; border-radius:10px 10px 4px 4px; background:var(--pace-accent); transition:height 240ms ease; }
-        .pace-bar-label { color:#fff; text-align:center; font-size:clamp(1rem,2vw,1.5rem); font-weight:950; }
-        .pace-discussion { width:min(100%,1180px); display:grid; grid-template-columns:minmax(0,1.25fr) minmax(260px,0.75fr); gap:clamp(14px,2.4vw,26px); text-align:left; }
-        .pace-discussion-main { display:grid; align-content:center; gap:12px; }
-        .pace-discussion-phase { margin:0; color:var(--pace-accent); font-size:0.78rem; font-weight:950; letter-spacing:0.14em; text-transform:uppercase; }
-        .pace-discussion-prompt { margin:0; color:#fff; font-size:clamp(2rem,4.3vw,4.5rem); line-height:1.06; font-weight:900; text-wrap:balance; }
-        .pace-share { display:grid; gap:5px; border:1px solid var(--pace-line); border-left:6px solid var(--pace-accent); border-radius:14px; background:color-mix(in srgb,var(--pace-base) 60%,transparent); padding:13px 16px; }
-        .pace-share span { color:var(--pace-accent); font-size:0.68rem; font-weight:950; letter-spacing:0.12em; text-transform:uppercase; }
-        .pace-share strong { color:#fff; font-size:clamp(1.8rem,4vw,3.8rem); line-height:1; font-weight:950; }
-        .pace-discussion-supports { display:grid; align-content:center; gap:12px; }
-        .pace-support-card { border:1px solid var(--pace-line); border-top:4px solid var(--pace-accent); border-radius:14px; background:color-mix(in srgb,var(--pace-base) 60%,transparent); padding:14px 16px; }
-        .pace-support-card h3 { margin:0 0 8px; color:var(--pace-accent); font-size:0.7rem; font-weight:950; letter-spacing:0.12em; text-transform:uppercase; }
-        .pace-support-card ul { display:grid; gap:7px; margin:0; padding-left:1.1rem; color:#fff; font-size:clamp(0.92rem,1.5vw,1.15rem); line-height:1.3; font-weight:760; }
-        .pace-vocab { display:flex; flex-wrap:wrap; gap:7px; }
-        .pace-vocab span { border:1px solid var(--pace-line); border-radius:999px; background:color-mix(in srgb,var(--pace-panel) 76%,transparent); padding:7px 10px; color:#fff; font-size:0.9rem; font-weight:880; }
-        @media (max-width:760px) { .pace-discussion { grid-template-columns:1fr; } .pace-bars { height:240px; } .pace-page .pjlesson { display:none; } }
-        @media (max-height:650px) { .pace-page .pace-current { padding:20px 32px; } }
+        /* Warm Notebook skin (Design canvas turn 12b): warm dotted paper, ink
+           text, one semantic accent per state via --acc. The support screen's
+           job is one instruction, the words they'll need, and the shared
+           clock - never competing with the main board. */
+        .pace-page { position:fixed; inset:0; box-sizing:border-box; overflow:hidden;
+          --ink:#201E1A; --head:#2E4A54; --soft:#5C6E75; --faint:#8A9299; --hair:#E3D9C2; --card:#fff;
+          --acc-deep:color-mix(in srgb, var(--acc) 62%, #201E1A);
+          background-color:#F3F0E7;
+          background-image:radial-gradient(circle,#CBC4B2 1px,transparent 1.3px);
+          background-size:18px 18px;
+          color:var(--ink); font-family:var(--bdb-font); display:grid; grid-template-rows:64px minmax(0,1fr); }
+        .pw-top { display:flex; align-items:center; gap:12px; padding:0 30px; border-bottom:1px solid rgba(120,110,90,0.18); background:rgba(243,240,231,0.86); }
+        .pw-dot { width:12px; height:12px; flex:none; border-radius:3px; background:var(--acc); }
+        .pw-chip { flex:none; border-radius:6px; background:var(--acc); color:#fff; padding:5px 11px; font-size:0.66rem; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; }
+        .pw-title { margin:0; overflow:hidden; color:var(--head); text-overflow:ellipsis; white-space:nowrap; font-size:16px; font-weight:800; }
+        .pw-lesson { margin:0; overflow:hidden; color:var(--faint); text-overflow:ellipsis; white-space:nowrap; font-size:13px; font-weight:650; }
+        .pw-timer { min-width:120px; flex:none; display:inline-flex; align-items:center; justify-content:center; gap:10px; margin-left:auto; border:1.2px solid var(--hair); border-radius:999px; background:var(--card); padding:7px 16px; color:var(--head); font-size:23px; line-height:0.9; font-weight:800; font-variant-numeric:tabular-nums; box-shadow:0 2px 10px rgba(40,32,20,0.06); }
+        .pw-timer::before { content:""; width:8px; height:8px; border-radius:999px; background:var(--acc); }
+        .pw-timer.finished { color:#A82C15; }
+        .pw-timer.finished::before { background:#F95335; }
+        .pw-body { position:relative; min-height:0; overflow:hidden; }
+        .pw-cols { position:absolute; inset:0; display:grid; grid-template-columns:minmax(0,1.35fr) minmax(280px,0.65fr); gap:clamp(18px,3vw,40px); padding:clamp(24px,3.6vw,52px); }
+        .pw-left { min-width:0; display:flex; flex-direction:column; gap:clamp(14px,2.2vh,22px); }
+        .pw-action { margin:0; color:var(--head); font-size:clamp(1.8rem,3.4vw,3.3rem); line-height:1.06; font-weight:800; letter-spacing:-0.02em; text-wrap:balance; }
+        .pw-callout { max-width:640px; border:1px solid var(--hair); border-left:6px solid var(--acc); border-radius:16px; background:var(--card); padding:16px 20px; box-shadow:0 2px 10px rgba(40,32,20,0.06); }
+        .pw-callout-label { margin:0 0 8px; color:var(--acc-deep); font-size:0.68rem; font-weight:900; letter-spacing:0.13em; text-transform:uppercase; }
+        .pw-steps { display:grid; gap:9px; margin:0; padding:0; list-style:none; }
+        .pw-steps li { display:flex; gap:11px; align-items:baseline; color:var(--ink); font-size:clamp(1rem,1.6vw,1.35rem); line-height:1.3; font-weight:700; }
+        .pw-stepn { flex:none; min-width:1.5ch; color:var(--acc-deep); font-weight:800; font-variant-numeric:tabular-nums; }
+        .pw-pace { margin-top:auto; display:inline-flex; align-items:center; gap:18px; width:fit-content; border:1px solid var(--hair); border-radius:16px; background:var(--card); padding:14px 22px; box-shadow:0 2px 10px rgba(40,32,20,0.06); }
+        .pw-bigtimer { color:var(--head); font-size:clamp(2.6rem,5vw,4.4rem); line-height:0.9; font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:-0.03em; }
+        .pw-bigtimer.finished { color:#A82C15; }
+        .pw-pace-copy { display:grid; gap:3px; }
+        .pw-pace-copy b { color:var(--ink); font-size:clamp(0.95rem,1.4vw,1.2rem); }
+        .pw-pace-copy span { color:var(--soft); font-size:clamp(0.82rem,1.15vw,1rem); font-weight:650; }
+        .pw-right { min-width:0; display:grid; align-content:center; gap:14px; }
+        .pw-vocab { position:relative; border:1px solid var(--hair); border-radius:14px; background:var(--card); padding:16px 18px 14px; box-shadow:0 2px 10px rgba(40,32,20,0.06); }
+        .pw-tape { position:absolute; top:-8px; left:22px; width:56px; height:16px; border-radius:3px; background:rgba(252,175,56,0.35); transform:rotate(-2deg); }
+        .pw-term { display:flex; align-items:center; gap:9px; color:var(--head); font-size:clamp(1rem,1.5vw,1.3rem); font-weight:800; }
+        .pw-term-dot { width:10px; height:10px; border-radius:3px; background:var(--acc); flex:none; }
+        .pw-def { margin:6px 0 0; padding-top:6px; border-top:1px solid #F0D9D3; color:var(--soft); font-size:clamp(0.85rem,1.2vw,1.05rem); line-height:1.35; font-weight:650; }
+        .pw-center { position:absolute; inset:0; display:grid; place-items:center; padding:clamp(28px,5vw,72px); text-align:center; }
+        .pw-center h2 { margin:0; max-width:24ch; color:var(--head); font-size:clamp(2rem,4.6vw,4.4rem); line-height:1.05; font-weight:800; letter-spacing:-0.02em; }
+        .pw-center p { margin:12px 0 0; color:var(--soft); font-size:clamp(0.95rem,1.7vw,1.3rem); font-weight:700; }
+        .pw-spinner { position:absolute; inset:0; overflow:hidden; }
+        .pw-check { width:min(100%,1120px); display:grid; align-content:center; gap:20px; }
+        .pw-check-title { margin:0; color:var(--acc-deep); font-size:clamp(0.78rem,1.4vw,1rem); font-weight:900; letter-spacing:0.14em; text-transform:uppercase; }
+        .pw-check-prompt { margin:0; color:var(--head); font-size:clamp(2rem,4.6vw,4.6rem); line-height:1.05; font-weight:800; text-wrap:balance; }
+        .pw-check-count { margin:0; color:var(--soft); font-size:clamp(1rem,1.8vw,1.35rem); font-weight:700; }
+        .pw-bars { height:min(42vh,330px); display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); align-items:end; gap:clamp(10px,1.8vw,22px); padding-top:20px; }
+        .pw-bar-column { height:100%; display:grid; grid-template-rows:minmax(0,1fr) auto; gap:9px; align-items:end; }
+        .pw-bar-track { height:100%; display:flex; align-items:flex-end; overflow:hidden; border:1px solid var(--hair); border-radius:12px 12px 6px 6px; background:#ECE7DD; }
+        .pw-bar-fill { width:100%; min-height:4px; border-radius:10px 10px 4px 4px; background:var(--acc); transition:height 240ms ease; }
+        .pw-bar-label { color:var(--ink); text-align:center; font-size:clamp(1rem,2vw,1.5rem); font-weight:800; }
+        .pw-share { display:grid; gap:5px; border:1px solid var(--hair); border-left:6px solid var(--acc); border-radius:14px; background:var(--card); padding:13px 16px; box-shadow:0 2px 10px rgba(40,32,20,0.06); }
+        .pw-share span { color:var(--acc-deep); font-size:0.68rem; font-weight:900; letter-spacing:0.12em; text-transform:uppercase; }
+        .pw-share strong { color:var(--head); font-size:clamp(1.8rem,4vw,3.6rem); line-height:1; font-weight:800; }
+        .pw-stems { display:grid; gap:7px; margin:0; padding-left:1.1rem; color:var(--ink); font-size:clamp(0.92rem,1.5vw,1.15rem); line-height:1.3; font-weight:700; }
+        @media (max-width:820px) { .pw-cols { grid-template-columns:1fr; overflow:auto; } .pw-lesson { display:none; } }
+        @media (max-height:640px) { .pace-page { grid-template-rows:52px minmax(0,1fr); } .pw-cols { padding:18px 26px; } }
       `}</style>
 
-      <section className="pj" aria-label="Pace and support projector">
-        <span className="glow" style={{ left: "16%", top: "14%" }} aria-hidden="true" />
-        <span className="glow" style={{ right: "12%", top: "16%", opacity: 0.12 }} aria-hidden="true" />
+      <header className="pw-top">
+        <span className="pw-dot" aria-hidden="true" />
+        <span className="pw-chip">{previewSample ? previewSample.label : state?.label || "Big Dog Math"}</span>
+        <h1 className="pw-title">{previewSample ? "Preview" : flow?.presentation?.title || state?.label || "Waiting for the lesson"}</h1>
+        {flow?.lesson?.title ? <p className="pw-lesson">{flow.lesson.title}</p> : null}
+        <span className={`pw-timer${timerFinished ? " finished" : ""}`} aria-label="Class timer">
+          {previewSample ? "5:00" : timer ? formatTime(timerSeconds) : "--:--"}
+        </span>
+      </header>
+
+      <section className="pw-body" aria-label="Pace and support">
         {!connected || !session || !flow || !state ? (
-          <div className="pjmain">
-            <div className="pjq" style={{ fontSize: "clamp(40px, 6vw, 66px)" }}>
-              {loading ? "Connecting to class" : "Ready for class"}
-            </div>
-            <div className="pjgo">{sessionMessage}</div>
-          </div>
-        ) : (
-          <>
-            <header className="pjtop">
-              <span className="pjmark" aria-hidden="true">÷</span>
-              <span className="stdot" aria-hidden="true" />
-              <h1 className="pjstage" style={{ margin: 0 }}>{flow.presentation?.title || state.label}</h1>
-              {flow.lesson?.title ? <span className="pjlesson">{flow.lesson.title}</span> : null}
-              <span className="tbadge" aria-label="Class timer">
-                <span className="tk">Time left</span>
-                <span className={`tt${timerFinished ? " finished" : ""}`}>{timer ? formatTime(timerSeconds) : "--:--"}</span>
-              </span>
-            </header>
-            {!linkedSpinnerMode && !(isLearningCheck && poll) && !isDiscussion ? (
-              <div className="pcbody">
-                <div className="pcact">{paceAction}</div>
-                <div className="pcrow">
-                  {paceSteps.length ? (
-                    <div className="steps">
-                      {paceSteps.map((step, index) => (
-                        <div className="step" key={step}>
-                          <span className="stepn">{index + 1}</span>
-                          {step}
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                  {timer ? (
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-                      <div className={`bigtimer${timerFinished ? " finished" : ""}`}>{formatTime(timerSeconds)}</div>
-                      <span className="tlbl">Minutes left</span>
-                    </div>
-                  ) : null}
+          previewSample ? (
+            <div className="pw-cols">
+              <div className="pw-left">
+                <h2 className="pw-action">{previewSample.action}</h2>
+                <div className="pw-callout">
+                  <p className="pw-callout-label">Do this</p>
+                  <ul className="pw-steps">
+                    {previewSample.steps.map((step, index) => (
+                      <li key={step}><span className="pw-stepn">{index + 1}</span>{step}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="pw-pace">
+                  <span className="pw-bigtimer">5:00</span>
+                  <span className="pw-pace-copy"><b>{previewSample.label}</b><span>Preview - no live session</span></span>
                 </div>
               </div>
-            ) : (
-            <section className={`pace-current${linkedSpinnerMode ? " spinner-linked" : ""}`} aria-label="Current directions and timer">
-              {linkedSpinnerMode ? (
-                <ClassroomSpinner
-                  key={`${session.id}:${spinnerSyncScope}:mirror`}
-                  mode={linkedSpinnerMode}
-                  sessionId={session.id}
-                  syncKey={session.join_code}
-                  periodId={session.period_id || null}
-                  stateId={state.id}
-                  syncScope={spinnerSyncScope}
-                  role="mirror"
-                  learningIntention={flow.lesson?.learningIntention}
-                  successCriterion={publicSuccessCriterion(flow.lesson?.selectedSuccessCriterion)}
-                />
-              ) : isLearningCheck && poll ? (
-                <div className="pace-check">
-                  <p className="pace-check-title">Fist to five</p>
-                  {poll.stage === "results" ? (
-                    <>
-                      <h2 className="pace-check-prompt">Where we are as a class</h2>
-                      <div className="pace-bars" aria-label="Anonymous Fist-to-Five results">
-                        {["0", "1", "2", "3", "4", "5"].map((choice) => {
-                          const count = pollAnswers.filter((answer) => answer.answer === choice).length;
-                          const maxCount = Math.max(1, ...["0", "1", "2", "3", "4", "5"].map((value) => pollAnswers.filter((answer) => answer.answer === value).length));
-                          return (
-                            <div className="pace-bar-column" key={choice}>
-                              <div className="pace-bar-track"><div className="pace-bar-fill" style={{ height: `${Math.max(4, Math.round((count / maxCount) * 100))}%` }} /></div>
-                              <span className="pace-bar-label">{choice}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <p className="pace-check-count">Anonymous class results. {pollAnswers.length} response{pollAnswers.length === 1 ? "" : "s"}.</p>
-                    </>
-                  ) : (
-                    <>
-                      <h2 className="pace-check-prompt">Answer on your Chromebook</h2>
-                      <p className="pace-check-count">{pollAnswers.length} response{pollAnswers.length === 1 ? "" : "s"} received. Names stay private.</p>
-                    </>
-                  )}
-                </div>
-              ) : isDiscussion ? (
-                <div className="pace-discussion">
-                  <div className="pace-discussion-main">
-                    <p className="pace-discussion-phase">{phase?.label || "Discussion"}</p>
-                    <h2 className="pace-discussion-prompt">{phase?.subtitle || paceDirections}</h2>
-                    {phase?.id === "share" && phase.selectedSharer ? (
-                      <div className="pace-share"><span>Ready to share</span><strong>{phase.selectedSharer}</strong></div>
-                    ) : null}
+              <div className="pw-right">
+                {[{ term: "Vocabulary", def: "Fills from the lesson step during class." }].map((card) => (
+                  <div className="pw-vocab" key={card.term}>
+                    <span className="pw-tape" aria-hidden="true" />
+                    <div className="pw-term"><span className="pw-term-dot" />{card.term}</div>
+                    <p className="pw-def">{card.def}</p>
                   </div>
-                  <div className="pace-discussion-supports">
-                    {discussionStems.length ? (
-                      <section className="pace-support-card">
-                        <h3>Sentence stems</h3>
-                        <ul>{discussionStems.slice(0, 3).map((stem) => <li key={stem}>{stem}</li>)}</ul>
-                      </section>
-                    ) : null}
-                    {discussionVocabulary.length ? (
-                      <section className="pace-support-card">
-                        <h3>Vocabulary</h3>
-                        <div className="pace-vocab">{discussionVocabulary.slice(0, 6).map((word) => <span key={word}>{word}</span>)}</div>
-                      </section>
-                    ) : null}
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="pw-center">
+              <div>
+                <h2>{loading ? "Connecting to class" : "Ready for class"}</h2>
+                <p>{sessionMessage}</p>
+              </div>
+            </div>
+          )
+        ) : linkedSpinnerMode ? (
+          <div className="pw-spinner">
+            <ClassroomSpinner
+              key={`${session.id}:${spinnerSyncScope}:mirror`}
+              mode={linkedSpinnerMode}
+              sessionId={session.id}
+              syncKey={session.join_code}
+              periodId={session.period_id || null}
+              stateId={state.id}
+              syncScope={spinnerSyncScope}
+              role="mirror"
+              learningIntention={flow.lesson?.learningIntention}
+              successCriterion={publicSuccessCriterion(flow.lesson?.selectedSuccessCriterion)}
+            />
+          </div>
+        ) : isLearningCheck && poll ? (
+          <div className="pw-center">
+            <div className="pw-check">
+              <p className="pw-check-title">Fist to five</p>
+              {poll.stage === "results" ? (
+                <>
+                  <h2 className="pw-check-prompt">Where we are as a class</h2>
+                  <div className="pw-bars" aria-label="Anonymous Fist-to-Five results">
+                    {["0", "1", "2", "3", "4", "5"].map((choice) => {
+                      const count = pollAnswers.filter((answer) => answer.answer === choice).length;
+                      const maxCount = Math.max(1, ...["0", "1", "2", "3", "4", "5"].map((value) => pollAnswers.filter((answer) => answer.answer === value).length));
+                      return (
+                        <div className="pw-bar-column" key={choice}>
+                          <div className="pw-bar-track"><div className="pw-bar-fill" style={{ height: `${Math.max(4, Math.round((count / maxCount) * 100))}%` }} /></div>
+                          <span className="pw-bar-label">{choice}</span>
+                        </div>
+                      );
+                    })}
                   </div>
+                  <p className="pw-check-count">Anonymous class results. {pollAnswers.length} response{pollAnswers.length === 1 ? "" : "s"}.</p>
+                </>
+              ) : (
+                <>
+                  <h2 className="pw-check-prompt">Answer on your Chromebook</h2>
+                  <p className="pw-check-count">{pollAnswers.length} response{pollAnswers.length === 1 ? "" : "s"} received. Names stay private.</p>
+                </>
+              )}
+            </div>
+          </div>
+        ) : isDiscussion ? (
+          <div className="pw-cols">
+            <div className="pw-left">
+              <p className="pw-callout-label">{phase?.label || "Discussion"}</p>
+              <h2 className="pw-action">{phase?.subtitle || paceDirections}</h2>
+              {phase?.id === "share" && phase.selectedSharer ? (
+                <div className="pw-share"><span>Ready to share</span><strong>{phase.selectedSharer}</strong></div>
+              ) : null}
+              {discussionStems.length ? (
+                <div className="pw-callout">
+                  <p className="pw-callout-label">Sentence stems</p>
+                  <ul className="pw-stems">{discussionStems.slice(0, 3).map((stem) => <li key={stem}>{stem}</li>)}</ul>
                 </div>
               ) : null}
-            </section>
-            )}
-          </>
+              {timer ? (
+                <div className="pw-pace">
+                  <span className={`pw-bigtimer${timerFinished ? " finished" : ""}`}>{formatTime(timerSeconds)}</span>
+                  <span className="pw-pace-copy"><b>{flow.presentation?.title || state.label}</b><span>Shared class clock</span></span>
+                </div>
+              ) : null}
+            </div>
+            <div className="pw-right">
+              {vocabCards.map((card) => (
+                <div className="pw-vocab" key={card.term}>
+                  <span className="pw-tape" aria-hidden="true" />
+                  <div className="pw-term"><span className="pw-term-dot" />{card.term}</div>
+                  {card.def ? <p className="pw-def">{card.def}</p> : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="pw-cols">
+            <div className="pw-left">
+              <h2 className="pw-action">{paceAction}</h2>
+              {paceSteps.length ? (
+                <div className="pw-callout">
+                  <p className="pw-callout-label">Do this</p>
+                  <ul className="pw-steps">
+                    {paceSteps.map((step, index) => (
+                      <li key={step}><span className="pw-stepn">{index + 1}</span>{step}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {timer ? (
+                <div className="pw-pace">
+                  <span className={`pw-bigtimer${timerFinished ? " finished" : ""}`}>{formatTime(timerSeconds)}</span>
+                  <span className="pw-pace-copy"><b>{flow.presentation?.title || state.label}</b><span>Shared class clock</span></span>
+                </div>
+              ) : null}
+            </div>
+            <div className="pw-right">
+              {vocabCards.map((card) => (
+                <div className="pw-vocab" key={card.term}>
+                  <span className="pw-tape" aria-hidden="true" />
+                  <div className="pw-term"><span className="pw-term-dot" />{card.term}</div>
+                  {card.def ? <p className="pw-def">{card.def}</p> : null}
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </section>
     </main>
