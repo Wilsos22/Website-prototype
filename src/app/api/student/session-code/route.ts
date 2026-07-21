@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "@/lib/supabaseServer";
 import type { LiveClassFlowSnapshot } from "@/lib/liveClassFlow";
+import { periodExistsForClassCode, withinSchoolHours } from "@/lib/periodClassCodes";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,16 @@ export async function POST(request: Request) {
     ?.find((step) => step.stateId === "warmup")
     ?.resourceUrl || null;
   const warmUpLink = currentWarmUpLink || lessonWarmUpLink;
+  // Instant warm-up access: a period's permanent class code is a valid entry
+  // even before any session exists. Recognition only - the session itself is
+  // created by the authenticated warmup-start call that follows, so an
+  // unauthenticated poster of this endpoint can never open anything.
+  if (!session && withinSchoolHours() && await periodExistsForClassCode(db, code)) {
+    return Response.json(
+      { open: true, warmUpLink: null },
+      { headers: { "cache-control": "no-store" } },
+    );
+  }
   return Response.json(
     { open: Boolean(session), warmUpLink },
     { headers: { "cache-control": "no-store" } },
