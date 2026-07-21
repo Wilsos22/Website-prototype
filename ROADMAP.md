@@ -104,14 +104,25 @@ to complaining-teen, less Red Bull, shorter replies)
   ladder closes, the pulled-out divisors line up UNDER it and the student
   multiplies them out one step at a time for the GCF, then extends the chain
   with the two bottom leftovers for the LCM; wrong products get the real
-  arithmetic named. NEW Factor Trees mode: build a factor tree for one number
-  or two side by side — tap a composite (dashed ring), split it by any factor
-  (wrong factors name the remainder), primes circle green and stop. Each
-  finished tree lists its prime leaves underneath; one tree closes by
-  multiplying the primes back into the number, two trees close by
-  multiplying the primes both trees SHARE — the same GCF the ladder finds.
-  No evidence emitters (unchanged). Verified end to end in-browser both
-  modes; typecheck and build clean. Merged to main and live 7/21.
+  arithmetic named. Factor Trees mode (rebuilt same day to Steele's spec,
+  commit 4de7f5c): the rules own the left third and the tree owns the rest.
+  No number options on screen — the teacher sets the sequence ahead of time
+  (Factor Trees field on the /control ladder state, or ?set=24,36,60; shared
+  parser src/lib/factorTreeSet.ts; /ladder-method gained a { set }
+  LiveToolConfig arm) and students get one number at a time with progress
+  dots and localStorage resume. The student types BOTH factors of a split; a
+  wrong pair names its real product, pulses the lit rules, and points at one
+  ("Not sure? Try 2 — the last digit is even"). New prime branches FLASH
+  until tapped; the tap draws a circle and check mark that settles. When
+  every prime is confirmed, the primes lift out of the tree and fly down to
+  a line at the bottom (staggered, capped under 2s, hard fallback so a
+  backgrounded tab can never strand a student; reduced motion lands them
+  instantly), then the line collapses two at a time through an anchored
+  pop-out — 2 x 2 becomes 4, 4 x 2 becomes 8 — until the original number
+  stands alone, rebuilt from its primes. The earlier two-tree side-by-side
+  compare was superseded by this spec and removed. No evidence emitters
+  (unchanged). Verified end to end in-browser both modes; typecheck and
+  build clean. Merged to main and live 7/21.
 - **Divisibility D1 — rules 1-6, closes with clickable factor arches** (7/21,
   commit 8c7a79a, same branch as the Distributive Area work) — /divisibility now
   matches its D1 lesson scope. The rule rail is ÷1 through ÷6 only (7-10 removed
