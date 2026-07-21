@@ -18,6 +18,7 @@ import {
   type LiveClassFlowSnapshot,
   type TeacherRemoteCommand,
 } from "@/lib/liveClassFlow";
+import { WARM_ACCENTS } from "@/lib/warmNotebook";
 
 interface StageSession {
   id: string;
@@ -40,23 +41,6 @@ function formatTime(totalSeconds: number) {
   const seconds = Math.max(0, totalSeconds);
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
-
-// Warm Notebook accents, one per stage (Design canvas turn 12e). These are the
-// semantic colors students learn; CLASSROOM_STAGE_THEMES keeps the dark
-// projector values for surfaces that have not been refit yet.
-const WARM_ACCENTS: Record<string, string> = {
-  evergreen: "#50A3A4",
-  scenario: "#F2820C",
-  concrete: "#2E9E5A",
-  representational: "#3E7CC0",
-  abstract: "#845BC9",
-  "lesson-targets": "#FCAF38",
-  "learning-check": "#FCAF38",
-  discussion: "#F95335",
-  independent: "#674A40",
-  exit: "#D6567C",
-  closeout: "#C9992F",
-};
 
 // ?preview=<stage id> renders the shell with sample content and no session -
 // the way to check the projector skin without starting Live Class Flow.
