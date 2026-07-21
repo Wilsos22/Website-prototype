@@ -15,3 +15,12 @@ aistudio_*
 
 # mastery golden-test build artifact
 .tmp-mastery/
+
+# Steele's local piles in the working folder - visible in Finder, never for git.
+# Mass-staging these during a GitHub Desktop pull is what caused the 7/21
+# add/add conflict mess.
+Big_Dog_Thinking_Posters/
+Codex Downloads/
+Claude Design Wireframe/*.zip
+Claude Design Wireframe/*-handoff*
+output/
