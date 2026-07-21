@@ -41,6 +41,46 @@ function formatTime(totalSeconds: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
+// Warm Notebook accents, one per stage (Design canvas turn 12e). These are the
+// semantic colors students learn; CLASSROOM_STAGE_THEMES keeps the dark
+// projector values for surfaces that have not been refit yet.
+const WARM_ACCENTS: Record<string, string> = {
+  evergreen: "#50A3A4",
+  scenario: "#F2820C",
+  concrete: "#2E9E5A",
+  representational: "#3E7CC0",
+  abstract: "#845BC9",
+  "lesson-targets": "#FCAF38",
+  "learning-check": "#FCAF38",
+  discussion: "#F95335",
+  independent: "#674A40",
+  exit: "#D6567C",
+  closeout: "#C9992F",
+};
+
+// ?preview=<stage id> renders the shell with sample content and no session -
+// the way to check the projector skin without starting Live Class Flow.
+const PREVIEW_SAMPLES: Record<string, { label: string; headline: string; direction: string }> = {
+  evergreen: { label: "Warm-up", headline: "Complete today's warm-up", direction: "Voices off. Work on your Chromebook." },
+  scenario: { label: "Launch", headline: "___ + ___ = 27", direction: "Think silently. Tell your partner one sum." },
+  concrete: { label: "Concrete", headline: "Build it with counters", direction: "Make the groups on your desk." },
+  representational: { label: "Representational", headline: "Make it with tiles", direction: "Build, then write what you built." },
+  abstract: { label: "Abstract", headline: "Three ways to write it", direction: "Same relationship, three notations." },
+  "learning-check": { label: "Learning check", headline: "Fist-to-Five", direction: "Show 0-5 on your Chromebook. Only I see your number." },
+  discussion: { label: "Discussion", headline: "Round 1", direction: "The ratio is ___ because ___." },
+  independent: { label: "Independent", headline: "Practice 1-6", direction: "Solve on paper. Due end of class." },
+  exit: { label: "Exit ticket", headline: "One question", direction: "Turn it in on your Chromebook." },
+  closeout: { label: "Closeout", headline: "Before tomorrow", direction: "Pack up. Paper in the tray." },
+};
+
+function previewStageParam() {
+  try {
+    return new URLSearchParams(window.location.search).get("preview")?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 function toolUrl(flow: LiveClassFlowSnapshot) {
   const tool = flow.tool;
   if (!tool) return null;
@@ -125,6 +165,13 @@ export default function ClassroomStagePage() {
   const [loading, setLoading] = useState(true);
   const [sessionMessage, setSessionMessage] = useState("Connecting to the confirmed class session.");
   const [pollAnswers, setPollAnswers] = useState<PollAnswer[]>([]);
+  const [previewStage, setPreviewStage] = useState<string | null>(null);
+  const [overrideUrl, setOverrideUrl] = useState<string | null>(null);
+  const [overrideFrame, setOverrideFrame] = useState<HTMLIFrameElement | null>(null);
+
+  useEffect(() => {
+    setPreviewStage(previewStageParam());
+  }, []);
 
   useEffect(() => {
     let stopped = false;
@@ -262,6 +309,53 @@ export default function ClassroomStagePage() {
     ? structuredSections.length ? structuredSections : independentSections(slideBody)
     : [];
   const assignedToolActive = presentation?.responseMode?.trim().toLowerCase() === "assigned tool";
+
+  // Hand-built screen override: when public/screens/<lessonCode>/<stateId>.html
+  // exists, it IS this state's screen - Steele built it on purpose. The live
+  // snapshot still fills any data-slot text the file kept; slots he deleted
+  // stay exactly as he wrote them. Board and Abbie overlays still stack on top.
+  const overrideLessonCode = (lesson?.code || activeSequenceStep?.lessonCode || "").trim();
+  const overrideStateId = state?.id?.trim() || "";
+  useEffect(() => {
+    if (!overrideLessonCode || !overrideStateId) {
+      setOverrideUrl(null);
+      return;
+    }
+    let stopped = false;
+    const url = `/screens/${encodeURIComponent(overrideLessonCode)}/${encodeURIComponent(overrideStateId)}.html`;
+    fetch(url, { method: "HEAD" })
+      .then((res) => {
+        if (!stopped) setOverrideUrl(res.ok ? url : null);
+      })
+      .catch(() => {
+        if (!stopped) setOverrideUrl(null);
+      });
+    return () => {
+      stopped = true;
+    };
+  }, [overrideLessonCode, overrideStateId]);
+
+  const overrideHeadline = (presentation?.mainDisplay || presentation?.body || "").split(/\n+/)[0] || "";
+  const overrideDirection = (presentation?.mainDisplay || presentation?.body || "")
+    .split(/\n+/).slice(1).join(" ").trim();
+  const overrideTimerText = timer ? formatTime(timerSeconds) : "";
+  useEffect(() => {
+    if (!overrideFrame) return;
+    const doc = overrideFrame.contentDocument;
+    if (!doc) return;
+    const fill = (slot: string, value: string) => {
+      if (!value) return;
+      doc.querySelectorAll(`[data-slot="${slot}"]`).forEach((el) => {
+        if (el.textContent !== value) el.textContent = value;
+      });
+    };
+    fill("state", state?.label || "");
+    fill("topic", presentation?.title || lesson?.title || "");
+    fill("code", lesson?.code || "");
+    fill("headline", overrideHeadline);
+    fill("direction", overrideDirection);
+    fill("timer", overrideTimerText);
+  }, [overrideFrame, state?.label, presentation?.title, lesson?.title, lesson?.code, overrideHeadline, overrideDirection, overrideTimerText]);
   const showPollPanel = Boolean(poll && (theme.id === "learning-check" || poll.stage === "results" || !presentation?.mainDisplay));
   const showResourcePanel = Boolean(
     resource
@@ -270,100 +364,113 @@ export default function ClassroomStagePage() {
     && resource.url.startsWith("/")
     && !["discussion", "independent", "closeout"].includes(theme.id),
   );
+  const previewSample = !session && !loading && previewStage
+    ? PREVIEW_SAMPLES[previewStage] || PREVIEW_SAMPLES[classroomStageTheme(previewStage).id] || null
+    : null;
+  const previewTheme = previewStage ? classroomStageTheme(previewStage) : null;
+  const activeThemeId = previewSample && previewTheme ? previewTheme.id : theme.id;
+  // The Warm Notebook stage: paper ground, one semantic accent. The dark
+  // projector* values in the theme belong to surfaces not yet refit.
+  const accent = WARM_ACCENTS[activeThemeId] || theme.accent;
   const style = {
-    "--stage-accent": theme.accent,
-    "--stage-base": theme.projectorBase,
-    "--stage-panel": theme.projectorPanel,
-    "--stage-line": theme.projectorLine,
-    "--stage-muted": theme.projectorMuted,
-    "--stage-glow": theme.projectorGlow,
+    "--acc": accent,
   } as CSSProperties;
 
   return (
     <main className="stage-page" style={style}>
       <style>{`
-        .stage-page { position:fixed; inset:0; box-sizing:border-box; overflow:hidden; background:radial-gradient(1200px 640px at 50% 18%,var(--stage-panel),var(--stage-base) 60%,var(--stage-base)); color:#f4eee3; font-family:var(--bdb-font); }
-        .stage-page::before, .stage-page::after { content:""; position:absolute; z-index:0; width:38vw; height:38vw; border-radius:50%; background:var(--stage-accent); filter:blur(120px); opacity:0.12; pointer-events:none; }
-        .stage-page::before { left:-8vw; top:-16vw; }
-        .stage-page::after { right:-12vw; bottom:-18vw; opacity:0.08; }
+        /* Warm Notebook skin (Design canvas turn 12): warm dotted paper, ink
+           text, one semantic accent per state via --acc. Derived tones:
+           --acc-deep darkens the accent enough to read as text on paper. */
+        .stage-page { position:fixed; inset:0; box-sizing:border-box; overflow:hidden;
+          --ink:#201E1A; --head:#2E4A54; --soft:#5C6E75; --faint:#8A9299; --hair:#E3D9C2; --card:#fff;
+          --acc-deep:color-mix(in srgb, var(--acc) 62%, #201E1A);
+          background-color:#F3F0E7;
+          background-image:radial-gradient(circle,#CBC4B2 1px,transparent 1.3px);
+          background-size:18px 18px;
+          color:var(--ink); font-family:var(--bdb-font); }
         .stage-frame { position:relative; z-index:1; width:100%; height:100%; display:grid; grid-template-rows:66px minmax(0,1fr); }
-        .stage-topbar { z-index:8; width:100%; box-sizing:border-box; display:flex; align-items:center; gap:13px; border-bottom:1px solid rgba(255,255,255,0.1); padding:0 32px; background:color-mix(in srgb,var(--stage-base) 90%,transparent); }
-        .stage-mark { width:30px; height:30px; flex:none; display:grid; place-items:center; border-radius:9px; background:rgba(255,255,255,0.12); color:#fff; font-size:0.95rem; font-weight:900; }
-        .stage-dot { width:12px; height:12px; flex:none; border-radius:3px; background:var(--stage-accent); }
+        .stage-topbar { z-index:8; width:100%; box-sizing:border-box; display:flex; align-items:center; gap:13px; border-bottom:1px solid rgba(120,110,90,0.18); padding:0 32px; background:rgba(243,240,231,0.86); }
+        .stage-mark { display:none; }
+        .stage-dot { width:12px; height:12px; flex:none; border-radius:3px; background:var(--acc); }
+        .stage-chip { flex:none; border-radius:6px; background:var(--acc); color:#fff; padding:5px 11px; font-size:0.66rem; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; }
         .stage-topbar-copy { min-width:0; display:flex; align-items:baseline; gap:12px; }
-        .stage-kicker { margin:0; color:var(--stage-accent); font-size:0.66rem; font-weight:900; letter-spacing:0.13em; text-transform:uppercase; }
-        .stage-title { margin:0; overflow:hidden; color:#f7f1e6; text-overflow:ellipsis; white-space:nowrap; font-size:17px; line-height:1.05; font-weight:900; }
-        .stage-lesson { margin:0; overflow:hidden; color:rgba(244,238,227,0.44); text-overflow:ellipsis; white-space:nowrap; font-size:13px; font-weight:650; }
-        .stage-timer { min-width:128px; flex:none; display:grid; grid-template-columns:auto auto; align-items:center; justify-content:center; gap:11px; margin-left:auto; border:1.5px solid color-mix(in srgb,var(--stage-accent) 46%,transparent); border-radius:999px; background:color-mix(in srgb,var(--stage-accent) 15%,transparent); padding:8px 18px; color:var(--stage-accent); text-align:center; font-size:25px; line-height:0.9; font-weight:900; font-variant-numeric:tabular-nums; letter-spacing:-0.04em; }
-        .stage-timer::before { content:"Time left"; color:rgba(244,238,227,0.58); font-size:9.5px; font-weight:800; letter-spacing:0.16em; text-transform:uppercase; }
-        .stage-timer.finished { color:#ffd6dc; }
-        .stage-success { position:absolute; z-index:4; top:14px; right:14px; width:min(34vw,440px); border:1px solid var(--stage-line); border-top:4px solid var(--stage-accent); border-radius:16px; background:color-mix(in srgb,var(--stage-panel) 90%,transparent); padding:13px 16px; box-shadow:0 14px 34px rgba(0,0,0,0.22); backdrop-filter:blur(12px); }
-        .stage-success-label { margin:0; color:var(--stage-accent); font-size:0.66rem; font-weight:900; letter-spacing:0.12em; text-transform:uppercase; }
-        .stage-success-text { margin:6px 0 0; color:#fff; font-size:clamp(0.8rem,1.25vw,1.02rem); line-height:1.32; font-weight:760; }
+        .stage-kicker { margin:0; color:var(--acc-deep); font-size:0.66rem; font-weight:900; letter-spacing:0.13em; text-transform:uppercase; }
+        .stage-title { margin:0; overflow:hidden; color:var(--head); text-overflow:ellipsis; white-space:nowrap; font-size:17px; line-height:1.05; font-weight:800; }
+        .stage-lesson { margin:0; overflow:hidden; color:var(--faint); text-overflow:ellipsis; white-space:nowrap; font-size:13px; font-weight:650; }
+        .stage-timer { min-width:128px; flex:none; display:inline-flex; align-items:center; justify-content:center; gap:10px; margin-left:auto; border:1.2px solid var(--hair); border-radius:999px; background:var(--card); padding:8px 18px; color:var(--head); text-align:center; font-size:25px; line-height:0.9; font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:-0.02em; box-shadow:0 2px 10px rgba(40,32,20,0.06); }
+        .stage-timer::before { content:""; width:8px; height:8px; border-radius:999px; background:var(--acc); }
+        .stage-timer.finished { color:#A82C15; }
+        .stage-timer.finished::before { background:#F95335; }
+        .stage-success { position:absolute; z-index:4; top:14px; right:14px; width:min(34vw,440px); border:1px solid var(--hair); border-top:4px solid var(--acc); border-radius:16px; background:var(--card); padding:13px 16px; box-shadow:0 12px 32px rgba(40,32,20,0.10); }
+        .stage-success-label { margin:0; color:var(--acc-deep); font-size:0.66rem; font-weight:900; letter-spacing:0.12em; text-transform:uppercase; }
+        .stage-success-text { margin:6px 0 0; color:var(--ink); font-size:clamp(0.8rem,1.25vw,1.02rem); line-height:1.32; font-weight:700; }
         .stage-work { position:relative; min-height:0; overflow:hidden; }
+        .stage-override { position:absolute; inset:0; z-index:3; width:100%; height:100%; border:0; background:#F3F0E7; }
         .stage-empty, .stage-directions, .stage-poll, .stage-resource-link { position:absolute; inset:0; display:grid; place-items:center; padding:clamp(34px,6vw,88px); text-align:center; }
-        .stage-empty h1 { margin:0; max-width:22ch; color:#fff; font-size:clamp(2.2rem,5.2vw,5.2rem); line-height:1.02; }
-        .stage-empty p { margin:14px 0 0; color:var(--stage-muted); font-size:clamp(1rem,2vw,1.4rem); font-weight:700; }
+        .stage-empty h1 { margin:0; max-width:22ch; color:var(--head); font-size:clamp(2.2rem,5.2vw,5.2rem); line-height:1.02; font-weight:800; letter-spacing:-0.02em; }
+        .stage-empty p { margin:14px 0 0; color:var(--soft); font-size:clamp(1rem,2vw,1.4rem); font-weight:700; }
         .stage-directions-inner { width:min(100%,1500px); display:grid; gap:22px; justify-items:center; }
-        .stage-main-prompt { margin:0; max-width:92%; color:#f8f2e7; text-align:center; white-space:pre-wrap; font-size:clamp(3.1rem,6.3vw,6.9rem); line-height:1.08; font-weight:900; letter-spacing:-0.025em; text-wrap:balance; }
+        .stage-main-prompt { margin:0; max-width:92%; color:var(--head); text-align:center; white-space:pre-wrap; font-size:clamp(3.1rem,6.3vw,6.9rem); line-height:1.08; font-weight:800; letter-spacing:-0.02em; text-wrap:balance; }
+        .stage-action-chip { border-radius:999px; background:var(--acc); color:#fff; padding:9px 20px; font-size:clamp(0.72rem,1.1vw,0.9rem); font-weight:800; letter-spacing:0.1em; text-transform:uppercase; }
         .stage-routine { position:absolute; inset:0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:clamp(12px,2vw,22px); align-content:center; padding:clamp(24px,4vw,60px); }
-        .stage-routine article { display:grid; align-content:center; gap:8px; min-height:120px; border:1px solid var(--stage-line); border-top:5px solid var(--stage-accent); border-radius:16px; background:color-mix(in srgb,var(--stage-panel) 92%,transparent); padding:clamp(16px,2.4vw,28px); }
+        .stage-routine article { display:grid; align-content:center; gap:8px; min-height:120px; border:1px solid var(--hair); border-top:5px solid var(--acc); border-radius:16px; background:var(--card); padding:clamp(16px,2.4vw,28px); box-shadow:0 2px 10px rgba(40,32,20,0.06); }
         .stage-routine .stage-routine-lead { grid-column:1 / -1; min-height:100px; grid-template-columns:1fr auto; align-items:end; }
-        .stage-routine p { margin:0; color:var(--stage-accent); font-size:0.72rem; font-weight:900; letter-spacing:0.13em; text-transform:uppercase; }
-        .stage-routine h2 { margin:0; color:#fff; font-size:clamp(2.2rem,4.5vw,4.7rem); line-height:0.95; }
-        .stage-routine span { color:var(--stage-muted); font-size:clamp(1rem,1.7vw,1.35rem); font-weight:780; }
-        .stage-routine strong { color:#fff; font-size:clamp(1.15rem,2.25vw,1.8rem); line-height:1.28; text-wrap:balance; }
+        .stage-routine p { margin:0; color:var(--acc-deep); font-size:0.72rem; font-weight:900; letter-spacing:0.13em; text-transform:uppercase; }
+        .stage-routine h2 { margin:0; color:var(--head); font-size:clamp(2.2rem,4.5vw,4.7rem); line-height:0.95; font-weight:800; }
+        .stage-routine span { color:var(--soft); font-size:clamp(1rem,1.7vw,1.35rem); font-weight:700; }
+        .stage-routine strong { color:var(--ink); font-size:clamp(1.15rem,2.25vw,1.8rem); line-height:1.28; text-wrap:balance; }
         .stage-routine.small-group { grid-template-columns:minmax(240px,0.7fr) minmax(0,1.3fr); }
         .stage-routine.small-group .stage-routine-lead { grid-column:auto; }
         .stage-targets { position:absolute; inset:0; display:grid; align-content:center; justify-items:center; gap:clamp(20px,3.5vw,38px); padding:clamp(34px,6vw,88px); text-align:center; }
-        .stage-targets-label { margin:0; color:var(--stage-accent); font-size:clamp(0.72rem,1.25vw,0.95rem); font-weight:950; letter-spacing:0.15em; text-transform:uppercase; }
-        .stage-targets-intention { margin:0; max-width:28ch; color:#fff; font-size:clamp(2rem,4.8vw,5rem); line-height:1.04; font-weight:900; letter-spacing:-0.035em; text-wrap:balance; }
-        .stage-targets-criterion { width:min(100%,980px); display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:16px; border:1px solid var(--stage-line); border-left:7px solid var(--stage-accent); border-radius:16px; background:color-mix(in srgb,var(--stage-panel) 90%,transparent); padding:clamp(16px,2.3vw,25px); color:#fff; text-align:left; box-shadow:0 18px 46px rgba(0,0,0,0.24); }
-        .stage-targets-check { display:grid; place-items:center; min-width:58px; height:42px; border:2px solid var(--stage-accent); border-radius:12px; color:var(--stage-accent); padding:0 8px; font-size:0.7rem; font-weight:950; letter-spacing:0.08em; text-transform:uppercase; }
+        .stage-targets-label { margin:0; color:var(--acc-deep); font-size:clamp(0.72rem,1.25vw,0.95rem); font-weight:900; letter-spacing:0.15em; text-transform:uppercase; }
+        .stage-targets-intention { margin:0; max-width:28ch; color:var(--head); font-size:clamp(2rem,4.8vw,5rem); line-height:1.04; font-weight:800; letter-spacing:-0.03em; text-wrap:balance; }
+        .stage-targets-criterion { width:min(100%,980px); display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:16px; border:1px solid var(--hair); border-left:7px solid var(--acc); border-radius:16px; background:var(--card); padding:clamp(16px,2.3vw,25px); color:var(--ink); text-align:left; box-shadow:0 12px 32px rgba(40,32,20,0.10); }
+        .stage-targets-check { display:grid; place-items:center; min-width:58px; height:42px; border:2px solid var(--acc); border-radius:12px; color:var(--acc-deep); padding:0 8px; font-size:0.7rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; }
         .stage-targets-criterion strong { font-size:clamp(1.25rem,2.6vw,2.3rem); line-height:1.2; }
         .stage-resource, .stage-tool { position:absolute; inset:0; width:100%; height:100%; border:0; background:#fff; }
         .stage-resource-link { padding-top:clamp(34px,6vw,88px); }
-        .stage-resource-link a { display:flex; min-height:72px; align-items:center; justify-content:center; border:2px solid var(--stage-accent); border-radius:14px; background:var(--stage-accent); color:#111813; padding:0 30px; text-decoration:none; font-size:1.25rem; font-weight:900; }
+        .stage-resource-link a { display:flex; min-height:72px; align-items:center; justify-content:center; border-radius:14px; background:var(--acc); color:#fff; padding:0 30px; text-decoration:none; font-size:1.25rem; font-weight:800; box-shadow:0 4px 16px rgba(40,32,20,0.14); }
         .stage-lesson-visual { position:absolute; inset:0; display:grid; place-items:center; padding:clamp(30px,5vw,72px); }
         .stage-poll { align-content:center; justify-items:center; gap:26px; padding-top:120px; }
-        .stage-question { margin:0; max-width:24ch; color:#fff; font-size:clamp(2.2rem,5.4vw,5.4rem); line-height:1.05; letter-spacing:-0.025em; }
-        .stage-response-count { margin:0; color:var(--stage-muted); font-size:clamp(1rem,2.2vw,1.5rem); font-weight:850; }
-        .stage-learning { margin:0; max-width:62ch; color:var(--stage-muted); font-size:clamp(1rem,1.8vw,1.35rem); line-height:1.35; font-weight:780; }
+        .stage-question { margin:0; max-width:24ch; color:var(--head); font-size:clamp(2.2rem,5.4vw,5.4rem); line-height:1.05; font-weight:800; letter-spacing:-0.02em; }
+        .stage-response-count { margin:0; color:var(--soft); font-size:clamp(1rem,2.2vw,1.5rem); font-weight:800; }
+        .stage-learning { margin:0; max-width:62ch; color:var(--soft); font-size:clamp(1rem,1.8vw,1.35rem); line-height:1.35; font-weight:700; }
         .stage-results { width:min(100%,900px); display:grid; gap:13px; }
-        .stage-result { display:grid; grid-template-columns:minmax(80px,1fr) minmax(180px,4fr) 60px; align-items:center; gap:14px; color:#fff; font-size:clamp(1rem,2.2vw,1.45rem); font-weight:850; text-align:left; }
-        .stage-bar { height:22px; border-radius:999px; background:color-mix(in srgb,var(--stage-panel) 65%,#000); overflow:hidden; }
-        .stage-fill { height:100%; border-radius:inherit; background:var(--stage-accent); }
+        .stage-result { display:grid; grid-template-columns:minmax(80px,1fr) minmax(180px,4fr) 60px; align-items:center; gap:14px; color:var(--ink); font-size:clamp(1rem,2.2vw,1.45rem); font-weight:800; text-align:left; }
+        .stage-bar { height:22px; border-radius:999px; background:#ECE7DD; border:1px solid var(--hair); overflow:hidden; }
+        .stage-fill { height:100%; border-radius:inherit; background:var(--acc); }
         .stage-score-scene { position:absolute; inset:0; display:grid; grid-template-columns:minmax(330px,0.78fr) minmax(0,1.22fr); align-items:center; gap:clamp(28px,5vw,72px); padding:clamp(34px,6vw,82px); }
-        .stage-scoreboard { display:grid; grid-template-columns:1fr 1fr; gap:12px; border:1px solid var(--stage-line); border-radius:22px; background:color-mix(in srgb,var(--stage-panel) 94%,#000); padding:18px; box-shadow:0 22px 56px rgba(0,0,0,0.28); }
-        .stage-scoreboard-label { grid-column:1 / -1; margin:0; border-bottom:1px solid var(--stage-line); padding:0 4px 12px; color:var(--stage-accent); text-align:center; font-size:0.72rem; font-weight:950; letter-spacing:0.16em; text-transform:uppercase; }
-        .stage-team { min-width:0; display:grid; justify-items:center; gap:8px; border:1px solid var(--stage-line); border-radius:16px; background:color-mix(in srgb,var(--stage-base) 74%,#000); padding:18px 12px; }
-        .stage-team span { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--stage-muted); font-size:clamp(0.78rem,1.4vw,1rem); font-weight:900; letter-spacing:0.08em; text-transform:uppercase; }
-        .stage-team strong { color:#fff; font-size:clamp(4.8rem,10vw,9rem); line-height:0.86; font-variant-numeric:tabular-nums; letter-spacing:-0.06em; }
+        .stage-scoreboard { display:grid; grid-template-columns:1fr 1fr; gap:12px; border:1px solid var(--hair); border-radius:22px; background:var(--card); padding:18px; box-shadow:0 12px 32px rgba(40,32,20,0.10); }
+        .stage-scoreboard-label { grid-column:1 / -1; margin:0; border-bottom:1px solid var(--hair); padding:0 4px 12px; color:var(--acc-deep); text-align:center; font-size:0.72rem; font-weight:900; letter-spacing:0.16em; text-transform:uppercase; }
+        .stage-team { min-width:0; display:grid; justify-items:center; gap:8px; border:1px solid var(--hair); border-radius:16px; background:#F6F3EC; padding:18px 12px; }
+        .stage-team span { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--soft); font-size:clamp(0.78rem,1.4vw,1rem); font-weight:900; letter-spacing:0.08em; text-transform:uppercase; }
+        .stage-team strong { color:var(--head); font-size:clamp(4.8rem,10vw,9rem); line-height:0.86; font-variant-numeric:tabular-nums; letter-spacing:-0.06em; }
         .stage-score-copy { display:grid; gap:20px; align-content:center; }
-        .stage-score-copy h2 { margin:0; max-width:12ch; color:#fff; font-size:clamp(3rem,6.7vw,7rem); line-height:0.95; letter-spacing:-0.045em; text-wrap:balance; }
-        .stage-score-copy p { margin:0; max-width:46ch; border-left:8px solid var(--stage-accent); padding:14px 0 14px 20px; color:var(--stage-muted); font-size:clamp(1.1rem,2.2vw,1.8rem); line-height:1.38; font-weight:780; }
+        .stage-score-copy h2 { margin:0; max-width:12ch; color:var(--head); font-size:clamp(3rem,6.7vw,7rem); line-height:0.95; font-weight:800; letter-spacing:-0.04em; text-wrap:balance; }
+        .stage-score-copy p { margin:0; max-width:46ch; border-left:8px solid var(--acc); padding:14px 0 14px 20px; color:var(--soft); font-size:clamp(1.1rem,2.2vw,1.8rem); line-height:1.38; font-weight:700; }
         .stage-discussion { position:absolute; inset:0; display:grid; grid-template-columns:minmax(0,1.35fr) minmax(300px,0.65fr); gap:clamp(18px,3vw,36px); padding:clamp(28px,4.2vw,58px); }
         .stage-discussion-main { min-width:0; display:grid; align-content:center; gap:14px; }
-        .stage-share-callout { width:min(100%,720px); display:grid; gap:6px; border:1px solid var(--stage-line); border-left:7px solid var(--stage-accent); border-radius:16px; background:color-mix(in srgb,var(--stage-panel) 84%,#000); padding:16px 20px; }
-        .stage-share-callout span { color:var(--stage-accent); font-size:0.7rem; font-weight:950; letter-spacing:0.13em; text-transform:uppercase; }
-        .stage-share-callout strong { color:#fff; font-size:clamp(2.2rem,5vw,5rem); line-height:1; font-weight:950; }
-        .stage-discussion-main h2 { margin:0 0 6px; color:#fff; font-size:clamp(2.1rem,4.7vw,4.8rem); line-height:1; letter-spacing:-0.035em; }
-        .stage-round { margin:0; border-left:6px solid var(--stage-accent); background:color-mix(in srgb,var(--stage-panel) 72%,transparent); padding:11px 15px; color:#fff; font-size:clamp(1rem,1.65vw,1.35rem); line-height:1.32; font-weight:780; }
+        .stage-share-callout { width:min(100%,720px); display:grid; gap:6px; border:1px solid var(--hair); border-left:7px solid var(--acc); border-radius:16px; background:var(--card); padding:16px 20px; box-shadow:0 2px 10px rgba(40,32,20,0.06); }
+        .stage-share-callout span { color:var(--acc-deep); font-size:0.7rem; font-weight:900; letter-spacing:0.13em; text-transform:uppercase; }
+        .stage-share-callout strong { color:var(--head); font-size:clamp(2.2rem,5vw,5rem); line-height:1; font-weight:800; }
+        .stage-discussion-main h2 { margin:0 0 6px; color:var(--head); font-size:clamp(2.1rem,4.7vw,4.8rem); line-height:1; font-weight:800; letter-spacing:-0.03em; }
+        .stage-round { margin:0; border-left:6px solid var(--acc); background:var(--card); padding:11px 15px; color:var(--ink); font-size:clamp(1rem,1.65vw,1.35rem); line-height:1.32; font-weight:700; box-shadow:0 2px 10px rgba(40,32,20,0.05); }
         .stage-supports { min-height:0; display:grid; grid-template-rows:auto auto; align-content:center; gap:14px; }
-        .stage-support-card { min-width:0; border:1px solid var(--stage-line); border-top:4px solid var(--stage-accent); border-radius:16px; background:color-mix(in srgb,var(--stage-panel) 90%,transparent); padding:15px 17px; }
-        .stage-support-title { margin:0 0 9px; color:var(--stage-accent); font-size:0.68rem; font-weight:950; letter-spacing:0.12em; text-transform:uppercase; }
+        .stage-support-card { min-width:0; border:1px solid var(--hair); border-top:4px solid var(--acc); border-radius:16px; background:var(--card); padding:15px 17px; box-shadow:0 2px 10px rgba(40,32,20,0.06); }
+        .stage-support-title { margin:0 0 9px; color:var(--acc-deep); font-size:0.68rem; font-weight:900; letter-spacing:0.12em; text-transform:uppercase; }
         .stage-stems { display:grid; gap:7px; margin:0; padding:0; list-style:none; }
-        .stage-stems li { color:#fff; font-size:clamp(0.78rem,1.25vw,0.98rem); line-height:1.28; font-weight:760; }
+        .stage-stems li { color:var(--ink); font-size:clamp(0.78rem,1.25vw,0.98rem); line-height:1.28; font-weight:700; }
         .stage-vocabulary { display:flex; flex-wrap:wrap; gap:7px; }
-        .stage-word { border:1px solid var(--stage-line); border-radius:999px; background:color-mix(in srgb,var(--stage-base) 72%,transparent); padding:6px 9px; color:#fff; font-size:clamp(0.72rem,1.1vw,0.88rem); font-weight:850; }
+        .stage-word { border:1px solid var(--hair); border-radius:999px; background:#F6F3EC; padding:6px 9px; color:var(--ink); font-size:clamp(0.72rem,1.1vw,0.88rem); font-weight:800; }
         .stage-independent { position:absolute; inset:0; display:grid; place-items:center; padding:clamp(22px,3.4vw,48px); }
         .stage-independent-grid { width:min(100%,1240px); max-height:100%; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; align-content:center; }
-        .stage-independent-card { min-width:0; border:1px solid var(--stage-line); border-top:4px solid var(--stage-accent); border-radius:16px; background:color-mix(in srgb,var(--stage-panel) 90%,transparent); padding:14px 17px; box-shadow:0 14px 34px rgba(0,0,0,0.16); }
+        .stage-independent-card { min-width:0; border:1px solid var(--hair); border-top:4px solid var(--acc); border-radius:16px; background:var(--card); padding:14px 17px; box-shadow:0 2px 10px rgba(40,32,20,0.06); }
         .stage-independent-card.required-paper-work,
         .stage-independent-card.help-path,
         .stage-independent-card.required-digital-work { grid-column:1 / -1; }
-        .stage-independent-label { margin:0 0 7px; color:var(--stage-accent); font-size:0.68rem; font-weight:950; letter-spacing:0.12em; text-transform:uppercase; }
-        .stage-independent-body { margin:0; color:#fff; font-size:clamp(0.98rem,1.55vw,1.3rem); line-height:1.3; font-weight:760; }
+        .stage-independent-label { margin:0 0 7px; color:var(--acc-deep); font-size:0.68rem; font-weight:900; letter-spacing:0.12em; text-transform:uppercase; }
+        .stage-independent-body { margin:0; color:var(--ink); font-size:clamp(0.98rem,1.55vw,1.3rem); line-height:1.3; font-weight:700; }
         .stage-independent-card.required-paper-work .stage-independent-body { font-size:clamp(1.08rem,1.9vw,1.55rem); }
         .stage-work.board-open .stage-empty,
         .stage-work.board-open .stage-directions,
@@ -386,7 +493,7 @@ export default function ClassroomStagePage() {
         .stage-work.board-open .stage-independent-grid { grid-template-columns:1fr; align-content:start; }
         .stage-work.board-open .stage-independent-card { grid-column:1; }
         .stage-work.board-open .classroom-spinner { right:42%; }
-        .stage-board-panel { position:absolute; z-index:5; inset:0 0 0 auto; width:42%; overflow:hidden; border-left:5px solid var(--stage-accent); background:#fff; box-shadow:-18px 0 40px rgba(0,0,0,0.28); }
+        .stage-board-panel { position:absolute; z-index:5; inset:0 0 0 auto; width:42%; overflow:hidden; border-left:5px solid var(--acc); background:#fff; box-shadow:-18px 0 40px rgba(40,32,20,0.16); }
         .stage-abbie { position:absolute; z-index:12; left:50%; bottom:20px; width:min(88%,860px); box-sizing:border-box; display:grid; grid-template-columns:auto minmax(0,1fr); gap:14px; align-items:center;
           transform:translateX(-50%); border:1px solid #2b5e54; border-left:7px solid #5eead4; border-radius:18px; background:#0d1f1b; padding:16px 20px; box-shadow:0 22px 60px rgba(0,0,0,0.48); }
         .stage-abbie-mark { width:50px; height:50px; display:grid; place-items:center; overflow:hidden; border-radius:50%; background:#14241f; }
@@ -433,13 +540,13 @@ export default function ClassroomStagePage() {
 
       <section className="stage-frame">
         <div className="stage-topbar">
-          <span className="stage-mark" aria-hidden="true">÷</span>
           <span className="stage-dot" aria-hidden="true" />
+          <span className="stage-chip">{previewSample ? previewSample.label : state?.label || "Big Dog Math"}</span>
           <div className="stage-topbar-copy">
-            <h1 className="stage-title">{presentation?.title || state?.label || "Waiting for the lesson"}</h1>
-            {lesson?.title ? <p className="stage-lesson">{lesson.title}</p> : null}
+            <h1 className="stage-title">{previewSample ? "Preview" : presentation?.title || state?.label || "Waiting for the lesson"}</h1>
+            {lesson?.title ? <p className="stage-lesson">{lesson.title}{lesson.code ? ` · ${lesson.code}` : ""}</p> : null}
           </div>
-          <div className={`stage-timer ${timerFinished ? "finished" : ""}`}>{timer ? formatTime(timerSeconds) : "--:--"}</div>
+          <div className={`stage-timer ${timerFinished ? "finished" : ""}`}>{previewSample ? "5:00" : timer ? formatTime(timerSeconds) : "--:--"}</div>
         </div>
 
         <section className={`stage-work${showBoardPanel ? " board-open" : ""}`}>
@@ -452,7 +559,25 @@ export default function ClassroomStagePage() {
           {loading ? (
             <div className="stage-empty"><div><h1>Connecting to the classroom</h1><p>{sessionMessage}</p></div></div>
           ) : !session || !flow || !state ? (
-            <div className="stage-empty"><div><h1>Ready for class</h1><p>{sessionMessage}</p></div></div>
+            previewSample ? (
+              <div className="stage-directions">
+                <div className="stage-directions-inner">
+                  <h2 className="stage-main-prompt">{previewSample.headline}</h2>
+                  <p className="stage-learning">{previewSample.direction}</p>
+                  <span className="stage-action-chip">{previewSample.label}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="stage-empty"><div><h1>Ready for class</h1><p>{sessionMessage}</p></div></div>
+            )
+          ) : overrideUrl ? (
+            <iframe
+              className="stage-override"
+              src={overrideUrl}
+              title={`${overrideLessonCode} ${state.label}`}
+              ref={setOverrideFrame}
+              onLoad={(event) => setOverrideFrame(event.currentTarget)}
+            />
           ) : showReaderSpinner ? (
             <ClassroomSpinner
               key={`${session.id}:${spinnerSyncScope}:controller`}
@@ -544,7 +669,7 @@ export default function ClassroomStagePage() {
               <LessonVisual
                 visual={lessonVisual}
                 variant="projector"
-                accent={theme.accent}
+                accent={accent}
                 scoreboardStage={presentation?.scoreboardStage}
               />
             </section>
