@@ -178,16 +178,16 @@ sets the cookie). Unauth: `/api/*` gets JSON 401; pages redirect to `/teacher-lo
 - Browser client: `getSupabase()` in `src/lib/supabase.ts` (`NEXT_PUBLIC_SUPABASE_URL` +
   `NEXT_PUBLIC_SUPABASE_ANON_KEY`). Server client: `getSupabaseAdmin()` in `src/lib/supabaseServer.ts`
   (`+ SUPABASE_SERVICE_ROLE_KEY`). Both return `null` when env is missing - null-check every call.
-- RLS posture, three groups:
-  - Permissive prototype (`prototype_all`, anon read+write): `periods`, `students`, `problems`,
-    `assignments`, `assignment_problems`, `sessions`, `responses`, `period_summaries`, `session_joins`,
-    `polls`, `poll_answers`, `challenges`, `challenge_attempts`, `checkpoint_runs`, `checkpoint_results`,
-    `practice_assignments`, `practice_assignment_attempts`, `exit_tickets`, `exit_ticket_responses`,
-    `lesson_presets`. Not safe for real PII.
-  - Server-only (RLS on, zero policies, revoked from anon - reachable only via service-role API):
-    `mastery`, `mastery_history`, `recommendations`, `iready_scores`. Anon reads return EMPTY silently.
-  - Read-only reference (anon SELECT only): `standards`, `standard_prereqs`, `misconceptions`,
-    `mastery_config`.
+- RLS posture: PRODUCTION IS LOCKED DOWN (verified live 2026-07-21 - anon gets 401/permission-denied
+  on `periods`, `students`, `sessions`, `responses`, `practice_assignments`, and the rest of the old
+  permissive group). `supabase/student-data-security.sql` removed the `prototype_all` policies, so
+  every student read/write goes through an authenticated `/api/*` route (`requireVerifiedStudent`
+  for `/api/student/*`, teacher gate for the rest); browser-side `getSupabase()` calls against those
+  tables silently fail in production and survive only in un-hardened dev environments.
+  `supabase/student-data-security-rollback.sql` restores the old posture if ever needed. Still true:
+  server-only spine tables (`mastery`, `mastery_history`, `recommendations`, `iready_scores`) are
+  service-role only, and the read-only reference group (`standards`, `standard_prereqs`,
+  `misconceptions`, `mastery_config`) allows anon SELECT.
 - Migrations are idempotent and hand-run; each schema-changing file ends with
   `notify pgrst, 'reload schema';`. Adding a table means writing a new `.sql`, choosing its RLS group
   deliberately, and running it in the SQL Editor. Order matters: `schema.sql` -> `proficiency.sql` ->
