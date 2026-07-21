@@ -75,13 +75,13 @@ export default function PaceSupportPage() {
     setPreviewStage(previewStageParam());
     try {
       const stored = Number(localStorage.getItem("bdm-pace-textscale"));
-      if (stored >= 1 && stored <= 1.5) setTextScale(stored);
+      if (stored >= 1 && stored <= 2.5) setTextScale(stored);
     } catch { /* ignore */ }
   }, []);
 
   const adjustTextScale = (delta: number) => {
     setTextScale((current) => {
-      const next = Math.min(1.5, Math.max(1, Math.round((current + delta) * 1000) / 1000));
+      const next = Math.min(2.5, Math.max(1, Math.round((current + delta) * 1000) / 1000));
       try { localStorage.setItem("bdm-pace-textscale", String(next)); } catch { /* ignore */ }
       return next;
     });
@@ -287,8 +287,8 @@ export default function PaceSupportPage() {
         <h1 className="pw-title">{previewSample ? "Preview" : flow?.presentation?.title || state?.label || "Waiting for the lesson"}</h1>
         {flow?.lesson?.title ? <p className="pw-lesson">{flow.lesson.title}</p> : null}
         <span className="pw-textbtns" aria-label="Text size">
-          <button className="pw-textbtn" type="button" onClick={() => adjustTextScale(-0.125)} disabled={textScale <= 1} aria-label="Smaller text">A-</button>
-          <button className="pw-textbtn" type="button" onClick={() => adjustTextScale(0.125)} disabled={textScale >= 1.5} aria-label="Bigger text">A+</button>
+          <button className="pw-textbtn" type="button" onClick={() => adjustTextScale(-0.25)} disabled={textScale <= 1} aria-label="Smaller text">A-</button>
+          <button className="pw-textbtn" type="button" onClick={() => adjustTextScale(0.25)} disabled={textScale >= 2.5} aria-label="Bigger text">A+</button>
         </span>
         <span className={`pw-timer${timerFinished ? " finished" : ""}`} aria-label="Class timer">
           {previewSample ? "5:00" : timer ? formatTime(timerSeconds) : "--:--"}

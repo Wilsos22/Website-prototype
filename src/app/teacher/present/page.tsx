@@ -161,13 +161,13 @@ export default function ClassroomStagePage() {
     setPreviewStage(previewStageParam());
     try {
       const stored = Number(localStorage.getItem("bdm-present-textscale"));
-      if (stored >= 1 && stored <= 1.5) setTextScale(stored);
+      if (stored >= 1 && stored <= 2.5) setTextScale(stored);
     } catch { /* ignore */ }
   }, []);
 
   const adjustTextScale = (delta: number) => {
     setTextScale((current) => {
-      const next = Math.min(1.5, Math.max(1, Math.round((current + delta) * 1000) / 1000));
+      const next = Math.min(2.5, Math.max(1, Math.round((current + delta) * 1000) / 1000));
       try { localStorage.setItem("bdm-present-textscale", String(next)); } catch { /* ignore */ }
       return next;
     });
@@ -551,8 +551,8 @@ export default function ClassroomStagePage() {
             {lesson?.title ? <p className="stage-lesson">{lesson.title}{lesson.code ? ` · ${lesson.code}` : ""}</p> : null}
           </div>
           <span className="stage-textbtns" aria-label="Text size">
-            <button className="stage-textbtn" type="button" onClick={() => adjustTextScale(-0.125)} disabled={textScale <= 1} aria-label="Smaller text">A-</button>
-            <button className="stage-textbtn" type="button" onClick={() => adjustTextScale(0.125)} disabled={textScale >= 1.5} aria-label="Bigger text">A+</button>
+            <button className="stage-textbtn" type="button" onClick={() => adjustTextScale(-0.25)} disabled={textScale <= 1} aria-label="Smaller text">A-</button>
+            <button className="stage-textbtn" type="button" onClick={() => adjustTextScale(0.25)} disabled={textScale >= 2.5} aria-label="Bigger text">A+</button>
           </span>
           <div className={`stage-timer ${timerFinished ? "finished" : ""}`}>{previewSample ? "5:00" : timer ? formatTime(timerSeconds) : "--:--"}</div>
         </div>

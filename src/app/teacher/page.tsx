@@ -283,6 +283,21 @@ export default function TeacherHome() {
   }, [publishedLessons, q]);
   const visibleNotionLessons = notionLessonMatches.slice(0, 6);
 
+  // Default view: only what's near - yesterday, today, tomorrow - as small
+  // cards. The full published list appears only while searching.
+  const dayCards = useMemo(() => {
+    const dayIso = (offset: number) => {
+      const date = new Date();
+      date.setDate(date.getDate() + offset);
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    };
+    const usable = usablePublishedLessons(publishedLessons);
+    return ([[-1, "Yesterday"], [0, "Today"], [1, "Tomorrow"]] as const).map(([offset, label]) => {
+      const iso = dayIso(offset);
+      return { label, iso, lesson: usable.find((lesson) => lesson.date?.slice(0, 10) === iso) || null };
+    });
+  }, [publishedLessons]);
+
   return (
     <div className="bd-home">
       <style>{`
@@ -338,6 +353,15 @@ export default function TeacherHome() {
 
         /* Compact published-lesson finder */
         .bd-lesson-finder { margin-top:14px; background:var(--bdb-card); border:1px solid var(--bdb-line); border-radius:var(--bdb-r-lg); box-shadow:var(--bdb-shadow-sm); overflow:hidden; scroll-margin-top:80px; }
+        .bd-day-cards { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; padding:16px 20px 20px; }
+        .bd-day-card { min-width:0; display:grid; align-content:start; gap:7px; border:1px solid var(--bdb-line); border-top:4px solid var(--bdb-teal); border-radius:12px; background:#fff; padding:13px 15px; }
+        .bd-day-card.empty { border-top-color:var(--bdb-line); background:var(--bdb-ground); }
+        .bd-day-label { margin:0; color:var(--bdb-ink-faint); font-size:0.66rem; font-weight:900; letter-spacing:0.12em; text-transform:uppercase; }
+        .bd-day-code { justify-self:start; border:1px solid var(--bdb-line); border-radius:999px; background:var(--bdb-ground); color:var(--bdb-ink); padding:3px 9px; font-size:0.72rem; font-weight:800; }
+        .bd-day-title { margin:0; overflow:hidden; color:var(--bdb-ink); text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; font-size:0.92rem; font-weight:750; line-height:1.3; }
+        .bd-day-none { margin:0; color:var(--bdb-ink-faint); font-size:0.85rem; font-weight:650; }
+        .bd-day-actions { display:flex; gap:7px; flex-wrap:wrap; margin-top:2px; }
+        @media (max-width:760px) { .bd-day-cards { grid-template-columns:1fr; } }
         .bd-lesson-find-head { display:flex; align-items:end; justify-content:space-between; gap:16px; padding:14px 16px; border-bottom:1px solid var(--bdb-line); }
         .bd-lesson-find-copy h2 { margin:0; font-size:1rem; font-weight:800; letter-spacing:-0.01em; }
         .bd-lesson-find-copy p { margin:3px 0 0; color:var(--bdb-ink-soft); font-size:0.8rem; }
@@ -510,6 +534,26 @@ export default function TeacherHome() {
               <p className="bd-lesson-state" role="status">Loading published lessons.</p>
             ) : publishedLessonsError ? (
               <p className="bd-lesson-state error" role="alert">{publishedLessonsError}</p>
+            ) : !q ? (
+              <div className="bd-day-cards">
+                {dayCards.map(({ label, lesson }) => (
+                  <div className={`bd-day-card${lesson ? "" : " empty"}`} key={label}>
+                    <p className="bd-day-label">{label}</p>
+                    {lesson ? (
+                      <>
+                        <span className="bd-day-code">{lesson.lessonCode}</span>
+                        <p className="bd-day-title" title={lesson.title}>{lesson.title || "Untitled lesson"}</p>
+                        <div className="bd-day-actions">
+                          <Link className="bd-btn" href={`/teacher/studio?lessonId=${encodeURIComponent(lesson.id)}`}>Edit screens</Link>
+                          <Link className="bd-btn p" href={`/control?notionLessonId=${encodeURIComponent(lesson.id)}&run=1`}>Begin</Link>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="bd-day-none">Nothing scheduled</p>
+                    )}
+                  </div>
+                ))}
+              </div>
             ) : visibleNotionLessons.length === 0 ? (
               <p className="bd-lesson-state">
                 {q ? `No published lessons match "${query.trim()}".` : "No published lessons with usable lesson codes were found."}
