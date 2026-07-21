@@ -86,6 +86,24 @@ cross-day memory note in the console woven into her context; personality tuned
 to complaining-teen, less Red Bull, shorter replies)
 
 ## In progress
+- **Ladder Method — rule rail redesign + Factor Trees mode** (7/21, commit
+  c9206cc) — /ladder-method now follows the three-column manipulative
+  convention: the divisibility rules sit in the LARGE LEFT RAIL (same wording
+  as /divisibility, rules 2-6 plus 7's honest non-rule), the ladder or trees
+  in the center, results on the right. The rail is live guidance — a rule
+  lights green when it works on BOTH bottom numbers (Ladder) or on the node
+  being split (Trees), and tapping a lit rule loads that divisor. When the
+  ladder closes, the pulled-out divisors line up UNDER it and the student
+  multiplies them out one step at a time for the GCF, then extends the chain
+  with the two bottom leftovers for the LCM; wrong products get the real
+  arithmetic named. NEW Factor Trees mode: build a factor tree for one number
+  or two side by side — tap a composite (dashed ring), split it by any factor
+  (wrong factors name the remainder), primes circle green and stop. Each
+  finished tree lists its prime leaves underneath; one tree closes by
+  multiplying the primes back into the number, two trees close by
+  multiplying the primes both trees SHARE — the same GCF the ladder finds.
+  No evidence emitters (unchanged). Verified end to end in-browser both
+  modes; typecheck and build clean. Merged to main and live 7/21.
 - **Divisibility D1 — rules 1-6, closes with clickable factor arches** (7/21,
   commit 8c7a79a, same branch as the Distributive Area work) — /divisibility now
   matches its D1 lesson scope. The rule rail is ÷1 through ÷6 only (7-10 removed
