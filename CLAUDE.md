@@ -116,14 +116,15 @@ only lets the teacher PUBLISH a task to it. The tool component must also call
 are silently dropped and students see nothing. All 18 tool routes are wired as of 2026-07-20 - a NEW
 route is the case to watch, so wire the component in the same change that extends `LiveToolRoute`.
 Where a route's `LiveToolConfig` arm carries a typed payload (`/number-line-plus`, `/percent-bar`,
-`/equation-builder`, `/order-of-operations`, `/algebra-tiles`) the tool also applies `tool.config` to
-its own state - always in an effect keyed on `tool.id`, never on the tool object
-(`useLiveToolConfig` re-reads every second, so object identity churns and an object-keyed effect
-restarts the student's problem mid-answer; `PercentBar` is the pattern). The in-flight branch
-`claude/distributive-area-tool-redesign-3b0be1` adds a sixth typed arm, `/distributive-area`
-`{ set }` - a "24x7,16x8" problem series parsed by `src/lib/distributiveProblems.ts`. The remaining
-arms are `Record<string, never>`, where the prompt is all there is - do not invent config behavior
-for them.
+`/equation-builder`, `/order-of-operations`, `/algebra-tiles`, plus two teacher-set sequence arms:
+`/distributive-area` `{ set }` - "24x7,16x8" via `src/lib/distributiveProblems.ts` - and
+`/ladder-method` `{ set }` - "24,36,60" for Factor Trees via `src/lib/factorTreeSet.ts`) the tool
+also applies `tool.config` to its own state - always in an effect keyed on `tool.id`, never on the
+tool object (`useLiveToolConfig` re-reads every second, so object identity churns and an
+object-keyed effect restarts the student's problem mid-answer; `PercentBar` is the pattern). Both
+sequence tools also take the same string as a `?set=` URL param, resume progress per device from
+localStorage, and treat an empty set as free play. The remaining arms are `Record<string, never>`,
+where the prompt is all there is - do not invent config behavior for them.
 
 Counting those arms, `LiveToolRoute` has 21, not 18: `/challenge`, `/exit-ticket` and `/checkpoint`
 ride the same union so `/control` can publish them, but they deliberately do NOT call
