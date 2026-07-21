@@ -184,6 +184,15 @@ Design is locked (Steele's "Independent Proficiency System") - build it, do not 
 
 ## Design system
 
+- Classroom-surface look (DECIDED 2026-07-20): the WARM NOTEBOOK temperature from the Claude Design
+  "Lesson Frame Wireframes" canvas, turn 11 (screens 11a main / 11b support). Warm dotted paper,
+  system-font content, handwritten voice for teacher asides ONLY - anything a student must read uses
+  the system font. The Blueprint temperature (11c/11d) was rejected: fine graph grids moire on a
+  projector at room distance, and its navy/orange chrome collides with the semantic per-state accent
+  colors students learn. Source of truth lives in-repo: `Claude Design Wireframe/Lesson Frame
+  Wireframes.dc.html` plus the `_ds` token set (cream/ink "warm edition" - hexes match `--bdb-*`);
+  `scripts/extract-lesson-frames.mjs` regenerates `public/frame-preview.html` for projector testing.
+  Chromebook and Remote screens in this look are not designed yet - requested from Design.
 - Font: `--bdb-font` = Albert Sans (Google Fonts, weights 400-800), NOT Georgia. Headings are weight
   700 in the sans font. Georgia only survives on ~7 legacy teacher/admin pages (roster, session,
   builder, teacher-login, teacher/mastery, teacher/rightnow, teacher/checkpoint-upload) - treat as
