@@ -258,6 +258,7 @@ export interface LiveClassFlowSnapshot {
     bigDogChallenge?: string;
     dueAndTurnIn?: string;
     helpPath?: string;
+    anchorProblem?: string;
   } | null;
   sequence?: {
     currentIndex: number;

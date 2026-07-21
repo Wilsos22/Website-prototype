@@ -92,6 +92,8 @@ export interface LessonData {
   bigDogChallenge: string;
   dueAndTurnIn: string;
   helpPath: string;
+  anchorProblem: string; // real-world problem shown at warm-up, answerable by lesson end
+  anchorAnswer: string;  // teacher-only answer and payoff notes
   discussionPrompt: string;
   practiceProblems: string;
   // Pre-planned reteach groups: one line per group, "misconception tag :: prepared move".
@@ -531,6 +533,8 @@ async function mapPage(
     bigDogChallenge: extractText(p["Big Dog Challenge"]),
     dueAndTurnIn: extractText(p["Due and Turn In"]),
     helpPath: extractText(p["Help Path"]),
+    anchorProblem: extractText(p["Anchor Problem"]),
+    anchorAnswer: extractText(p["Anchor Answer"]),
     discussionPrompt: extractText(p["Discussion Prompt"]),
     practiceProblems: extractText(p["Practice Problems"]),
     misconceptionPlans: extractText(p["Misconception Plans"]),

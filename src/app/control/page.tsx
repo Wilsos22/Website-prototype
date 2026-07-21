@@ -459,6 +459,7 @@ type TodayLesson = {
   bigDogChallenge?: string;
   dueAndTurnIn?: string;
   helpPath?: string;
+  anchorProblem?: string;
   warmUpLink?: string;
   exitTicketLink?: string;
   steps?: TodayLessonStep[];
@@ -480,6 +481,7 @@ type ActiveLessonContext = {
   bigDogChallenge: string;
   dueAndTurnIn: string;
   helpPath: string;
+  anchorProblem: string;
 };
 
 const LESSON_TOOL_ALIASES: Record<string, string> = {
@@ -1028,6 +1030,7 @@ export default function ControlPage() {
         optionalSupport: flow.lesson.optionalSupport || "",
         bigDogChallenge: flow.lesson.bigDogChallenge || "",
         dueAndTurnIn: flow.lesson.dueAndTurnIn || "",
+        anchorProblem: flow.lesson.anchorProblem || "",
         helpPath: flow.lesson.helpPath || "",
       });
     } else setActiveLessonContext(null);
@@ -1605,6 +1608,7 @@ export default function ControlPage() {
           bigDogChallenge: activeLessonContext.bigDogChallenge,
           dueAndTurnIn: activeLessonContext.dueAndTurnIn,
           helpPath: activeLessonContext.helpPath,
+          anchorProblem: activeLessonContext.anchorProblem,
         }
       : null;
     const sequence = activeState
@@ -1929,6 +1933,7 @@ export default function ControlPage() {
       bigDogChallenge: lesson.bigDogChallenge || "",
       dueAndTurnIn: lesson.dueAndTurnIn || "",
       helpPath: lesson.helpPath || "",
+      anchorProblem: lesson.anchorProblem || "",
     });
     persistLineup(newLineup);
     const first = newLineup[0];
@@ -2416,6 +2421,7 @@ export default function ControlPage() {
           optionalSupport: publishedFlow.lesson.optionalSupport || "",
           bigDogChallenge: publishedFlow.lesson.bigDogChallenge || "",
           dueAndTurnIn: publishedFlow.lesson.dueAndTurnIn || "",
+          anchorProblem: publishedFlow.lesson.anchorProblem || "",
           helpPath: publishedFlow.lesson.helpPath || "",
         });
       } else setActiveLessonContext(null);

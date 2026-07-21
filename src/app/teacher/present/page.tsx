@@ -44,8 +44,13 @@ function formatTime(totalSeconds: number) {
 
 // ?preview=<stage id> renders the shell with sample content and no session -
 // the way to check the projector skin without starting Live Class Flow.
-const PREVIEW_SAMPLES: Record<string, { label: string; headline: string; direction: string }> = {
-  evergreen: { label: "Warm-up", headline: "Complete today's warm-up", direction: "Voices off. Work on your Chromebook." },
+const PREVIEW_SAMPLES: Record<string, { label: string; headline: string; direction: string; anchor?: string }> = {
+  evergreen: {
+    label: "Warm-up",
+    headline: "Complete today's warm-up",
+    direction: "Warm-up first, on your Chromebook. Then think about the problem up here.",
+    anchor: "A concert venue is splitting its floor into a standing area and a VIP section. The floor is 6 rows by 28 squares. Where would you put the dividing line - and how could you prove the two sections still add up to the whole floor?",
+  },
   scenario: { label: "Launch", headline: "___ + ___ = 27", direction: "Think silently. Tell your partner one sum." },
   concrete: { label: "Concrete", headline: "Build it with counters", direction: "Make the groups on your desk." },
   representational: { label: "Representational", headline: "Make it with tiles", direction: "Build, then write what you built." },
@@ -272,6 +277,14 @@ export default function ClassroomStagePage() {
   const slideBody = theme.id === "closeout"
     ? CLOSEOUT_DIRECTIONS
     : presentation?.mainDisplay || presentation?.body || state?.description || "";
+  // The anchor problem: posed while warm-ups run, answered at closeout. The
+  // lesson earns the payoff line by teaching the concept in between.
+  const anchorText = flow?.lesson?.anchorProblem?.trim() || "";
+  const anchorMode = anchorText && state?.id === "warmup"
+    ? "pose" as const
+    : anchorText && theme.id === "closeout"
+      ? "payoff" as const
+      : null;
   const activeSequenceStep = flow?.sequence?.steps?.[flow.sequence.currentIndex] || null;
   const lessonVisual = flow ? resolveLessonVisual({
     lessonCode: lesson?.code || activeSequenceStep?.lessonCode,
@@ -417,6 +430,10 @@ export default function ClassroomStagePage() {
         .stage-directions-inner { width:min(100%,1500px); display:grid; gap:22px; justify-items:center; }
         .stage-main-prompt { margin:0; max-width:92%; color:var(--head); text-align:center; white-space:pre-wrap; font-size:clamp(3.1rem,6.3vw,6.9rem); line-height:1.08; font-weight:800; letter-spacing:-0.02em; text-wrap:balance; }
         .stage-action-chip { border-radius:999px; background:var(--acc); color:#fff; padding:9px 20px; font-size:clamp(0.72rem,1.1vw,0.9rem); font-weight:800; letter-spacing:0.1em; text-transform:uppercase; }
+        .stage-anchor-kicker { margin:0; color:var(--acc-deep); font-size:clamp(0.78rem,1.3vw,1rem); font-weight:900; letter-spacing:0.16em; text-transform:uppercase; }
+        .stage-anchor-text { font-size:clamp(1.9rem,3.6vw,3.8rem); line-height:1.16; max-width:30ch; }
+        .stage-anchor-text.long { font-size:clamp(1.5rem,2.6vw,2.7rem); max-width:44ch; }
+        .stage-anchor-note { margin:0; max-width:70ch; border-top:1px solid var(--hair); padding-top:14px; color:var(--soft); font-size:clamp(0.9rem,1.4vw,1.1rem); line-height:1.4; font-weight:650; white-space:pre-wrap; }
         .stage-routine { position:absolute; inset:0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:clamp(12px,2vw,22px); align-content:center; padding:clamp(24px,4vw,60px); }
         .stage-routine article { display:grid; align-content:center; gap:8px; min-height:120px; border:1px solid var(--hair); border-top:5px solid var(--acc); border-radius:16px; background:var(--card); padding:clamp(16px,2.4vw,28px); box-shadow:0 2px 10px rgba(40,32,20,0.06); }
         .stage-routine .stage-routine-lead { grid-column:1 / -1; min-height:100px; grid-template-columns:1fr auto; align-items:end; }
@@ -572,9 +589,19 @@ export default function ClassroomStagePage() {
             previewSample ? (
               <div className="stage-directions">
                 <div className="stage-directions-inner">
-                  <h2 className="stage-main-prompt">{previewSample.headline}</h2>
-                  <p className="stage-learning">{previewSample.direction}</p>
-                  <span className="stage-action-chip">{previewSample.label}</span>
+                  {previewSample.anchor ? (
+                    <>
+                      <p className="stage-anchor-kicker">Puzzle of the day</p>
+                      <h2 className={`stage-main-prompt stage-anchor-text${previewSample.anchor.length > 150 ? " long" : ""}`}>{previewSample.anchor}</h2>
+                      <p className="stage-learning">{previewSample.direction}</p>
+                    </>
+                  ) : (
+                    <>
+                      <h2 className="stage-main-prompt">{previewSample.headline}</h2>
+                      <p className="stage-learning">{previewSample.direction}</p>
+                      <span className="stage-action-chip">{previewSample.label}</span>
+                    </>
+                  )}
                 </div>
               </div>
             ) : (
@@ -719,12 +746,27 @@ export default function ClassroomStagePage() {
               </div>
             </section>
           ) : (
+            anchorMode ? (
+              <div className="stage-directions">
+                <div className="stage-directions-inner">
+                  <p className="stage-anchor-kicker">{anchorMode === "pose" ? "Puzzle of the day" : "This morning's puzzle"}</p>
+                  <h2 className={`stage-main-prompt stage-anchor-text${anchorText.length > 150 ? " long" : ""}`}>{anchorText}</h2>
+                  <p className="stage-learning">
+                    {anchorMode === "pose"
+                      ? slideBody || "Warm-up first. Then see how far you can get on this."
+                      : "You can answer it now. Use what you learned today."}
+                  </p>
+                  {anchorMode === "payoff" && slideBody ? <p className="stage-anchor-note">{slideBody}</p> : null}
+                </div>
+              </div>
+            ) : (
             <div className="stage-directions">
               <div className="stage-directions-inner">
                 {showLessonTargets && lesson?.learningIntention ? <p className="stage-learning">{lesson.learningIntention}</p> : null}
                 <h2 className="stage-main-prompt">{slideBody}</h2>
               </div>
             </div>
+            )
           )}
           {showBoardPanel && session ? (
             <aside className="stage-board-panel" aria-label="Live writing workspace">

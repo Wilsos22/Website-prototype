@@ -36,6 +36,7 @@ const PUBLIC_TODAY_LESSON_FIELDS = [
   "bigDogChallenge",
   "dueAndTurnIn",
   "helpPath",
+  "anchorProblem",
   "discussionPrompt",
   "practiceProblems",
 ] as const satisfies readonly (keyof LessonData)[];
