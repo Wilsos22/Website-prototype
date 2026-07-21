@@ -28,6 +28,17 @@ type WarmupSessionLesson = { code: string; title: string };
 const REQUIRE_GOOGLE_AUTH = process.env.NEXT_PUBLIC_REQUIRE_STUDENT_GOOGLE_AUTH === "true";
 const WARMUP_IDENTITY = process.env.NEXT_PUBLIC_WARMUP_IDENTITY_ENABLED === "true";
 
+// Once the warm-up form is open in its own tab, this tab turns into the
+// student home base: lesson info plus these destinations. They stay locked
+// until the warm-up response connects, because leaving this page before the
+// receipt lands would stop the verification polling that links the student
+// to the live session.
+const HOME_LINKS = [
+  { href: "/lesson", title: "Today's lesson", desc: "The plan, goals, and what you need" },
+  { href: "/practice", title: "Challenge games", desc: "Pick a game and beat your score" },
+  { href: "/explore", title: "Explore the tools", desc: "Every math tool, free to try" },
+];
+
 export default function StudentLanding() {
   const router = useRouter();
   const supabase = getSupabase();
@@ -40,6 +51,7 @@ export default function StudentLanding() {
   const [pendingCode, setPendingCode] = useState<string | null>(null);
   const [warmupHref, setWarmupHref] = useState<string | null>(null);
   const [warmupToken, setWarmupToken] = useState<string | null>(null);
+  const [warmupOpenedFor, setWarmupOpenedFor] = useState<string | null>(null);
   const [sessionLesson, setSessionLesson] = useState<WarmupSessionLesson | null>(null);
   const [identityReady, setIdentityReady] = useState(false);
   const [helpRequestCode, setHelpRequestCode] = useState<string | null>(null);
@@ -49,6 +61,7 @@ export default function StudentLanding() {
 
   useEffect(() => {
     try { const n = localStorage.getItem("bdm-student-name"); if (n) setName(n.trim().split(/\s+/)[0]); } catch { /* ignore */ }
+    try { setWarmupOpenedFor(sessionStorage.getItem("bdm-warmup-opened")); } catch { /* ignore */ }
     if (SECURE_STUDENT_DATA) {
       void (async () => {
         try {
@@ -140,12 +153,26 @@ export default function StudentLanding() {
     setPendingCode(null);
     setWarmupHref(null);
     setWarmupToken(null);
+    setWarmupOpenedFor(null);
     setSessionLesson(null);
     setIdentityReady(false);
     setHelpRequestCode(null);
     clearStoredStudentSession();
-    try { sessionStorage.removeItem("bdm-pending-class-code"); } catch { /* ignore */ }
+    try {
+      sessionStorage.removeItem("bdm-pending-class-code");
+      sessionStorage.removeItem("bdm-warmup-opened");
+    } catch { /* ignore */ }
     if (message) setJoinErr(message);
+  }
+
+  // The warm-up form opens in its own tab; recording which token it was opened
+  // for lets this tab switch to the home-base view (and fall back to the big
+  // warm-up button if the teacher later replaces the assigned form, which
+  // rotates the token).
+  function markWarmupOpened() {
+    if (!warmupToken) return;
+    try { sessionStorage.setItem("bdm-warmup-opened", warmupToken); } catch { /* ignore */ }
+    setWarmupOpenedFor(warmupToken);
   }
 
   // The teacher may load the lesson after Chromebooks have already accepted
@@ -222,12 +249,14 @@ export default function StudentLanding() {
     setPendingCode(null);
     setWarmupHref(null);
     setWarmupToken(null);
+    setWarmupOpenedFor(null);
     setSessionLesson(null);
     setIdentityReady(false);
     setHelpRequestCode(null);
     try {
       localStorage.removeItem("bdm-student-session");
       sessionStorage.removeItem("bdm-pending-class-code");
+      sessionStorage.removeItem("bdm-warmup-opened");
     } catch { /* ignore */ }
   }
 
@@ -375,6 +404,12 @@ export default function StudentLanding() {
 
   const moduleNumber = sessionLesson?.code.match(/^M(\d+)/i)?.[1] || "";
   const topicNumber = sessionLesson?.code.match(/\.T(\d+)/i)?.[1] || "";
+  // Home-base view: the warm-up is underway in another tab (or already
+  // connected), so this tab shows lesson info and the games instead of the
+  // big warm-up button.
+  const showHome = Boolean(
+    pendingCode && (identityReady || (warmupToken && warmupOpenedFor === warmupToken && warmupHref)),
+  );
 
   return (
     <main className="st-page">
@@ -418,8 +453,16 @@ export default function StudentLanding() {
         .st-warmup-action { background:var(--bdb-amber); border-color:var(--bdb-amber); color:#3d2a12; font-weight:900;
           box-shadow:0 14px 28px -18px rgba(252,175,56,0.9); }
         .st-warmup-action:hover { border-color:var(--bdb-amber); color:#3d2a12; filter:brightness(1.03); }
-        .st-challenge-action { background:var(--bdb-teal); border-color:var(--bdb-teal); color:#fff; text-align:left; }
-        .st-challenge-action:hover { border-color:var(--bdb-teal); color:#fff; filter:brightness(1.03); }
+        .st-home-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+        @media (max-width:560px) { .st-home-grid { grid-template-columns:1fr; } }
+        .st-home-card { display:grid; gap:4px; align-content:start; text-decoration:none; border:1px solid #E3D9C2;
+          border-radius:var(--bdb-r); background:#fff; padding:12px 14px; box-shadow:0 2px 10px rgba(40,32,20,0.05);
+          transition:border-color 120ms; }
+        .st-home-card b { color:var(--bdb-ink); font-weight:800; font-size:0.95rem; }
+        .st-home-card span { color:var(--bdb-ink-soft); font-size:0.8rem; font-weight:600; line-height:1.35; }
+        a.st-home-card:hover { border-color:var(--bdb-teal); }
+        .st-home-locked { opacity:0.55; }
+        .st-home-note { margin:0; color:var(--bdb-ink-faint); font-size:0.8rem; font-weight:700; }
         .st-warmup-tools { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
         .st-link-btn { border:0; background:transparent; color:var(--bdb-ink-soft); padding:4px 0; font:inherit;
           font-size:0.82rem; font-weight:750; text-decoration:underline; cursor:pointer; }
@@ -460,7 +503,13 @@ export default function StudentLanding() {
         <img src="/big-dog-logo.svg" alt="Big Dog Math" />
       </div>
       <h1 className="st-hello">{name ? `Hey ${name}!` : "Welcome!"}</h1>
-      <p className="st-hello-sub">{pendingCode ? "Your class code is accepted. Start the warm-up, then return here." : "Enter your class code to start today's lesson."}</p>
+      <p className="st-hello-sub">
+        {pendingCode
+          ? showHome
+            ? "This is your home base while class gets ready."
+            : "Your class code is accepted. Start the warm-up, then return here."
+          : "Enter your class code to start today's lesson."}
+      </p>
 
       <div className="st-cards">
         <div className="st-join">
@@ -477,23 +526,58 @@ export default function StudentLanding() {
                 </div>
               </section>
               <p className="st-warmup-label">Warm-up</p>
-              <h2 className="st-join-h">{warmupHref ? "Start today's warm-up" : "Waiting for your teacher"}</h2>
-              <p className="st-warmup-copy">
-                {warmupHref
-                  ? "Complete all five Google Form questions. This homepage stays open underneath so you can come right back."
-                  : "Your teacher is selecting the lesson. The assigned warm-up will appear here when it is ready."}
-              </p>
-              {warmupHref ? (
-                <a className="st-explore st-warmup-action" href={warmupHref} target="_blank" rel="noopener noreferrer">
-                  Open today's warm-up
-                </a>
+              {showHome ? (
+                <>
+                  <h2 className="st-join-h">{identityReady ? "Warm-up connected" : "Warm-up open in your other tab"}</h2>
+                  <p className="st-warmup-copy">
+                    {identityReady
+                      ? "Nice work. Read the lesson or play a challenge while class gets ready."
+                      : "Finish all five questions there and press Submit. Big Dog connects your response on its own, so keep this page open."}
+                  </p>
+                  <div className="st-home-grid">
+                    {HOME_LINKS.map((link) => identityReady ? (
+                      <a key={link.href} className="st-home-card" href={link.href}>
+                        <b>{link.title}</b>
+                        <span>{link.desc}</span>
+                      </a>
+                    ) : (
+                      <span key={link.href} className="st-home-card st-home-locked" aria-disabled="true">
+                        <b>{link.title}</b>
+                        <span>{link.desc}</span>
+                      </span>
+                    ))}
+                  </div>
+                  {!identityReady && <p className="st-home-note">These unlock when your warm-up connects.</p>}
+                </>
               ) : (
-                <p className="st-warmup-wait">Keep this page open. The assigned warm-up will appear automatically.</p>
+                <>
+                  <h2 className="st-join-h">{warmupHref ? "Start today's warm-up" : "Waiting for your teacher"}</h2>
+                  <p className="st-warmup-copy">
+                    {warmupHref
+                      ? "Complete all five Google Form questions. This homepage stays open underneath so you can come right back."
+                      : "Your teacher is selecting the lesson. The assigned warm-up will appear here when it is ready."}
+                  </p>
+                  {warmupHref ? (
+                    <a
+                      className="st-explore st-warmup-action"
+                      href={warmupHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={markWarmupOpened}
+                    >
+                      Open today's warm-up
+                    </a>
+                  ) : (
+                    <p className="st-warmup-wait">Keep this page open. The assigned warm-up will appear automatically.</p>
+                  )}
+                </>
               )}
               <p className="st-warmup-wait" role="status" aria-live="polite">
                 {identityReady
                   ? "Warm-up connected. Choose a challenge while class gets ready."
-                  : "After you submit, return here. Big Dog will connect your response automatically."}
+                  : showHome
+                    ? "Watching for your warm-up submission."
+                    : "After you submit, return here. Big Dog will connect your response automatically."}
               </p>
               {joinErr && <div className="st-joinerr" role="alert">{joinErr}</div>}
               {helpRequestCode && (
@@ -501,12 +585,12 @@ export default function StudentLanding() {
                   Tell your teacher this help code: <strong>{helpRequestCode}</strong>
                 </p>
               )}
-              {identityReady && (
-                <a className="st-explore st-challenge-action" href="/practice">
-                  <span><b>Challenge activities</b><br />Choose any practice game and work to beat your score.</span>
-                </a>
-              )}
               <div className="st-warmup-tools">
+                {showHome && warmupHref && (
+                  <a className="st-link-btn" href={warmupHref} target="_blank" rel="noopener noreferrer">
+                    Reopen the warm-up
+                  </a>
+                )}
                 {!identityReady && !helpRequestCode && (
                   <button className="st-link-btn" type="button" onClick={requestTeacherHelp} disabled={requestingHelp}>
                     {requestingHelp ? "Requesting help" : "Warm-up not connecting? Ask for help"}

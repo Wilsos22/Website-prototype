@@ -28,6 +28,14 @@ L2-D2 skate park are live) ·
 **Warm Notebook rollout complete** (7/21 - all four surfaces plus landing,
 lessons archive, and Screen Studio wear the decided look; the teacher Remote
 is dark per the 12d design; projectors have A-/A+ text scaling to 2.5x) ·
+**Instant warm-up + student home base** (7/21 - permanent period class codes
+(`periods.class_code`, DOG2-DOG5/DOG7/MOCK) open the day's warm-up the moment
+a student types the code: `/api/student/warmup-start` reuses or auto-creates
+the day's session seeded with today's published form, and the teacher's
+/session inherits it. Once the form is open in its second tab - or the
+response verifies - the landing becomes a home base: today's lesson card plus
+Today's lesson / Challenge games / Explore the tools links that unlock when
+the warm-up connects, keeping the origin tab's verification polling alive) ·
 **Warm Notebook screen kit** (7/20 — `public/screens/`: one hand-owned,
 projector-ready HTML file per lesson state in the decided turn-12 Warm Notebook
 look, scaled to any display by `_system/frame.js`; `_system/frame.css` is
