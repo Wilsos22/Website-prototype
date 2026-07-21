@@ -120,11 +120,13 @@ export default function StudentLanding() {
       method: "POST",
       body: JSON.stringify({ code: classCode }),
     });
-    // A class code must resolve only to the lesson the teacher loaded into that
-    // live session. Falling back to a date-based lesson can open an unrelated or
-    // superseded form when the teacher has not selected a lesson yet. The same
-    // server call also rotates the one-time token if the teacher replaces the
-    // assigned Form.
+    // The server resolves the code: an open session's assigned lesson always
+    // wins, and a period's permanent class code opens the day's session on
+    // demand, seeded with today's published warm-up form - so students start
+    // the moment they type their code (decided 2026-07-21, replacing the
+    // earlier no-date-fallback rule). The same server call rotates the
+    // one-time token if the teacher replaces the assigned Form, and the
+    // polling below swaps in the teacher's form without a refresh.
     const link = data.warmUpLink || null;
     return {
       open: true,

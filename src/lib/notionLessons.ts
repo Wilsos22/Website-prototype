@@ -36,7 +36,7 @@ export interface LessonStepData {
   paperTask: string;
   tool: string;
   question: string;
-  pollKind: "short-answer" | "multiple-choice" | "fist-to-five" | "";
+  pollKind: "short-answer" | "multiple-choice" | "multiple-choice-explain" | "fist-to-five" | "";
   choices: string[];
   correctAnswer: string;
   standard: string;
@@ -442,7 +442,8 @@ async function mapPage(
     const related = await fetchRelatedPage(id, token, cache);
     const step = related.properties;
     const rawKind = extractText(step["Poll Kind"]);
-    const pollKind = rawKind === "short-answer" || rawKind === "multiple-choice" || rawKind === "fist-to-five"
+    const pollKind = rawKind === "short-answer" || rawKind === "multiple-choice"
+      || rawKind === "multiple-choice-explain" || rawKind === "fist-to-five"
       ? rawKind
       : "";
     const stateId = extractText(step["State ID"]);

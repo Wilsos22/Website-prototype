@@ -5,6 +5,7 @@ import {
   studentIdentityResponse,
 } from "@/lib/studentIdentity";
 import type { LiveClassFlowSnapshot } from "@/lib/liveClassFlow";
+import { getTodayLesson } from "@/lib/notionLessons";
 import { assignedWarmupLink, canonicalGoogleFormResource } from "@/lib/warmupResource";
 
 export const runtime = "nodejs";
@@ -18,6 +19,107 @@ function classCode(value: unknown): string {
   return code;
 }
 
+const CLASSROOM_TIME_ZONE = "America/Los_Angeles";
+
+function classroomDate(date = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: CLASSROOM_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+/**
+ * Today's warm-up form, straight from the published Notion lesson's warmup
+ * step. Used only when a session has no teacher-assigned flow yet, so the
+ * first student of the day gets the form without waiting. Once the teacher
+ * loads a lesson into the session, the assigned link always wins.
+ */
+async function todaysWarmupFlow(): Promise<{ url: string; lessonCode: string; lessonTitle: string } | null> {
+  try {
+    const lesson = await getTodayLesson(classroomDate());
+    const url = lesson?.steps.find((step) => step.stateId?.trim().toLowerCase() === "warmup")?.linkUrl
+      || lesson?.warmUpLink
+      || "";
+    if (!lesson || !canonicalGoogleFormResource(url)) return null;
+    return { url, lessonCode: lesson.lessonCode || "", lessonTitle: lesson.title || "" };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Instant warm-up access: when no session is open for the typed code, treat
+ * the code as a period's permanent class code and open the day's session
+ * server-side. The session row anchors the existing receipt/verification
+ * chain unchanged, and the teacher's /session page later finds and inherits
+ * this same open session. Tolerant of the period-class-codes.sql migration
+ * not having run yet: every failure falls through to null and the caller
+ * raises the original "not open" error.
+ */
+async function sessionFromPeriodCode(
+  db: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  code: string,
+): Promise<{ id: string; live_flow: LiveClassFlowSnapshot | null } | null> {
+  try {
+    const periodResult = await db
+      .from("periods")
+      .select("id,class_code")
+      .ilike("class_code", code)
+      .maybeSingle();
+    if (periodResult.error || !periodResult.data) return null;
+    const periodId = periodResult.data.id as string;
+
+    const openResult = await db
+      .from("sessions")
+      .select("id,live_flow")
+      .eq("period_id", periodId)
+      .eq("status", "open")
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (openResult.data) {
+      return openResult.data as { id: string; live_flow: LiveClassFlowSnapshot | null };
+    }
+
+    const today = await todaysWarmupFlow();
+    // A minimal flow snapshot whose warmup step carries the form URL: the
+    // bdm_complete_warmup_identity verifier reads exactly this path, so the
+    // receipt chain works before the teacher has loaded anything. broadcast
+    // stays "free", so no classroom surface renders this placeholder.
+    const seedFlow = today
+      ? {
+          sequence: { currentIndex: 0, steps: [{ stateId: "warmup", resourceUrl: today.url }] },
+          lesson: { code: today.lessonCode, title: today.lessonTitle },
+        }
+      : null;
+    const insertResult = await db
+      .from("sessions")
+      .insert({ period_id: periodId, join_code: code, status: "open", broadcast: "free", live_flow: seedFlow })
+      .select("id,live_flow")
+      .maybeSingle();
+    if (insertResult.data) {
+      return insertResult.data as { id: string; live_flow: LiveClassFlowSnapshot | null };
+    }
+
+    // Unique-index race: another student created it first - use theirs.
+    const retryResult = await db
+      .from("sessions")
+      .select("id,live_flow")
+      .eq("period_id", periodId)
+      .eq("status", "open")
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return (retryResult.data as { id: string; live_flow: LiveClassFlowSnapshot | null } | null) || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const identity = await requireStudentAuth(request);
@@ -29,7 +131,7 @@ export async function POST(request: Request) {
       throw new StudentIdentityError("Live sessions are not configured.", 503, "sessions_not_configured");
     }
 
-    const { data: session, error: sessionError } = await db
+    const { data: openSession, error: sessionError } = await db
       .from("sessions")
       .select("id,live_flow")
       .eq("join_code", code)
@@ -38,6 +140,9 @@ export async function POST(request: Request) {
     if (sessionError) {
       throw new StudentIdentityError("The class session could not be checked.", 500, "session_lookup_failed");
     }
+    // Instant access: a period's permanent class code works before the
+    // teacher has started anything - it opens the day's session on demand.
+    const session = openSession || await sessionFromPeriodCode(db, code);
     if (!session) {
       throw new StudentIdentityError("That code is not open right now.", 404, "session_not_open");
     }
