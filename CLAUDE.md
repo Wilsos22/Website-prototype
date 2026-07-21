@@ -28,7 +28,12 @@ bars and live misconception grouping).
    pre-dating this rule); do not add more, and strip emoji from any file you edit as you go.
 2. Never `git add .` or `git add -A`. A Google AI Studio agent and cloud Claude sessions commit to this
    same repo concurrently - stage only the explicit paths you changed. Always `git fetch` and merge (or
-   fast-forward) before pushing; local `main` goes stale fast.
+   fast-forward) before pushing; local `main` goes stale fast. Corollary: when a brief cites a commit as
+   already done, confirm it is actually in YOUR history (`git merge-base --is-ancestor <sha> HEAD`)
+   before building on it - it may still be sitting on another agent's unmerged branch, and
+   `git branch -a --contains <sha>` finds it. On 2026-07-21 the live tool banner's cream-surface
+   restyle was one such commit; wiring eleven more cream pages to the un-restyled banner would have
+   shipped pale-on-pale text no student could read.
 3. Agents commit locally; Steele pushes (GitHub Desktop). Only push when he asks. A push is what
    deploys - Vercel auto-builds `main`.
 4. Never import `src/lib/supabaseServer.ts` (the service-role client / `SUPABASE_SERVICE_ROLE_KEY`) into
@@ -103,6 +108,15 @@ Where a route's `LiveToolConfig` arm carries a typed payload (`/number-line-plus
 `/equation-builder`, `/order-of-operations`, `/algebra-tiles`) the tool also applies `tool.config` to
 its own state; the other thirteen arms are `Record<string, never>`, where the prompt is all there is -
 do not invent config behavior for them.
+
+Counting those arms, `LiveToolRoute` has 21, not 18: `/challenge`, `/exit-ticket` and `/checkpoint`
+ride the same union so `/control` can publish them, but they deliberately do NOT call
+`useLiveToolConfig` - do not "fix" them by wiring the banner. Each has its own launch path
+(`launchChallenge`, `launchExitTicket`, `launchCheckpoint`) writing the real content to `challenges` /
+`exit_tickets` / `checkpoint_runs`, and the student surface polls that table instead (`/exit-ticket`
+reads `getOpenExitTicket`). Their `buildLiveToolConfig` result is only a marker for the control
+panel's own published-state UI, and the teacher's question comes from a dedicated field
+(`toolSetup.exitPrompt`), not the generic tool prompt - so nothing is dropped.
 
 `LiveToolBanner` styles itself from `--bdb-*` tokens; it is shared, so do not hardcode a hex into it.
 Every tool page it renders on is a light surface - cream (`--bdb-ground`) except
