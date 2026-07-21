@@ -109,6 +109,7 @@ export default function DistributiveAreaMethod() {
   const [stepMisses, setStepMisses] = useState(0);
   const [note, setNote] = useState<string | null>(null);
   const [arcs, setArcs] = useState<Arcs | null>(null);
+  const [convTick, setConvTick] = useState<[number, number]>([0, 0]); // bump to replay a region's factors-converging animation
   const [finePointer, setFinePointer] = useState(false); // mouse/pen: safe to autofocus; touch: let the student tap so the soft keyboard does not cover the work
   const [view, setView] = useState({ w: 980, h: 800 });
 
@@ -150,7 +151,7 @@ export default function DistributiveAreaMethod() {
     setTop(t); setSide(s); setInTop(String(t)); setInSide(String(s));
     setTopSplit(null); setPending(null); setHoverCut(null);
     setStep(0); setVals(Array(7).fill("")); setWrongSlots([]);
-    setMisses(0); setStepMisses(0); setNote(null); setArcs(null);
+    setMisses(0); setStepMisses(0); setNote(null); setArcs(null); setConvTick([0, 0]);
     reportedRef.current = false;
     missTagRef.current = null;
     setPhase("split");
@@ -223,6 +224,14 @@ export default function DistributiveAreaMethod() {
     catch { /* progress just will not survive a reload */ }
   }, [lesson, lIdx]);
 
+  // Replay the factors converging on whichever piece is being multiplied now, so
+  // the solve step below always points back at two numbers on the picture.
+  useEffect(() => {
+    if (phase !== "work" || (step !== 2 && step !== 3)) return;
+    const which = step - 2;
+    setConvTick((t) => (which === 0 ? [t[0] + 1, t[1]] : [t[0], t[1] + 1]));
+  }, [phase, step]);
+
   // Focus the first open slot of the step (mouse/pen only).
   useEffect(() => {
     if (phase !== "work" || !finePointer) return;
@@ -266,7 +275,11 @@ export default function DistributiveAreaMethod() {
     if (!r) return null;
     return clamp(Math.round((clientX - r.left) / cell), 1, top - 1);
   };
-  const commitSplit = (col: number) => { setTopSplit(col); setPending(null); setHoverCut(null); setPhase("work"); };
+  // The cut is the moment both pieces are born, so both sets of factors fly in.
+  const commitSplit = (col: number) => {
+    setTopSplit(col); setPending(null); setHoverCut(null); setPhase("work");
+    setConvTick(([x, y]) => [x + 1, y + 1]);
+  };
   const onRectDown = (e: React.PointerEvent) => {
     if (phase !== "split") return;
     if (finePointer) {
@@ -509,7 +522,15 @@ export default function DistributiveAreaMethod() {
         .da-region.on { outline-color:var(--bdb-ink); }
         .da-region.solved .da-prod { animation:daDrop 340ms var(--da-settle); }
         @keyframes daDrop { from { transform:translateY(-12px) scale(1.25); opacity:0; } to { transform:none; opacity:1; } }
-        .da-dims { font-weight:800; font-size:1rem; color:var(--bdb-ink); opacity:0.72; }
+        /* the piece's two factors travel in from where they actually live — the
+           side number from the side label, the part from the label above it —
+           and meet with the x between them */
+        .da-conv { display:flex; align-items:center; gap:9px; font-weight:900; font-size:clamp(1rem,2.6vw,1.5rem); color:var(--bdb-ink); }
+        .da-cn.side { animation:daFromLeft .8s var(--da-carry) both; }
+        .da-cn.part { animation:daFromTop .8s var(--da-carry) both; }
+        .da-cn.x { animation:daFade .8s ease .3s both; color:var(--bdb-ink-soft); font-weight:800; }
+        @keyframes daFromTop { from { transform:translateY(-40px); opacity:0; } to { transform:none; opacity:1; } }
+        @keyframes daFromLeft { from { transform:translateX(-40px); opacity:0; } to { transform:none; opacity:1; } }
         .da-prod { font-weight:900; font-size:clamp(1.3rem,3vw,1.9rem); color:var(--bdb-ink); }
 
         .da-tools { display:flex; gap:8px; justify-content:center; margin-bottom:6px; flex-wrap:wrap; }
@@ -562,7 +583,8 @@ export default function DistributiveAreaMethod() {
         .da-done .eq { font-size:clamp(1.2rem,3.6vw,1.7rem); font-weight:900; margin:4px 0; }
         .da-reflect { color:var(--bdb-ink-soft); font-size:0.95rem; max-width:470px; margin:8px auto 0; line-height:1.5; }
         .da-abstract { margin:14px auto 0; color:var(--bdb-ink-soft); font-weight:800; font-size:1.05rem; }
-        .da-abstract .t { color:${TEAL}; } .da-abstract .m { color:${AMBER}; }
+        .da-av { display:inline-block; font-weight:900; animation:daRise .3s var(--da-settle) both; }
+        .da-av.ink { color:var(--bdb-ink); } .da-av.t { color:${TEAL}; } .da-av.m { color:${AMBER}; }
 
         .da-lbar { display:flex; align-items:center; justify-content:center; gap:10px; margin:0 0 10px; }
         .da-lbar .cnt { font-weight:800; font-size:0.82rem; color:var(--bdb-ink-soft); }
@@ -586,7 +608,9 @@ export default function DistributiveAreaMethod() {
         .da-wrow .mark { font-size:0.8rem; font-weight:700; color:var(--bdb-ink-soft); }
 
         @media (prefers-reduced-motion: reduce) {
-          .da-fade, .da-reveal, .da-out.pulse, .da-region.solved .da-prod, .da-slot.wrong { animation:none !important; }
+          .da-fade, .da-reveal, .da-out.pulse, .da-region.solved .da-prod, .da-slot.wrong,
+          .da-cn.side, .da-cn.x, .da-cn.part, .da-av { animation:none !important; }
+          .da-cn, .da-av { opacity:1 !important; transform:none !important; }
           .da-fade, .da-reveal { opacity:1 !important; transform:none !important; }
           .da-region { transition:none !important; }
           .da-arc { stroke-dashoffset:0 !important; animation:none !important; }
@@ -734,9 +758,16 @@ export default function DistributiveAreaMethod() {
                     className={`da-region ${activeRegion === i ? "on" : ""} ${solved ? "solved" : ""}`}
                     style={{ left: r.x, width: r.w, background: `color-mix(in srgb, ${r.color} 26%, transparent)` }}
                   >
-                    {solved
-                      ? <span className="da-prod">{r.tw * r.th}</span>
-                      : <span className="da-dims">{r.th} x {r.tw}</span>}
+                    {solved ? (
+                      <span className="da-prod">{r.tw * r.th}</span>
+                    ) : (
+                      // keyed on the tick so bumping it replays the entry animation
+                      <div className="da-conv" key={`conv-${i}-${convTick[i]}`} style={{ animationDelay: `${i * 0.15}s` }}>
+                        <span className="da-cn side" style={{ animationDelay: `${i * 0.15}s` }}>{r.th}</span>
+                        <span className="da-cn x" style={{ animationDelay: `${0.3 + i * 0.15}s` }}>x</span>
+                        <span className="da-cn part" style={{ animationDelay: `${i * 0.15}s` }}>{r.tw}</span>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -824,7 +855,20 @@ export default function DistributiveAreaMethod() {
           {phase === "done" && (
             <div className="da-done">
               <p className="da-reflect">{doneReflect}</p>
-              <div className="da-abstract">a<span className="da-paren">(</span><span className="t">b</span> + <span className="m">c</span><span className="da-paren">)</span> = a<span className="da-paren">(</span><span className="t">b</span><span className="da-paren">)</span> + a<span className="da-paren">(</span><span className="m">c</span><span className="da-paren">)</span></div>
+              {/* the letters land one at a time, in reading order, so the shape
+                  of the identity assembles itself rather than just appearing */}
+              <div className="da-abstract">
+                <span className="da-av ink" style={{ animationDelay: "0ms" }}>a</span>
+                <span className="da-paren">(</span>
+                <span className="da-av t" style={{ animationDelay: "80ms" }}>b</span>
+                <span className="da-op"> + </span>
+                <span className="da-av m" style={{ animationDelay: "160ms" }}>c</span>
+                <span className="da-paren">)</span>
+                <span className="da-op"> = </span>
+                <span className="da-av ink" style={{ animationDelay: "260ms" }}>a</span><span className="da-paren">(</span><span className="da-av t" style={{ animationDelay: "320ms" }}>b</span><span className="da-paren">)</span>
+                <span className="da-op"> + </span>
+                <span className="da-av ink" style={{ animationDelay: "380ms" }}>a</span><span className="da-paren">(</span><span className="da-av m" style={{ animationDelay: "440ms" }}>c</span><span className="da-paren">)</span>
+              </div>
               <div className="da-bar">
                 {lesson
                   ? <button className="da-btn" onClick={nextInLesson}>{lIdx + 1 >= lesson.length ? "See how you did" : "Next problem"}</button>
