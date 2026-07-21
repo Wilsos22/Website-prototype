@@ -461,21 +461,25 @@ export default function ClassroomSpinner({
   return (
     <section className={`classroom-spinner ${mode} ${role}`} aria-label={mode === "readers" ? "Reader spinner" : "iPad Kid spinner"}>
       <style>{`
-        .classroom-spinner { position:absolute; inset:0; display:grid; grid-template-rows:minmax(0,1fr) auto; gap:18px; overflow:auto; background:radial-gradient(circle at 50% 42%,var(--stage-glow),transparent 58%); padding:clamp(22px,4vw,58px); }
+        /* Warm Notebook (Design canvas turn 12): white cards on the host's
+           dotted paper, ink text, one semantic accent. The accent var
+           cascades from whichever warm surface hosts the spinner. */
+        .classroom-spinner { --sp-acc:var(--acc, var(--lf-accent, #50A3A4)); --sp-acc-deep:color-mix(in srgb, var(--sp-acc) 62%, #201E1A);
+          position:absolute; inset:0; display:grid; grid-template-rows:minmax(0,1fr) auto; gap:18px; overflow:auto; padding:clamp(22px,4vw,58px); }
         .classroom-spinner-grid { width:min(100%,1280px); margin:auto; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:clamp(16px,2.4vw,30px); align-items:stretch; }
         .classroom-spinner.ipad .classroom-spinner-grid { width:min(100%,720px); grid-template-columns:1fr; }
-        .classroom-spinner-card { min-width:0; display:grid; grid-template-rows:auto minmax(96px,auto) auto; gap:13px; border:1px solid var(--stage-line); border-top:6px solid var(--stage-accent); border-radius:22px; background:color-mix(in srgb,var(--stage-panel) 94%,transparent); padding:clamp(18px,2.8vw,34px); box-shadow:0 22px 52px rgba(0,0,0,0.24); }
-        .classroom-spinner-label { margin:0; color:var(--stage-accent); font-size:clamp(0.72rem,1.25vw,0.95rem); font-weight:950; letter-spacing:0.13em; text-transform:uppercase; }
-        .classroom-spinner-target { margin:0; align-self:center; color:#fff; font-size:clamp(1.15rem,2.1vw,1.8rem); line-height:1.25; font-weight:820; text-wrap:balance; }
-        .classroom-spinner-window { min-height:clamp(92px,14vh,150px); display:grid; place-items:center; overflow:hidden; border:2px solid var(--stage-line); border-radius:16px; background:color-mix(in srgb,var(--stage-base) 82%,#000); padding:16px; color:#fff; }
+        .classroom-spinner-card { min-width:0; display:grid; grid-template-rows:auto minmax(96px,auto) auto; gap:13px; border:1px solid #E3D9C2; border-top:6px solid var(--sp-acc); border-radius:22px; background:#fff; padding:clamp(18px,2.8vw,34px); box-shadow:0 12px 32px rgba(40,32,20,0.10); }
+        .classroom-spinner-label { margin:0; color:var(--sp-acc-deep); font-size:clamp(0.72rem,1.25vw,0.95rem); font-weight:900; letter-spacing:0.13em; text-transform:uppercase; }
+        .classroom-spinner-target { margin:0; align-self:center; color:#201E1A; font-size:clamp(1.15rem,2.1vw,1.8rem); line-height:1.25; font-weight:750; text-wrap:balance; }
+        .classroom-spinner-window { min-height:clamp(92px,14vh,150px); display:grid; place-items:center; overflow:hidden; border:2px solid #E3D9C2; border-radius:16px; background:#F6F3EC; padding:16px; color:#2E4A54; }
         .classroom-spinner-window.spinning { animation:classroom-spinner-shake 160ms linear infinite; }
-        .classroom-spinner-window.landed { border-color:var(--stage-accent); box-shadow:0 0 0 3px color-mix(in srgb,var(--stage-accent) 40%,transparent) inset,0 0 34px color-mix(in srgb,var(--stage-accent) 28%,transparent); }
-        .classroom-spinner-name { max-width:100%; overflow:hidden; text-overflow:ellipsis; color:#fff; text-align:center; white-space:nowrap; font-size:clamp(1.7rem,4.2vw,4rem); line-height:1; font-weight:950; letter-spacing:-0.035em; }
+        .classroom-spinner-window.landed { border-color:var(--sp-acc); box-shadow:0 0 0 3px color-mix(in srgb,var(--sp-acc) 24%,transparent) inset; }
+        .classroom-spinner-name { max-width:100%; overflow:hidden; text-overflow:ellipsis; color:#2E4A54; text-align:center; white-space:nowrap; font-size:clamp(1.7rem,4.2vw,4rem); line-height:1; font-weight:800; letter-spacing:-0.03em; }
         .classroom-spinner-window.spinning .classroom-spinner-name { filter:blur(1.2px); opacity:0.72; }
         .classroom-spinner-actions { display:grid; justify-items:center; gap:9px; }
-        .classroom-spinner-button { min-width:min(100%,340px); min-height:58px; border:2px solid var(--stage-accent); border-radius:14px; background:var(--stage-accent); color:var(--stage-base); padding:0 24px; font:inherit; font-size:clamp(1rem,1.7vw,1.25rem); font-weight:950; cursor:pointer; box-shadow:0 12px 28px rgba(0,0,0,0.2); }
+        .classroom-spinner-button { min-width:min(100%,340px); min-height:58px; border:0; border-radius:14px; background:var(--sp-acc); color:#fff; padding:0 24px; font:inherit; font-size:clamp(1rem,1.7vw,1.25rem); font-weight:800; cursor:pointer; box-shadow:0 4px 16px rgba(40,32,20,0.14); }
         .classroom-spinner-button:disabled { cursor:not-allowed; opacity:0.48; }
-        .classroom-spinner-status { margin:0; color:var(--stage-muted); text-align:center; font-size:0.78rem; font-weight:760; }
+        .classroom-spinner-status { margin:0; color:#5C6E75; text-align:center; font-size:0.78rem; font-weight:700; }
         @keyframes classroom-spinner-shake { 50% { transform:translateY(-2px); } }
         @media (max-width:760px) { .classroom-spinner-grid { grid-template-columns:1fr; } .classroom-spinner { padding:18px; } }
       `}</style>

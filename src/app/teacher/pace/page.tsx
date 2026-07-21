@@ -68,10 +68,24 @@ export default function PaceSupportPage() {
   const [sessionMessage, setSessionMessage] = useState("Connecting to the confirmed class session.");
   const [pollAnswers, setPollAnswers] = useState<PollAnswer[]>([]);
   const [previewStage, setPreviewStage] = useState<string | null>(null);
+  // Room-tunable text size, persisted per device (same control as present).
+  const [textScale, setTextScale] = useState(1);
 
   useEffect(() => {
     setPreviewStage(previewStageParam());
+    try {
+      const stored = Number(localStorage.getItem("bdm-pace-textscale"));
+      if (stored >= 1 && stored <= 1.5) setTextScale(stored);
+    } catch { /* ignore */ }
   }, []);
+
+  const adjustTextScale = (delta: number) => {
+    setTextScale((current) => {
+      const next = Math.min(1.5, Math.max(1, Math.round((current + delta) * 1000) / 1000));
+      try { localStorage.setItem("bdm-pace-textscale", String(next)); } catch { /* ignore */ }
+      return next;
+    });
+  };
 
   useEffect(() => {
     let stopped = false;
@@ -220,6 +234,11 @@ export default function PaceSupportPage() {
         .pw-timer::before { content:""; width:8px; height:8px; border-radius:999px; background:var(--acc); }
         .pw-timer.finished { color:#A82C15; }
         .pw-timer.finished::before { background:#F95335; }
+        .pw-textbtns { display:inline-flex; gap:6px; margin-left:auto; }
+        .pw-textbtns + .pw-timer { margin-left:12px; }
+        .pw-textbtn { min-width:40px; min-height:30px; border:1.2px solid var(--hair); border-radius:8px; background:var(--card); color:var(--head); font:inherit; font-size:0.78rem; font-weight:800; cursor:pointer; }
+        .pw-textbtn:hover:not(:disabled) { border-color:var(--acc); }
+        .pw-textbtn:disabled { opacity:0.4; cursor:default; }
         .pw-body { position:relative; min-height:0; overflow:hidden; }
         .pw-cols { position:absolute; inset:0; display:grid; grid-template-columns:minmax(0,1.35fr) minmax(280px,0.65fr); gap:clamp(18px,3vw,40px); padding:clamp(24px,3.6vw,52px); }
         .pw-left { min-width:0; display:flex; flex-direction:column; gap:clamp(14px,2.2vh,22px); }
@@ -267,12 +286,16 @@ export default function PaceSupportPage() {
         <span className="pw-chip">{previewSample ? previewSample.label : state?.label || "Big Dog Math"}</span>
         <h1 className="pw-title">{previewSample ? "Preview" : flow?.presentation?.title || state?.label || "Waiting for the lesson"}</h1>
         {flow?.lesson?.title ? <p className="pw-lesson">{flow.lesson.title}</p> : null}
+        <span className="pw-textbtns" aria-label="Text size">
+          <button className="pw-textbtn" type="button" onClick={() => adjustTextScale(-0.125)} disabled={textScale <= 1} aria-label="Smaller text">A-</button>
+          <button className="pw-textbtn" type="button" onClick={() => adjustTextScale(0.125)} disabled={textScale >= 1.5} aria-label="Bigger text">A+</button>
+        </span>
         <span className={`pw-timer${timerFinished ? " finished" : ""}`} aria-label="Class timer">
           {previewSample ? "5:00" : timer ? formatTime(timerSeconds) : "--:--"}
         </span>
       </header>
 
-      <section className="pw-body" aria-label="Pace and support">
+      <section className="pw-body" aria-label="Pace and support" style={{ zoom: textScale }}>
         {!connected || !session || !flow || !state ? (
           previewSample ? (
             <div className="pw-cols">

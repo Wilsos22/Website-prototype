@@ -152,10 +152,26 @@ export default function ClassroomStagePage() {
   const [previewStage, setPreviewStage] = useState<string | null>(null);
   const [overrideUrl, setOverrideUrl] = useState<string | null>(null);
   const [overrideFrame, setOverrideFrame] = useState<HTMLIFrameElement | null>(null);
+  // Room-tunable text size: A- / A+ scale the whole content stage so every
+  // layout stays proportional. Persisted per device - set it once for the
+  // projector and it sticks.
+  const [textScale, setTextScale] = useState(1);
 
   useEffect(() => {
     setPreviewStage(previewStageParam());
+    try {
+      const stored = Number(localStorage.getItem("bdm-present-textscale"));
+      if (stored >= 1 && stored <= 1.5) setTextScale(stored);
+    } catch { /* ignore */ }
   }, []);
+
+  const adjustTextScale = (delta: number) => {
+    setTextScale((current) => {
+      const next = Math.min(1.5, Math.max(1, Math.round((current + delta) * 1000) / 1000));
+      try { localStorage.setItem("bdm-present-textscale", String(next)); } catch { /* ignore */ }
+      return next;
+    });
+  };
 
   useEffect(() => {
     let stopped = false;
@@ -386,6 +402,10 @@ export default function ClassroomStagePage() {
         .stage-timer::before { content:""; width:8px; height:8px; border-radius:999px; background:var(--acc); }
         .stage-timer.finished { color:#A82C15; }
         .stage-timer.finished::before { background:#F95335; }
+        .stage-textbtns { display:inline-flex; gap:6px; margin-left:12px; }
+        .stage-textbtn { min-width:40px; min-height:30px; border:1.2px solid var(--hair); border-radius:8px; background:var(--card); color:var(--head); font:inherit; font-size:0.78rem; font-weight:800; cursor:pointer; }
+        .stage-textbtn:hover:not(:disabled) { border-color:var(--acc); }
+        .stage-textbtn:disabled { opacity:0.4; cursor:default; }
         .stage-success { position:absolute; z-index:4; top:14px; right:14px; width:min(34vw,440px); border:1px solid var(--hair); border-top:4px solid var(--acc); border-radius:16px; background:var(--card); padding:13px 16px; box-shadow:0 12px 32px rgba(40,32,20,0.10); }
         .stage-success-label { margin:0; color:var(--acc-deep); font-size:0.66rem; font-weight:900; letter-spacing:0.12em; text-transform:uppercase; }
         .stage-success-text { margin:6px 0 0; color:var(--ink); font-size:clamp(0.8rem,1.25vw,1.02rem); line-height:1.32; font-weight:700; }
@@ -530,10 +550,16 @@ export default function ClassroomStagePage() {
             <h1 className="stage-title">{previewSample ? "Preview" : presentation?.title || state?.label || "Waiting for the lesson"}</h1>
             {lesson?.title ? <p className="stage-lesson">{lesson.title}{lesson.code ? ` · ${lesson.code}` : ""}</p> : null}
           </div>
+          <span className="stage-textbtns" aria-label="Text size">
+            <button className="stage-textbtn" type="button" onClick={() => adjustTextScale(-0.125)} disabled={textScale <= 1} aria-label="Smaller text">A-</button>
+            <button className="stage-textbtn" type="button" onClick={() => adjustTextScale(0.125)} disabled={textScale >= 1.5} aria-label="Bigger text">A+</button>
+          </span>
           <div className={`stage-timer ${timerFinished ? "finished" : ""}`}>{previewSample ? "5:00" : timer ? formatTime(timerSeconds) : "--:--"}</div>
         </div>
 
-        <section className={`stage-work${showBoardPanel ? " board-open" : ""}`}>
+        {/* zoom, not transform: the stage is fixed and non-scrolling, so zoom
+            scales text and layout together with no coordinate drift. */}
+        <section className={`stage-work${showBoardPanel ? " board-open" : ""}`} style={{ zoom: textScale }}>
           {showLessonTargets && !isLearningCheck && !resource && !showReaderSpinner ? (
             <aside className="stage-success" aria-label="Success criterion">
               <p className="stage-success-label">Success criterion</p>
