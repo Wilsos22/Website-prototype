@@ -1,0 +1,99 @@
+/* Big Dog Board — Color tokens (warm edition)
+   Warm, rounded, soft — but accents are FLAT REGULAR HUES, never pastel or
+   washed-out. Cream backdrop, white cards, golden-yellow brand highlight,
+   and clear flat status colors (blue/green/orange/red/violet). */
+:root {
+  /* ---- Warm neutrals (ink) ---- */
+  --ink-900: #201E1A;   /* headings — warm near-black */
+  --ink-800: #2E2A24;
+  --ink-700: #4A453E;   /* body */
+  --ink-600: #635C52;
+  --ink-500: #8A8378;   /* muted — meta, idle nav */
+  --ink-400: #B4ADA1;   /* faint — placeholder, ticks */
+  --ink-300: #DBD5C9;   /* hairline border */
+  --ink-200: #ECE7DD;   /* sunk fill — wells, tracks */
+  --ink-100: #F6F3EC;   /* warm paper */
+  --cream:   #ECE8E0;   /* app backdrop */
+  --white:   #FFFFFF;
+  --brown-500: #674A40; /* colours.cafe warm brown — palette neutral anchor */
+
+  /* ---- Brand: AMBER (flat, not pastel) — colours.cafe FCAF38 ---- */
+  --yellow-100: #FDEAC2;  /* soft highlight bg (active nav) */
+  --yellow-200: #FBD98C;
+  --yellow-400: #FCBE52;
+  --yellow-500: #FCAF38;  /* brand accent */
+  --yellow-600: #D88A1C;
+  --yellow-700: #9C6310;
+
+  /* ---- Action: TEAL (flat) — colours.cafe 50A3A4 ---- */
+  --blue-100: #D8EBEB;
+  --blue-500: #50A3A4;
+  --blue-600: #3D8586;
+  --blue-700: #2A6162;
+
+  /* ---- Positive / Done: GREEN (flat, harmonized) ---- */
+  --green-100: #DAEEDF;
+  --green-500: #2E9E5A;
+  --green-600: #1F7A45;
+  --green-700: #155A33;
+
+  /* ---- In progress: ORANGE (flat) ---- */
+  --orange-100: #FCE6CC;
+  --orange-500: #F2820C;
+  --orange-600: #C4660A;
+  --orange-700: #8F4A07;
+
+  /* ---- Negative: CORAL (flat) — colours.cafe F95335 ---- */
+  --red-100: #FDD8CD;
+  --red-500: #F95335;
+  --red-600: #DE3C20;
+  --red-700: #A82C15;
+
+  /* ---- Fractions / x²: VIOLET (flat, harmonized) ---- */
+  --violet-100: #E7DDF6;
+  --violet-500: #845BC9;
+  --violet-600: #67429E;
+  --violet-700: #4D3079;
+
+  /* ---- Surfaces & lines ---- */
+  --bg-app:        var(--cream);
+  --paper:         var(--ink-100);
+  --surface:       var(--white);
+  --surface-warm:  var(--ink-100);
+  --surface-sunk:  var(--ink-200);
+  --line:          var(--ink-300);
+  --line-strong:   var(--ink-400);
+
+  /* ---- Text aliases ---- */
+  --text-heading: var(--ink-900);
+  --text-body:    var(--ink-700);
+  --text-muted:   var(--ink-500);
+  --text-faint:   var(--ink-400);
+  --text-on-fill: var(--white);
+
+  /* ---- Role aliases ---- */
+  --brand:        var(--yellow-500); /* brand highlight */
+  --brand-soft:   var(--yellow-100);
+  --primary:      var(--ink-900);    /* dark solid button */
+  --action:       var(--blue-500);   /* blue CTA + active accents */
+  --action-strong:var(--blue-600);
+  --focus-ring:   var(--blue-100);
+
+  /* ---- Math-meaning aliases ---- */
+  --math-positive: var(--green-500);
+  --math-negative: var(--red-500);
+  --math-x:        var(--blue-500);
+  --math-fraction: var(--violet-500);
+  --math-amber:    var(--yellow-500);
+
+  /* ---- Status (kanban-style) ---- */
+  --status-todo:     var(--ink-400);
+  --status-progress: var(--orange-500);
+  --status-done:     var(--green-500);
+
+  /* ---- Semantic ---- */
+  --success: var(--green-500);
+  --danger:  var(--red-500);
+  --warning: var(--orange-500);
+  --info:    var(--blue-500);
+}

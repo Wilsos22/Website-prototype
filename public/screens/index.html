@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Screen kit &middot; Big Dog Math</title>
+<style>
+  body { margin: 0; background: #ECE8E0; color: #201E1A; padding: 44px;
+    font-family: 'Albert Sans', system-ui, sans-serif; }
+  h1 { margin: 0 0 6px; font-size: 26px; letter-spacing: -0.02em; }
+  p { max-width: 74ch; color: #6f675c; line-height: 1.55; margin: 0 0 8px; }
+  code { background: #fff; border: 1px solid #DBD5C9; border-radius: 5px; padding: 1px 6px; }
+  nav { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 10px; margin-top: 26px; max-width: 1040px; }
+  nav a { display: flex; align-items: center; gap: 10px; background: #fff;
+    border: 1px solid #DBD5C9; border-radius: 12px; padding: 13px 16px;
+    color: #201E1A; text-decoration: none; font-weight: 700; font-size: 15px; }
+  nav a:hover { border-color: #a59c8d; }
+  .sw { width: 12px; height: 12px; border-radius: 4px; flex: none; }
+  .aux { margin-top: 14px; }
+  .aux a { background: #F6F3EC; font-weight: 600; }
+</style>
+</head>
+<body>
+<h1>Screen kit</h1>
+<p>One file per lesson state, projector-ready, scaled to any display. Every file
+is <b>yours to edit by hand</b> - open it, change it, save, refresh. Nothing
+regenerates these.</p>
+<p><code>data-slot</code> text is filled from the Notion lesson step; delete the
+attribute to lock your own words. <code>_system/frame.css</code> is generated
+from the Design canvas - edit the look there only by re-running
+<code>scripts/build-screen-kit.mjs</code>.</p>
+<nav>
+<a href="warmup.html"><span class="sw" style="background:#50A3A4"></span>Warm-up</a>
+<a href="review.html"><span class="sw" style="background:#50A3A4"></span>Review</a>
+<a href="launch.html"><span class="sw" style="background:#F2820C"></span>Launch</a>
+<a href="concrete.html"><span class="sw" style="background:#2E9E5A"></span>Concrete</a>
+<a href="representational.html"><span class="sw" style="background:#3E7CC0"></span>Representational</a>
+<a href="abstract.html"><span class="sw" style="background:#845BC9"></span>Abstract</a>
+<a href="learning-check.html"><span class="sw" style="background:#FCAF38"></span>Learning check</a>
+<a href="discussion.html"><span class="sw" style="background:#F95335"></span>Discussion</a>
+<a href="independent.html"><span class="sw" style="background:#674A40"></span>Independent</a>
+<a href="exit-ticket.html"><span class="sw" style="background:#D6567C"></span>Exit ticket</a>
+<a href="closeout.html"><span class="sw" style="background:#C9992F"></span>Closeout</a>
+</nav>
+<nav class="aux">
+<a href="_blank.html"><span class="sw" style="background:#B4ADA1"></span>Blank starter</a>
+<a href="example-new-learning.html"><span class="sw" style="background:#50A3A4"></span>Example: rich hand-built screen</a>
+</nav>
+</body>
+</html>

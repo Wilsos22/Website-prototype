@@ -195,6 +195,15 @@ Design is locked (Steele's "Independent Proficiency System") - build it, do not 
   `Claude Design Wireframe/Lesson Frame Wireframes.dc.html` plus the `_ds` token set (cream/ink
   "warm edition" - hexes match `--bdb-*`); `scripts/extract-lesson-frames.mjs` regenerates
   `public/frame-preview.html` (`?solo=<id>` shows one frame full-page for the projector).
+- Screen kit (`public/screens/`): one projector-ready HTML file per lesson state in the Warm
+  Notebook look, plus `_blank.html` and a rich exemplar. OWNERSHIP CONTRACT: the `*.html` screens
+  are HAND-OWNED - Steele edits them directly; no script may regenerate or overwrite them.
+  `_system/frame.css` is GENERATED (`node scripts/build-screen-kit.mjs`) from the canvas +
+  `_ds` tokens - never hand-edit it. `_system/frame.js` scales the fixed 1440x810 stage to any
+  display. Slot contract: `data-slot="..."` text is fillable from Notion Lesson Step fields
+  (the same fields `/teacher/studio` edits); deleting the attribute locks hand-written content.
+  Two rules hold on every screen regardless of author: student-required text uses the system
+  font (`.nbaside` handwriting is teacher-asides only), and no student names or results appear.
 - Font: `--bdb-font` = Albert Sans (Google Fonts, weights 400-800), NOT Georgia. Headings are weight
   700 in the sans font. Georgia only survives on ~7 legacy teacher/admin pages (roster, session,
   builder, teacher-login, teacher/mastery, teacher/rightnow, teacher/checkpoint-upload) - treat as

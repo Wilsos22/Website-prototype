@@ -115,36 +115,40 @@ export default function CityRoutesPanel({ sessionId }: { sessionId: string }) {
   return (
     <section className="crp" aria-label="City Routes, private">
       <style>{`
-        .crp { border:1px solid rgba(255,255,255,0.14); border-radius:14px; background:rgba(10,14,24,0.45); padding:14px 14px 16px; color:#eef1f8; }
-        .crp-head { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:2px; }
-        .crp-title { margin:0; font-size:0.95rem; font-weight:900; letter-spacing:0.02em; }
-        .crp-chip { font-size:0.62rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; padding:3px 9px; border-radius:999px; border:1px solid rgba(255,255,255,0.25); color:#cfd6e6; }
-        .crp-chip.released { border-color:rgba(120,220,160,0.6); color:#9fe8bf; }
-        .crp-note { margin:0 0 10px; font-size:0.7rem; color:rgba(238,241,248,0.55); }
-        .crp-cities { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-bottom:10px; }
-        .crp-city { border:1px solid rgba(255,255,255,0.14); border-radius:10px; padding:8px 10px; background:rgba(255,255,255,0.05); }
-        .crp-city-name { margin:0; font-size:0.92rem; font-weight:900; }
-        .crp-city-route { margin:1px 0 0; font-size:0.64rem; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; color:rgba(238,241,248,0.6); }
-        .crp-actions { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
-        .crp-btn { font:inherit; font-size:0.74rem; font-weight:850; min-height:38px; padding:0 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.3); background:rgba(255,255,255,0.08); color:#eef1f8; cursor:pointer; }
+        /* Matches the Remote's private-section card language (see .private-plan):
+           tinted panel, 5px accent left border, white inner cards, uppercase
+           micro-labels. Teal family so it reads as its own private section
+           beside the blue small-group plan. */
+        .crp { display:grid; gap:10px; border:1px solid #bcd6d4; border-left:5px solid #50a3a4; border-radius:15px; background:#f1f8f7; padding:13px; color:#28241e; font-family:var(--bdb-font); }
+        .crp-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+        .crp-title { margin:0; color:#33706f; font-size:0.7rem; font-weight:900; letter-spacing:0.11em; text-transform:uppercase; }
+        .crp-chip { font-size:0.6rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; padding:3px 9px; border-radius:999px; border:1px solid #c4cfd0; background:#fff; color:#6f675c; }
+        .crp-chip.released { border-color:#9ed3b4; background:#eefaf2; color:#256d4a; }
+        .crp-note { margin:0; color:#6f7c8e; font-size:0.68rem; font-weight:730; }
+        .crp-cities { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+        .crp-city { border:1px solid #d5e4e2; border-radius:10px; padding:9px 11px; background:#fff; }
+        .crp-city-name { margin:0; font-size:0.92rem; font-weight:900; color:#28241e; }
+        .crp-city-route { margin:2px 0 0; font-size:0.6rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; color:#3e7d7e; }
+        .crp-actions { display:flex; gap:8px; flex-wrap:wrap; }
+        .crp-btn { font:inherit; font-size:0.74rem; font-weight:850; min-height:40px; padding:0 14px; border-radius:10px; border:1px solid #c9c1b2; background:#fff; color:#28241e; cursor:pointer; }
         .crp-btn:disabled { opacity:0.45; cursor:default; }
-        .crp-btn.release { border-color:rgba(120,220,160,0.7); color:#b9f2d2; }
+        .crp-btn.release { border-color:#2f9e6f; color:#256d4a; }
         .crp-btn.confirm { background:#2f9e6f; border-color:#2f9e6f; color:#fff; }
-        .crp-error { margin:0 0 8px; font-size:0.72rem; font-weight:700; color:#ffb1a6; }
-        .crp-empty { margin:0; font-size:0.76rem; color:rgba(238,241,248,0.6); }
+        .crp-error { margin:0; font-size:0.72rem; font-weight:800; color:#b3402c; }
+        .crp-empty { margin:0; font-size:0.74rem; font-weight:650; color:#6f7c8e; }
         .crp-list { display:flex; flex-direction:column; gap:5px; max-height:300px; overflow-y:auto; }
-        .crp-row { display:flex; align-items:center; gap:8px; border:1px solid rgba(255,255,255,0.1); border-radius:9px; padding:5px 8px; background:rgba(255,255,255,0.03); }
-        .crp-row-name { flex:1 1 auto; min-width:0; font-size:0.78rem; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .crp-row { display:flex; align-items:center; gap:8px; border:1px solid #dde6e5; border-radius:9px; padding:5px 8px; background:#fff; }
+        .crp-row-name { flex:1 1 auto; min-width:0; font-size:0.78rem; font-weight:800; color:#28241e; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         .crp-ev { flex:none; display:flex; align-items:center; gap:4px; }
-        .crp-dot { width:14px; height:14px; border-radius:4px; display:grid; place-items:center; font-size:0.56rem; font-weight:900; }
-        .crp-dot.yes { background:rgba(47,158,111,0.85); color:#fff; }
-        .crp-dot.no { background:rgba(249,83,53,0.8); color:#fff; }
-        .crp-dot.none { background:rgba(255,255,255,0.14); color:rgba(255,255,255,0.5); }
-        .crp-fist { font-size:0.62rem; font-weight:900; color:rgba(238,241,248,0.7); min-width:24px; text-align:center; }
-        .crp-flag { flex:none; font-size:0.56rem; font-weight:900; letter-spacing:0.05em; text-transform:uppercase; color:#ffd489; border:1px solid rgba(255,212,137,0.5); border-radius:6px; padding:1px 5px; }
+        .crp-dot { width:15px; height:15px; border-radius:4px; display:grid; place-items:center; font-size:0.56rem; font-weight:900; }
+        .crp-dot.yes { background:#2f9e6f; color:#fff; }
+        .crp-dot.no { background:#f95335; color:#fff; }
+        .crp-dot.none { background:#eceae4; color:#a59c8d; }
+        .crp-fist { font-size:0.62rem; font-weight:900; color:#6f675c; min-width:24px; text-align:center; }
+        .crp-flag { flex:none; font-size:0.56rem; font-weight:900; letter-spacing:0.05em; text-transform:uppercase; color:#8a6414; border:1px solid #e3c98a; background:#fdf4dd; border-radius:6px; padding:2px 6px; }
         .crp-routes { flex:none; display:flex; gap:3px; }
-        .crp-route-btn { font:inherit; font-size:0.6rem; font-weight:900; min-height:30px; padding:0 8px; border-radius:7px; border:1px solid rgba(255,255,255,0.2); background:transparent; color:rgba(238,241,248,0.6); cursor:pointer; }
-        .crp-route-btn.on { background:rgba(255,255,255,0.16); border-color:rgba(255,255,255,0.55); color:#fff; }
+        .crp-route-btn { font:inherit; font-size:0.6rem; font-weight:900; min-height:32px; padding:0 9px; border-radius:7px; border:1px solid #d0cabc; background:#fff; color:#6f675c; cursor:pointer; }
+        .crp-route-btn.on { background:#28241e; border-color:#28241e; color:#fff; }
         .crp-route-btn.override { border-style:dashed; }
         .crp-route-btn:disabled { opacity:0.4; cursor:default; }
         @media (max-width: 700px) { .crp-cities { grid-template-columns:1fr; } }
