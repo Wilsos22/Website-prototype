@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
 import { SECURE_STUDENT_DATA, studentApiRequest } from "@/lib/studentApi";
 import {
@@ -87,25 +87,35 @@ export function useLiveToolConfig(route: LiveToolRoute): LiveToolConfig | null {
   return tool;
 }
 
-export function LiveToolBanner({ tool }: { tool: LiveToolConfig | null }) {
+// `style` lets a host nudge placement only — e.g. spanning a multi-column grid.
+// It merges last, so a caller can override, but the token colors are the default.
+export function LiveToolBanner({ tool, style }: { tool: LiveToolConfig | null; style?: CSSProperties }) {
   if (!tool?.prompt.trim()) return null;
 
+  // Every tool that renders this banner is a light surface — cream (--bdb-ground)
+  // everywhere except /multiplication-fluency, which is white — so it is styled
+  // from the design tokens: white card, ink text, amber accent rail. On the white
+  // page the amber rail and hairline border are what separate it from the ground.
   return (
     <div
       style={{
         margin: "0 auto 14px",
-        width: "min(92vw, 960px)",
-        border: "1px solid rgba(250, 204, 21, 0.42)",
-        borderRadius: 10,
-        background: "rgba(250, 204, 21, 0.1)",
-        color: "#fef3c7",
+        width: "100%",
+        maxWidth: "min(92vw, 960px)",
+        border: "1px solid var(--bdb-line)",
+        borderLeft: "4px solid var(--bdb-amber)",
+        borderRadius: "var(--bdb-r-sm)",
+        background: "var(--bdb-card)",
+        boxShadow: "var(--bdb-shadow-sm)",
+        color: "var(--bdb-ink)",
         padding: "10px 14px",
         fontWeight: 800,
         lineHeight: 1.4,
-        textAlign: "center",
+        textAlign: "left",
+        ...style,
       }}
     >
-      <span style={{ color: "#facc15", fontSize: "0.72rem", letterSpacing: "0.08em", textTransform: "uppercase" }}>Today&apos;s task</span>
+      <span style={{ color: "var(--bdb-ink-soft)", fontWeight: 700, fontSize: "0.72rem", letterSpacing: "0.08em", textTransform: "uppercase" }}>Today&apos;s task</span>
       <div>{tool.prompt}</div>
     </div>
   );

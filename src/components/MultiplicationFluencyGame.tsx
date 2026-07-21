@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { CSSProperties, FormEvent, RefObject } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { LiveToolBanner, useLiveToolConfig } from "./useLiveToolConfig";
 
 type Mode = "practice" | "mastery";
 type Phase = "ready" | "playing" | "summary";
@@ -873,6 +874,7 @@ function SummaryCard({
 }
 
 export default function MultiplicationFluencyGame() {
+  const liveTool = useLiveToolConfig("/multiplication-fluency");
   const [mode, setMode] = useState<Mode>("practice");
 
   return (
@@ -1363,13 +1365,20 @@ export default function MultiplicationFluencyGame() {
         <img className="mf-logo" src="/big-dog-mark.png" alt="Big Dog Math" />
       </header>
 
-      <div className="mf-mode-tabs" aria-label="Game mode">
-        <button className={`mf-mode-tab${mode === "practice" ? " active" : ""}`} onClick={() => setMode("practice")}>
-          Practice
-        </button>
-        <button className={`mf-mode-tab${mode === "mastery" ? " active" : ""}`} onClick={() => setMode("mastery")}>
-          Times Mastery
-        </button>
+      {/* Banner and tabs share one wrapper so .mf-root keeps the three children its
+          `grid-template-rows: auto 1fr` is written for — a fourth would hand the 1fr
+          row to the banner and stretch it down the page. */}
+      <div>
+        <LiveToolBanner tool={liveTool} style={{ marginTop: 14 }} />
+
+        <div className="mf-mode-tabs" aria-label="Game mode">
+          <button className={`mf-mode-tab${mode === "practice" ? " active" : ""}`} onClick={() => setMode("practice")}>
+            Practice
+          </button>
+          <button className={`mf-mode-tab${mode === "mastery" ? " active" : ""}`} onClick={() => setMode("mastery")}>
+            Times Mastery
+          </button>
+        </div>
       </div>
 
       {mode === "practice" ? <PracticeGame /> : <MasteryGame />}

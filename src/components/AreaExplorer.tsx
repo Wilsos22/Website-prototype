@@ -10,6 +10,7 @@
 
 import { CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { reportToolResult } from "@/lib/toolEvidence";
+import { LiveToolBanner, useLiveToolConfig } from "./useLiveToolConfig";
 
 type ShapeType = "rectangle" | "square" | "parallelogram" | "triangle" | "trapezoid";
 type Phase = "bank" | "substitute" | "compute" | "unit" | "done";
@@ -203,6 +204,7 @@ function inPoly(x: number, y: number, verts: Pt[]) {
 }
 
 export default function AreaExplorer() {
+  const liveTool = useLiveToolConfig("/area-explorer");
   const [mode, setMode] = useState<"solve" | "practice" | "sandbox" | "composite" | "volume">("solve");
   const [phase, setPhase] = useState<Phase>("bank");
   const [shape, setShape] = useState<Shape | null>(null);
@@ -463,6 +465,8 @@ export default function AreaExplorer() {
         .ae-pconfirm.on { color:var(--bdb-green); font-weight:800; font-size:1.05rem; border:2px solid color-mix(in srgb, var(--bdb-green) 45%, transparent); background:color-mix(in srgb, var(--bdb-green) 10%, var(--bdb-card)); padding:12px 16px; }
         @media (prefers-reduced-motion: reduce) { .ae-mark-pulse { animation:none; } .ae-slide { animation:none; transform:translateX(var(--dx)); } .ae-flip { animation:none; } .ae-count-cell { animation:none; } }
       `}</style>
+
+      <LiveToolBanner tool={liveTool} />
 
       <div className="ae-modebar">
         <div className="ae-modeseg">

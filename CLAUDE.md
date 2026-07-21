@@ -28,9 +28,20 @@ bars and live misconception grouping).
    pre-dating this rule); do not add more, and strip emoji from any file you edit as you go.
 2. Never `git add .` or `git add -A`. A Google AI Studio agent and cloud Claude sessions commit to this
    same repo concurrently - stage only the explicit paths you changed. Always `git fetch` and merge (or
-   fast-forward) before pushing; local `main` goes stale fast.
-3. Agents commit locally; Steele pushes (GitHub Desktop). Only push when he asks. A push is what
-   deploys - Vercel auto-builds `main`.
+   fast-forward) before pushing; local `main` goes stale fast. Corollary: when a brief cites a commit as
+   already done, confirm it is actually in YOUR history (`git merge-base --is-ancestor <sha> HEAD`)
+   before building on it - it may still be sitting on another agent's unmerged branch, and
+   `git branch -a --contains <sha>` finds it. On 2026-07-21 the live tool banner's cream-surface
+   restyle was one such commit; wiring eleven more cream pages to the un-restyled banner would have
+   shipped pale-on-pale text no student could read.
+3. Verified work ships without waiting for Steele (his standing request, 2026-07-21 - routing
+   merges through him twice stranded finished work). A push to `main` is what deploys - Vercel
+   auto-builds it. Flow: push the feature branch first (a local-only branch is invisible to
+   Steele's github.com flow - never hand him a merge as an action item), then fetch, merge into
+   `main` in a clean worktree, resolve conflicts, typecheck AND build the MERGED tree, push, and
+   verify the live route actually changed. Still ask him first: curriculum/Notion content,
+   classroom-orchestration core, locked designs, schema/RLS migrations, anything destructive, and
+   anything you could not verify.
 4. Never import `src/lib/supabaseServer.ts` (the service-role client / `SUPABASE_SERVICE_ROLE_KEY`) into
    a client component or any browser-reachable code. Server-only tables are touched only through
    `src/app/api/*` route handlers.
@@ -80,7 +91,9 @@ bars and live misconception grouping).
 - Manipulative tools (public, no session): `/whiteboard`, `/number-line-plus`, `/number-line`,
   `/fraction-bars`, `/group-bars`, `/percent-bar`, `/algebra-tiles`, `/equation-builder`,
   `/order-of-operations` (GEMS), `/combine-like-terms`, `/proportions`, `/area-model`,
-  `/coordinate-grid`, `/ladder-method`, `/multiplication-fluency`, `/term-identifier`, `/timer`.
+  `/coordinate-grid`, `/ladder-method`, `/multiplication-fluency`, `/term-identifier`,
+  `/divisibility`, `/distributive-area`, `/area-explorer`, `/balance-beam`, `/long-division`,
+  `/place-value`, `/place-value-mirror`, `/timer`.
 - Room/display surfaces (public): `/board` + `/ipad` (pen-to-board), `/warmup`, `/live-flow`.
 - Teacher (gated): `/teacher` and `/teacher/*` (analytics, assignments, challenges, checkpoint-upload,
   checkpoints, exit-tickets, mastery, rightnow), `/control`, `/session`, `/roster`, `/start-question`.
@@ -93,6 +106,39 @@ bars and live misconception grouping).
 
 Adding a tool: also add a lowercase entry to `TOOL_ROUTES` in `src/app/lesson/page.tsx` or the Notion
 `Tool:` name renders as a dead pill. SiteNav link sets are hardcoded arrays - add nav entries manually.
+
+Same trap on the live-session side: listing a route in `LiveToolRoute` (`src/lib/liveClassFlow.ts`)
+only lets the teacher PUBLISH a task to it. The tool component must also call
+`useLiveToolConfig("/route")` and render `<LiveToolBanner tool={...} />`, or the published directions
+are silently dropped and students see nothing. All 18 tool routes are wired as of 2026-07-20 - a NEW
+route is the case to watch, so wire the component in the same change that extends `LiveToolRoute`.
+Where a route's `LiveToolConfig` arm carries a typed payload (`/number-line-plus`, `/percent-bar`,
+`/equation-builder`, `/order-of-operations`, `/algebra-tiles`) the tool also applies `tool.config` to
+its own state - always in an effect keyed on `tool.id`, never on the tool object
+(`useLiveToolConfig` re-reads every second, so object identity churns and an object-keyed effect
+restarts the student's problem mid-answer; `PercentBar` is the pattern). The in-flight branch
+`claude/distributive-area-tool-redesign-3b0be1` adds a sixth typed arm, `/distributive-area`
+`{ set }` - a "24x7,16x8" problem series parsed by `src/lib/distributiveProblems.ts`. The remaining
+arms are `Record<string, never>`, where the prompt is all there is - do not invent config behavior
+for them.
+
+Counting those arms, `LiveToolRoute` has 21, not 18: `/challenge`, `/exit-ticket` and `/checkpoint`
+ride the same union so `/control` can publish them, but they deliberately do NOT call
+`useLiveToolConfig` - do not "fix" them by wiring the banner. Each has its own launch path
+(`launchChallenge`, `launchExitTicket`, `launchCheckpoint`) writing the real content to `challenges` /
+`exit_tickets` / `checkpoint_runs`, and the student surface polls that table instead (`/exit-ticket`
+reads `getOpenExitTicket`). Their `buildLiveToolConfig` result is only a marker for the control
+panel's own published-state UI, and the teacher's question comes from a dedicated field
+(`toolSetup.exitPrompt`), not the generic tool prompt - so nothing is dropped.
+
+`LiveToolBanner` styles itself from `--bdb-*` tokens; it is shared, so do not hardcode a hex into it.
+Every tool page it renders on is a light surface - cream (`--bdb-ground`) except
+`/multiplication-fluency`, which is white, where the amber rail and hairline border carry the
+separation. Its optional `style` prop is for PLACEMENT only (it merges last): `/area-model` and
+`/coordinate-grid` pass `gridColumn: "1 / -1"` because their main container is a two-column grid.
+Watch for a root with a fixed `grid-template-rows` - adding the banner as a new direct child shifts
+every row (`.mf-root` on `/multiplication-fluency` is why the banner shares a wrapper with the mode
+tabs there).
 
 ## Auth
 
@@ -239,6 +285,10 @@ Design is locked (Steele's "Independent Proficiency System") - build it, do not 
 ## Build, deploy, test
 
 - `npm run dev` (webpack), `npm run build`, `npm run typecheck` (`tsc --noEmit`).
+- Scratch worktrees: `npm run build` (Turbopack) panics if the `node_modules` symlink points outside
+  what it takes as the project root - "Symlink [project]/node_modules is invalid". Put worktrees that
+  need a BUILD under `.claude/worktrees/` inside the repo; a tmp-dir worktree with the symlink is
+  fine for `typecheck` only.
 - Golden tests: `npm run test:mastery` and `npm run test:grouping` compile `src/lib/mastery.ts` /
   `grouping.ts` in isolation (`tsc --ignoreConfig`) against Python-prototype fixtures - so do NOT add
   tsconfig path aliases or new imports to those two files, and regenerate `scripts/fixtures/*.json` if
@@ -251,6 +301,19 @@ Design is locked (Steele's "Independent Proficiency System") - build it, do not 
   `refs/remotes/origin/HEAD 2`, `index 2`, or `routes.d 3.ts` cause
   `fatal: bad object refs/remotes/origin/HEAD 2` on fetch and duplicate-identifier typecheck errors.
   Fix: delete the ` 2`/` 3`-suffixed files (`find .git .next -name "* 2" -o -name "* 3"`), then retry.
+  A `node_modules 2` duplicate makes `npm run build` fail on a spurious type error deep in a
+  third-party `.d.ts` (a webauthn package, nothing you touched) - same artifact, same fix: delete
+  the duplicate and rebuild. Drive also re-applies DELETES late: a file git just restored can
+  vanish seconds afterward because your earlier `rm` only now synced - if a freshly checked-out
+  file is missing, `git checkout -- <path>` again and re-verify before concluding anything.
+- Verifying in the in-app Browser pane: the preview throttles rendering, so CSS animations sit at
+  their first frame and screenshots wait for motion to settle - prove motion with
+  `el.getAnimations()` or keyed-remount node identity instead of watching. `ResizeObserver`
+  callbacks may never fire there (dispatch a synthetic window `resize` after resizing), and
+  synthetic `dispatchEvent` clicks BATCH under React 18 - one state-advancing synthetic click per
+  `javascript_tool` call is the reliable rhythm. `window.innerWidth` can report the pane frame
+  rather than the emulated viewport (and misreports under real browser zoom), so in tool code size
+  from the measured container (`clientWidth` on a ref), not `window.innerWidth`.
 - Student digital responses: Response Mode on a Lesson Step drives the Chromebook input.
   "Multiple Choice + Explain" (added 2026-07-21) shows tappable choices plus a required written
   explanation; the choice stays in `poll_answers.answer` (tallies, correctness, and City Routes

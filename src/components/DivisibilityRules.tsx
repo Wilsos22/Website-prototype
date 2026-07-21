@@ -3,14 +3,23 @@
 // Divisibility Rules - M1.T1.L2-D1 "Factors and Multiples Foundations" (6.NS.4).
 //
 // Three fixed columns so a sixth grader always knows where to look:
-//   LEFT   the rule bank, large, one row per divisor 1 through 10
+//   LEFT   the rule bank, large, one row per divisor 1 through 6
 //   CENTER the number being tested, which travels DOWN the rail one rule at a time
 //   RIGHT  the factor family, which builds itself as each rule lands
 //
 // The run stops when d * d passes N - the lesson's stopping rule - so the arch
 // closes on its own and the student can see why no later pair is needed. Once
-// the rules are finished the student completes the family by clicking every
-// factor in order, then the pairs are drawn as a nested arch.
+// the rules are finished the student closes the family themselves: the full
+// factor line appears in order, and they click the TWO factors that multiply
+// to N. A right pick draws the arch between them and pops the product - green,
+// at the apex - so every arch literally says "this pair makes N". A wrong pick
+// shows the product they actually made and lets them try again.
+//
+// D1 covers the rules for 1 through 6 ONLY. Every number offered here has its
+// crossing point at or below 6 (all are under 49), so testing 1..6 still finds
+// a genuinely complete factor list - and a factor of 7 arrives as a PARTNER
+// (35 = 5 x 7, 42 = 6 x 7) rather than needing a rule of its own. The stop is
+// always the mathematical crossing d * d > N, never "the board ran out".
 
 import { ReactNode, useMemo, useState } from "react";
 
@@ -28,23 +37,18 @@ const RULES: Record<number, string> = {
   4: "The last two digits make a number divisible by 4.",
   5: "Last digit is 0 or 5.",
   6: "Passes both the rule for 2 and the rule for 3.",
-  7: "No digit shortcut. Divide to check.",
-  8: "The last three digits make a number divisible by 8.",
-  9: "The digit sum is divisible by 9.",
-  10: "Last digit is 0.",
 };
 
-const RAIL = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const RAIL = [1, 2, 3, 4, 5, 6];
+const MAX_RULE = RAIL[RAIL.length - 1];
+// The rail can prove a list complete only while the crossing point is on it,
+// i.e. floor(sqrt(N)) <= MAX_RULE. Derived, not hand-flagged, so adding a
+// number that the rules cannot finish surfaces itself instead of lying.
+const closesOnRail = (n: number) => n < (MAX_RULE + 1) ** 2;
 
-interface Level { label: string; nums: number[]; closes: boolean }
-const LEVELS: Level[] = [
-  // Every number here is <= 100, so testing 1-10 always reaches the stopping
-  // point and the factor list the tool builds is genuinely complete.
-  { label: "Two-digit", nums: [24, 36, 40, 48, 60, 72], closes: true },
-  // Above 100 the rail runs out before the partners meet. The tool says so
-  // rather than pretending the list is finished.
-  { label: "Three-digit", nums: [102, 126, 150, 234, 405, 720], closes: false },
-];
+// Each of these reaches its crossing point at or below 6, so the six rules on
+// the rail are enough to finish every factor list here.
+const NUMBERS = [24, 35, 36, 40, 42, 48];
 
 const digitsOf = (n: number) => String(n).split("").map(Number);
 const digitSum = (n: number) => digitsOf(n).reduce((a, b) => a + b, 0);
@@ -77,30 +81,16 @@ function evidence(N: number, d: number, prior: Record<number, boolean>): Ev {
       return { correct, idx: idxLast(1), mode: "digits",
         card: <>Last digit: <b>{lastDigit}</b></>,
         reason: `the last digit is ${lastDigit}, ${correct ? "a 0 or 5" : "not 0 or 5"}` };
-    case 10:
-      return { correct, idx: idxLast(1), mode: "digits",
-        card: <>Last digit: <b>{lastDigit}</b></>,
-        reason: `the last digit is ${lastDigit}, ${correct ? "a 0" : "not 0"}` };
     case 4: {
       const t = N % 100;
       return { correct, idx: idxLast(2), mode: "digits",
         card: <>Last two digits: <b>{String(t).padStart(2, "0")}</b></>,
         reason: `${t} ${correct ? `= 4 x ${t / 4}` : `divided by 4 leaves ${t % 4}`}` };
     }
-    case 8: {
-      const t = N % 1000;
-      return { correct, idx: idxLast(3), mode: "digits",
-        card: <>Last three digits: <b>{String(t).padStart(3, "0")}</b></>,
-        reason: `${t} ${correct ? `= 8 x ${t / 8}` : `divided by 8 leaves ${t % 8}`}` };
-    }
     case 3:
       return { correct, idx: all, mode: "sum",
         card: <>Digit sum: <b>{digits.join(" + ")} = {sum}</b></>,
         reason: `the digit sum ${sum} ${correct ? "is" : "is not"} divisible by 3` };
-    case 9:
-      return { correct, idx: all, mode: "sum",
-        card: <>Digit sum: <b>{digits.join(" + ")} = {sum}</b></>,
-        reason: `the digit sum ${sum} ${correct ? "is" : "is not"} divisible by 9` };
     case 6: {
       const by2 = prior[2] ?? N % 2 === 0;
       const by3 = prior[3] ?? sum % 3 === 0;
@@ -108,24 +98,20 @@ function evidence(N: number, d: number, prior: Record<number, boolean>): Ev {
         card: <>You found: divisible by 2 was <b>{by2 ? "yes" : "no"}</b>, by 3 was <b>{by3 ? "yes" : "no"}</b>. Both?</>,
         reason: `6 needs BOTH - even (${by2 ? "yes" : "no"}) and digit sum divisible by 3 (${by3 ? "yes" : "no"})` };
     }
-    case 7:
-      return { correct, idx: none, mode: "digits",
-        card: <>No digit trick. Work out <b>{N} ÷ 7</b>.</>,
-        reason: `${N} ÷ 7 ${correct ? `= ${N / 7} exactly` : `leaves ${N % 7}`}` };
     default:
       return { correct, idx: none, mode: "digits", card: null, reason: "" };
   }
 }
 
 export default function DivisibilityRules() {
-  const [lvl, setLvl] = useState(0);
   const [numIdx, setNumIdx] = useState(0);
   const [results, setResults] = useState<{ d: number; isFactor: boolean }[]>([]);
-  const [picked, setPicked] = useState<number[]>([]);
+  const [sel, setSel] = useState<number | null>(null);   // first factor of the pair being picked
+  const [closed, setClosed] = useState<number[]>([]);    // small factor of each arched pair, in pick order
   const [note, setNote] = useState<string | null>(null);
 
-  const level = LEVELS[lvl];
-  const N = level.nums[numIdx];
+  const N = NUMBERS[numIdx];
+  const closes = closesOnRail(N);
 
   // Test 1, 2, 3 ... but only while the smaller factor has not passed its
   // partner. This is the lesson's stopping rule, enforced by the tool.
@@ -155,22 +141,48 @@ export default function DivisibilityRules() {
     return [...s].sort((a, b) => a - b);
   }, [pairs]);
 
-  // Shuffled pool for the completion step. Reshuffles only when the set changes.
-  const pool = useMemo(() => {
-    const a = [...allFactors];
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
-  }, [allFactors]);
+  // The closing step only makes sense when the search actually reached its
+  // crossing point; every number offered here does.
+  const assembling = !running && closes && pairs.length > 0 && closed.length < pairs.length;
+  const finished = !running && pairs.length > 0
+    && (!closes || closed.length === pairs.length);
 
-  // The completion step only makes sense when the arch actually closed. Asking
-  // for "every factor, smallest to largest" off a partial list would teach the
-  // wrong thing, so above 100 the tool stops at the pairs it can prove.
-  const assembling = !running && level.closes && picked.length < allFactors.length;
-  const finished = !running && allFactors.length > 0
-    && (!level.closes || picked.length === allFactors.length);
+  // Arch geometry. Factors sit on one ascending line; each pair is a curve from
+  // its small factor to its partner. Because a complete factor list is
+  // symmetric, pair k always spans index k to (count-1-k), so nesting falls out
+  // and the widest span is automatically the tallest arch. A perfect square
+  // ends on a single factor - one self-loop, never a duplicated number.
+  const arch = useMemo(() => {
+    const idx = new Map(allFactors.map((f, i) => [f, i] as const));
+    const cols = allFactors.length;
+    const COL = 74, PAD = 22, H_MIN = 36, H_MAX = 132, SELF_H = 34;
+    const items = pairs
+      .map(([a, b]) => ({ a, b, i: idx.get(a) ?? 0, j: idx.get(b) ?? 0, self: a === b }))
+      .map((it) => ({ ...it, span: it.j - it.i }))
+      .sort((p, q) => q.span - p.span); // outermost first: draw order and colour order
+    const maxSpan = Math.max(1, ...items.map((it) => it.span));
+    const base = H_MAX + 44; // headroom above the outer arch for its product label
+    const x = (i: number) => PAD + COL * i + COL / 2;
+    const shaped = items.map((it) => {
+      const h = it.self ? SELF_H : H_MIN + (it.span / maxSpan) * (H_MAX - H_MIN);
+      const x1 = x(it.i), x2 = x(it.j);
+      // Both control points at the same height give a symmetric curve whose
+      // apex sits at 3/4 of the control offset, so scale by 4/3 to hit h.
+      const c = base - h * (4 / 3);
+      // Self-pair: a small round loop over the single factor - wide control
+      // points and short height so it reads as a little arch, not a teardrop.
+      const d = it.self
+        ? `M ${x1 - 12} ${base} C ${x1 - 42} ${base - h * 1.6} ${x1 + 42} ${base - h * 1.6} ${x1 + 12} ${base}`
+        : `M ${x1} ${base} C ${x1} ${c} ${x2} ${c} ${x2} ${base}`;
+      return { ...it, h, x1, x2, d, apex: it.self ? base - h * 1.2 : base - h };
+    });
+    return {
+      shaped, cols, base, x,
+      width: PAD * 2 + COL * cols,
+      height: base + 52,
+      draw: 0.55, pulse: 0.38,
+    };
+  }, [pairs, allFactors]);
 
   function answer(said: boolean) {
     if (!ev || currentD == null) return;
@@ -185,21 +197,27 @@ export default function DivisibilityRules() {
     setResults([...results, { d: currentD, isFactor: ev.correct }]);
   }
 
-  function pick(f: number) {
-    const want = allFactors[picked.length];
-    if (f !== want) {
-      setNote(`Not yet - the next smallest factor you have not used is still to come.`);
-      return;
+  // Pair-picking on the factor line. First click selects a factor; the second
+  // click is the claim "these two multiply to N". Right: the arch draws itself
+  // and the product pops at its apex. Wrong: show the product they actually
+  // made, clear the selection, let them try again. Clicking the same factor
+  // twice claims f x f, which is exactly right on a perfect square (6 then 6
+  // closes 36) and gets honest feedback anywhere else (3 x 3 = 9, not 24).
+  function pickFactor(f: number) {
+    const small = Math.min(f, N / f);
+    if (closed.includes(small)) { setSel(null); return; } // that arch is already closed
+    if (sel == null) { setSel(f); setNote(null); return; }
+    if (sel * f === N) {
+      setSel(null); setNote(null);
+      setClosed([...closed, small]);
+    } else {
+      setNote(`Not this pair - ${sel} x ${f} = ${sel * f}, not ${N}.`);
+      setSel(null);
     }
-    setNote(null);
-    setPicked([...picked, f]);
   }
 
   function loadNumber(i: number) {
-    setNumIdx(i); setResults([]); setPicked([]); setNote(null);
-  }
-  function switchLevel(i: number) {
-    setLvl(i); setNumIdx(0); setResults([]); setPicked([]); setNote(null);
+    setNumIdx(i); setResults([]); setSel(null); setClosed([]); setNote(null);
   }
 
   const digits = digitsOf(N);
@@ -210,9 +228,6 @@ export default function DivisibilityRules() {
       <style>{`
         .dv-wrap { font-family:var(--bdb-font); color:var(--bdb-ink); max-width:1240px; margin:0 auto; padding:12px clamp(10px,2.5vw,20px) 34px; }
         .dv-top { display:flex; gap:10px; justify-content:center; align-items:center; flex-wrap:wrap; margin-bottom:14px; }
-        .dv-seg { display:inline-flex; border:2px solid var(--bdb-line); border-radius:22px; overflow:hidden; background:var(--bdb-card); }
-        .dv-seg button { font:inherit; font-weight:800; font-size:0.86rem; min-height:44px; padding:0 18px; border:none; background:transparent; color:var(--bdb-ink-soft); cursor:pointer; }
-        .dv-seg button.on { background:var(--bdb-ink); color:#fff; }
         .dv-npill { font:inherit; font-weight:800; font-size:0.92rem; min-height:40px; padding:0 15px; border-radius:999px; border:1px solid var(--bdb-line); background:var(--bdb-card); color:var(--bdb-ink-soft); cursor:pointer; }
         .dv-npill.on { background:var(--bdb-ink); color:#fff; border-color:var(--bdb-ink); }
 
@@ -258,18 +273,38 @@ export default function DivisibilityRules() {
         .dv-empty { color:var(--bdb-ink-faint); font-size:0.9rem; line-height:1.5; }
         @keyframes dvIn { from { opacity:0; transform:translateX(16px); } to { opacity:1; transform:none; } }
 
-        .dv-pool { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
-        .dv-chip { font:inherit; font-weight:900; font-size:1.1rem; min-width:52px; min-height:48px; padding:0 12px; border-radius:12px; border:2px solid var(--bdb-ink); background:var(--bdb-card); color:var(--bdb-ink); cursor:pointer; }
-        .dv-chip.used { opacity:0.25; pointer-events:none; }
-        .dv-built { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; min-height:48px; }
-        .dv-slot { display:grid; place-items:center; min-width:52px; min-height:48px; border-radius:12px; background:var(--bdb-ink); color:#fff; font-weight:900; font-size:1.1rem; }
-        .dv-slot.blank { background:transparent; border:2px dashed var(--bdb-line); }
-
-        /* the arch */
-        .dv-arch { display:flex; flex-direction:column; gap:5px; align-items:center; margin-top:4px; }
-        .dv-arow { display:flex; align-items:center; gap:8px; width:100%; }
-        .dv-line { flex:1; height:2px; background:color-mix(in srgb, ${C_TEAL} 70%, transparent); }
-        .dv-af { font-weight:900; font-size:1.05rem; color:var(--bdb-ink); min-width:40px; text-align:center; }
+        /* the completed arch - full width under the columns so a ten-factor
+           line stays readable without sideways scrolling */
+        .dv-archwrap { margin:20px auto 0; border:2px solid var(--bdb-line); background:var(--bdb-card); padding:14px clamp(8px,2vw,18px) 10px; }
+        .dv-archhead { font-size:0.72rem; font-weight:800; letter-spacing:0.07em; text-transform:uppercase; color:var(--bdb-ink-faint); margin-bottom:6px; text-align:center; }
+        .dv-archsvg { display:block; width:100%; height:auto; max-height:56vh; margin:0 auto; overflow:visible; }
+        .dv-ap { fill:none; stroke-width:3.5; stroke-linecap:round; stroke-dasharray:1; stroke-dashoffset:1; animation:dvDraw var(--dur) cubic-bezier(.4,.75,.35,1) var(--delay) forwards; }
+        @keyframes dvDraw { to { stroke-dashoffset:0; } }
+        .dv-adot { opacity:0; transform-box:fill-box; transform-origin:center; animation:dvDot var(--pdur) cubic-bezier(.3,.8,.35,1) var(--pdelay) forwards; }
+        @keyframes dvDot { 0% { opacity:0; transform:scale(.4); } 55% { opacity:1; transform:scale(1.7); } 100% { opacity:1; transform:scale(1); } }
+        .dv-alabel { font-family:var(--bdb-font); font-weight:900; fill:var(--bdb-ink); }
+        .dv-aself { font-family:var(--bdb-font); font-weight:800; font-size:15px; opacity:0; animation:dvFadeIn var(--pdur) ease var(--pdelay) forwards; }
+        @keyframes dvFadeIn { to { opacity:1; } }
+        .dv-abase { stroke:var(--bdb-line); stroke-width:2; }
+        /* clickable factor targets on the line */
+        .dv-fhit { cursor:pointer; }
+        .dv-fhit circle.ring { fill:transparent; stroke:transparent; stroke-width:2.5; transition:fill .15s, stroke .15s; }
+        .dv-fhit:hover circle.ring { stroke:color-mix(in srgb, ${C_TEAL} 55%, transparent); }
+        .dv-fhit.sel circle.ring { fill:color-mix(in srgb, ${C_TEAL} 20%, transparent); stroke:${C_TEAL}; }
+        .dv-fhit.paired { cursor:default; }
+        .dv-fhit:focus-visible circle.ring { stroke:var(--bdb-ink); }
+        /* the product pops above the apex as the arch closes, settles, then
+           fades - it is the "you made N" feedback beat, not a permanent label.
+           (Every arch of a symmetric family apexes at the same x, so persistent
+           labels would stack into a tower.) */
+        .dv-aprod { font-family:var(--bdb-font); font-weight:900; fill:${C_GREEN}; opacity:0; transform-box:fill-box; transform-origin:center; animation:dvPop 1.7s cubic-bezier(.3,.9,.35,1.15) var(--pdelay) forwards; }
+        @keyframes dvPop {
+          0% { opacity:0; transform:scale(.3) translateY(8px); }
+          22% { opacity:1; transform:scale(1.32) translateY(-2px); }
+          34% { opacity:1; transform:scale(1) translateY(0); }
+          72% { opacity:1; transform:scale(1) translateY(0); }
+          100% { opacity:0; transform:scale(1) translateY(0); }
+        }
 
         .dv-note { text-align:center; min-height:26px; margin-top:16px; }
         .dv-note-in { display:inline-block; color:var(--bdb-coral); font-weight:800; font-size:clamp(0.98rem,2.4vw,1.2rem); line-height:1.35; padding:8px 16px; border-radius:12px; background:color-mix(in srgb, var(--bdb-coral) 12%, transparent); }
@@ -289,16 +324,16 @@ export default function DivisibilityRules() {
           .dv-car { transition:none; }
           .dv-pair { animation:none; }
           .dv-dig { transition:none; }
+          /* completed arches appear at once, already closed; the transient
+             product pop is motion, so it simply does not appear */
+          .dv-ap { animation:none !important; stroke-dashoffset:0 !important; }
+          .dv-adot, .dv-aself { animation:none !important; opacity:1 !important; transform:none !important; }
+          .dv-aprod { animation:none !important; opacity:0 !important; }
         }
       `}</style>
 
       <div className="dv-top">
-        <div className="dv-seg">
-          {LEVELS.map((l, i) => (
-            <button key={l.label} className={lvl === i ? "on" : ""} onClick={() => switchLevel(i)}>{l.label}</button>
-          ))}
-        </div>
-        {level.nums.map((n, i) => (
+        {NUMBERS.map((n, i) => (
           <button key={n} className={`dv-npill ${i === numIdx ? "on" : ""}`} onClick={() => loadNumber(i)}>{n}</button>
         ))}
       </div>
@@ -327,9 +362,7 @@ export default function DivisibilityRules() {
           })}
           {!running && (
             <div className="dv-stop">
-              {level.closes
-                ? `Stop at ${stoppedAt}. The next divisor would pass its partner, so every later pair repeats one you already have.`
-                : `You have run every rule through 10, but the partners have not met yet. To finish this list you would keep testing past 10.`}
+              {`Stop at ${stoppedAt}. The next divisor would pass its partner, so every later pair repeats one you already have.`}
             </div>
           )}
         </div>
@@ -376,54 +409,107 @@ export default function DivisibilityRules() {
             ))}
 
             {assembling && (
-              <>
-                <p className="dv-empty" style={{ marginBottom: 10 }}>
-                  Now finish it. Click every factor from smallest to largest.
-                </p>
-                <div className="dv-built">
-                  {allFactors.map((_, i) => (
-                    <span key={i} className={`dv-slot ${picked[i] == null ? "blank" : ""}`}>
-                      {picked[i] ?? ""}
-                    </span>
-                  ))}
-                </div>
-                <div className="dv-pool">
-                  {pool.map((f) => (
-                    <button key={f} className={`dv-chip ${picked.includes(f) ? "used" : ""}`} onClick={() => pick(f)}>{f}</button>
-                  ))}
-                </div>
-              </>
+              <p className="dv-empty">
+                You proved {pairs.length} pairs. Now close each arch below.
+              </p>
             )}
 
             {finished && (
-              <div className="dv-arch">
-                {pairs.map(([a, b], i) => (
-                  <div className="dv-arow" key={a} style={{ width: `${Math.max(46, 100 - i * 9)}%` }}>
-                    <span className="dv-af">{a}</span>
-                    <span className="dv-line" />
-                    <span className="dv-af">{b}</span>
-                  </div>
-                ))}
-              </div>
+              <p className="dv-empty">
+                Every arch is closed below.
+              </p>
             )}
           </div>
+        </div>
+      </div>
 
+      {/* The closing step and the finished representation are the same surface:
+          every factor on one ascending line. The student clicks the two factors
+          that multiply to N; the arch draws itself between them and the product
+          pops at the apex. Keyed on N so a new number starts clean. */}
+      {(assembling || finished) && (
+        <div className="dv-archwrap" key={N}>
+          <div className="dv-archhead">
+            {assembling
+              ? `Close the arches: click the two factors that multiply to make ${N}`
+              : `The factor arches of ${N}`}
+          </div>
+          <svg
+            className="dv-archsvg"
+            viewBox={`0 0 ${arch.width} ${arch.height}`}
+            style={{ maxWidth: arch.width * 1.5 }}
+            role="img"
+            aria-label={assembling
+              ? `All factors of ${N} on one line. Click two factors that multiply to ${N} to close their arch. ${closed.length} of ${pairs.length} arches closed.`
+              : `All factors of ${N} on one line, each pair joined by an arch: ${pairs.map(([a, b]) => (a === b ? `${a} times itself` : `${a} and ${b}`)).join(", ")}.`}
+          >
+            <line className="dv-abase" x1={arch.x(0) - 26} y1={arch.base} x2={arch.x(arch.cols - 1) + 26} y2={arch.base} />
+
+            {/* arches appear in the order the student closes them; height still
+                comes from the span, so nesting is always right */}
+            {closed.map((small) => {
+              const k = arch.shaped.findIndex((s) => s.a === small);
+              const p = arch.shaped[k];
+              if (!p) return null;
+              const color = [C_TEAL, C_GREEN, C_AMBER, C_CORAL][k % 4];
+              const anim = {
+                "--dur": `${arch.draw}s`, "--delay": "0s",
+                "--pdur": `${arch.pulse}s`, "--pdelay": `${arch.draw * 0.7}s`,
+              } as React.CSSProperties;
+              return (
+                <g key={`${p.a}-${p.b}`} style={anim}>
+                  <path className="dv-ap" d={p.d} stroke={color} pathLength={1} />
+                  <circle className="dv-adot" cx={p.x1 - (p.self ? 12 : 0)} cy={arch.base} r={5.5} fill={color} />
+                  <circle className="dv-adot" cx={p.x2 + (p.self ? 12 : 0)} cy={arch.base} r={5.5} fill={color} />
+                  {/* the pair's product lands green at the apex - every arch
+                      says out loud that it makes N */}
+                  <text className="dv-aprod" x={(p.x1 + p.x2) / 2} y={p.apex - (p.self ? 24 : 10)} textAnchor="middle" fontSize={22}>
+                    {N}
+                  </text>
+                  {p.self && (
+                    <text className="dv-aself" x={p.x1} y={p.apex - 6} textAnchor="middle" fill={color}>
+                      {p.a} x {p.b}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+
+            {allFactors.map((f, i) => {
+              const paired = closed.includes(Math.min(f, N / f));
+              const cls = `dv-fhit ${sel === f ? "sel" : ""} ${paired ? "paired" : ""}`;
+              return (
+                <g
+                  key={f}
+                  className={cls}
+                  role={assembling && !paired ? "button" : undefined}
+                  tabIndex={assembling && !paired ? 0 : undefined}
+                  aria-label={paired ? `${f}, arch closed` : `factor ${f}`}
+                  onClick={() => assembling && pickFactor(f)}
+                  onKeyDown={(e) => { if (assembling && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); pickFactor(f); } }}
+                >
+                  <circle className="ring" cx={arch.x(i)} cy={arch.base + 27} r={20} />
+                  <text className="dv-alabel" x={arch.x(i)} y={arch.base + 34} textAnchor="middle" fontSize={f >= 10 ? 21 : 23}>
+                    {f}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
           {finished && (
             <div className="dv-done">
-              {level.closes
-                ? `${N} has ${allFactors.length} factors. The arch is closed, so the list is complete.`
-                : `You have found ${allFactors.length} factors of ${N}. Keep testing past 10 before calling this list complete.`}
+              {`${N} has ${allFactors.length} factors. The arches are closed. Every factor has a partner, so the list is complete.`}
               <br />
               <a href="/ladder-method">Break it into primes with the Ladder Method</a>
             </div>
           )}
         </div>
-      </div>
+      )}
 
       <div className="dv-note">{note && <span key={note} className="dv-note-in">{note}</span>}</div>
 
       <div className="dv-bar">
-        <button className="dv-btn" onClick={() => loadNumber((numIdx + 1) % level.nums.length)}>Next number</button>
+        <button className="dv-btn" onClick={() => loadNumber((numIdx + 1) % NUMBERS.length)}>Next number</button>
         <button className="dv-link" onClick={() => loadNumber(numIdx)}>Start this one again</button>
       </div>
     </div>
