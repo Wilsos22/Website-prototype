@@ -808,15 +808,15 @@ export default function TeacherRemotePage() {
     return (
       <main className="remote-write-page" style={remoteStyle}>
         <style>{`
-          .remote-write-page { position:fixed; inset:0; display:grid; grid-template-rows:auto minmax(0,1fr); background:#f2ecdf; color:#28241e; font-family:var(--bdb-font); }
-          .remote-write-bar { display:flex; align-items:center; justify-content:space-between; gap:14px; border-bottom:1px solid #d8d0c3; background:#fff; padding:10px 14px; box-shadow:0 6px 20px rgba(62,50,35,0.08); }
+          .remote-write-page { position:fixed; inset:0; display:grid; grid-template-rows:auto minmax(0,1fr); background:#0d0b08; color:#EFE8D8; font-family:var(--bdb-font); }
+          .remote-write-bar { display:flex; align-items:center; justify-content:space-between; gap:14px; border-bottom:1px solid rgba(255,255,255,0.09); background:#fff; padding:10px 14px; box-shadow:0 6px 20px rgba(62,50,35,0.08); }
           .remote-write-copy { min-width:0; }
-          .remote-write-copy strong { display:block; color:#28241e; font-size:1rem; }
-          .remote-write-copy span { display:block; margin-top:2px; color:#756d62; font-size:0.76rem; font-weight:700; }
+          .remote-write-copy strong { display:block; color:#EFE8D8; font-size:1rem; }
+          .remote-write-copy span { display:block; margin-top:2px; color:#B8AE99; font-size:0.76rem; font-weight:700; }
           .remote-write-back { min-height:48px; border:1px solid color-mix(in srgb,var(--remote-accent) 70%,#7f776c); border-radius:11px; background:color-mix(in srgb,var(--remote-accent) 15%,#fff); color:color-mix(in srgb,var(--remote-accent) 60%,#28241e); padding:0 16px; font:inherit; font-weight:900; cursor:pointer; }
           .remote-write-back:disabled { opacity:0.5; cursor:not-allowed; }
           .remote-write-actions { display:flex; align-items:center; gap:9px; }
-          .remote-write-time { min-width:76px; color:#28241e; font-size:1.45rem; font-weight:900; font-variant-numeric:tabular-nums; text-align:center; }
+          .remote-write-time { min-width:76px; color:#EFE8D8; font-size:1.45rem; font-weight:900; font-variant-numeric:tabular-nums; text-align:center; }
           .remote-write-pause { min-height:48px; border:1px solid #c89c35; border-radius:11px; background:#fff5d8; color:#6e5211; padding:0 14px; font:inherit; font-weight:900; cursor:pointer; }
           .remote-write-pause:disabled { opacity:0.5; cursor:not-allowed; }
           .remote-write-back:focus-visible, .remote-write-pause:focus-visible { outline:3px solid var(--remote-accent); outline-offset:2px; }
@@ -848,55 +848,55 @@ export default function TeacherRemotePage() {
   return (
     <main className="remote-page" style={remoteStyle}>
       <style>{`
-        .remote-page { min-height:100dvh; box-sizing:border-box; display:grid; place-items:center; overflow:hidden; background:radial-gradient(circle at 18% 12%,color-mix(in srgb,var(--remote-accent) 12%,transparent),transparent 32%),linear-gradient(145deg,#e9e3d8,#dcd4c7); color:#28241e; font-family:var(--bdb-font); padding:8px; }
-        .remote-shell { width:min(100%,1194px); height:min(834px,calc(100dvh - 16px)); min-height:0; display:flex; flex-direction:column; overflow:hidden; border:1px solid #d5cdbf; border-radius:26px; background:#fbf6ea; box-shadow:0 24px 58px rgba(60,47,31,0.2); }
-        .remote-head { min-height:58px; box-sizing:border-box; flex:none; display:flex; align-items:center; gap:12px; border-bottom:1px solid #ddd5c8; background:#fff; padding:0 22px; }
+        .remote-page { min-height:100dvh; box-sizing:border-box; display:grid; place-items:center; overflow:hidden; background:radial-gradient(circle at 18% 12%,color-mix(in srgb,var(--remote-accent) 16%,transparent),transparent 34%),#0d0b08; color:#EFE8D8; font-family:var(--bdb-font); padding:8px; }
+        .remote-shell { width:min(100%,1194px); height:min(834px,calc(100dvh - 16px)); min-height:0; display:flex; flex-direction:column; overflow:hidden; border:1px solid rgba(255,255,255,0.08); border-radius:26px; background:#211D17; box-shadow:0 24px 58px rgba(0,0,0,0.55); }
+        .remote-head { min-height:58px; box-sizing:border-box; flex:none; display:flex; align-items:center; gap:12px; border-bottom:1px solid rgba(255,255,255,0.08); background:#26211A; padding:0 22px; }
         .remote-brand { min-width:0; display:flex; align-items:center; gap:11px; }
-        .remote-mark { width:30px; height:30px; flex:none; display:grid; place-items:center; border-radius:9px; background:#28241e; color:#fff; font-size:0.95rem; font-weight:950; }
+        .remote-mark { width:30px; height:30px; flex:none; display:grid; place-items:center; border-radius:9px; background:rgba(255,255,255,0.12); color:#fff; font-size:0.95rem; font-weight:950; }
         .remote-brand-copy { min-width:0; }
-        .remote-title { margin:0; color:#28241e; font-size:16px; line-height:1; font-weight:900; }
-        .remote-phase-chip { min-width:0; max-width:350px; min-height:28px; box-sizing:border-box; display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:8px; margin-left:0; border:1px solid color-mix(in srgb,var(--remote-accent) 42%,#d8d0c3); border-radius:999px; background:#f7f1e6; padding:0 13px; }
+        .remote-title { margin:0; color:#EFE8D8; font-size:16px; line-height:1; font-weight:900; }
+        .remote-phase-chip { min-width:0; max-width:350px; min-height:28px; box-sizing:border-box; display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:8px; margin-left:0; border:1px solid color-mix(in srgb,var(--remote-accent) 46%,transparent); border-radius:999px; background:rgba(255,255,255,0.06); padding:0 13px; }
         .remote-phase-dot { width:9px; height:9px; border-radius:3px; background:var(--remote-accent); }
-        .remote-phase-chip strong { overflow:hidden; color:#28241e; text-overflow:ellipsis; white-space:nowrap; font-size:0.74rem; font-weight:900; }
-        .remote-phase-time { color:#28241e; font-size:0.78rem; font-weight:950; font-variant-numeric:tabular-nums; letter-spacing:-0.02em; }
-        .remote-phase-time.finished { color:#9d3544; }
-        .remote-phase-time.finished { color:#9d3544; }
+        .remote-phase-chip strong { overflow:hidden; color:#EFE8D8; text-overflow:ellipsis; white-space:nowrap; font-size:0.74rem; font-weight:900; }
+        .remote-phase-time { color:#EFE8D8; font-size:0.78rem; font-weight:950; font-variant-numeric:tabular-nums; letter-spacing:-0.02em; }
+        .remote-phase-time.finished { color:#f2a3ac; }
+        .remote-phase-time.finished { color:#f2a3ac; }
         .remote-connection { min-height:28px; display:grid; grid-template-columns:auto auto; align-items:center; gap:1px 7px; border-radius:999px; background:#e8f5ed; color:#255e41; padding:0 12px; }
         .remote-connection.attention { background:#fff0d7; color:#78531b; }
         .remote-connection-dot { grid-row:1 / 3; width:8px; height:8px; border-radius:50%; background:#2f9e6f; }
         .remote-connection.attention .remote-connection-dot { background:#c78b24; }
         .remote-connection strong { font-size:0.68rem; font-weight:900; line-height:1.1; }
         .remote-connection span { color:currentColor; opacity:0.72; font-size:0.57rem; font-weight:800; line-height:1.1; }
-        .remote-status { flex:none; min-height:30px; margin:0; border-bottom:1px solid #e0d8cb; border-left:4px solid var(--remote-accent); background:#f7f1e6; color:#5f584f; padding:6px 14px; font-size:0.7rem; line-height:1.25; font-weight:780; }
+        .remote-status { flex:none; min-height:30px; margin:0; border-bottom:1px solid rgba(255,255,255,0.08); border-left:4px solid var(--remote-accent); background:#26211A; color:#B8AE99; padding:6px 14px; font-size:0.7rem; line-height:1.25; font-weight:780; }
         .remote-workspace { flex:1; min-height:0; display:grid; grid-template-columns:314px minmax(0,1fr); }
-        .remote-mirrors { min-height:0; display:grid; grid-template-rows:auto repeat(3,minmax(0,1fr)); gap:12px; overflow:hidden; border-right:1px solid #dcd3c5; background:#f3eddf; padding:16px; }
-        .mirror-rail-label { margin:0; color:#8a8175; font-size:0.62rem; font-weight:900; letter-spacing:0.12em; text-transform:uppercase; }
-        .surface-mirror { min-height:0; display:flex; flex-direction:column; overflow:hidden; border:1px solid #d8d0c3; border-radius:12px; background:#fff; box-shadow:0 7px 18px rgba(73,57,36,0.07); }
-        .surface-mirror-head { min-height:29px; flex:none; display:flex; align-items:center; gap:7px; border-bottom:1px solid #e2dacd; background:#fff; padding:5px 9px; }
+        .remote-mirrors { min-height:0; display:grid; grid-template-rows:auto repeat(3,minmax(0,1fr)); gap:12px; overflow:hidden; border-right:1px solid rgba(255,255,255,0.08); background:#1C1812; padding:16px; }
+        .mirror-rail-label { margin:0; color:#8C8069; font-size:0.62rem; font-weight:900; letter-spacing:0.12em; text-transform:uppercase; }
+        .surface-mirror { min-height:0; display:flex; flex-direction:column; overflow:hidden; border:1px solid rgba(255,255,255,0.09); border-radius:12px; background:#fff; box-shadow:0 7px 18px rgba(0,0,0,0.21); }
+        .surface-mirror-head { min-height:29px; flex:none; display:flex; align-items:center; gap:7px; border-bottom:1px solid rgba(255,255,255,0.09); background:#26211A; padding:5px 9px; }
         .surface-mirror-dot { width:8px; height:8px; flex:none; border-radius:2px; background:var(--remote-accent); }
-        .surface-mirror-head strong { color:#5f584f; font-size:0.64rem; font-weight:900; }
-        .surface-mirror-head span:last-child { margin-left:auto; color:#8a8175; font-size:0.58rem; font-weight:850; font-variant-numeric:tabular-nums; }
+        .surface-mirror-head strong { color:#B8AE99; font-size:0.64rem; font-weight:900; }
+        .surface-mirror-head span:last-child { margin-left:auto; color:#8C8069; font-size:0.58rem; font-weight:850; font-variant-numeric:tabular-nums; }
         .surface-mirror > p { flex:1; display:-webkit-box; align-content:center; overflow:hidden; margin:0; padding:10px 11px; color:#f5efe5; text-align:left; text-overflow:ellipsis; -webkit-box-orient:vertical; -webkit-line-clamp:4; font-size:0.76rem; line-height:1.3; font-weight:800; background:radial-gradient(circle at 20% 12%,color-mix(in srgb,var(--remote-accent) 15%,transparent),transparent 45%),var(--remote-base); }
-        .surface-mirror.cream > p { color:#28241e; background:radial-gradient(circle at 84% 14%,color-mix(in srgb,var(--remote-accent) 12%,transparent),transparent 45%),#fbf6ea; }
+        .surface-mirror.cream > p { color:#EFE8D8; background:radial-gradient(circle at 84% 14%,color-mix(in srgb,var(--remote-accent) 12%,transparent),transparent 45%),#fbf6ea; }
         .remote-controls { min-height:0; display:grid; align-content:start; gap:12px; overflow-x:hidden; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain;
-          background:#fbf6ea; padding:16px 18px calc(24px + env(safe-area-inset-bottom)); scroll-padding-bottom:calc(24px + env(safe-area-inset-bottom)); scrollbar-color:#bdb3a4 transparent; }
+          background:#2A241B; padding:16px 18px calc(24px + env(safe-area-inset-bottom)); scroll-padding-bottom:calc(24px + env(safe-area-inset-bottom)); scrollbar-color:#8C8069 transparent; }
         .remote-primary-stack { display:grid; gap:12px; }
         .remote-secondary { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(230px,0.85fr); gap:12px; align-items:start; }
         .remote-shell > .deck-section { margin:18px; overflow:auto; }
         .session-list { display:grid; gap:10px; }
-        .session-choice { width:100%; min-height:72px; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center; border:1px solid #d8d0c3; border-radius:13px; background:#fff; color:#28241e; padding:14px 16px; font:inherit; text-align:left; cursor:pointer; box-shadow:0 7px 18px rgba(73,57,36,0.07); }
+        .session-choice { width:100%; min-height:72px; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center; border:1px solid rgba(255,255,255,0.09); border-radius:13px; background:#2A241B; color:#EFE8D8; padding:14px 16px; font:inherit; text-align:left; cursor:pointer; box-shadow:0 7px 18px rgba(0,0,0,0.21); }
         .session-choice:hover, .session-choice:focus-visible { border-color:var(--remote-accent); outline:3px solid color-mix(in srgb,var(--remote-accent) 24%,transparent); outline-offset:2px; }
-        .session-choice strong { display:block; color:#28241e; font-size:1rem; }
-        .session-choice span { display:block; margin-top:3px; color:#756d62; font-size:0.78rem; font-weight:700; }
+        .session-choice strong { display:block; color:#EFE8D8; font-size:1rem; }
+        .session-choice span { display:block; margin-top:3px; color:#B8AE99; font-size:0.78rem; font-weight:700; }
         .session-use { color:color-mix(in srgb,var(--remote-accent) 68%,#28241e) !important; font-size:0.72rem !important; font-weight:900 !important; letter-spacing:0.08em; text-transform:uppercase; }
-        .current-card { min-width:0; border:1px solid #d8d0c3; border-top:5px solid var(--remote-accent); border-radius:15px; background:#fff; padding:14px; box-shadow:0 8px 22px rgba(73,57,36,0.08); }
+        .current-card { min-width:0; border:1px solid rgba(255,255,255,0.09); border-top:5px solid var(--remote-accent); border-radius:15px; background:#26211A; padding:14px; box-shadow:0 8px 22px rgba(0,0,0,0.24); }
         .current-label { margin:0 0 5px; color:color-mix(in srgb,var(--remote-accent) 66%,#28241e); font-size:0.64rem; font-weight:900; letter-spacing:0.11em; text-transform:uppercase; }
-        .current-title { margin:0; color:#28241e; font-size:clamp(1rem,1.7vw,1.2rem); line-height:1.08; font-weight:900; }
-        .current-notes-label { margin:11px 0 0; color:#756d62; font-size:0.62rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
-        .current-directions { display:grid; gap:5px; margin:6px 0 0; padding-left:1.05rem; color:#4f4941; font-size:0.79rem; line-height:1.36; font-weight:720; }
+        .current-title { margin:0; color:#EFE8D8; font-size:clamp(1rem,1.7vw,1.2rem); line-height:1.08; font-weight:900; }
+        .current-notes-label { margin:11px 0 0; color:#B8AE99; font-size:0.62rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
+        .current-directions { display:grid; gap:5px; margin:6px 0 0; padding-left:1.05rem; color:#B8AE99; font-size:0.79rem; line-height:1.36; font-weight:720; }
         .current-directions li { padding-left:2px; }
         .current-directions li::marker { color:var(--remote-accent); }
-        .current-next { margin:12px 0 0; color:#756d62; font-size:0.78rem; line-height:1.35; font-weight:740; }
+        .current-next { margin:12px 0 0; color:#B8AE99; font-size:0.78rem; line-height:1.35; font-weight:740; }
         .current-live-note { display:inline-flex; margin:10px 0 0; border:1px solid #ddbd76; border-radius:999px; background:#fff4d7; color:#674b0f; padding:7px 10px; font-size:0.7rem; font-weight:900; }
         .private-plan { display:grid; gap:10px; border:1px solid #bfcfe3; border-left:5px solid #4d8df6; border-radius:15px; background:#f4f8ff; padding:13px; }
         .private-plan-head { display:grid; gap:3px; }
@@ -907,12 +907,12 @@ export default function TeacherRemotePage() {
         .private-plan-label { margin:0 0 5px; color:#466eaa; font-size:0.62rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
         .private-plan-body { margin:0; color:#374457; font-size:0.79rem; font-weight:720; line-height:1.38; white-space:pre-wrap; }
         .private-plan-materials { margin:0; padding-left:1.1rem; color:#445267; font-size:0.78rem; line-height:1.4; }
-        .deck-section { display:grid; gap:10px; border:1px solid #d8d0c3; border-radius:15px; background:#fff; padding:13px; box-shadow:0 7px 18px rgba(73,57,36,0.06); }
+        .deck-section { display:grid; gap:10px; border:1px solid rgba(255,255,255,0.09); border-radius:15px; background:#26211A; padding:13px; box-shadow:0 7px 18px rgba(0,0,0,0.18); }
         .remote-primary-stack > .deck-section { border:0; border-radius:0; background:transparent; padding:0; box-shadow:none; }
         .deck-section.compact-private { box-shadow:none; }
         .deck-section-head { display:flex; justify-content:space-between; align-items:baseline; gap:12px; }
-        .deck-section-title { margin:0; color:#28241e; font-size:0.7rem; font-weight:900; letter-spacing:0.11em; text-transform:uppercase; }
-        .deck-section-note { margin:0; color:#756d62; font-size:0.7rem; font-weight:700; text-align:right; }
+        .deck-section-title { margin:0; color:#EFE8D8; font-size:0.7rem; font-weight:900; letter-spacing:0.11em; text-transform:uppercase; }
+        .deck-section-note { margin:0; color:#B8AE99; font-size:0.7rem; font-weight:700; text-align:right; }
         .remote-primary-stack .deck-section-note { display:none; }
         .deck-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
         .deck-grid.stages { grid-template-columns:repeat(3,minmax(0,1fr)); }
@@ -923,10 +923,10 @@ export default function TeacherRemotePage() {
         .discussion-selection { display:grid; gap:5px; border:1px solid #bba9dd; border-left:5px solid #8b5cf6; border-radius:12px; background:#f5efff; padding:11px 13px; }
         .discussion-selection span { color:#6d4aa7; font-size:0.62rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
         .discussion-selection strong { color:#322544; font-size:clamp(1.2rem,2.6vw,1.7rem); line-height:1; }
-        .deck-key { min-height:44px; display:grid; place-items:center; border:1px solid #d5cdbf; border-radius:12px; background:#fff; color:#28241e; padding:7px 11px; font:inherit; text-align:center; cursor:pointer; touch-action:manipulation; box-shadow:0 5px 12px rgba(73,57,36,0.08); transition:transform 100ms ease,box-shadow 100ms ease,border-color 100ms ease; }
-        .deck-key:hover:not(:disabled) { border-color:color-mix(in srgb,var(--remote-accent) 62%,#9c9387); box-shadow:0 7px 16px rgba(73,57,36,0.12); }
+        .deck-key { min-height:44px; display:grid; place-items:center; border:1px solid rgba(255,255,255,0.09); border-radius:12px; background:rgba(255,255,255,0.08); color:#EFE8D8; padding:7px 11px; font:inherit; text-align:center; cursor:pointer; touch-action:manipulation; box-shadow:0 5px 12px rgba(0,0,0,0.24); transition:transform 100ms ease,box-shadow 100ms ease,border-color 100ms ease; }
+        .deck-key:hover:not(:disabled) { border-color:color-mix(in srgb,var(--remote-accent) 62%,#9c9387); box-shadow:0 7px 16px rgba(0,0,0,0.36); }
         .deck-key:focus-visible { outline:3px solid color-mix(in srgb,var(--remote-accent) 42%,transparent); outline-offset:2px; }
-        .deck-key:active:not(:disabled) { transform:translateY(1px); box-shadow:0 2px 6px rgba(73,57,36,0.1); }
+        .deck-key:active:not(:disabled) { transform:translateY(1px); box-shadow:0 2px 6px rgba(0,0,0,0.30); }
         .deck-key.active { outline:3px solid color-mix(in srgb,var(--remote-accent) 58%,#fff); outline-offset:2px; }
         .deck-key:disabled { opacity:0.46; cursor:not-allowed; }
         .deck-key-label { font-size:clamp(0.78rem,1.2vw,0.9rem); font-weight:900; line-height:1.08; }
@@ -938,29 +938,29 @@ export default function TeacherRemotePage() {
         .deck-key.gold { border-color:#d4ad55; background:#fff5d8; color:#6e5211; }
         .deck-key.purple { border-color:#a995d2; background:#f4efff; color:#65459a; }
         .deck-key.green { border-color:#76b494; background:#edf8f1; color:#216947; }
-        .deck-key.red { border-color:#d88d94; background:#fff0f1; color:#963b49; }
+        .deck-key.red { border-color:#d88d94; background:#fff0f1; color:#f2a3ac; }
         .response-list { display:grid; gap:8px; margin:0; padding:0; list-style:none; }
-        .response-row { display:grid; grid-template-columns:minmax(92px,0.8fr) minmax(0,1.8fr); gap:9px; border-top:1px solid #e1d9cc; padding-top:8px; color:#39342d; font-size:0.8rem; }
+        .response-row { display:grid; grid-template-columns:minmax(92px,0.8fr) minmax(0,1.8fr); gap:9px; border-top:1px solid rgba(255,255,255,0.09); padding-top:8px; color:#EFE8D8; font-size:0.8rem; }
         .response-name { font-weight:900; }
-        .response-answer { color:#635c53; overflow-wrap:anywhere; }
-        .response-empty { margin:0; color:#756d62; font-size:0.8rem; font-weight:700; }
+        .response-answer { color:#B8AE99; overflow-wrap:anywhere; }
+        .response-empty { margin:0; color:#B8AE99; font-size:0.8rem; font-weight:700; }
         .remote-links { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
-        .remote-link, .remote-change, .remote-end { display:flex; min-height:44px; align-items:center; justify-content:center; border:1px solid #d5cdbf; border-radius:11px; background:#fff; color:#39342d; padding:0 11px; text-align:center; text-decoration:none; font:inherit; font-size:0.78rem; font-weight:850; cursor:pointer; }
+        .remote-link, .remote-change, .remote-end { display:flex; min-height:44px; align-items:center; justify-content:center; border:1px solid rgba(255,255,255,0.09); border-radius:11px; background:rgba(255,255,255,0.08); color:#EFE8D8; padding:0 11px; text-align:center; text-decoration:none; font:inherit; font-size:0.78rem; font-weight:850; cursor:pointer; }
         .remote-link:hover, .remote-change:hover { border-color:var(--remote-accent); }
         .remote-link:focus-visible, .remote-change:focus-visible, .remote-end:focus-visible { outline:3px solid color-mix(in srgb,var(--remote-accent) 36%,transparent); outline-offset:2px; }
         .remote-change { color:#6e5211; }
-        .remote-end { flex:none; min-width:104px; min-height:36px; margin-left:auto; border-color:#d88d94; background:#fff; color:#963b49; }
+        .remote-end { flex:none; min-width:104px; min-height:36px; margin-left:auto; border-color:rgba(216,141,148,0.55); background:rgba(216,141,148,0.12); color:#f2a3ac; }
         .remote-end:disabled { opacity:0.5; cursor:not-allowed; }
-        .remote-utilities { min-width:0; border:1px solid #d8d0c3; border-radius:15px; background:#fff; box-shadow:0 7px 18px rgba(73,57,36,0.06); }
-        .remote-utilities > summary { min-height:56px; box-sizing:border-box; display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:12px; padding:10px 13px; color:#28241e; cursor:pointer; list-style:none; font-size:0.76rem; font-weight:900; }
+        .remote-utilities { min-width:0; border:1px solid rgba(255,255,255,0.09); border-radius:15px; background:#26211A; box-shadow:0 7px 18px rgba(0,0,0,0.18); }
+        .remote-utilities > summary { min-height:56px; box-sizing:border-box; display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:12px; padding:10px 13px; color:#EFE8D8; cursor:pointer; list-style:none; font-size:0.76rem; font-weight:900; }
         .remote-utilities > summary::-webkit-details-marker { display:none; }
-        .remote-utilities > summary::after { content:"Open"; border:1px solid #d5cdbf; border-radius:999px; background:#f7f1e6; padding:5px 9px; color:#756d62; font-size:0.62rem; letter-spacing:0.08em; text-transform:uppercase; }
+        .remote-utilities > summary::after { content:"Open"; border:1px solid rgba(255,255,255,0.09); border-radius:999px; background:#2A241B; padding:5px 9px; color:#B8AE99; font-size:0.62rem; letter-spacing:0.08em; text-transform:uppercase; }
         .remote-utilities[open] > summary::after { content:"Close"; }
         .remote-utilities > summary:focus-visible { outline:3px solid color-mix(in srgb,var(--remote-accent) 36%,transparent); outline-offset:-3px; }
         .remote-utilities-copy { min-width:0; display:grid; gap:2px; }
-        .remote-utilities-copy strong { color:#28241e; font-size:0.72rem; letter-spacing:0.11em; text-transform:uppercase; }
-        .remote-utilities-copy span { color:#756d62; font-size:0.68rem; font-weight:720; }
-        .remote-utilities-body { display:grid; grid-template-columns:1fr 1fr; gap:12px; border-top:1px solid #e1d9cc; padding:12px; background:#f7f1e6; }
+        .remote-utilities-copy strong { color:#EFE8D8; font-size:0.72rem; letter-spacing:0.11em; text-transform:uppercase; }
+        .remote-utilities-copy span { color:#B8AE99; font-size:0.68rem; font-weight:720; }
+        .remote-utilities-body { display:grid; grid-template-columns:1fr 1fr; gap:12px; border-top:1px solid rgba(255,255,255,0.09); padding:12px; background:#2A241B; }
         .remote-utilities-body > * { min-width:0; }
         .remote-utilities-body .deck-section { box-shadow:none; }
         .remote-utilities-body .remote-links { grid-column:1 / -1; }
@@ -973,7 +973,7 @@ export default function TeacherRemotePage() {
           .remote-shell { height:calc(100dvh - 16px); }
           .remote-head { min-height:58px; }
           .remote-workspace { grid-template-columns:1fr; grid-template-rows:auto minmax(0,1fr); }
-          .remote-mirrors { grid-template-columns:repeat(3,minmax(0,1fr)); grid-template-rows:auto minmax(76px,94px); gap:8px; border-right:0; border-bottom:1px solid #dcd3c5; padding:9px 12px 10px; }
+          .remote-mirrors { grid-template-columns:repeat(3,minmax(0,1fr)); grid-template-rows:auto minmax(76px,94px); gap:8px; border-right:0; border-bottom:1px solid rgba(255,255,255,0.09); padding:9px 12px 10px; }
           .mirror-rail-label { grid-column:1 / -1; }
           .surface-mirror > p { -webkit-line-clamp:2; padding:8px 9px; font-size:0.68rem; }
           .surface-mirror-head { min-height:25px; padding:4px 7px; }
