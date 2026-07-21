@@ -297,7 +297,9 @@ Design is locked (Steele's "Independent Proficiency System") - build it, do not 
   Fix: delete the ` 2`/` 3`-suffixed files (`find .git .next -name "* 2" -o -name "* 3"`), then retry.
   A `node_modules 2` duplicate makes `npm run build` fail on a spurious type error deep in a
   third-party `.d.ts` (a webauthn package, nothing you touched) - same artifact, same fix: delete
-  the duplicate and rebuild.
+  the duplicate and rebuild. Drive also re-applies DELETES late: a file git just restored can
+  vanish seconds afterward because your earlier `rm` only now synced - if a freshly checked-out
+  file is missing, `git checkout -- <path>` again and re-verify before concluding anything.
 - Verifying in the in-app Browser pane: the preview throttles rendering, so CSS animations sit at
   their first frame and screenshots wait for motion to settle - prove motion with
   `el.getAnimations()` or keyed-remount node identity instead of watching. `ResizeObserver`
