@@ -46,6 +46,7 @@ import {
   type TeacherRemoteCommand,
 } from "@/lib/liveClassFlow";
 import { normalizeDistributiveSet, parseDistributiveSet } from "@/lib/distributiveProblems";
+import { normalizeFactorTreeSet, parseFactorTreeSet } from "@/lib/factorTreeSet";
 import {
   listLessonPresets,
   getLessonPreset,
@@ -164,6 +165,7 @@ interface ToolSetupValues {
   gemsExpression: string;
   algebraExpression: string;
   distributiveSet: string;
+  ladderTreeSet: string;
   gameSkill: string;
   gameLevel: string;
   gameDuration: string;
@@ -229,6 +231,7 @@ const DEFAULT_TOOL_SETUP: ToolSetupValues = {
   gemsExpression: "3 + 4 × 2",
   algebraExpression: "2x + 3 = 11",
   distributiveSet: "14x6, 18x5, 24x7",
+  ladderTreeSet: "24, 36, 60",
   gameSkill: SKILLS[0].key,
   gameLevel: "1",
   gameDuration: "180",
@@ -345,7 +348,8 @@ function buildLiveToolConfig(stateId: ToolStateId, values: ToolSetupValues): Liv
     case "tool-combine":
       return { ...base, route: "/combine-like-terms", config: {} };
     case "tool-ladder":
-      return { ...base, route: "/ladder-method", config: {} };
+      // Empty set is meaningful: the tool runs its built-in tree sequence.
+      return { ...base, route: "/ladder-method", config: { set: normalizeFactorTreeSet(values.ladderTreeSet) } };
     case "tool-proportions":
       return { ...base, route: "/proportions", config: {} };
     case "tool-group-bars":
@@ -3082,6 +3086,20 @@ export default function ControlPage() {
                             const set = parseDistributiveSet(toolSetup.distributiveSet);
                             if (!set.length) return "Leave blank to let students pick their own numbers.";
                             return `${set.length} problem${set.length === 1 ? "" : "s"}: ${set.map((p) => `${p.top} x ${p.side} = ${p.top * p.side}`).join(", ")}`;
+                          })()}
+                        </span>
+                      </label>
+                    )}
+
+                    {activeToolState === "tool-ladder" && (
+                      <label className="cx-tool-field wide" htmlFor="ladder-tree-set">
+                        Factor Trees number sequence (students get them one at a time)
+                        <input id="ladder-tree-set" className="cx-tool-input" value={toolSetup.ladderTreeSet} onChange={(event) => updateToolSetup("ladderTreeSet", event.target.value)} placeholder="24, 36, 60" />
+                        <span className="cx-tool-hint">
+                          {(() => {
+                            const seq = parseFactorTreeSet(toolSetup.ladderTreeSet);
+                            if (!seq.length) return "Leave blank for the tool's built-in sequence. Publishing a sequence opens the tool in Factor Trees mode.";
+                            return `${seq.length} number${seq.length === 1 ? "" : "s"}: ${seq.join(", ")}`;
                           })()}
                         </span>
                       </label>

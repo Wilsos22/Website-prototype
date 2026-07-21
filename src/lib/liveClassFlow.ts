@@ -109,7 +109,6 @@ export type LiveToolConfig =
         | "/area-model"
         | "/multiplication-fluency"
         | "/combine-like-terms"
-        | "/ladder-method"
         | "/group-bars"
         | "/proportions"
         | "/coordinate-grid"
@@ -155,6 +154,16 @@ export type LiveToolConfig =
       // lib/distributiveProblems). Empty means free play — students pick their
       // own numbers, same as visiting the tool directly.
       route: "/distributive-area";
+      label: string;
+      prompt: string;
+      config: { set: string };
+    }
+  | {
+      id: string;
+      // `set` is a "24,36,60" number sequence for the Factor Trees mode (see
+      // lib/factorTreeSet). Empty means free play - the tool's built-in
+      // sequence, same as visiting the route directly.
+      route: "/ladder-method";
       label: string;
       prompt: string;
       config: { set: string };
