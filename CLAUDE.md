@@ -279,6 +279,10 @@ Design is locked (Steele's "Independent Proficiency System") - build it, do not 
 ## Build, deploy, test
 
 - `npm run dev` (webpack), `npm run build`, `npm run typecheck` (`tsc --noEmit`).
+- Scratch worktrees: `npm run build` (Turbopack) panics if the `node_modules` symlink points outside
+  what it takes as the project root - "Symlink [project]/node_modules is invalid". Put worktrees that
+  need a BUILD under `.claude/worktrees/` inside the repo; a tmp-dir worktree with the symlink is
+  fine for `typecheck` only.
 - Golden tests: `npm run test:mastery` and `npm run test:grouping` compile `src/lib/mastery.ts` /
   `grouping.ts` in isolation (`tsc --ignoreConfig`) against Python-prototype fixtures - so do NOT add
   tsconfig path aliases or new imports to those two files, and regenerate `scripts/fixtures/*.json` if
