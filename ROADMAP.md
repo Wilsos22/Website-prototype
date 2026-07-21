@@ -20,6 +20,14 @@ double-verified), `/teacher/bruh/board` projector, `/teacher/bruh/remote` iPad,
 round clock and grading; units are required when the answer names one. Tables are
 server-only. Deliberately does NOT feed the proficiency spine — it is about
 teamwork and effort, not assessment) ·
+**Anchor problems** (7/21 - each lesson can pose a real-world problem during
+warm-up ("Puzzle of the day" on the main projector) that returns at closeout
+with "You can answer it now." Notion fields Anchor Problem / Anchor Answer;
+the answer stays teacher-only. L1 concert floor, L2-D1 water balloons,
+L2-D2 skate park are live) ·
+**Warm Notebook rollout complete** (7/21 - all four surfaces plus landing,
+lessons archive, and Screen Studio wear the decided look; the teacher Remote
+is dark per the 12d design; projectors have A-/A+ text scaling to 2.5x) ·
 **Warm Notebook screen kit** (7/20 — `public/screens/`: one hand-owned,
 projector-ready HTML file per lesson state in the decided turn-12 Warm Notebook
 look, scaled to any display by `_system/frame.js`; `_system/frame.css` is
