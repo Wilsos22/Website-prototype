@@ -1,0 +1,36 @@
+/* Big Dog Board — Typography tokens (warm edition)
+   Display: Albert Sans (bold, friendly, slightly tight).
+   Body/UI + numerals: Geist (tnum for figures). */
+:root {
+  --font-display: 'Albert Sans', system-ui, -apple-system, sans-serif;
+  --font-body:    'Geist', system-ui, -apple-system, sans-serif;
+  --font-mono:    'Geist', ui-monospace, monospace; /* numerals: Geist + tnum */
+
+  /* Type scale (px) */
+  --fs-display: 56px;  /* hero numerals / timer */
+  --fs-h1: 34px;       /* page heading (e.g. "App Design") */
+  --fs-h2: 24px;
+  --fs-title: 19px;    /* card / panel title */
+  --fs-lg: 17px;
+  --fs-body: 15px;
+  --fs-sm: 14px;
+  --fs-xs: 13px;
+  --fs-2xs: 12px;
+  --fs-chip: 11px;
+  --fs-label: 11px;    /* uppercase labels */
+
+  --lh-tight: 1.0; /* @kind other */
+  --lh-snug: 1.18; /* @kind other */
+  --lh-normal: 1.5; /* @kind other */
+  --lh-relaxed: 1.6; /* @kind other */
+
+  --fw-regular: 400; /* @kind other */
+  --fw-medium: 500; /* @kind other */
+  --fw-semibold: 600; /* @kind other */
+  --fw-bold: 700; /* @kind other */
+  --fw-extrabold: 800; /* @kind other */
+
+  --ls-tight: -0.02em; /* @kind other */
+  --ls-normal: 0em; /* @kind other */
+  --ls-label: 0.05em; /* @kind other */
+}

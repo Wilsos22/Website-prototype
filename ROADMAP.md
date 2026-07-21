@@ -20,6 +20,15 @@ double-verified), `/teacher/bruh/board` projector, `/teacher/bruh/remote` iPad,
 round clock and grading; units are required when the answer names one. Tables are
 server-only. Deliberately does NOT feed the proficiency spine — it is about
 teamwork and effort, not assessment) ·
+**Warm Notebook screen kit** (7/20 — `public/screens/`: one hand-owned,
+projector-ready HTML file per lesson state in the decided turn-12 Warm Notebook
+look, scaled to any display by `_system/frame.js`; `_system/frame.css` is
+generated from the Design canvas by `scripts/build-screen-kit.mjs` and the
+screens themselves are never regenerated — Steele edits them directly.
+`data-slot` marks text the site can fill from the Notion lesson step; deleting
+the attribute locks hand-written content. Ships with a blank starter and a rich
+exemplar; intended rendering layer under `/teacher/studio` and the four
+surfaces) ·
 **Weekly classroom display** (7/16 — separately launched projector display with
 five weekday themes and four 20-second screens: Notion-fed learning intention,
 success criteria, weekly topics with the current day highlighted, and the bell
@@ -79,8 +88,10 @@ to complaining-teen, less Red Bull, shorter replies)
   correct-but-low-Fist-to-Five flags a teacher check, never demotes; no answers =
   needs assignment). Server-only tables (`supabase/city-routes.sql`, mastery-style
   lockdown), teacher API `/api/live/city-routes` (gated), student card API
-  `/api/session/city-route` (returns city/destination/materials/first action
-  only), review/override/shuffle/release panel on the iPad Remote, and the
+  `/api/student/city-route` (dual-mode like session-state: verified identity
+  under the secure rollout, claimed id in transitional mode; returns
+  city/destination/materials/first action only), review/override/shuffle/release
+  panel on the iPad Remote, and the
   student card on `/live-flow` during small-group and independent states.
   Code + migration done; waiting on Steele to run `supabase/city-routes.sql`
   and a live run. Deferred: projector city-to-location key, timed stagger

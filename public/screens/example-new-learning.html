@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Example &middot; a rich hand-built screen (from Design turn 12a)</title>
+<link rel="stylesheet" href="_system/frame.css">
+<script defer src="_system/frame.js"></script>
+<!--
+  YOURS TO EDIT - this file is owned by hand. No script regenerates it.
+
+  The frame is the system: top bar, timer, accent color, dotted stage.
+  Everything inside .vmmain is the day's canvas - change it freely.
+
+  data-slot="..." marks text the site may fill from the Notion lesson step.
+  Delete the attribute on anything you hand-write and want kept as-is.
+
+  Rules that hold even here: student-required text uses the system font
+  (handwriting class .nbaside is for teacher asides only), and no student
+  names or results ever appear on this screen.
+-->
+</head>
+<body>
+<div class="vmstage" style="--acc:#50A3A4">
+<div class="nbtop"><span class="nbdot"></span><span class="nbtag">New learning</span><span class="nbstg">Prime factorisation</span><span class="nbls">M2.T1.L2 · Rm 204</span><span class="nbright"><span class="nbchip">Paper &amp; pencil · devices closed</span><span class="nbtimer"><span class="nbtimdot"></span>06:00</span></span></div>
+<div class="vmmain">
+<div style="text-align:center;display:flex;flex-direction:column;gap:6px"><div class="vmh">Building the factor tree for 36</div><div class="vmsub">Split each number into two factors until every branch ends in a prime.</div></div>
+<div class="vmtree">
+<svg viewBox="0 0 880 420"><defs><marker id="vah12" markerWidth="9" markerHeight="9" refX="6.2" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#4A5A64"></path></marker></defs><g stroke="#4A5A64" stroke-width="2.5" fill="none" marker-end="url(#vah12)"><line x1="440" y1="90" x2="255" y2="180"></line><line x1="440" y1="90" x2="625" y2="180"></line><line x1="250" y1="240" x2="152" y2="330"></line><line x1="250" y1="240" x2="348" y2="330"></line><line x1="630" y1="240" x2="532" y2="330"></line><line x1="630" y1="240" x2="728" y2="330"></line></g></svg>
+<div class="vmnode vmcomp" style="left:440px;top:60px">36</div>
+<div class="vmnode vmcomp" style="left:250px;top:210px">4</div>
+<div class="vmnode vmcomp" style="left:630px;top:210px">9</div>
+<div class="vmnode nbprime" style="left:150px;top:360px">2</div>
+<div class="vmnode nbprime" style="left:350px;top:360px">2</div>
+<div class="vmnode nbprime" style="left:530px;top:360px">3</div>
+<div class="vmnode nbprime" style="left:730px;top:360px">3</div>
+</div>
+<div class="vmres">36 = 2 × 2 × 3 × 3 <span class="vmresx" style="background:#E4F3EA;color:#2E7D4E">2² × 3²</span></div>
+</div>
+<div class="nbcallout" style="position:absolute;top:150px;right:52px;max-width:280px"><span class="nbclabel">Remember</span><div class="nbctext">A <b>prime</b> has only two factors — <b>1 and itself</b>. When a branch is prime it's a <b>leaf</b>: stop splitting.</div></div>
+<div class="nbaside" style="position:absolute;right:118px;bottom:150px;width:200px">every branch ends in a prime — nice work!</div>
+<div class="nblg" style="left:52px;bottom:40px"><div class="nblgrow"><span class="nblgsw" style="background:#3E4C57"></span>Composite — split it again</div><div class="nblgrow"><span class="nblgsw" style="background:#2E9E5A;box-shadow:0 0 10px 2px rgba(46,158,90,.5)"></span>Prime — a building block, stop</div></div>
+</div>
+</body>
+</html>

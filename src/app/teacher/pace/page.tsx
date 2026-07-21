@@ -1,5 +1,6 @@
 "use client";
 
+import "@/styles/classroom-frames.css";
 import { useEffect, useState, type CSSProperties } from "react";
 import ClassroomSpinner from "@/components/ClassroomSpinner";
 import { CLOSEOUT_DIRECTIONS } from "@/lib/classStates";
@@ -147,43 +148,40 @@ export default function PaceSupportPage() {
         : routineConfig?.kind === "small-group"
           ? `${routineConfig.publicTask} Rotate every ${routineConfig.rotationMinutes} minutes.`
       : flow?.presentation?.paceDirections || state?.description;
+  // The empty shell shows the design system's neutral phase; a connected flow
+  // themes the wireframe frame straight from the stage theme (same hexes the
+  // handoff's ph-* classes carry).
+  const connected = Boolean(!loading && session && flow && state);
   const style = {
+    "--acc": connected ? theme.accent : "#FCAF38",
+    "--base": connected ? theme.projectorBase : "#181310",
+    "--panel": connected ? theme.projectorPanel : "#241c15",
     "--pace-accent": theme.accent,
     "--pace-base": theme.projectorBase,
     "--pace-panel": theme.projectorPanel,
     "--pace-line": theme.projectorLine,
     "--pace-muted": theme.projectorMuted,
     "--pace-glow": theme.projectorGlow,
-    "--stage-accent": theme.accent,
-    "--stage-base": theme.projectorBase,
-    "--stage-panel": theme.projectorPanel,
-    "--stage-line": theme.projectorLine,
-    "--stage-muted": theme.projectorMuted,
-    "--stage-glow": theme.projectorGlow,
   } as CSSProperties;
 
+  // The wireframe's pace body is an action headline plus numbered steps:
+  // line one of the authored Pace Directions is the action, remaining lines
+  // become the steps. A single-line direction renders as the action alone.
+  const directionLines = (paceDirections || "").split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  const paceAction = directionLines[0] || "";
+  const paceSteps = directionLines.slice(1, 7);
+
   return (
-    <main className="pace-page" style={style}>
+    <main className="pace-page dcw" style={style}>
       <style>{`
-        .pace-page { position:fixed; inset:0; overflow:hidden; box-sizing:border-box; background:radial-gradient(1200px 640px at 50% 18%,var(--pace-panel),var(--pace-base) 60%,var(--pace-base)); color:#f4eee3; font-family:var(--bdb-font); }
-        .pace-page::before, .pace-page::after { content:""; position:absolute; z-index:0; width:38vw; height:38vw; border-radius:50%; background:var(--pace-accent); filter:blur(120px); opacity:0.12; pointer-events:none; }
-        .pace-page::before { left:-8vw; top:-16vw; }
-        .pace-page::after { right:-12vw; bottom:-18vw; opacity:0.08; }
-        .pace-shell { position:relative; z-index:1; width:100%; height:100%; display:grid; grid-template-rows:66px minmax(0,1fr); }
-        .pace-topbar { z-index:5; display:flex; align-items:center; gap:13px; border-bottom:1px solid rgba(255,255,255,0.1); background:color-mix(in srgb,var(--pace-base) 90%,transparent); padding:0 32px; }
-        .pace-mark { width:30px; height:30px; flex:none; display:grid; place-items:center; border-radius:9px; background:rgba(255,255,255,0.12); color:#fff; font-size:0.95rem; font-weight:900; }
-        .pace-dot { width:12px; height:12px; flex:none; border-radius:3px; background:var(--pace-accent); }
-        .pace-phase { margin:0; overflow:hidden; color:#f7f1e6; text-overflow:ellipsis; white-space:nowrap; font-size:17px; font-weight:900; }
-        .pace-lesson { margin:0; overflow:hidden; color:rgba(244,238,227,0.44); text-overflow:ellipsis; white-space:nowrap; font-size:13px; font-weight:650; }
-        .pace-timer { min-width:128px; flex:none; display:grid; grid-template-columns:auto auto; align-items:center; justify-content:center; gap:11px; margin-left:auto; border:1.5px solid color-mix(in srgb,var(--pace-accent) 46%,transparent); border-radius:999px; background:color-mix(in srgb,var(--pace-accent) 15%,transparent); padding:8px 18px; }
-        .pace-timer::before { content:"Time left"; color:rgba(244,238,227,0.58); font-size:9.5px; font-weight:800; letter-spacing:0.16em; text-transform:uppercase; }
-        .pace-time { color:var(--pace-accent); font-size:25px; font-weight:900; line-height:0.9; font-variant-numeric:tabular-nums; letter-spacing:-0.04em; }
-        .pace-time.finished { color:#ffd5dc; }
-        .pace-current { min-height:0; display:grid; place-items:center; padding:clamp(28px,5vw,72px); text-align:center; }
-        .pace-current.spinner-linked { position:relative; overflow:hidden; padding:0; }
-        .pace-current-inner { width:min(100%,1180px); display:grid; gap:18px; justify-items:center; }
-        .pace-current-label { margin:0; color:var(--pace-accent); font-size:clamp(0.72rem,1.3vw,0.92rem); font-weight:900; letter-spacing:0.14em; text-transform:uppercase; }
-        .pace-directions { margin:0; max-width:31ch; color:#f8f2e7; font-size:clamp(2.8rem,6vw,6.4rem); line-height:1.04; letter-spacing:-0.03em; text-wrap:balance; white-space:pre-wrap; }
+        /* The look is the extracted wireframe stylesheet (classroom-frames.css).
+           This block only bridges it to a live viewport and keeps the state
+           layouts (check, discussion, spinner) that ride inside the frame. */
+        .pace-page { position:fixed; inset:0; overflow:hidden; box-sizing:border-box; font-family:var(--bdb-font); }
+        .pace-page .pj { width:100%; height:100%; border-radius:0; }
+        .pace-page .tt.finished, .pace-page .bigtimer.finished { color:#ffd5dc; }
+        .pace-page .pace-current { flex:1; min-height:0; position:relative; z-index:1; display:grid; place-items:center; padding:clamp(28px,5vw,72px); text-align:center; }
+        .pace-current.spinner-linked { overflow:hidden; padding:0; }
         .pace-check { width:min(100%,1120px); display:grid; align-content:center; gap:20px; }
         .pace-check-title { margin:0; color:var(--pace-accent); font-size:clamp(0.78rem,1.4vw,1rem); font-weight:950; letter-spacing:0.14em; text-transform:uppercase; }
         .pace-check-prompt { margin:0; color:#fff; font-size:clamp(2rem,4.6vw,4.8rem); line-height:1.05; font-weight:900; text-wrap:balance; }
@@ -206,40 +204,55 @@ export default function PaceSupportPage() {
         .pace-support-card ul { display:grid; gap:7px; margin:0; padding-left:1.1rem; color:#fff; font-size:clamp(0.92rem,1.5vw,1.15rem); line-height:1.3; font-weight:760; }
         .pace-vocab { display:flex; flex-wrap:wrap; gap:7px; }
         .pace-vocab span { border:1px solid var(--pace-line); border-radius:999px; background:color-mix(in srgb,var(--pace-panel) 76%,transparent); padding:7px 10px; color:#fff; font-size:0.9rem; font-weight:880; }
-        .pace-empty { grid-row:1 / -1; display:grid; place-items:center; text-align:center; padding:40px; }
-        .pace-empty h1 { margin:0; max-width:20ch; font-size:clamp(2.4rem,6vw,5.6rem); line-height:1.02; }
-        .pace-empty p { margin:15px 0 0; color:var(--pace-muted); font-size:clamp(1rem,2vw,1.35rem); font-weight:720; }
-        @media (max-width:760px) { .pace-discussion { grid-template-columns:1fr; } .pace-bars { height:240px; } .pace-lesson { display:none; } }
-        @media (max-height:650px) {
-          .pace-shell { grid-template-rows:54px minmax(0,1fr); }
-          .pace-topbar { padding:0 18px; }
-          .pace-mark { width:28px; height:28px; }
-          .pace-timer { min-width:112px; padding:6px 13px; }
-          .pace-time { font-size:1.35rem; }
-          .pace-current { padding:20px 32px; }
-          .pace-directions { font-size:clamp(2.2rem,5.1vw,4rem); }
-        }
+        @media (max-width:760px) { .pace-discussion { grid-template-columns:1fr; } .pace-bars { height:240px; } .pace-page .pjlesson { display:none; } }
+        @media (max-height:650px) { .pace-page .pace-current { padding:20px 32px; } }
       `}</style>
 
-      <section className="pace-shell">
-        {loading || !session || !flow || !state ? (
-          <section className="pace-empty">
-            <div>
-              <h1>{loading ? "Connecting to class" : "Ready for class"}</h1>
-              <p>{sessionMessage}</p>
+      <section className="pj" aria-label="Pace and support projector">
+        <span className="glow" style={{ left: "16%", top: "14%" }} aria-hidden="true" />
+        <span className="glow" style={{ right: "12%", top: "16%", opacity: 0.12 }} aria-hidden="true" />
+        {!connected || !session || !flow || !state ? (
+          <div className="pjmain">
+            <div className="pjq" style={{ fontSize: "clamp(40px, 6vw, 66px)" }}>
+              {loading ? "Connecting to class" : "Ready for class"}
             </div>
-          </section>
+            <div className="pjgo">{sessionMessage}</div>
+          </div>
         ) : (
           <>
-            <header className="pace-topbar">
-              <span className="pace-mark" aria-hidden="true">÷</span>
-              <span className="pace-dot" aria-hidden="true" />
-              <h1 className="pace-phase">{flow.presentation?.title || state.label}</h1>
-              {flow.lesson?.title ? <p className="pace-lesson">{flow.lesson.title}</p> : null}
-              <section className="pace-timer" aria-label="Class timer">
-                <div className={`pace-time ${timerFinished ? "finished" : ""}`}>{timer ? formatTime(timerSeconds) : "--:--"}</div>
-              </section>
+            <header className="pjtop">
+              <span className="pjmark" aria-hidden="true">÷</span>
+              <span className="stdot" aria-hidden="true" />
+              <h1 className="pjstage" style={{ margin: 0 }}>{flow.presentation?.title || state.label}</h1>
+              {flow.lesson?.title ? <span className="pjlesson">{flow.lesson.title}</span> : null}
+              <span className="tbadge" aria-label="Class timer">
+                <span className="tk">Time left</span>
+                <span className={`tt${timerFinished ? " finished" : ""}`}>{timer ? formatTime(timerSeconds) : "--:--"}</span>
+              </span>
             </header>
+            {!linkedSpinnerMode && !(isLearningCheck && poll) && !isDiscussion ? (
+              <div className="pcbody">
+                <div className="pcact">{paceAction}</div>
+                <div className="pcrow">
+                  {paceSteps.length ? (
+                    <div className="steps">
+                      {paceSteps.map((step, index) => (
+                        <div className="step" key={step}>
+                          <span className="stepn">{index + 1}</span>
+                          {step}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {timer ? (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                      <div className={`bigtimer${timerFinished ? " finished" : ""}`}>{formatTime(timerSeconds)}</div>
+                      <span className="tlbl">Minutes left</span>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : (
             <section className={`pace-current${linkedSpinnerMode ? " spinner-linked" : ""}`} aria-label="Current directions and timer">
               {linkedSpinnerMode ? (
                 <ClassroomSpinner
@@ -305,13 +318,9 @@ export default function PaceSupportPage() {
                     ) : null}
                   </div>
                 </div>
-              ) : (
-                <div className="pace-current-inner">
-                  <p className="pace-current-label">Current directions</p>
-                  <h2 className="pace-directions">{paceDirections}</h2>
-                </div>
-              )}
+              ) : null}
             </section>
+            )}
           </>
         )}
       </section>

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>State name &middot; main screen</title>
+<link rel="stylesheet" href="_system/frame.css">
+<script defer src="_system/frame.js"></script>
+<!--
+  YOURS TO EDIT - this file is owned by hand. No script regenerates it.
+
+  The frame is the system: top bar, timer, accent color, dotted stage.
+  Everything inside .vmmain is the day's canvas - change it freely.
+
+  data-slot="..." marks text the site may fill from the Notion lesson step.
+  Delete the attribute on anything you hand-write and want kept as-is.
+
+  Rules that hold even here: student-required text uses the system font
+  (handwriting class .nbaside is for teacher asides only), and no student
+  names or results ever appear on this screen.
+-->
+</head>
+<body>
+<div class="vmstage" style="--acc:#50A3A4">
+  <div class="nbtop">
+    <span class="nbdot"></span>
+    <span class="nbtag" data-slot="state">State name</span>
+    <span class="nbstg" data-slot="topic">Today's lesson</span>
+    <span class="nbls" data-slot="code">M0.T0.L0 &middot; Rm 204</span>
+    <span class="nbright">
+      <span class="nbchip" data-slot="materials">Materials line</span>
+      <span class="nbtimer"><span class="nbtimdot"></span><span data-slot="timer">05:00</span></span>
+    </span>
+  </div>
+  <div class="vmmain">
+    <div style="text-align:center;display:flex;flex-direction:column;gap:12px;max-width:1040px">
+      <div class="vmh" data-slot="headline">One dominant action, stated big</div>
+      <div class="vmsub" data-slot="direction">One or two lines of direction under it. Delete what you do not need.</div>
+    </div>
+      <span class="nbtag2" data-slot="action">Action chip</span>
+  </div>
+</div>
+</body>
+</html>
