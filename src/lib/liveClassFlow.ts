@@ -103,7 +103,6 @@ export type LiveToolConfig =
       route:
         | "/whiteboard"
         | "/balance-beam"
-        | "/distributive-area"
         | "/area-explorer"
         | "/fraction-bars"
         | "/area-model"
@@ -148,6 +147,16 @@ export type LiveToolConfig =
       label: string;
       prompt: string;
       config: { expression: string };
+    }
+  | {
+      id: string;
+      // `set` is the shared "24x7,16x8" problem-set string (see
+      // lib/distributiveProblems). Empty means free play — students pick their
+      // own numbers, same as visiting the tool directly.
+      route: "/distributive-area";
+      label: string;
+      prompt: string;
+      config: { set: string };
     };
 
 export interface LiveFlowSequenceStep {

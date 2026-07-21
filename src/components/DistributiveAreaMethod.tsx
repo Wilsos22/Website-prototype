@@ -13,19 +13,36 @@
 // The student plugs the parts into the skeleton, then solves it one step at a
 // time — and each solved product drops into its own region on the model, so the
 // two representations move together. No detour screen, no answer typed twice.
-// Lesson mode runs a teacher-set series: build it here or link it with
-// ?set=18x6,24x7. Tap-to-split (pointer/touch, no hover), squared corners, a
-// unit grid — on purpose.
+//
+// Lesson mode runs a teacher-set series of problems, which can arrive three
+// ways (all the same "24x7,16x8" string, see lib/distributiveProblems):
+//   1. the Distributive Area Method state in /control, published to the live
+//      session — joined devices pick it up and start the series;
+//   2. a ?set= link, for a Notion step or a handout;
+//   3. the built-in builder on this page, for setting one up on the spot.
+// Tap-to-split (pointer/touch, no hover), squared corners, a unit grid — on
+// purpose.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { reportToolResult } from "@/lib/toolEvidence";
+import { useLiveToolConfig } from "./useLiveToolConfig";
+import {
+  parseDistributiveSet,
+  serializeDistributiveSet,
+  DISTRIBUTIVE_MAX_PROBLEMS,
+  DISTRIBUTIVE_TOP_MIN,
+  DISTRIBUTIVE_TOP_MAX,
+  DISTRIBUTIVE_SIDE_MIN,
+  DISTRIBUTIVE_SIDE_MAX,
+  type DistributiveProblem,
+} from "@/lib/distributiveProblems";
 
 type Phase = "enter" | "setup" | "split" | "work" | "done" | "wrap";
 const TEAL = "#50a3a4";
 const AMBER = "#fcaf38";
 const LESSON_KEY = "bdm-distributive-lesson-v1";
 
-interface Problem { top: number; side: number }
+type Problem = DistributiveProblem;
 interface Result { top: number; side: number; total: number; misses: number }
 interface Region { id: number; tw: number; th: number; color: string; x: number; w: number }
 interface Arcs { w: number; h: number; b: string; c: string; endB: { x: number; y: number }; endC: { x: number; y: number } }
@@ -39,7 +56,9 @@ const STEP_SLOTS: number[][] = [[0, 1], [2, 3], [4], [5], [6]];
 const LAST_STEP = 4;
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
-const TOP_MIN = 2, TOP_MAX = 40, SIDE_MIN = 2, SIDE_MAX = 20;
+// Free entry allows a 2, which splits into 1 + 1; a teacher-set series starts at
+// DISTRIBUTIVE_TOP_MIN so no problem in a lesson is degenerate.
+const TOP_MIN = 2, TOP_MAX = DISTRIBUTIVE_TOP_MAX, SIDE_MIN = DISTRIBUTIVE_SIDE_MIN, SIDE_MAX = DISTRIBUTIVE_SIDE_MAX;
 
 // The model is the anchor, so it gets the room: as wide as its container allows
 // (measured, not assumed — window.innerWidth lies inside embedded previews and
@@ -51,19 +70,16 @@ function cellSize(top: number, side: number, w: number, h: number) {
   return clamp(Math.floor(Math.min(wBudget / top, hBudget / side)), 9, 46);
 }
 
-const serializeSet = (ps: Problem[]) => ps.map((p) => `${p.top}x${p.side}`).join(",");
-function parseSet(raw: string | null): Problem[] {
-  if (!raw) return [];
-  const out: Problem[] = [];
-  for (const chunk of raw.split(",")) {
-    const m = chunk.trim().match(/^(\d+)\s*[x*]\s*(\d+)$/i);
-    if (!m) continue;
-    const t = clamp(Math.round(Number(m[1])), TOP_MIN, TOP_MAX);
-    const s = clamp(Math.round(Number(m[2])), SIDE_MIN, SIDE_MAX);
-    if (t > 2) out.push({ top: t, side: s });
-    if (out.length >= 12) break;
-  }
-  return out;
+// Where in a set to pick up — a reload mid-series (a dropped Chromebook, a
+// student rejoining) should not send them back to problem one.
+function resumeIndex(ps: Problem[]): number {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(LESSON_KEY) || "null");
+    if (saved && saved.sig === serializeDistributiveSet(ps)) {
+      return clamp(Math.round(Number(saved.idx) || 0), 0, ps.length - 1);
+    }
+  } catch { /* storage unavailable — the set still runs, it just starts at one */ }
+  return 0;
 }
 
 // Prefill for the lesson builder — sensible 2-digit x 1-digit problems the
@@ -175,24 +191,35 @@ export default function DistributiveAreaMethod() {
     return () => { ro?.disconnect(); window.removeEventListener("resize", measure); };
   }, []);
 
-  // A teacher-built series arrives in the URL (?set=18x6,24x7) so it can be
+  // Pick up a series the teacher published from the control panel. Keyed on the
+  // config id, not the whole object, so the 1s poll behind useLiveToolConfig
+  // does not restart the problem under a student mid-answer. Re-publishing the
+  // same numbers resumes where each device left off; changing the numbers
+  // starts the new set. An empty set is respected as "let them pick their own"
+  // rather than forcing a lesson.
+  const liveTool = useLiveToolConfig("/distributive-area");
+  const liveToolId = liveTool?.id;
+  useEffect(() => {
+    if (!liveTool || liveTool.route !== "/distributive-area") return;
+    const ps = parseDistributiveSet(liveTool.config.set);
+    if (!ps.length) return;
+    setDraft(ps);
+    startLesson(ps, resumeIndex(ps));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveToolId]);
+
+  // A teacher-built series also arrives in the URL (?set=18x6,24x7) so it can be
   // pasted into Notion or handed out as a link. Progress resumes on reload.
   useEffect(() => {
-    const ps = parseSet(new URLSearchParams(window.location.search).get("set"));
+    const ps = parseDistributiveSet(new URLSearchParams(window.location.search).get("set"));
     if (!ps.length) return;
-    const sig = serializeSet(ps);
-    let at = 0;
-    try {
-      const saved = JSON.parse(window.localStorage.getItem(LESSON_KEY) || "null");
-      if (saved && saved.sig === sig) at = clamp(Number(saved.idx) || 0, 0, ps.length - 1);
-    } catch { /* storage unavailable — the set still runs, it just starts at one */ }
     setDraft(ps);
-    startLesson(ps, at);
+    startLesson(ps, resumeIndex(ps));
   }, [startLesson]);
 
   useEffect(() => {
     if (!lesson) return;
-    try { window.localStorage.setItem(LESSON_KEY, JSON.stringify({ sig: serializeSet(lesson), idx: lIdx })); }
+    try { window.localStorage.setItem(LESSON_KEY, JSON.stringify({ sig: serializeDistributiveSet(lesson), idx: lIdx })); }
     catch { /* progress just will not survive a reload */ }
   }, [lesson, lIdx]);
 
@@ -386,7 +413,7 @@ export default function DistributiveAreaMethod() {
   }, [lesson, lIdx, beginProblem]);
 
   const copyLink = useCallback(async () => {
-    const url = `${window.location.origin}${window.location.pathname}?set=${encodeURIComponent(serializeSet(draft))}`;
+    const url = `${window.location.origin}${window.location.pathname}?set=${encodeURIComponent(serializeDistributiveSet(draft))}`;
     try { await navigator.clipboard.writeText(url); setCopied(true); window.setTimeout(() => setCopied(false), 1800); }
     catch { window.prompt("Copy this link for your students:", url); }
   }, [draft]);
@@ -395,7 +422,7 @@ export default function DistributiveAreaMethod() {
   // read the same stale length and only move the list by one.
   const stepDraftCount = (delta: number) => {
     setDraft((prev) => {
-      const want = clamp(prev.length + delta, 1, FILLER.length);
+      const want = clamp(prev.length + delta, 1, Math.min(FILLER.length, DISTRIBUTIVE_MAX_PROBLEMS));
       if (want <= prev.length) return prev.slice(0, want);
       const out = [...prev];
       while (out.length < want) out.push(FILLER[out.length]);
@@ -406,7 +433,7 @@ export default function DistributiveAreaMethod() {
     const digits = raw.replace(/\D/g, "");
     setDraft((prev) => prev.map((p, j) => (j === i ? { ...p, [key]: digits === "" ? 0 : Number(digits) } : p)));
   };
-  const draftReady = draft.every((p) => p.top >= 3 && p.top <= TOP_MAX && p.side >= SIDE_MIN && p.side <= SIDE_MAX);
+  const draftReady = draft.every((p) => p.top >= DISTRIBUTIVE_TOP_MIN && p.top <= TOP_MAX && p.side >= SIDE_MIN && p.side <= SIDE_MAX);
 
   const splitParts: [number, number] | null =
     pending != null ? [pending, top - pending] : topSplit != null ? [topSplit, top - topSplit] : null;
@@ -455,6 +482,9 @@ export default function DistributiveAreaMethod() {
     <div className="da-wrap" ref={wrapRef}>
       <style>{`
         .da-wrap { --da-carry:cubic-bezier(.34,.8,.3,1); --da-settle:cubic-bezier(.2,.8,.3,1); font-family:var(--bdb-font); color:var(--bdb-ink); max-width:1040px; margin:0 auto; padding:8px clamp(10px,3vw,20px) 26px; }
+        .da-live { max-width:640px; margin:0 auto 10px; padding:8px 14px; border:1px solid var(--bdb-line); border-left:4px solid var(--bdb-amber); border-radius:8px; background:var(--bdb-card); text-align:center; }
+        .da-live .lbl { display:block; color:var(--bdb-ink-faint); font-size:0.7rem; font-weight:800; letter-spacing:0.09em; text-transform:uppercase; }
+        .da-live div { color:var(--bdb-ink); font-weight:700; line-height:1.4; }
         .da-prompt { text-align:center; font-size:clamp(1.1rem,3.2vw,1.5rem); font-weight:800; margin:0 0 2px; min-height:30px; }
         .da-sub { text-align:center; color:var(--bdb-ink-soft); font-size:0.9rem; margin:0 0 8px; min-height:18px; }
         .da-enter { display:flex; gap:10px; align-items:center; justify-content:center; margin:24px 0 6px; flex-wrap:wrap; }
@@ -564,6 +594,16 @@ export default function DistributiveAreaMethod() {
           .da-carry { animation:none !important; opacity:0 !important; }
         }
       `}</style>
+
+      {/* The teacher's directions from the control panel. Rendered here rather
+          than with the shared LiveToolBanner, whose pale-on-pale palette is
+          built for the dark tool pages and washes out on cream. */}
+      {liveTool?.prompt.trim() && (
+        <div className="da-live">
+          <span className="lbl">Today&apos;s task</span>
+          <div>{liveTool.prompt.trim()}</div>
+        </div>
+      )}
 
       {phase === "enter" && (
         <>
