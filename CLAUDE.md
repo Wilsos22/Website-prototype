@@ -28,7 +28,12 @@ bars and live misconception grouping).
    pre-dating this rule); do not add more, and strip emoji from any file you edit as you go.
 2. Never `git add .` or `git add -A`. A Google AI Studio agent and cloud Claude sessions commit to this
    same repo concurrently - stage only the explicit paths you changed. Always `git fetch` and merge (or
-   fast-forward) before pushing; local `main` goes stale fast.
+   fast-forward) before pushing; local `main` goes stale fast. Corollary: when a brief cites a commit as
+   already done, confirm it is actually in YOUR history (`git merge-base --is-ancestor <sha> HEAD`)
+   before building on it - it may still be sitting on another agent's unmerged branch, and
+   `git branch -a --contains <sha>` finds it. On 2026-07-21 the live tool banner's cream-surface
+   restyle was one such commit; wiring eleven more cream pages to the un-restyled banner would have
+   shipped pale-on-pale text no student could read.
 3. Agents commit locally; Steele pushes (GitHub Desktop). Only push when he asks. A push is what
    deploys - Vercel auto-builds `main`.
 4. Never import `src/lib/supabaseServer.ts` (the service-role client / `SUPABASE_SERVICE_ROLE_KEY`) into
