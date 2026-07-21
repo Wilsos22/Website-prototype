@@ -41,6 +41,15 @@ bars and live misconception grouping).
 7. Verify the build before reporting "done" (`npm run typecheck` at minimum, `npm run build` for
    anything non-trivial). Do not rely on file edits alone.
 8. Do not store real student PII until RLS is tightened. Mock/test identities must be fully fictional.
+9. KEEP THIS FILE TRUE, IMMEDIATELY. The moment you discover something that would have prevented a bug
+   - a stale reference, a silent failure mode, an undocumented constraint - correct this file in the
+   same turn you discovered it, as its own small commit, and get that commit onto `main` without
+   waiting for the feature you were working on. This file is the shared brain: `AGENTS.md` points Codex
+   here, Claude Code loads it automatically, and the Claude Project reads it from `main`. A correction
+   parked on a feature branch is a correction nobody has. Two real bugs in July 2026 came from stale
+   lines here - a `middleware.ts` reference that had moved to `src/proxy.ts`, which sent an agent to
+   build a student endpoint in a teacher-gated namespace. Corollary: anything another agent would need
+   goes HERE, not in a Claude-only memory note, because Codex cannot read those.
 
 ## Repo layout
 
@@ -49,7 +58,7 @@ bars and live misconception grouping).
 - `src/components/**` - shared React components (SiteNav, ToolNav, AbbieTalk, the manipulatives, etc.).
 - `src/lib/**` - non-UI logic: `supabase.ts`, `supabaseServer.ts`, `notionLessons.ts`, `mastery.ts`,
   `grouping.ts`, `toolEvidence.ts`, `teacherToken.ts`, `classStates.ts`, `liveClassFlow.ts`.
-- `middleware.ts` (repo root) - the real access-control gate (see Auth).
+- `src/proxy.ts` - the real access-control gate (see Auth).
 - `supabase/*.sql` - hand-run, idempotent migrations (no migration runner; run them in the Supabase SQL
   Editor). `supabase/SETUP.md` documents env setup.
 - `warmup-*.gs` (repo root) - Google Apps Script warm-up pipeline (generator, Notion sync, evidence
@@ -82,17 +91,25 @@ Adding a tool: also add a lowercase entry to `TOOL_ROUTES` in `src/app/lesson/pa
 
 ## Auth
 
-The only enforced gate is `middleware.ts` at the repo root, and it is a NO-OP unless `TEACHER_PASSWORD`
-is set (then everything protected is wide open). It gates a request when the path matches
-`PROTECTED_PREFIXES` (`/teacher`, `/control`, `/session`, `/roster`, `/start-question`,
-`/api/form-responses`, `/api/mastery`, `/api/live`, `/api/roster`, `/api/checkpoints`). It authorizes via,
+The only enforced gate is `src/proxy.ts` (formerly `middleware.ts` at the repo root - update stale
+references on sight). Without `TEACHER_PASSWORD` set, protected APIs return 503 and protected pages
+redirect to `/teacher-login?error=configuration`. It gates a request when the path matches
+`PROTECTED_PREFIXES` (`/teacher`, `/control`, `/session`, `/roster`, `/ipad`, `/board`,
+`/start-question`, `/api/form-responses`, `/api/mastery`, `/api/live`, `/api/roster`,
+`/api/checkpoints`, `/api/outreach`, `/api/submissions`, `/api/teacher`, `/api/control-remote`,
+`/api/iready`, `/api/warmup-summaries`) - plus, when `NEXT_PUBLIC_SECURE_STUDENT_DATA=true`
+(production has this ON), `SECURE_ROLLOUT_PREFIXES` `/api/session` and `/api/warmup`. Student-facing
+endpoints therefore live under `/api/student/*` (never gated here) and are dual-mode: secure rollout
+authenticates via `requireVerifiedStudent()` in `src/lib/studentIdentity.ts`; transitional mode
+accepts the claimed id at the server boundary. Copy `/api/student/session-state` when adding one.
+It authorizes via,
 in order: (1) the `bdm_teacher` device cookie (value = lowercase SHA-256 of `bdm-teacher-cookie-v1|<TEACHER_PASSWORD>`,
 `teacherToken()` in `src/lib/teacherToken.ts`, ~6-month expiry); (2) `Authorization: Bearer <CRON_SECRET>`
 (Vercel cron); (3) HTTP Basic (user `TEACHER_USERNAME` or `teacher`, pass `TEACHER_PASSWORD`, which also
 sets the cookie). Unauth: `/api/*` gets JSON 401; pages redirect to `/teacher-login?next=...`.
 
 - Adding a protected route requires editing BOTH the `PROTECTED_PREFIXES` array AND the `config.matcher`
-  in `middleware.ts` (Next.js needs static-analyzable literals). Keep them in sync.
+  in `src/proxy.ts` (Next.js needs static-analyzable literals). Keep them in sync.
 - A shell `curl` that returns 401 on `/api/live/*` or `/teacher/*` is EXPECTED, not a bug - those need
   the cookie, Basic auth, or a Bearer cron token. In-browser fetches from a logged-in teacher tab carry
   the cookie automatically.
