@@ -104,6 +104,15 @@ Where a route's `LiveToolConfig` arm carries a typed payload (`/number-line-plus
 its own state; the other thirteen arms are `Record<string, never>`, where the prompt is all there is -
 do not invent config behavior for them.
 
+Counting those arms, `LiveToolRoute` has 21, not 18: `/challenge`, `/exit-ticket` and `/checkpoint`
+ride the same union so `/control` can publish them, but they deliberately do NOT call
+`useLiveToolConfig` - do not "fix" them by wiring the banner. Each has its own launch path
+(`launchChallenge`, `launchExitTicket`, `launchCheckpoint`) writing the real content to `challenges` /
+`exit_tickets` / `checkpoint_runs`, and the student surface polls that table instead (`/exit-ticket`
+reads `getOpenExitTicket`). Their `buildLiveToolConfig` result is only a marker for the control
+panel's own published-state UI, and the teacher's question comes from a dedicated field
+(`toolSetup.exitPrompt`), not the generic tool prompt - so nothing is dropped.
+
 `LiveToolBanner` styles itself from `--bdb-*` tokens; it is shared, so do not hardcode a hex into it.
 Every tool page it renders on is a light surface - cream (`--bdb-ground`) except
 `/multiplication-fluency`, which is white, where the amber rail and hairline border carry the
