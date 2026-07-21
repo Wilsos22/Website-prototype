@@ -16,7 +16,10 @@ bars and live misconception grouping).
 - Stack: Next.js (App Router) + TypeScript, deployed on Vercel.
 - Live: https://bigdogmath.com (also website-prototype-three.vercel.app).
 - Repo: https://github.com/Wilsos22/Website-prototype (default branch `main`).
-- Local working folder: `/Users/steelewilson/Documents/Website prototype`.
+- Local working folder: `/Users/steelewilson/Website prototype` (moved OUT of Documents on
+  2026-07-21 - Documents is Google Drive-synced, and Drive sync corrupted `.git`, `.next`, and
+  `node_modules` with ` 2`-suffixed duplicate files at least six separate times. Never move this
+  repo back inside a cloud-synced folder).
 - Teacher/owner: Steele Wilson. Mascot: Abbie (Steele's dog).
 
 ## Hard rules (non-negotiable)
