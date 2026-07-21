@@ -34,8 +34,14 @@ bars and live misconception grouping).
    `git branch -a --contains <sha>` finds it. On 2026-07-21 the live tool banner's cream-surface
    restyle was one such commit; wiring eleven more cream pages to the un-restyled banner would have
    shipped pale-on-pale text no student could read.
-3. Agents commit locally; Steele pushes (GitHub Desktop). Only push when he asks. A push is what
-   deploys - Vercel auto-builds `main`.
+3. Verified work ships without waiting for Steele (his standing request, 2026-07-21 - routing
+   merges through him twice stranded finished work). A push to `main` is what deploys - Vercel
+   auto-builds it. Flow: push the feature branch first (a local-only branch is invisible to
+   Steele's github.com flow - never hand him a merge as an action item), then fetch, merge into
+   `main` in a clean worktree, resolve conflicts, typecheck AND build the MERGED tree, push, and
+   verify the live route actually changed. Still ask him first: curriculum/Notion content,
+   classroom-orchestration core, locked designs, schema/RLS migrations, anything destructive, and
+   anything you could not verify.
 4. Never import `src/lib/supabaseServer.ts` (the service-role client / `SUPABASE_SERVICE_ROLE_KEY`) into
    a client component or any browser-reachable code. Server-only tables are touched only through
    `src/app/api/*` route handlers.
