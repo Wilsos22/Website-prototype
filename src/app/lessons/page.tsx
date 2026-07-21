@@ -2,6 +2,7 @@
 
 // Lesson archive — all published lessons sorted by date, for absent students catching up.
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 interface LessonData {
   id: string;
@@ -39,6 +40,7 @@ function isToday(iso: string): boolean {
 }
 
 export default function LessonsPage() {
+  const router = useRouter();
   const [lessons, setLessons] = useState<LessonData[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -79,12 +81,14 @@ export default function LessonsPage() {
       <style>{`
         .lessons-root {
           min-height: 100vh;
-          background: var(--background, #f7f7fb);
-          font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+          background-color: #F3F0E7;
+          background-image: radial-gradient(circle,#CBC4B2 1px,transparent 1.3px);
+          background-size: 18px 18px;
+          font-family: var(--bdb-font);
         }
         .lessons-header {
-          background: #fff;
-          border-bottom: 2px solid #d8deea;
+          background: rgba(243,240,231,0.92);
+          border-bottom: 1px solid rgba(120,110,90,0.18);
           padding: 20px 32px;
           display: flex;
           flex-wrap: wrap;
@@ -100,20 +104,20 @@ export default function LessonsPage() {
           font-weight: 900;
           letter-spacing: 0.12em;
           text-transform: uppercase;
-          color: #245caa;
+          color: #2A6162;
           margin: 0;
         }
         .lessons-title {
           font-size: 1.5rem;
           font-weight: 900;
-          color: #21252d;
+          color: #2E4A54;
           margin: 0;
         }
         .lessons-search {
-          background: #eef1f6;
-          border: 2px solid #d8deea;
+          background: #F6F3EC;
+          border: 2px solid #E3D9C2;
           border-radius: 8px;
-          color: #21252d;
+          color: #2E4A54;
           font-size: 0.95rem;
           font-weight: 600;
           padding: 10px 14px;
@@ -122,21 +126,21 @@ export default function LessonsPage() {
         }
         .lessons-search:focus {
           outline: none;
-          border-color: #245caa;
+          border-color: #2A6162;
         }
         .lessons-nav-link {
           font-size: 0.82rem;
           font-weight: 800;
           letter-spacing: 0.06em;
           text-transform: uppercase;
-          color: #245caa;
-          border: 2px solid #d8deea;
+          color: #2A6162;
+          border: 2px solid #E3D9C2;
           border-radius: 6px;
           padding: 8px 14px;
           text-decoration: none;
           transition: border-color 140ms ease;
         }
-        .lessons-nav-link:hover { border-color: #245caa; }
+        .lessons-nav-link:hover { border-color: #2A6162; }
 
         /* Grid */
         .lessons-grid {
@@ -151,7 +155,7 @@ export default function LessonsPage() {
         /* Card */
         .lesson-card {
           background: #fff;
-          border: 2px solid #d8deea;
+          border: 2px solid #E3D9C2;
           border-radius: 12px;
           padding: 22px;
           display: grid;
@@ -159,11 +163,17 @@ export default function LessonsPage() {
           text-decoration: none;
           color: inherit;
           transition: border-color 150ms ease, box-shadow 150ms ease;
-          cursor: default;
+          cursor: pointer;
+          box-shadow: 0 2px 10px rgba(40,32,20,0.05);
+        }
+        .lesson-card:hover, .lesson-card:focus-visible {
+          border-color: var(--bdb-teal);
+          box-shadow: 0 6px 18px rgba(40,32,20,0.10);
+          outline: none;
         }
         .lesson-card.today-card {
-          border-color: #245caa;
-          background: #f0f6ff;
+          border-color: #2A6162;
+          background: #F1F8F7;
         }
         .lesson-card-top {
           display: flex;
@@ -178,7 +188,7 @@ export default function LessonsPage() {
           color: #5f6877;
         }
         .lesson-card-today-badge {
-          background: #245caa;
+          background: #2A6162;
           border-radius: 4px;
           color: #fff;
           font-size: 0.72rem;
@@ -188,7 +198,7 @@ export default function LessonsPage() {
           text-transform: uppercase;
         }
         .lesson-card-module {
-          background: #eef1f6;
+          background: #F6F3EC;
           border-radius: 4px;
           color: #5f6877;
           font-size: 0.72rem;
@@ -200,7 +210,7 @@ export default function LessonsPage() {
         .lesson-card-title {
           font-size: 1.15rem;
           font-weight: 900;
-          color: #21252d;
+          color: #2E4A54;
           margin: 0;
           line-height: 1.25;
         }
@@ -228,13 +238,13 @@ export default function LessonsPage() {
           justify-content: space-between;
           gap: 10px;
           padding-top: 8px;
-          border-top: 1px solid #eef1f6;
+          border-top: 1px solid #F6F3EC;
         }
         .lesson-assignment-link {
           display: inline-flex;
           align-items: center;
           gap: 6px;
-          background: #245caa;
+          background: #2A6162;
           border-radius: 6px;
           color: #fff;
           font-size: 0.82rem;
@@ -283,19 +293,18 @@ export default function LessonsPage() {
             type="search"
             value={search}
           />
-          <a className="lessons-nav-link" href="/today">Today →</a>
+          <a className="lessons-nav-link" href="/today">Today</a>
         </header>
 
         {loading && (
           <div className="lessons-empty">
-            <div className="lessons-empty-icon">📘</div>
-            <p className="lessons-empty-title">Loading lessons…</p>
+                        <p className="lessons-empty-title">Loading lessons…</p>
           </div>
         )}
 
         {!loading && error && (
           <div className="lessons-empty">
-            <div className="lessons-empty-icon">⚠️</div>
+            <div className="lessons-empty-icon"></div>
             <p className="lessons-empty-title">Couldn't load lessons</p>
             <p className="lessons-empty-sub" style={{ fontFamily: "monospace", fontSize: "0.82rem" }}>
               {error}
@@ -328,6 +337,10 @@ export default function LessonsPage() {
               <div
                 className={`lesson-card${isToday(lesson.date) ? " today-card" : ""}`}
                 key={lesson.id}
+                role="link"
+                tabIndex={0}
+                onClick={() => router.push(`/lessons/${lesson.id}`)}
+                onKeyDown={(event) => { if (event.key === "Enter") router.push(`/lessons/${lesson.id}`); }}
               >
                 {/* Top row */}
                 <div className="lesson-card-top">
@@ -363,8 +376,9 @@ export default function LessonsPage() {
                       href={lesson.assignmentLink}
                       rel="noopener noreferrer"
                       target="_blank"
+                      onClick={(event) => event.stopPropagation()}
                     >
-                      Assignment ↗
+                      Assignment
                     </a>
                   ) : (
                     <span />
