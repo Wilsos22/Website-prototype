@@ -10,10 +10,13 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   try {
     const student = await requireVerifiedStudent(request);
-    const body = await request.json().catch(() => ({})) as { pollId?: unknown; answer?: unknown };
+    const body = await request.json().catch(() => ({})) as { pollId?: unknown; answer?: unknown; explanation?: unknown };
     const pollId = typeof body.pollId === "string" ? body.pollId : "";
     const answer = typeof body.answer === "string" ? body.answer.trim() : "";
-    if (!pollId || !answer || answer.length > 2000) {
+    // Multiple Choice + Explain: the answer stays the bare choice (tallies and
+    // correctness exact-match it); the explanation is stored beside it.
+    const explanation = typeof body.explanation === "string" ? body.explanation.trim() : "";
+    if (!pollId || !answer || answer.length > 2000 || explanation.length > 2000) {
       throw new StudentIdentityError("A valid question and answer are required.", 400, "invalid_poll_answer");
     }
 
@@ -53,6 +56,9 @@ export async function POST(request: Request) {
         student_id: student.id,
         display_name: student.fullName,
         answer,
+        // Only sent when present so plain polls keep working before the
+        // poll-explanations.sql migration has been run.
+        ...(explanation ? { explanation } : {}),
       },
       { onConflict: "poll_id,student_id" },
     );

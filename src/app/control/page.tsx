@@ -30,6 +30,7 @@ import {
   canRevealM2T1L1FinalScore,
   clearStoredTeacherSession,
   getStoredTeacherSessionId,
+  isChoicePollKind,
   isDiscussionRemoteAction,
   liveAssignedToolRoute,
   resolveLiveStepPollKind,
@@ -1272,7 +1273,7 @@ export default function ControlPage() {
     const question = kind === "fist-to-five"
       ? configuredQuestion || pollQuestion.trim() || "How well do you understand this right now?"
       : configuredQuestion || pollQuestion.trim();
-    const choices = kind === "multiple-choice"
+    const choices = isChoicePollKind(kind)
       ? (config?.choices ?? pollChoices).map((choice) => choice.trim()).filter(Boolean)
       : kind === "fist-to-five"
         ? ["0", "1", "2", "3", "4", "5"]
@@ -1281,7 +1282,7 @@ export default function ControlPage() {
       setPollError("Add the question students should answer.");
       return false;
     }
-    if (kind === "multiple-choice" && (!choices || choices.length < 2)) {
+    if (isChoicePollKind(kind) && (!choices || choices.length < 2)) {
       setPollError("Add at least two answer choices.");
       return false;
     }
@@ -2899,11 +2900,13 @@ export default function ControlPage() {
                             <>
                               <option value="short-answer">Short answer</option>
                               <option value="multiple-choice">Multiple choice</option>
+                              <option value="multiple-choice-explain">Multiple choice + explain</option>
                             </>
                           ) : (
                             <>
                               <option value="fist-to-five">Fist to 5 slider</option>
                               <option value="multiple-choice">Multiple choice</option>
+                              <option value="multiple-choice-explain">Multiple choice + explain</option>
                             </>
                           )}
                         </select>
@@ -2916,7 +2919,7 @@ export default function ControlPage() {
                           placeholder={pollKind === "fist-to-five" ? "How well do you understand this right now?" : "Type the question students should answer"}
                         />
                       </div>
-                      {pollKind === "multiple-choice" && (
+                      {isChoicePollKind(pollKind) && (
                         <div className="cx-poll-choices">
                           {pollChoices.map((choice, index) => (
                             <input

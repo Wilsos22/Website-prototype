@@ -45,6 +45,7 @@ const RESPONSE_MODES = [
   "Paper",
   "Short Answer",
   "Multiple Choice",
+  "Multiple Choice + Explain",
   "Fist to Five",
   "Assigned Tool",
   "Physical Response",

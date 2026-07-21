@@ -9,6 +9,7 @@ import type { DiscussionPhaseSnapshot } from "@/lib/discussionProtocol";
 export {
   LIVE_RESPONSE_MODES,
   canRevealM2T1L1FinalScore,
+  isChoicePollKind,
   liveAssignedToolRoute,
   liveIndependentSupportItems,
   liveResponseModePollKind,

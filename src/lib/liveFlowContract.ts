@@ -2,7 +2,12 @@ import { publicSuccessCriterion } from "./successCriterion";
 import { usesDiscussionProtocol } from "./classroomPilot";
 import { normalizeDiscussionPhaseSnapshot, type DiscussionPhaseSnapshot } from "./discussionProtocol";
 
-export type LivePollKind = "short-answer" | "multiple-choice" | "fist-to-five";
+export type LivePollKind = "short-answer" | "multiple-choice" | "multiple-choice-explain" | "fist-to-five";
+
+/** Kinds whose response is a tap on one of the authored choices. */
+export function isChoicePollKind(kind: string | null | undefined): boolean {
+  return kind === "multiple-choice" || kind === "multiple-choice-explain";
+}
 
 export type RemoteNextBehavior = "reveal-results" | "advance";
 
@@ -93,6 +98,7 @@ export const LIVE_RESPONSE_MODES = [
   "Paper",
   "Short Answer",
   "Multiple Choice",
+  "Multiple Choice + Explain",
   "Fist to Five",
   "Assigned Tool",
   "Physical Response",
@@ -104,12 +110,15 @@ export function liveResponseModePollKind(responseMode: string | undefined): Live
   const normalized = responseMode?.trim().toLowerCase();
   if (normalized === "short answer") return "short-answer";
   if (normalized === "multiple choice") return "multiple-choice";
+  // Accept the natural author spellings: "+", "and", "&".
+  if (/^multiple choice\s*(\+|and|&)\s*explain$/.test(normalized || "")) return "multiple-choice-explain";
   if (normalized === "fist to five") return "fist-to-five";
   return null;
 }
 
 function isLivePollKind(value: string | undefined): value is LivePollKind {
-  return value === "short-answer" || value === "multiple-choice" || value === "fist-to-five";
+  return value === "short-answer" || value === "multiple-choice"
+    || value === "multiple-choice-explain" || value === "fist-to-five";
 }
 
 /**

@@ -27,6 +27,17 @@ export async function GET(request: Request) {
   const pollId = new URL(request.url).searchParams.get("pollId") || "";
   if (!pollId) return Response.json({ error: "Poll is required." }, { status: 400 });
 
+  // Prefer the explanation column (Multiple Choice + Explain); fall back to
+  // the narrow select so polls keep working before poll-explanations.sql has
+  // been run in the Supabase SQL Editor.
+  const wide = await db
+    .from("poll_answers")
+    .select("id,student_id,display_name,answer,explanation,created_at")
+    .eq("poll_id", pollId)
+    .order("created_at");
+  if (!wide.error) {
+    return Response.json({ answers: wide.data ?? [] }, { headers: { "cache-control": "no-store" } });
+  }
   const { data, error } = await db
     .from("poll_answers")
     .select("id,student_id,display_name,answer,created_at")

@@ -118,6 +118,7 @@ export default function LiveFlowPage() {
   const [emptyMessage, setEmptyMessage] = useState("Waiting for the teacher.");
   const [holding, setHolding] = useState(false);
   const [pollAnswer, setPollAnswer] = useState("");
+  const [selectedChoice, setSelectedChoice] = useState("");
   const [fistRating, setFistRating] = useState(3);
   const [submittedPollIds, setSubmittedPollIds] = useState<string[]>([]);
   const [authUserId, setAuthUserId] = useState<string | null>(null);
@@ -287,6 +288,7 @@ export default function LiveFlowPage() {
       }
     }
     setPollAnswer(draft?.answer || "");
+    setSelectedChoice("");
     setFistRating(draft?.fistRating ?? 3);
     loadedDraftKeyRef.current = key;
     setPollSaveState(submittedPollIds.includes(activePoll.id) ? "submitted" : draft ? "saved" : "idle");
@@ -306,16 +308,23 @@ export default function LiveFlowPage() {
     }
   }, [activePollId, activeResponseKey, fistRating, pollAnswer, submittedPollIds]);
 
-  async function submitPollAnswer(answer: string) {
+  async function submitPollAnswer(answer: string, explanation?: string) {
     const student = getStoredStudentSession();
     if (!supabase || !activePoll || !student || !answer.trim() || submittedPollIds.includes(activePoll.id)) return;
+    // The answer column stays the bare choice so tallies and correctness
+    // checks keep exact-matching; the explanation travels beside it.
+    const trimmedExplanation = explanation?.trim() || "";
     setPollSubmitError(null);
     setPollSaveState("saving");
     try {
       if (SECURE_STUDENT_DATA) {
         await studentApiRequest("/api/student/poll-answer", {
           method: "POST",
-          body: JSON.stringify({ pollId: activePoll.id, answer: answer.trim() }),
+          body: JSON.stringify({
+            pollId: activePoll.id,
+            answer: answer.trim(),
+            ...(trimmedExplanation ? { explanation: trimmedExplanation } : {}),
+          }),
         });
       } else {
         const result = await supabase.from("poll_answers").insert({
@@ -323,6 +332,7 @@ export default function LiveFlowPage() {
           ...(student.studentId ? { student_id: student.studentId } : {}),
           display_name: student.name,
           answer: answer.trim(),
+          ...(trimmedExplanation ? { explanation: trimmedExplanation } : {}),
         });
         if (result.error) throw result.error;
       }
@@ -506,6 +516,7 @@ export default function LiveFlowPage() {
         .lf-poll-choices { width:min(100%,620px); display:grid; gap:10px; }
         .lf-poll-choice, .lf-poll-send { width:100%; min-height:62px; border:2px solid var(--bdb-line); border-radius:10px; background:#fff; color:var(--bdb-ink); padding:14px 18px; font:inherit; font-size:clamp(1rem,2.4vw,1.3rem); font-weight:900; cursor:pointer; box-shadow:var(--bdb-shadow-sm); }
         .lf-poll-choice:hover, .lf-poll-choice:focus-visible, .lf-poll-send:hover, .lf-poll-send:focus-visible { border-color:var(--lf-accent); outline:none; }
+        .lf-poll-choice.selected { border-color:var(--lf-accent); background:color-mix(in srgb, var(--lf-accent) 12%, #fff); }
         .lf-poll-entry { width:min(100%,620px); display:grid; gap:10px; }
         .lf-poll-text { width:100%; min-height:130px; box-sizing:border-box; border:2px solid var(--bdb-line); border-radius:10px; background:#fff; color:var(--bdb-ink); padding:14px 16px; font:inherit; font-size:1.1rem; font-weight:700; resize:vertical; box-shadow:var(--bdb-shadow-sm); }
         .lf-poll-text:focus { border-color:var(--lf-accent); outline:none; }
@@ -699,6 +710,41 @@ export default function LiveFlowPage() {
                       <button className="lf-poll-choice" key={choice} disabled={pollSubmitted || pollSaveState === "saving"} onClick={() => submitPollAnswer(choice)}>{choice}</button>
                     ))}
                     {pollSubmitted && <p className="lf-poll-sent">Answer submitted.</p>}
+                    {pollSubmitError && <p className="lf-poll-help">{pollSubmitError}</p>}
+                  </div>
+                ) : activePoll.kind === "multiple-choice-explain" ? (
+                  <div className="lf-poll-choices">
+                    {activePoll.choices?.map((choice) => (
+                      <button
+                        className={`lf-poll-choice${selectedChoice === choice ? " selected" : ""}`}
+                        key={choice}
+                        disabled={pollSubmitted || pollSaveState === "saving"}
+                        onClick={() => setSelectedChoice(choice)}
+                      >
+                        {choice}
+                      </button>
+                    ))}
+                    <textarea
+                      className="lf-poll-text"
+                      value={pollAnswer}
+                      disabled={pollSubmitted}
+                      onChange={(event) => setPollAnswer(event.target.value)}
+                      placeholder="Explain your choice - name the method and what the answer means"
+                    />
+                    {pollSubmitted ? (
+                      <p className="lf-poll-sent">Answer submitted.</p>
+                    ) : (
+                      <button
+                        className="lf-poll-send"
+                        disabled={pollSaveState === "saving" || !selectedChoice || !pollAnswer.trim()}
+                        onClick={() => submitPollAnswer(selectedChoice, pollAnswer)}
+                      >
+                        Send answer
+                      </button>
+                    )}
+                    {!pollSubmitted && (!selectedChoice || !pollAnswer.trim()) ? (
+                      <p className="lf-poll-help">Pick one answer and write your explanation, then send.</p>
+                    ) : null}
                     {pollSubmitError && <p className="lf-poll-help">{pollSubmitError}</p>}
                   </div>
                 ) : (
