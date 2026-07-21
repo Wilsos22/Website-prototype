@@ -185,14 +185,16 @@ Design is locked (Steele's "Independent Proficiency System") - build it, do not 
 ## Design system
 
 - Classroom-surface look (DECIDED 2026-07-20): the WARM NOTEBOOK temperature from the Claude Design
-  "Lesson Frame Wireframes" canvas, turn 11 (screens 11a main / 11b support). Warm dotted paper,
-  system-font content, handwritten voice for teacher asides ONLY - anything a student must read uses
-  the system font. The Blueprint temperature (11c/11d) was rejected: fine graph grids moire on a
-  projector at room distance, and its navy/orange chrome collides with the semantic per-state accent
-  colors students learn. Source of truth lives in-repo: `Claude Design Wireframe/Lesson Frame
-  Wireframes.dc.html` plus the `_ds` token set (cream/ink "warm edition" - hexes match `--bdb-*`);
-  `scripts/extract-lesson-frames.mjs` regenerates `public/frame-preview.html` for projector testing.
-  Chromebook and Remote screens in this look are not designed yet - requested from Design.
+  "Lesson Frame Wireframes" canvas. Turn 11 made the choice; TURN 12 is canonical - it standardizes
+  the look across all four surfaces (12a main, 12b support, 12c Chromebook, 12d Remote) and all
+  eleven lesson states (12e). Warm dotted paper, system-font content, handwritten voice for teacher
+  asides ONLY - anything a student must read uses the system font. The Remote (12d) is dark - it is
+  the private teacher surface, consistent with the dark `/control` rule. The Blueprint temperature
+  was rejected: fine graph grids moire on a projector at room distance, and its navy/orange chrome
+  collides with the semantic per-state accent colors students learn. Source of truth lives in-repo:
+  `Claude Design Wireframe/Lesson Frame Wireframes.dc.html` plus the `_ds` token set (cream/ink
+  "warm edition" - hexes match `--bdb-*`); `scripts/extract-lesson-frames.mjs` regenerates
+  `public/frame-preview.html` (`?solo=<id>` shows one frame full-page for the projector).
 - Font: `--bdb-font` = Albert Sans (Google Fonts, weights 400-800), NOT Georgia. Headings are weight
   700 in the sans font. Georgia only survives on ~7 legacy teacher/admin pages (roster, session,
   builder, teacher-login, teacher/mastery, teacher/rightnow, teacher/checkpoint-upload) - treat as
