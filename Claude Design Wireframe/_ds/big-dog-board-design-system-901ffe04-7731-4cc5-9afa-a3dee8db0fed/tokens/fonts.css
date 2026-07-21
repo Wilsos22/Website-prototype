@@ -1,0 +1,5 @@
+/* Big Dog Board — Webfonts (warm edition)
+   Display: Albert Sans (geometric, friendly, bold headings — the Grovia pairing).
+   Body/UI: Geist (clean, modern, neutral). Numerals use Geist with tnum.
+   (Both loaded from Google Fonts — see readme Caveats.) */
+@import url('https://fonts.googleapis.com/css2?family=Albert+Sans:wght@400;500;600;700;800&family=Geist:wght@400;500;600;700&display=swap');

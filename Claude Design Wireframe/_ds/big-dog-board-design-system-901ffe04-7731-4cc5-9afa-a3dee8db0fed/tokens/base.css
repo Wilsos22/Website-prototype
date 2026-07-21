@@ -1,0 +1,23 @@
+/* Big Dog Board — base element defaults (warm edition). */
+:root { color-scheme: light; }
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  line-height: var(--lh-normal);
+  color: var(--text-body);
+  background: var(--bg-app);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  color: var(--text-heading);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--ls-tight);
+  font-weight: 800;
+  margin: 0;
+}
+.bdm-num, .bdm-mono { font-feature-settings: 'tnum' 1; }
+*, *::before, *::after { box-sizing: border-box; }
+::selection { background: var(--yellow-200); }
