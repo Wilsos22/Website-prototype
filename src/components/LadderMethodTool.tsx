@@ -2,6 +2,7 @@
 
 import { Fragment, useState } from "react";
 import type { FormEvent } from "react";
+import { LiveToolBanner, useLiveToolConfig } from "./useLiveToolConfig";
 
 type Step = { divisor: number; left: number; right: number };
 type Phase = "divide" | "gcf" | "lcm" | "done";
@@ -40,6 +41,7 @@ const DIVISIBILITY_RULES = [
 ] as const;
 
 export default function LadderMethodTool() {
+  const liveTool = useLiveToolConfig("/ladder-method");
   const [problem, setProblem] = useState<[number, number]>(() => PROBLEMS[0]);
   const [steps, setSteps] = useState<Step[]>([]);
   const [phase, setPhase] = useState<Phase>("divide");
@@ -375,6 +377,8 @@ export default function LadderMethodTool() {
           .lad-rule-grid { grid-template-columns: 1fr; }
         }
       `}</style>
+
+      <LiveToolBanner tool={liveTool} />
 
       <p className="lad-kicker">GCF &amp; LCM · Ladder Method</p>
 

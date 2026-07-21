@@ -5,6 +5,7 @@
 // Works by DRAG (mouse or touch) or by TAP-the-part then TAP-the-bucket.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { LiveToolBanner, useLiveToolConfig } from "./useLiveToolConfig";
 
 type Bucket = "coefficient" | "variable" | "operation" | "constant";
 type Level = 1 | 2 | 3;
@@ -85,6 +86,7 @@ function makeProblem(level: Level, prev?: Problem): Problem {
 const PRAISE = ["Yes!", "Nailed it.", "That's it.", "Correct.", "Good eye."];
 
 export default function TermIdentifier() {
+  const liveTool = useLiveToolConfig("/term-identifier");
   const [level, setLevel] = useState<Level>(1);
   const [problem, setProblem] = useState<Problem>(() => makeProblem(1));
   const [placed, setPlaced] = useState<Record<string, Bucket>>({});
@@ -287,6 +289,8 @@ export default function TermIdentifier() {
       `}</style>
 
       <div className="ti-main">
+        <LiveToolBanner tool={liveTool} />
+
         <p className="ti-mark">Identify the Terms</p>
         <div className="ti-levels" aria-label="Term identifier levels">
           {[1, 2, 3].map((item) => (

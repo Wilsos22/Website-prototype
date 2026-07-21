@@ -12,6 +12,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { reportToolResult } from "@/lib/toolEvidence";
+import { LiveToolBanner, useLiveToolConfig } from "./useLiveToolConfig";
 import type { FormEvent } from "react";
 
 interface Term { coef: number; variable: string } // variable "" = constant
@@ -68,6 +69,7 @@ function exprStr(terms: Term[]): string {
 }
 
 export default function CombineLikeTerms() {
+  const liveTool = useLiveToolConfig("/combine-like-terms");
   const [start, setStart] = useState<Term[]>(PRESETS[0].terms);
   const [arranged, setArranged] = useState<Term[]>(PRESETS[0].terms);
   const [lines, setLines] = useState<Line[]>([]);
@@ -324,6 +326,8 @@ export default function CombineLikeTerms() {
       </header>
 
       <main className="cl-main">
+        <LiveToolBanner tool={liveTool} />
+
         <div style={{ display: "grid", gap: 6, justifyItems: "center" }}>
           <div className="cl-label">Given</div>
           <div className="cl-given">
