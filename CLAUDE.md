@@ -200,6 +200,15 @@ sets the cookie). Unauth: `/api/*` gets JSON 401; pages redirect to `/teacher-lo
   value, two names) or it 401s.
 - Apps Script: exactly ONE spreadsheet-level `onFormSubmit` trigger (per-form triggers double-fire and
   hit Google's 20-trigger cap). Run `repairAllWarmupTriggers()` once to clean up.
+- Instant warm-up access (2026-07-21): `periods.class_code` is a permanent per-period student code
+  (`supabase/period-class-codes.sql`, defaults DOG1..DOGn). In `/api/student/warmup-start`, a code
+  that matches no open session falls back to the period: it reuses the period's open session or
+  AUTO-CREATES the day's session (join_code = class code, broadcast "free") seeded with a minimal
+  live_flow whose warmup step carries today's published lesson's form URL - the shape
+  `bdm_complete_warmup_identity` verifies against, so the receipt chain is unchanged. The teacher's
+  `/session` page finds and inherits that open session. A teacher-assigned lesson always wins once
+  loaded (the landing page polls and swaps forms without refresh). `sessions.join_code` uniqueness
+  is now a partial index over OPEN sessions only, so codes are reusable across days.
 
 ## Proficiency spine
 
