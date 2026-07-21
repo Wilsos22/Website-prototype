@@ -332,7 +332,14 @@ Design is locked (Steele's "Independent Proficiency System") - build it, do not 
   synthetic `dispatchEvent` clicks BATCH under React 18 - one state-advancing synthetic click per
   `javascript_tool` call is the reliable rhythm. `window.innerWidth` can report the pane frame
   rather than the emulated viewport (and misreports under real browser zoom), so in tool code size
-  from the measured container (`clientWidth` on a ref), not `window.innerWidth`.
+  from the measured container (`clientWidth` on a ref), not `window.innerWidth`. Route changes in
+  the pane are FULL document loads even through next/link and `window.next.router.push`, and
+  parent-page intervals are throttled - so a `window.fetch` override cannot survive navigation and
+  loses the race against mount effects. To exercise a data-backed page without Supabase/Notion env,
+  register a temporary same-origin Service Worker that answers the `/api/*` calls (write it under
+  `public/`, register from `javascript_tool`, reload; unregister and DELETE the file before
+  committing - it survives page loads because it intercepts at the network layer, and the real
+  page logic runs untouched).
 - Student digital responses: Response Mode on a Lesson Step drives the Chromebook input.
   "Multiple Choice + Explain" (added 2026-07-21) shows tappable choices plus a required written
   explanation; the choice stays in `poll_answers.answer` (tallies, correctness, and City Routes
