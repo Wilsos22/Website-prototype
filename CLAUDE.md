@@ -50,6 +50,11 @@ bars and live misconception grouping).
    lines here - a `middleware.ts` reference that had moved to `src/proxy.ts`, which sent an agent to
    build a student endpoint in a teacher-gated namespace. Corollary: anything another agent would need
    goes HERE, not in a Claude-only memory note, because Codex cannot read those.
+   Two mechanisms back this rule up; do not rebuild them. `.claude/hooks/brain-sync-check.sh` runs on
+   Claude Code's Stop event and prints one advisory per session when a branch changed files under
+   `src/` and never touched this file - it never blocks, and silence means the check passed. `/sync`
+   (`.claude/commands/sync.md`) is the manual pass: read the diff, sort each finding into this file,
+   `ROADMAP.md`, auto-memory, or nothing, then land the `CLAUDE.md` edit on its own path to `main`.
 
 ## Repo layout
 
