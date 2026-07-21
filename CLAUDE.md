@@ -233,7 +233,13 @@ sets the cookie). Unauth: `/api/*` gets JSON 401; pages redirect to `/teacher-lo
   `bdm_complete_warmup_identity` verifies against, so the receipt chain is unchanged. The teacher's
   `/session` page finds and inherits that open session. A teacher-assigned lesson always wins once
   loaded (the landing page polls and swaps forms without refresh). `sessions.join_code` uniqueness
-  is now a partial index over OPEN sessions only, so codes are reusable across days.
+  is now a partial index over OPEN sessions only, so codes are reusable across days. Once the
+  student opens the form (tracked per warm-up token in `sessionStorage['bdm-warmup-opened']`) or
+  their response verifies, the landing swaps to a home-base view: lesson card plus /lesson,
+  /practice, /explore links that stay LOCKED until verification. That lock is load-bearing - the
+  warmup-status -> join polling that writes the verified student session lives only in
+  `src/app/page.tsx`, so the origin tab must stay on `/` until `identityReady`; navigating
+  students elsewhere first strands them outside the live-flow join and receipt chain.
 
 ## Proficiency spine
 
