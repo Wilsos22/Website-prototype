@@ -78,6 +78,51 @@ cross-day memory note in the console woven into her context; personality tuned
 to complaining-teen, less Red Bull, shorter replies)
 
 ## In progress
+- **Divisibility D1 — rules 1-6, closes with clickable factor arches** (7/21,
+  commit 8c7a79a, same branch as the Distributive Area work) — /divisibility now
+  matches its D1 lesson scope. The rule rail is ÷1 through ÷6 only (7-10 removed
+  outright); the numbers are 24, 35, 36, 40, 42, 48, chosen so every crossing
+  point sits at or below 6 — the six rules always finish the factor list, and a
+  factor of 7 arrives as a partner (35 = 5 x 7, 42 = 6 x 7) instead of needing a
+  rule. The stop is still the computed crossing d*d > N (24 stops after testing
+  4, 35 after 5), never "the board ran out". The least-to-greatest ordering step
+  is replaced by pair-picking on the ascending factor line: the student clicks
+  the TWO factors that multiply to N; a right pick draws a real curved SVG arch
+  between them (endpoints pulse once, the product pops green at the apex,
+  settles, fades), a wrong pick names the product they actually made ("Not this
+  pair - 3 x 12 = 36, not 24"). 36 closes its square with a single 6 under a
+  small 6 x 6 self-loop — no duplicated factor. Arches nest by span with the
+  outermost tallest; the arch panel is full-width so 48's ten factors fit a
+  Chromebook with no horizontal scroll. Completion line: "The arches are closed.
+  Every factor has a partner, so the list is complete." prefers-reduced-motion
+  shows the closed arches instantly. No evidence emitters (unchanged — this stays
+  an optional-support tool). Verified in-browser across all six numbers plus the
+  wrong Yes/No and wrong-pair paths; typecheck and build clean. Merged to main
+  7/21.
+- **Distributive Area Method — one-screen redesign + teacher problem series** (7/20)
+  — the tool now works on a single screen: "Keep it whole" is gone (splitting is
+  the point), and the equation chain sits directly under the area model, where
+  students plug the parts into `a(__ + __) = a(__) + a(__)` and solve it one step
+  at a time, each solved product dropping into its own region on the rectangle.
+  Interactions cut from ~13 to 6 — one click to split, then five checks; no detour
+  payoff screen, no product typed twice. Wrong answers get feedback aimed at the
+  specific mistake (outside factor used as a part, added instead of multiplied,
+  answered with the whole rectangle, product added to a part); two of those tag
+  the existing "distributes to first term only" misconception. Area model ~3x
+  bigger, sized off the measured container with a viewport-aware height budget, so
+  the flow fits without scrolling on a laptop and an iPad. A teacher-set problem
+  series can start three ways, all one format (`24x7, 16x8`, first number is the
+  one they split): the Problem series field on the Distributive Area Method state
+  in `/control` (rides the existing `live_flow` snapshot via a new `LiveToolConfig`
+  variant — no new table or endpoint), a `?set=` link for a Notion step or handout,
+  or the builder on the tool itself. Blank = students pick their own numbers, i.e.
+  today's behaviour. Shared format/parser in `src/lib/distributiveProblems.ts`.
+  Code done and typecheck/build clean; merged to main 7/21. Still owed: Steele's
+  one-time spot-check of the control-panel publish with a student tab joined (that
+  handoff could not be exercised locally — `/control` needs `TEACHER_PASSWORD`).
+  Post-merge cleanup queued: swap the tool's local task banner for the shared
+  `LiveToolBanner`, which main restyled for cream pages while this branch was in
+  flight.
 - **City Routes v1** (7/19) — the private differentiated release every M1.T1 lesson
   references. After the two-question readiness check, students split into three
   temporary support routes announced only as rotating park names (Yosemite,

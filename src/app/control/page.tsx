@@ -45,6 +45,7 @@ import {
   type LiveToolRoute,
   type TeacherRemoteCommand,
 } from "@/lib/liveClassFlow";
+import { normalizeDistributiveSet, parseDistributiveSet } from "@/lib/distributiveProblems";
 import {
   listLessonPresets,
   getLessonPreset,
@@ -162,6 +163,7 @@ interface ToolSetupValues {
   equationSolution: string;
   gemsExpression: string;
   algebraExpression: string;
+  distributiveSet: string;
   gameSkill: string;
   gameLevel: string;
   gameDuration: string;
@@ -226,6 +228,7 @@ const DEFAULT_TOOL_SETUP: ToolSetupValues = {
   equationSolution: "4",
   gemsExpression: "3 + 4 × 2",
   algebraExpression: "2x + 3 = 11",
+  distributiveSet: "14x6, 18x5, 24x7",
   gameSkill: SKILLS[0].key,
   gameLevel: "1",
   gameDuration: "180",
@@ -335,7 +338,8 @@ function buildLiveToolConfig(stateId: ToolStateId, values: ToolSetupValues): Liv
     case "tool-area-model":
       return { ...base, route: "/area-model", config: {} };
     case "tool-distributive-area":
-      return { ...base, route: "/distributive-area", config: {} };
+      // Empty set is meaningful: students pick their own numbers.
+      return { ...base, route: "/distributive-area", config: { set: normalizeDistributiveSet(values.distributiveSet) } };
     case "tool-area-explorer":
       return { ...base, route: "/area-explorer", config: {} };
     case "tool-combine":
@@ -2710,6 +2714,7 @@ export default function ControlPage() {
         .cx-tool-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
         .cx-tool-field { display:grid; gap:5px; color:#c8e3f6; font-size:0.78rem; font-weight:900; }
         .cx-tool-field.wide { grid-column:1 / -1; }
+        .cx-tool-hint { color:#8fb4cf; font-size:0.76rem; font-weight:700; line-height:1.4; text-transform:none; letter-spacing:0; }
         .cx-tool-input, .cx-tool-select { width:100%; min-height:42px; box-sizing:border-box; border:1px solid #3f3725; border-radius:8px; background:#120f0a; color:#fff; padding:9px 10px; font:inherit; font-weight:750; }
         .cx-tool-status { color:#a7f3d0; font-size:0.82rem; font-weight:800; }
         .cx-leader { display:grid; gap:8px; border:1px solid #3a3322; border-radius:10px; background:#120f0a; padding:12px; }
@@ -3059,6 +3064,20 @@ export default function ControlPage() {
                       <label className="cx-tool-field wide" htmlFor="algebra-expression">
                         Expression or equation
                         <input id="algebra-expression" className="cx-tool-input" value={toolSetup.algebraExpression} onChange={(event) => updateToolSetup("algebraExpression", event.target.value)} placeholder="2x + 3 = 11" />
+                      </label>
+                    )}
+
+                    {activeToolState === "tool-distributive-area" && (
+                      <label className="cx-tool-field wide" htmlFor="distributive-set">
+                        Problem series (first number is the one they split)
+                        <input id="distributive-set" className="cx-tool-input" value={toolSetup.distributiveSet} onChange={(event) => updateToolSetup("distributiveSet", event.target.value)} placeholder="14x6, 18x5, 24x7" />
+                        <span className="cx-tool-hint">
+                          {(() => {
+                            const set = parseDistributiveSet(toolSetup.distributiveSet);
+                            if (!set.length) return "Leave blank to let students pick their own numbers.";
+                            return `${set.length} problem${set.length === 1 ? "" : "s"}: ${set.map((p) => `${p.top} x ${p.side} = ${p.top * p.side}`).join(", ")}`;
+                          })()}
+                        </span>
                       </label>
                     )}
 
