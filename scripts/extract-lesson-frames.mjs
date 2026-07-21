@@ -78,12 +78,13 @@ function readTurn(id) {
 // the SOURCE .dc.html stays verbatim (it is the fidelity reference), but the
 // generated page must not carry them. Already flagged upstream to Design.
 function stripGlyphs(markup) {
-  // Arrows carry meaning ("warm-up → closeout"), so they become the word
+  // Arrows carry meaning (state A to state B), so they become the word
   // rather than a hole. Everything else is decoration; browsers collapse the
-  // leftover whitespace, so removal alone is enough.
+  // leftover whitespace, so removal alone is enough. Ranges are written as
+  // escapes so this file itself stays free of the glyphs it removes.
   return markup
-    .replace(/\s*(?:→|➜|⇒)\s*/gu, " to ")
-    .replace(/[←-⇿①-⓿☀-➿⬀-⯿\u{1F000}-\u{1FAFF}]️?/gu, "");
+    .replace(/\s*[\u{2192}\u{21D2}\u{279C}]\s*/gu, " to ")
+    .replace(/[\u{2190}-\u{21FF}\u{2460}-\u{24FF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{1F000}-\u{1FAFF}]\u{FE0F}?/gu, "");
 }
 
 const turn = stripGlyphs(readTurn(turnId));
