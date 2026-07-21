@@ -85,7 +85,9 @@ bars and live misconception grouping).
 - Manipulative tools (public, no session): `/whiteboard`, `/number-line-plus`, `/number-line`,
   `/fraction-bars`, `/group-bars`, `/percent-bar`, `/algebra-tiles`, `/equation-builder`,
   `/order-of-operations` (GEMS), `/combine-like-terms`, `/proportions`, `/area-model`,
-  `/coordinate-grid`, `/ladder-method`, `/multiplication-fluency`, `/term-identifier`, `/timer`.
+  `/coordinate-grid`, `/ladder-method`, `/multiplication-fluency`, `/term-identifier`,
+  `/divisibility`, `/distributive-area`, `/area-explorer`, `/balance-beam`, `/long-division`,
+  `/place-value`, `/place-value-mirror`, `/timer`.
 - Room/display surfaces (public): `/board` + `/ipad` (pen-to-board), `/warmup`, `/live-flow`.
 - Teacher (gated): `/teacher` and `/teacher/*` (analytics, assignments, challenges, checkpoint-upload,
   checkpoints, exit-tickets, mastery, rightnow), `/control`, `/session`, `/roster`, `/start-question`.
@@ -106,8 +108,13 @@ are silently dropped and students see nothing. All 18 tool routes are wired as o
 route is the case to watch, so wire the component in the same change that extends `LiveToolRoute`.
 Where a route's `LiveToolConfig` arm carries a typed payload (`/number-line-plus`, `/percent-bar`,
 `/equation-builder`, `/order-of-operations`, `/algebra-tiles`) the tool also applies `tool.config` to
-its own state; the other thirteen arms are `Record<string, never>`, where the prompt is all there is -
-do not invent config behavior for them.
+its own state - always in an effect keyed on `tool.id`, never on the tool object
+(`useLiveToolConfig` re-reads every second, so object identity churns and an object-keyed effect
+restarts the student's problem mid-answer; `PercentBar` is the pattern). The in-flight branch
+`claude/distributive-area-tool-redesign-3b0be1` adds a sixth typed arm, `/distributive-area`
+`{ set }` - a "24x7,16x8" problem series parsed by `src/lib/distributiveProblems.ts`. The remaining
+arms are `Record<string, never>`, where the prompt is all there is - do not invent config behavior
+for them.
 
 Counting those arms, `LiveToolRoute` has 21, not 18: `/challenge`, `/exit-ticket` and `/checkpoint`
 ride the same union so `/control` can publish them, but they deliberately do NOT call
@@ -284,6 +291,17 @@ Design is locked (Steele's "Independent Proficiency System") - build it, do not 
   `refs/remotes/origin/HEAD 2`, `index 2`, or `routes.d 3.ts` cause
   `fatal: bad object refs/remotes/origin/HEAD 2` on fetch and duplicate-identifier typecheck errors.
   Fix: delete the ` 2`/` 3`-suffixed files (`find .git .next -name "* 2" -o -name "* 3"`), then retry.
+  A `node_modules 2` duplicate makes `npm run build` fail on a spurious type error deep in a
+  third-party `.d.ts` (a webauthn package, nothing you touched) - same artifact, same fix: delete
+  the duplicate and rebuild.
+- Verifying in the in-app Browser pane: the preview throttles rendering, so CSS animations sit at
+  their first frame and screenshots wait for motion to settle - prove motion with
+  `el.getAnimations()` or keyed-remount node identity instead of watching. `ResizeObserver`
+  callbacks may never fire there (dispatch a synthetic window `resize` after resizing), and
+  synthetic `dispatchEvent` clicks BATCH under React 18 - one state-advancing synthetic click per
+  `javascript_tool` call is the reliable rhythm. `window.innerWidth` can report the pane frame
+  rather than the emulated viewport (and misreports under real browser zoom), so in tool code size
+  from the measured container (`clientWidth` on a ref), not `window.innerWidth`.
 - Student digital responses: Response Mode on a Lesson Step drives the Chromebook input.
   "Multiple Choice + Explain" (added 2026-07-21) shows tappable choices plus a required written
   explanation; the choice stays in `poll_answers.answer` (tallies, correctness, and City Routes
