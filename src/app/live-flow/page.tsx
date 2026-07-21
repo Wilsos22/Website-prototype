@@ -7,7 +7,9 @@ import CityRouteCard from "@/components/CityRouteCard";
 import { getSupabase } from "@/lib/supabase";
 import { SECURE_STUDENT_DATA, studentApiRequest } from "@/lib/studentApi";
 import { CLOSEOUT_DIRECTIONS } from "@/lib/classStates";
+import { classroomStageTheme } from "@/lib/classroomPilot";
 import { normalizeDiscussionPhaseSnapshot } from "@/lib/discussionProtocol";
+import { WARM_ACCENTS } from "@/lib/warmNotebook";
 import { publicSuccessCriterion } from "@/lib/successCriterion";
 import {
   LIVE_FLOW_MODE,
@@ -392,7 +394,11 @@ export default function LiveFlowPage() {
   const phaseMedia = phase?.media ?? null;
   const timer = flow?.timer ?? null;
   const showTimer = Boolean(timer && timer.totalSeconds > 0 && (!phase || phase.timed));
-  const accent = flow?.state?.color ?? "#14b8a6";
+  // Warm Notebook accent (turn 12e): the Chromebook must agree with both
+  // projectors about what color each state is, so the shared map wins over
+  // the state's stored color.
+  const stageThemeId = classroomStageTheme(flow?.state?.id, flow?.state?.label).id;
+  const accent = WARM_ACCENTS[stageThemeId] ?? flow?.state?.color ?? "#50A3A4";
   const activeTimerSeconds = phase?.timed && typeof phase.secondsLeft === "number"
     ? phase.secondsLeft
     : liveTimerSeconds(timer);
@@ -470,16 +476,22 @@ export default function LiveFlowPage() {
   return (
     <main className="lf-page" style={{ "--lf-accent": accent } as CSSProperties}>
       <style>{`
-        .lf-page { position:fixed; inset:0; box-sizing:border-box; overflow:hidden; background:linear-gradient(180deg,#fbf6ea,#f1e8d5); color:var(--bdb-ink); font-family:var(--bdb-font); }
-        .lf-page::before { content:""; position:absolute; z-index:0; right:-12vw; top:-18vw; width:42vw; height:42vw; border-radius:50%; background:var(--lf-accent); filter:blur(130px); opacity:0.08; pointer-events:none; }
+        /* Warm Notebook skin (Design canvas turn 12c): the same dotted paper
+           stage as both projectors, one semantic accent per state. */
+        .lf-page { position:fixed; inset:0; box-sizing:border-box; overflow:hidden;
+          --lf-head:#2E4A54; --lf-hair:#E3D9C2;
+          background-color:#F3F0E7;
+          background-image:radial-gradient(circle,#CBC4B2 1px,transparent 1.3px);
+          background-size:18px 18px;
+          color:var(--bdb-ink); font-family:var(--bdb-font); }
         .lf-exit { min-height:34px; border:1px solid var(--bdb-line); border-radius:9px; background:#fff; color:var(--bdb-ink-soft); padding:0 11px; font:inherit; font-size:0.66rem; font-weight:900; letter-spacing:0.06em; text-transform:uppercase; cursor:pointer; }
         .lf-exit:hover, .lf-exit:focus-visible { border-color:var(--lf-accent); outline:none; }
         .lf-shell { position:relative; z-index:1; width:100%; height:100%; text-align:center; display:grid; grid-template-rows:52px minmax(0,1fr); }
-        .lf-topbar { width:100%; box-sizing:border-box; display:flex; align-items:center; gap:10px; border-top:5px solid var(--lf-accent); border-bottom:1px solid rgba(0,0,0,0.06); background:rgba(251,246,234,0.9); padding:0 18px; }
-        .lf-mark { width:26px; height:26px; flex:none; display:grid; place-items:center; border-radius:8px; background:var(--bdb-ink); color:#fff; font-size:0.8rem; font-weight:900; }
-        .lf-phase-dot { width:9px; height:9px; flex:none; border-radius:3px; background:var(--lf-accent); }
-        .lf-phase { margin:0; color:color-mix(in srgb,var(--lf-accent) 58%,#26221c); font-size:0.82rem; font-weight:850; }
-        .lf-sync { margin-left:auto; display:inline-flex; align-items:center; gap:7px; min-height:24px; border-radius:999px; background:#e8f5ed; color:#255e41; padding:0 11px; font-size:0.66rem; font-weight:850; }
+        .lf-topbar { width:100%; box-sizing:border-box; display:flex; align-items:center; gap:10px; border-bottom:1px solid rgba(120,110,90,0.18); background:rgba(243,240,231,0.88); padding:0 18px; }
+        .lf-mark { display:none; }
+        .lf-phase-dot { width:11px; height:11px; flex:none; border-radius:3px; background:var(--lf-accent); }
+        .lf-phase { margin:0; flex:none; border-radius:6px; background:var(--lf-accent); color:#fff; padding:4px 10px; font-size:0.64rem; font-weight:800; letter-spacing:0.09em; text-transform:uppercase; }
+        .lf-sync { margin-left:auto; display:inline-flex; align-items:center; gap:7px; min-height:24px; border:1px solid var(--lf-hair); border-radius:999px; background:#fff; color:var(--lf-head); padding:0 11px; font-size:0.66rem; font-weight:800; }
         .lf-sync::before { content:""; width:7px; height:7px; border-radius:50%; background:#2f9e6f; }
         .lf-who { color:var(--bdb-ink-soft); font-size:0.75rem; font-weight:800; }
         .lf-body { min-height:0; overflow:auto; display:grid; align-content:center; justify-items:center; gap:clamp(13px,2vw,22px); padding:clamp(18px,3.2vw,34px); }
@@ -491,7 +503,7 @@ export default function LiveFlowPage() {
         .lf-spinner-shell .classroom-spinner-window { border-color:var(--bdb-line); background:var(--bdb-ground); color:var(--bdb-ink); }
         .lf-spinner-shell .classroom-spinner-window.landed { border-color:var(--lf-accent); box-shadow:0 0 0 3px color-mix(in srgb,var(--lf-accent) 24%,transparent) inset; }
         .lf-spinner-shell .classroom-spinner-status { color:var(--bdb-ink-soft); }
-        .lf-title { margin:0; max-width:31ch; color:var(--bdb-ink); font-size:clamp(1.45rem,2.8vw,2.2rem); line-height:1.14; font-weight:900; letter-spacing:-0.01em; }
+        .lf-title { margin:0; max-width:31ch; color:var(--lf-head); font-size:clamp(1.45rem,2.8vw,2.2rem); line-height:1.14; font-weight:800; letter-spacing:-0.015em; }
         .lf-subtitle { margin:0; max-width:54ch; color:var(--bdb-ink-soft); font-size:clamp(0.88rem,1.45vw,1.02rem); line-height:1.48; font-weight:700; }
         .lf-share { width:min(100%,620px); display:grid; gap:6px; border:1px solid var(--bdb-line); border-left:6px solid var(--lf-accent); border-radius:12px; background:#fff; padding:16px 20px; text-align:left; box-shadow:var(--bdb-shadow-sm); }
         .lf-share span { color:var(--lf-accent); font-size:0.72rem; font-weight:900; letter-spacing:0.12em; text-transform:uppercase; }
@@ -499,8 +511,9 @@ export default function LiveFlowPage() {
         .lf-media-wrap { width:min(100%,760px); display:grid; place-items:center; }
         .lf-media { width:min(100%,720px); max-height:38vh; border:1px solid var(--bdb-line); border-radius:12px; background:#fff; object-fit:contain; box-shadow:var(--bdb-shadow); }
         .lf-media.embed { aspect-ratio:16 / 9; height:auto; }
-        .lf-timer { display:flex; align-items:center; justify-content:flex-end; gap:8px; white-space:nowrap; }
-        .lf-time { color:var(--bdb-ink); font-size:1rem; font-variant-numeric:tabular-nums; font-weight:900; line-height:1; letter-spacing:0; }
+        .lf-timer { display:inline-flex; align-items:center; gap:8px; white-space:nowrap; border:1.2px solid var(--lf-hair); border-radius:999px; background:#fff; padding:4px 12px; box-shadow:0 2px 10px rgba(40,32,20,0.06); }
+        .lf-timer::before { content:""; width:7px; height:7px; border-radius:999px; background:var(--lf-accent); }
+        .lf-time { color:var(--lf-head); font-size:1rem; font-variant-numeric:tabular-nums; font-weight:800; line-height:1; letter-spacing:0; }
         .lf-directions { width:min(100%,720px); display:grid; gap:10px; margin:0; padding:0; list-style:none; }
         .lf-direction { border:1px solid var(--bdb-line); border-left:5px solid var(--lf-accent); background:#fff; color:var(--bdb-ink); padding:clamp(13px,2vw,18px) clamp(17px,3vw,26px); text-align:left; font-size:clamp(1rem,1.8vw,1.22rem); font-weight:800; line-height:1.4; box-shadow:var(--bdb-shadow-sm); }
         .lf-supports { width:min(100%,1000px); display:grid; grid-template-columns:minmax(0,1.35fr) minmax(230px,0.75fr); gap:14px; text-align:left; }
@@ -511,7 +524,7 @@ export default function LiveFlowPage() {
         .lf-vocab-list { display:flex; flex-wrap:wrap; gap:9px; margin:0; padding:0; list-style:none; }
         .lf-vocab { background:var(--bdb-ground); border:1px solid var(--bdb-line); border-radius:999px; color:var(--bdb-ink); padding:9px 12px; font-size:clamp(0.95rem,1.9vw,1.16rem); font-weight:900; line-height:1.1; }
         .lf-poll { width:min(100%,760px); display:grid; gap:18px; justify-items:center; }
-        .lf-poll-question { margin:0; max-width:34ch; color:var(--bdb-ink); font-size:clamp(1.45rem,3.4vw,2.6rem); font-weight:900; line-height:1.18; }
+        .lf-poll-question { margin:0; max-width:34ch; color:var(--lf-head); font-size:clamp(1.45rem,3.4vw,2.6rem); font-weight:800; line-height:1.18; }
         .lf-poll-help { margin:0; color:var(--bdb-ink-soft); font-size:clamp(1rem,2.2vw,1.3rem); font-weight:700; }
         .lf-poll-choices { width:min(100%,620px); display:grid; gap:10px; }
         .lf-poll-choice, .lf-poll-send { width:100%; min-height:62px; border:2px solid var(--bdb-line); border-radius:10px; background:#fff; color:var(--bdb-ink); padding:14px 18px; font:inherit; font-size:clamp(1rem,2.4vw,1.3rem); font-weight:900; cursor:pointer; box-shadow:var(--bdb-shadow-sm); }
@@ -533,7 +546,7 @@ export default function LiveFlowPage() {
         .lf-result { display:grid; grid-template-columns:minmax(70px,1fr) minmax(100px,3fr) auto; gap:10px; align-items:center; color:var(--bdb-ink); font-size:clamp(0.95rem,2vw,1.18rem); font-weight:800; }
         .lf-result-bar { height:13px; overflow:hidden; border-radius:999px; background:var(--bdb-line); }
         .lf-result-fill { height:100%; border-radius:inherit; background:var(--lf-accent); transition:width 220ms ease; }
-        .lf-wait { color:var(--bdb-ink); font-size:clamp(1.7rem,4vw,3rem); font-weight:900; line-height:1.14; }
+        .lf-wait { color:var(--lf-head); font-size:clamp(1.7rem,4vw,3rem); font-weight:800; line-height:1.14; }
         .lf-ready { display:inline-flex; align-items:center; gap:9px; color:var(--bdb-ink-soft); font-size:0.95rem; font-weight:800; letter-spacing:0.04em; text-transform:uppercase; }
         .lf-ready-dot { width:11px; height:11px; border-radius:50%; background:var(--lf-accent); animation:lfPulse 1.8s ease-out infinite; }
         @keyframes lfPulse { 0% { box-shadow:0 0 0 0 rgba(20,184,166,0.5); } 70% { box-shadow:0 0 0 12px rgba(20,184,166,0); } 100% { box-shadow:0 0 0 0 rgba(20,184,166,0); } }
