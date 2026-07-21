@@ -7,6 +7,7 @@
 // fraction, decimal, and percent — the same pieces, three ways.
 
 import { useRef, useState, useCallback } from "react";
+import { LiveToolBanner, useLiveToolConfig } from "./useLiveToolConfig";
 
 type Rep = "fraction" | "decimal" | "percent";
 const DENOMS = [2, 3, 4, 5, 6, 8, 10, 12];
@@ -23,6 +24,7 @@ function label(num: number, den: number, rep: Rep): string {
 }
 
 export default function GroupBars() {
+  const liveTool = useLiveToolConfig("/group-bars");
   const [den, setDen] = useState(5);
   const [count, setCount] = useState(0);
   const [rep, setRep] = useState<Rep>("percent");
@@ -99,6 +101,8 @@ export default function GroupBars() {
       </header>
 
       <main className="gb-main">
+        <LiveToolBanner tool={liveTool} />
+
         <div className="gb-controls">
           <div className="gb-group">
             <span className="gb-glabel">Show as</span>

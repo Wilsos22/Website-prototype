@@ -4,6 +4,7 @@
 // point by typing its coordinates. Toggle all four quadrants vs Quadrant 1.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { LiveToolBanner, useLiveToolConfig } from "./useLiveToolConfig";
 
 type Mode = "plot" | "identify";
 type Quad = "all" | "q1";
@@ -13,6 +14,7 @@ const S = 440;
 const P = 36;
 
 export default function CoordinateGrid() {
+  const liveTool = useLiveToolConfig("/coordinate-grid");
   const [mode, setMode] = useState<Mode>("plot");
   const [quad, setQuad] = useState<Quad>("all");
   const [target, setTarget] = useState<Pt>({ x: 3, y: -2 });
@@ -175,6 +177,9 @@ export default function CoordinateGrid() {
       <p className="cg-kicker" style={{ paddingTop: 14 }}>Coordinate Grid</p>
 
       <div className="cg-main">
+        {/* .cg-main is a two-column grid, so the banner spans both columns. */}
+        <LiveToolBanner tool={liveTool} style={{ gridColumn: "1 / -1" }} />
+
         <div className="cg-svgwrap">
           <svg ref={svgRef} className="cg-svg" viewBox={`0 0 ${S} ${S}`} onClick={onGridClick}>
             {/* grid lines */}

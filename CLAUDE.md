@@ -94,6 +94,25 @@ bars and live misconception grouping).
 Adding a tool: also add a lowercase entry to `TOOL_ROUTES` in `src/app/lesson/page.tsx` or the Notion
 `Tool:` name renders as a dead pill. SiteNav link sets are hardcoded arrays - add nav entries manually.
 
+Same trap on the live-session side: listing a route in `LiveToolRoute` (`src/lib/liveClassFlow.ts`)
+only lets the teacher PUBLISH a task to it. The tool component must also call
+`useLiveToolConfig("/route")` and render `<LiveToolBanner tool={...} />`, or the published directions
+are silently dropped and students see nothing. All 18 tool routes are wired as of 2026-07-20 - a NEW
+route is the case to watch, so wire the component in the same change that extends `LiveToolRoute`.
+Where a route's `LiveToolConfig` arm carries a typed payload (`/number-line-plus`, `/percent-bar`,
+`/equation-builder`, `/order-of-operations`, `/algebra-tiles`) the tool also applies `tool.config` to
+its own state; the other thirteen arms are `Record<string, never>`, where the prompt is all there is -
+do not invent config behavior for them.
+
+`LiveToolBanner` styles itself from `--bdb-*` tokens; it is shared, so do not hardcode a hex into it.
+Every tool page it renders on is a light surface - cream (`--bdb-ground`) except
+`/multiplication-fluency`, which is white, where the amber rail and hairline border carry the
+separation. Its optional `style` prop is for PLACEMENT only (it merges last): `/area-model` and
+`/coordinate-grid` pass `gridColumn: "1 / -1"` because their main container is a two-column grid.
+Watch for a root with a fixed `grid-template-rows` - adding the banner as a new direct child shifts
+every row (`.mf-root` on `/multiplication-fluency` is why the banner shares a wrapper with the mode
+tabs there).
+
 ## Auth
 
 The only enforced gate is `src/proxy.ts` (formerly `middleware.ts` at the repo root - update stale

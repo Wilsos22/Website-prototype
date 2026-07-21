@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { reportToolResult } from "@/lib/toolEvidence";
+import { LiveToolBanner, useLiveToolConfig } from "./useLiveToolConfig";
 
 type Phase = "enter" | "split" | "products" | "combine" | "distribute" | "done";
 const REGION_COLORS = ["#50a3a4", "#fcaf38", "#f95335", "#7c5cd6"];
@@ -25,6 +26,7 @@ function cellSize(top: number, side: number) {
 }
 
 export default function DistributiveAreaMethod() {
+  const liveTool = useLiveToolConfig("/distributive-area");
   const [phase, setPhase] = useState<Phase>("enter");
   const [top, setTop] = useState(18);   // horizontal — the factor that gets split into (b + c)
   const [side, setSide] = useState(14); // vertical — one single group, the outside factor "a"
@@ -321,6 +323,8 @@ export default function DistributiveAreaMethod() {
           .da-carry { animation:none !important; opacity:0 !important; }
         }
       `}</style>
+
+      <LiveToolBanner tool={liveTool} />
 
       {phase === "enter" && (
         <>

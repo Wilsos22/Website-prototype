@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { reportToolResult } from "@/lib/toolEvidence";
+import { LiveToolBanner, useLiveToolConfig } from "./useLiveToolConfig";
 
 const STAGE_W = 640;
 const STAGE_H = 430;
@@ -32,6 +33,7 @@ function makeProblem(): Problem {
 }
 
 export default function BalanceBeam() {
+  const liveTool = useLiveToolConfig("/balance-beam");
   const [prob, setProb] = useState<Problem>({ unknown: 2, leftUnits: 3, rightUnits: 5 });
   const [leftUnits, setLeftUnits] = useState(3);
   const [rightUnits, setRightUnits] = useState(5);
@@ -162,6 +164,8 @@ export default function BalanceBeam() {
         .bb-new { font:inherit; font-weight:700; font-size:0.9rem; padding:11px 20px; border-radius:999px; border:1px solid var(--bdb-line); background:var(--bdb-amber); color:var(--bdb-ink); cursor:pointer; }
         .bb-hint { text-align:center; color:var(--bdb-ink-soft); font-size:0.9rem; line-height:1.5; margin:14px auto 0; max-width:520px; }
       `}</style>
+
+      <LiveToolBanner tool={liveTool} />
 
       <div className="bb-head">
         <div className="bb-goal">Goal: get the <span className="q">?</span> box all by itself.</div>

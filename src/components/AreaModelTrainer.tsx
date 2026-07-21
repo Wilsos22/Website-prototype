@@ -4,6 +4,7 @@
 // partial-products, and see how the rectangle pieces add back to the product.
 import { type CSSProperties, useState } from "react";
 import { reportToolResult } from "@/lib/toolEvidence";
+import { LiveToolBanner, useLiveToolConfig } from "./useLiveToolConfig";
 
 type Problem = {
   top: number;
@@ -88,6 +89,7 @@ function productText(a: number | null, b: number | null): string {
 }
 
 export default function AreaModelTrainer() {
+  const liveTool = useLiveToolConfig("/area-model");
   const [problem, setProblem] = useState<Problem>(PROBLEMS[0]);
   const [fields, setFields] = useState<Fields>(EMPTY_FIELDS);
   const [feedback, setFeedback] = useState<Feedback>(INITIAL_FEEDBACK);
@@ -346,6 +348,9 @@ export default function AreaModelTrainer() {
       </header>
 
       <main className="am-main">
+        {/* .am-main is a two-column grid, so the banner spans both columns. */}
+        <LiveToolBanner tool={liveTool} style={{ gridColumn: "1 / -1" }} />
+
         <section className="am-panel">
           <div className="am-problem">
             <p className="am-label">Multiply</p>

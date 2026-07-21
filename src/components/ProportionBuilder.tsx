@@ -8,6 +8,7 @@
 // reinforcing "multiply top and bottom by the same number."
 
 import { useRef, useState, useCallback } from "react";
+import { LiveToolBanner, useLiveToolConfig } from "./useLiveToolConfig";
 
 type Phase = "scale" | "fill" | "solved";
 interface Problem { p: number; q: number; k: number; knownSide: "num" | "den"; }
@@ -28,6 +29,7 @@ const PRESETS: Problem[] = [
 ];
 
 export default function ProportionBuilder() {
+  const liveTool = useLiveToolConfig("/proportions");
   const [prob, setProb] = useState<Problem>(PRESETS[0]);
   const [phase, setPhase] = useState<Phase>("scale");
   const [kKnown, setKKnown] = useState(false);
@@ -166,6 +168,8 @@ export default function ProportionBuilder() {
       </header>
 
       <main className="pb-main">
+        <LiveToolBanner tool={liveTool} />
+
         <div className="pb-step-banner" aria-live="polite">
           <span className="pb-step-num">{phase === "scale" ? "1" : "2"}</span>
           <span className="pb-step-copy">
