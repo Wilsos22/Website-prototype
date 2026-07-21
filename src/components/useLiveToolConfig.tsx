@@ -90,22 +90,27 @@ export function useLiveToolConfig(route: LiveToolRoute): LiveToolConfig | null {
 export function LiveToolBanner({ tool }: { tool: LiveToolConfig | null }) {
   if (!tool?.prompt.trim()) return null;
 
+  // Every tool that renders this banner is a cream surface (--bdb-ground), so it
+  // is styled from the design tokens: white card, ink text, amber accent rail.
   return (
     <div
       style={{
         margin: "0 auto 14px",
-        width: "min(92vw, 960px)",
-        border: "1px solid rgba(250, 204, 21, 0.42)",
-        borderRadius: 10,
-        background: "rgba(250, 204, 21, 0.1)",
-        color: "#fef3c7",
+        width: "100%",
+        maxWidth: "min(92vw, 960px)",
+        border: "1px solid var(--bdb-line)",
+        borderLeft: "4px solid var(--bdb-amber)",
+        borderRadius: "var(--bdb-r-sm)",
+        background: "var(--bdb-card)",
+        boxShadow: "var(--bdb-shadow-sm)",
+        color: "var(--bdb-ink)",
         padding: "10px 14px",
         fontWeight: 800,
         lineHeight: 1.4,
-        textAlign: "center",
+        textAlign: "left",
       }}
     >
-      <span style={{ color: "#facc15", fontSize: "0.72rem", letterSpacing: "0.08em", textTransform: "uppercase" }}>Today&apos;s task</span>
+      <span style={{ color: "var(--bdb-ink-soft)", fontWeight: 700, fontSize: "0.72rem", letterSpacing: "0.08em", textTransform: "uppercase" }}>Today&apos;s task</span>
       <div>{tool.prompt}</div>
     </div>
   );
