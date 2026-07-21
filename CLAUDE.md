@@ -205,15 +205,15 @@ sets the cookie). Unauth: `/api/*` gets JSON 401; pages redirect to `/teacher-lo
   short-answer bonus. Q1 fluency, Q2-Q3 spiral review, Q4-Q5 the focus topic. Q4/Q5 are RETENTION - they
   check the PREVIOUS taught day's lesson, drawn from the lesson's `Retention Q4`/`Retention Q5` fields
   (teacher text wins) else the curated pool, pulling BACKWARD only (never un-taught material).
-- Rebuilding a lesson's steps IN PLACE requires overwriting EVERY text field on every reused step
-  page - Main Display, Question, Choices, Student/Teacher notes, Vocabulary, Discussion Stems, Pace
-  Directions, Paper Task, and the base64 BDM_ROUTINE_CONFIG in AI Context - not just the fields the
-  new spec enumerates. The 2026-07-17 L2 day-split rebuilt the headline fields exactly to spec but
-  left the old one-day draft's GCF/LCM content in the support fields of four Day-1 steps, which
-  surfaced on classroom screens as Day-2 material out of nowhere. When a lesson page declares a
-  scope contract ("Held for Day 2: ..."), audit the steps against it: a case-SENSITIVE sweep
-  (SQLite GLOB, not LIKE - base64 blobs false-positive case-insensitive matches) across all step
-  text fields.
+- Entering an agreed lesson into Notion is TRANSCRIPTION, not authoring. Enter only what was
+  agreed; a field the agreement does not dictate stays EMPTY - never fill it from an earlier
+  draft or with plausible content, because empty renders as nothing but wrong renders on a
+  classroom screen. In July 2026 the L2-D1 build (agreed state by state with Steele) was entered
+  with Day-2 GCF/LCM material in four steps' support fields - teacher notes, vocabulary, stems,
+  and the base64 BDM_ROUTINE_CONFIG - that was in nobody's agreement. The transcription miss hid
+  in exactly the fields no one re-read. After any lesson entry, audit every step text field
+  against the lesson page's scope contract ("Held for Day 2: ...") with a case-SENSITIVE sweep
+  (SQLite GLOB, not LIKE - base64 blobs false-positive case-insensitive matches).
 - One page per teaching day (locked convention) - never a Notion Date range. Ranges are only a
   fallback; single dates are what make `/api/today` and the day-to-day retention chain work.
 - Evidence ingest: `POST /api/evidence` is the single write path for warm-up + tool events (rows into
