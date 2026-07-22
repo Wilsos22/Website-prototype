@@ -344,7 +344,10 @@ Design is locked (Steele's "Independent Proficiency System") - build it, do not 
   register a temporary same-origin Service Worker that answers the `/api/*` calls (write it under
   `public/`, register from `javascript_tool`, reload; unregister and DELETE the file before
   committing - it survives page loads because it intercepts at the network layer, and the real
-  page logic runs untouched).
+  page logic runs untouched). Caveat: the pane's loader sometimes fails SW-controlled NAVIGATIONS
+  outright ("This page couldn't load" while curl serves the route in milliseconds) - if that hits,
+  unregister the SW, verify what you can through `?preview=` params plus `getAnimations()`, and
+  treat the SW technique as page-load-dependent, not guaranteed.
 - Student digital responses: Response Mode on a Lesson Step drives the Chromebook input.
   "Multiple Choice + Explain" (added 2026-07-21) shows tappable choices plus a required written
   explanation; the choice stays in `poll_answers.answer` (tallies, correctness, and City Routes
