@@ -144,8 +144,22 @@ to complaining-teen, less Red Bull, shorter replies)
   (taper geometry on the wire, display bake, palm rejection, highlighter
   layering, eraser, background-tab recovery, and an iPad-drawn circle landing
   exactly around the target on the present stage). Pencil-in-hand feel test
-  is Steele's; phases 2 (undo/gestures/stroke-eraser/shape-snap/laser) and 3
-  (zoom/pages) queued.
+  is Steele's. PHASE 2 shipped same day (commit 1fbb770): synced UNDO/REDO
+  with an operation history (undoing an eraser swipe restores everything it
+  took; toolbar buttons with live enabled states on both surfaces plus
+  scratch; two-finger tap undoes, three-finger tap redoes), the STROKE
+  ERASER as the default Eraser (touch a stroke and the whole stroke
+  vanishes, one history op per swipe; the classic rub-out lives on as the
+  Pixel tool), HOLD-TO-STRAIGHTEN (hold the pen still ~600ms and the
+  scribble snaps to a line - angle pulled onto 0/45/90, far end keeps
+  following the pen - or a circle or rectangle; the wall swaps the raw
+  scribble for the clean shape in one beat on pen-up), a LASER POINTER (a
+  glowing fading trail every surface sees, never stored, never exported),
+  and reconnect resync (a display that drops re-requests full board state,
+  so a wifi blip cannot leave the wall missing strokes; also fixed a latent
+  Phase 1 bug where switching surfaces could replay the last Clear).
+  Verified with synthetic Pencil and touch events end to end; wire carries
+  remove/restore/replace/laser. Phase 3 (pinch zoom + pages) queued.
 - **Ladder Method — rule rail redesign + Factor Trees mode** (7/21, commit
   c9206cc) — /ladder-method now follows the three-column manipulative
   convention: the divisibility rules sit in the LARGE LEFT RAIL (same wording
