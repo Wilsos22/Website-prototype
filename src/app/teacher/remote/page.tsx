@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import CityRoutesPanel from "@/components/CityRoutesPanel";
+import LiveScreenPreview from "@/components/LiveScreenPreview";
 import {
   REMOTE_COMMAND_STALE_MS,
   canRevealM2T1L1FinalScore,
@@ -82,9 +83,8 @@ interface DeckKeyProps {
 
 interface SurfaceMirrorProps {
   label: string;
-  body: string;
+  src: string;
   meta: string;
-  tone: "dark" | "cream";
 }
 
 function formatTime(totalSeconds: number) {
@@ -267,15 +267,17 @@ function DeckKey({ button, busy, disabled, onSend, active = false }: DeckKeyProp
   );
 }
 
-function SurfaceMirror({ label, body, meta, tone }: SurfaceMirrorProps) {
+function SurfaceMirror({ label, src, meta }: SurfaceMirrorProps) {
   return (
-    <article className={`surface-mirror ${tone}`} aria-label={`${label} preview`}>
+    <article className="surface-mirror" aria-label={`${label} live preview`}>
       <header className="surface-mirror-head">
         <span className="surface-mirror-dot" aria-hidden="true" />
         <strong>{label}</strong>
         <span>{meta}</span>
       </header>
-      <p>{body}</p>
+      <div className="surface-mirror-live">
+        <LiveScreenPreview src={src} title={`${label} live preview`} />
+      </div>
     </article>
   );
 }
@@ -760,36 +762,9 @@ export default function TeacherRemotePage() {
   const publicSurfacesLinked = flow?.presentation?.publicSurfaceMode === "linked";
   const isLearningCheckState = flow?.state?.id === "learning-check"
     || flow?.state?.semantic === "learning-check";
-  const mainMirrorText = spinnerStateId === "learning-target-readers"
-    ? "Learning intention and success criterion readers"
-    : spinnerStateId === "ipad-kid"
-      ? "This week\'s iPad Kid"
-      : launchScoreboardAvailable
-        ? finalScoreShowing ? "Final score: 60 to 40" : "Halftime score: 30 to 20"
-        : isLearningCheckState
-          ? "Learning intention and one success criterion"
-          : flow?.presentation?.mainDisplay
-            || flow?.presentation?.body
-            || flow?.state?.description
-            || "Waiting for the current lesson screen";
-  const paceMirrorText = publicSurfacesLinked
-    ? mainMirrorText
-    : isLearningCheckState
-      ? flow?.poll?.stage === "results" ? "Anonymous Fist-to-Five bars" : "Answer on your Chromebook"
-      : isDiscussionState
-        ? `${discussionPhase?.label || "Discussion"}: sentence stems and vocabulary`
-        : flow?.presentation?.paceDirections
-          || flow?.state?.description
-          || "Waiting for current directions";
-  const studentMirrorText = publicSurfacesLinked
-    ? mainMirrorText
-    : flow?.poll?.stage === "responding"
-      ? flow.poll.question
-      : isDiscussionState
-        ? discussionPhase?.subtitle || flow?.presentation?.studentAction || "Use the current sentence stem"
-        : flow?.presentation?.studentAction
-          || flow?.state?.description
-          || "Waiting for the current action";
+  // The mirrors show the real screens now; the student surface follows the
+  // published tool route when one is live, else the default lesson view.
+  const studentPreviewRoute = flow?.tool?.route || "/lesson";
   const currentPhaseLabel = discussionPhase
     ? `${flow?.state?.label || "Discussion"}: ${discussionPhase.label}`
     : flow?.state?.label || "Lesson ready";
@@ -877,8 +852,7 @@ export default function TeacherRemotePage() {
         .surface-mirror-dot { width:8px; height:8px; flex:none; border-radius:2px; background:var(--remote-accent); }
         .surface-mirror-head strong { color:#B8AE99; font-size:0.64rem; font-weight:900; }
         .surface-mirror-head span:last-child { margin-left:auto; color:#8C8069; font-size:0.58rem; font-weight:850; font-variant-numeric:tabular-nums; }
-        .surface-mirror > p { flex:1; display:-webkit-box; align-content:center; overflow:hidden; margin:0; padding:10px 11px; color:#f5efe5; text-align:left; text-overflow:ellipsis; -webkit-box-orient:vertical; -webkit-line-clamp:4; font-size:0.76rem; line-height:1.3; font-weight:800; background:radial-gradient(circle at 20% 12%,color-mix(in srgb,var(--remote-accent) 15%,transparent),transparent 45%),var(--remote-base); }
-        .surface-mirror.cream > p { color:#EFE8D8; background:radial-gradient(circle at 84% 14%,color-mix(in srgb,var(--remote-accent) 12%,transparent),transparent 45%),#fbf6ea; }
+        .surface-mirror-live { flex:1; min-height:0; }
         .remote-controls { min-height:0; display:grid; align-content:start; gap:12px; overflow-x:hidden; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain;
           background:#2A241B; padding:16px 18px calc(24px + env(safe-area-inset-bottom)); scroll-padding-bottom:calc(24px + env(safe-area-inset-bottom)); scrollbar-color:#8C8069 transparent; }
         .remote-primary-stack { display:grid; gap:12px; }
@@ -976,7 +950,6 @@ export default function TeacherRemotePage() {
           .remote-workspace { grid-template-columns:1fr; grid-template-rows:auto minmax(0,1fr); }
           .remote-mirrors { grid-template-columns:repeat(3,minmax(0,1fr)); grid-template-rows:auto minmax(76px,94px); gap:8px; border-right:0; border-bottom:1px solid rgba(255,255,255,0.09); padding:9px 12px 10px; }
           .mirror-rail-label { grid-column:1 / -1; }
-          .surface-mirror > p { -webkit-line-clamp:2; padding:8px 9px; font-size:0.68rem; }
           .surface-mirror-head { min-height:25px; padding:4px 7px; }
           .surface-mirror-head span:last-child { display:none; }
           .remote-controls { overflow:auto; padding:12px; }
@@ -995,7 +968,6 @@ export default function TeacherRemotePage() {
           .remote-mirrors { grid-template-rows:auto minmax(66px,78px); padding:8px; }
           .surface-mirror-head { min-height:22px; }
           .surface-mirror-head strong { font-size:0.58rem; }
-          .surface-mirror > p { -webkit-line-clamp:2; padding:6px 7px; font-size:0.61rem; }
           .remote-controls { padding:10px; }
           .deck-grid, .deck-grid.stages { grid-template-columns:repeat(2,minmax(0,1fr)); }
           .deck-grid.discussion-phases, .deck-grid.discussion-controls { grid-template-columns:repeat(2,minmax(0,1fr)); }
@@ -1064,9 +1036,9 @@ export default function TeacherRemotePage() {
             <div className="remote-workspace">
               <aside className="remote-mirrors" aria-label="Public screen mirrors">
                 <p className="mirror-rail-label">Public screen mirrors</p>
-                <SurfaceMirror label="Main" body={mainMirrorText} meta={mirrorMeta} tone="dark" />
-                <SurfaceMirror label="Pace" body={paceMirrorText} meta={mirrorMeta} tone="dark" />
-                <SurfaceMirror label="Student" body={studentMirrorText} meta="Synced" tone="cream" />
+                <SurfaceMirror label="Main" src={`/teacher/present?session=${encodeURIComponent(session.id)}`} meta={mirrorMeta} />
+                <SurfaceMirror label="Pace" src={`/teacher/pace?session=${encodeURIComponent(session.id)}`} meta={mirrorMeta} />
+                <SurfaceMirror label="Student" src={`${studentPreviewRoute}?teacherPreview=1`} meta="Synced" />
               </aside>
 
               <section className="remote-controls" aria-label="Classroom controls">

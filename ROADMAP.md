@@ -42,6 +42,14 @@ the day's session seeded with today's published form, and the teacher's
 response verifies - the landing becomes a home base: today's lesson card plus
 Today's lesson / Challenge games / Explore the tools links that unlock when
 the warm-up connects, keeping the origin tab's verification polling alive) ·
+**iPad Remote: live screen mirrors** (7/22 - Steele's catch: the Remote's
+mirror rail still showed text summaries of each surface. The three mirrors
+now embed the REAL pages - Main and Pace + Support with the session param,
+the Student view following the published tool route - as scaled live
+iframes (shared src/components/LiveScreenPreview.tsx, measured-width
+scaling with a zero-rect retry), so the staged hook, scene sweeps,
+transitions, and everything else appear on the Remote exactly as the room
+sees them) ·
 **Session page as in-class cockpit** (7/21 - Steele's ask, two rounds: /session
 runs class start to finish without /control. The join-code card carries a
 lesson transport - Start today's lesson (new server-side
