@@ -191,7 +191,37 @@ to complaining-teen, less Red Bull, shorter replies)
   so a wifi blip cannot leave the wall missing strokes; also fixed a latent
   Phase 1 bug where switching surfaces could replay the last Clear).
   Verified with synthetic Pencil and touch events end to end; wire carries
-  remove/restore/replace/laser. Phase 3 (pinch zoom + pages) queued.
+  remove/restore/replace/laser. PHASE 3 shipped 7/22 (commit c848cb6): PINCH
+  ZOOM + PAN on the pen surface only — a view transform applied at paint time
+  and inverted at input capture, so strokes stay in page coordinates, the
+  wire format is untouched, and the wall never zooms. The same two fingers
+  that tap to undo become the pinch once they move; one finger pans while
+  zoomed; ctrl+wheel zooms at the desk; a percent chip offers Fit; and the
+  dotted paper, background image, and problem cards all scale WITH the ink so
+  grid templates stay under what was written on them. PAGES — chips (1 2 3 +,
+  cap 8) flip between up to eight boards; each page syncs on its own room so
+  hello/state resync works per page for free, a pageflip message on the ctrl
+  channel drives the display (which re-asks after a reconnect and shows Page
+  N of M in its pill), and inactive pages stay mounted with canvases parked
+  at 1x1 — strokes, history, and channels survive, flipping back is one
+  repaint, and per-page Undo/Clear/Background/Problem/Export all act on the
+  page in view. The same mechanism fixed a real Phase 1/2 gap: switching
+  Board / Write on screen used to unmount the other surface and silently
+  discard the iPad's copy of that ink. Both board surfaces and the PNG export
+  now sit on the Warm Notebook dotted cream ground (the display page went
+  cream too). Also fixed a latent Phase 2 loop — notifyHistory read the
+  onHistoryChange prop directly, so an inline parent callback made the
+  mount-notify effect setState every render (Maximum update depth exceeded).
+  Verified in-pane end to end: zoom math exact against the fixed-point
+  formula, zoomed input inverse-mapped to 6 decimals on the wire, pinch =
+  finger-spread ratio, tap-undo still fires (one remove) while a moved
+  finger kills the tap, pan clamps to the page, pages isolate their rooms
+  with zero cross-leakage, hidden pages free to 1x1 and repaint bit-for-bit
+  (212=212 samples), and a second tab's display followed live pageflips and
+  painted while backgrounded. Zoom is deliberately absent from the glass
+  sheet (ink must stay aligned to the screen under it) and gestures still
+  need "Finger draws" OFF. Phase 4 candidates: Warm Notebook template pages,
+  glass-sheet export, per-page export-all.
 - **Ladder Method — rule rail redesign + Factor Trees mode** (7/21, commit
   c9206cc) — /ladder-method now follows the three-column manipulative
   convention: the divisibility rules sit in the LARGE LEFT RAIL (same wording
