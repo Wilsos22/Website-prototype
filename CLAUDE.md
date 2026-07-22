@@ -102,7 +102,9 @@ bars and live misconception grouping).
   checkpoints, exit-tickets, mastery, rightnow), `/control`, `/session`, `/roster`, `/start-question`.
   `/teacher/growth` redirects to `/teacher/rightnow`. Note: `/builder` and `/abbie` are teacher-ish but
   NOT gated. The lesson flow does NOT require `/control` to run: `/api/control-remote` executes
-  everything server-side - POST `start-lesson` (sessionId + lessonCode) builds the flow from Notion and
+  everything server-side - POST `start-lesson` (sessionId + notionLessonId, lessonCode as fallback -
+  the by-code Notion lookup returned empty on the first live run, so prefer the page id) builds the
+  flow from Notion and
   enters step 0 through the same navigateFlow as Next, POST next/previous/toggle-timer drive it, and
   GET applies the lazy automatic-pacing transition, so pacing advances as long as ANY surface (Remote,
   /session's toolbar) is polling. `/control` remains the full host; `/session` carries a minimal
