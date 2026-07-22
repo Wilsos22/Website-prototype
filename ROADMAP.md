@@ -236,7 +236,12 @@ to complaining-teen, less Red Bull, shorter replies)
   be." No further ink phases are queued - real classroom use decides what
   comes next, and glass-sheet export was considered and declined (annotations
   do not need to become artifacts; including the under-screen would take DOM
-  rasterization of the present stage). Open loop: his Pencil feel test -
+  rasterization of the present stage). First real-use bug report came in
+  same day and was fixed within the hour (ff4df7d): the Pixel eraser's ring
+  froze at touch-down and erased blind, because pixel erase paints straight
+  onto the dry layers and nothing repainted the wet layer holding the ring -
+  the ring now tracks the drag for both eraser tools. Open loop: his Pencil
+  feel test -
   pressure curve, snap timing, eraser reach, laser fade, zoom ceiling, dot
   pitch are all one-number dials.
 - **Ladder Method — rule rail redesign + Factor Trees mode** (7/21, commit
