@@ -21,16 +21,18 @@ export interface InkStroke {
   id: string;
   color: string;
   erase: boolean;
+  m?: "p" | "h"; // pen (default) or highlighter; erase wins over m
   widthFrac: number; // line width as a fraction of surface width
   points: InkPoint[];
 }
 
 export type InkMessage =
-  | { t: "seg"; id: string; color: string; erase: boolean; widthFrac: number; pts: InkPoint[]; start?: boolean; end?: boolean }
+  | { t: "seg"; id: string; color: string; erase: boolean; m?: "p" | "h"; widthFrac: number; pts: InkPoint[]; start?: boolean; end?: boolean }
   | { t: "clear" }
   | { t: "bg"; url: string | null }
   | { t: "problem"; text: string | null } // problem(s) to show with space to solve
   | { t: "scratch"; open: boolean } // open/close the scratch overlay on the board
+  | { t: "view"; ar: number } // the display announces its stage aspect ratio so the pen surface can letterbox to match
   | { t: "hello" } // a display just opened — please resend current state
   | { t: "state"; strokes: InkStroke[]; bg: string | null; problem: string | null };
 
