@@ -109,6 +109,13 @@ export default function SessionPage() {
   const [error, setError] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(true);
   const [ending, setEnding] = useState(false);
+  // End is a two-tap confirm (window.confirm blocked the page for seconds and
+  // reads badly on the iPad), and after ending, any OTHER open session is
+  // adopted and announced instead of silently reappearing on the next visit.
+  const [endArmed, setEndArmed] = useState(false);
+  const endArmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [openCount, setOpenCount] = useState(0);
+  const [endNotice, setEndNotice] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [poll, setPoll] = useState<{ id: string; question: string; choices: string[] | null } | null>(null);
@@ -148,6 +155,14 @@ export default function SessionPage() {
         const stored = getStoredTeacherSession();
         let openSession: TeacherSessionRow | null = null;
 
+        // Count every open session up front: a day of testing or a sloppy
+        // period change can leave several open, and the teacher needs to SEE
+        // that instead of ending one and finding "it" open again later.
+        const listResult = await teacherApiRequest<{ sessions: TeacherSessionRow[] }>("/api/teacher/session")
+          .catch(() => ({ sessions: [] as TeacherSessionRow[] }));
+        const openList = listResult.sessions.filter((candidate) => candidate.status === "open");
+        if (!cancelled) setOpenCount(openList.length);
+
         if (requestedSessionId) {
           const result = await teacherApiRequest<{ session: TeacherSessionRow }>(
             `/api/teacher/session?sessionId=${encodeURIComponent(requestedSessionId)}`,
@@ -158,8 +173,7 @@ export default function SessionPage() {
         }
 
         if (!openSession) {
-          const result = await teacherApiRequest<{ sessions: TeacherSessionRow[] }>("/api/teacher/session");
-          openSession = result.sessions.find((candidate) => candidate.status === "open") ?? null;
+          openSession = openList[0] ?? null;
         }
 
         if (cancelled) return;
@@ -251,21 +265,82 @@ export default function SessionPage() {
     saveTeacherSession(sessionId, code, periodName);
     setSession({ id: sessionId, code, periodName, periodId });
     setJoins([]); setAdmissionRequests([]); setBroadcast(data.broadcast || "free");
+    setOpenCount(1); setEndNotice(null);
   }
+  function adoptOpenSession(row: TeacherSessionRow) {
+    const periodName = periods.find((period) => period.id === row.period_id)?.name || "Class";
+    const code = row.join_code || "----";
+    setRosterCount(rosterStudents.filter((student) => student.periodId === row.period_id).length);
+    setBroadcast(row.broadcast);
+    setSession({ id: row.id, code, periodName, periodId: row.period_id });
+    saveTeacherSession(row.id, code, periodName);
+    setJoins([]); setAdmissionRequests([]); setPoll(null); setAnswers([]);
+    setChallenge(null); setBoard([]); setLiveFlow(null);
+  }
+
+  async function closeSessionById(sessionId: string) {
+    await teacherPost("/api/teacher/session", { action: "close", sessionId });
+    clearStoredTeacherSession(sessionId);
+  }
+
   async function end() {
     if (!session || ending) return;
-    if (!window.confirm("End this session for every connected student?")) return;
-    // Close any polls still open for this session so they can't linger and block
-    // students who later join (an orphaned open poll otherwise has no off-switch).
+    // Two-tap confirm instead of window.confirm: the dialog blocked the page
+    // (a 3-second click in the field) and is clumsy on the iPad.
+    if (!endArmed) {
+      setEndArmed(true);
+      if (endArmTimer.current) clearTimeout(endArmTimer.current);
+      endArmTimer.current = setTimeout(() => setEndArmed(false), 4000);
+      return;
+    }
+    setEndArmed(false);
+    if (endArmTimer.current) clearTimeout(endArmTimer.current);
     setEnding(true);
     setError(null);
+    setEndNotice(null);
     try {
-      await teacherPost("/api/teacher/session", { action: "close", sessionId: session.id });
-      clearStoredTeacherSession(session.id);
-      setSession(null); setJoins([]); setAdmissionRequests([]); setPoll(null); setAnswers([]); setBroadcast(null);
-      setChallenge(null); setBoard([]);
+      await closeSessionById(session.id);
+      // Ending one session must surface any OTHER open session immediately.
+      // Hiding it until the next visit made a second open session look like
+      // the first one refusing to die.
+      const result = await teacherApiRequest<{ sessions: TeacherSessionRow[] }>("/api/teacher/session")
+        .catch(() => ({ sessions: [] as TeacherSessionRow[] }));
+      const remaining = result.sessions.filter((candidate) => candidate.status === "open");
+      setOpenCount(remaining.length);
+      if (remaining.length) {
+        adoptOpenSession(remaining[0]);
+        setEndNotice(remaining.length === 1
+          ? "That session is closed. One more session is still open - it is shown here now."
+          : `That session is closed. ${remaining.length} more sessions are still open - the next one is shown here now.`);
+      } else {
+        setSession(null); setJoins([]); setAdmissionRequests([]); setPoll(null); setAnswers([]); setBroadcast(null);
+        setChallenge(null); setBoard([]); setLiveFlow(null);
+        setEndNotice("Session ended. Nothing else is open.");
+      }
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : "The session could not be ended.");
+    } finally {
+      setEnding(false);
+    }
+  }
+
+  async function endAll() {
+    if (ending) return;
+    setEnding(true);
+    setError(null);
+    setEndNotice(null);
+    try {
+      const result = await teacherApiRequest<{ sessions: TeacherSessionRow[] }>("/api/teacher/session");
+      const openList = result.sessions.filter((candidate) => candidate.status === "open");
+      for (const row of openList) {
+        await closeSessionById(row.id);
+      }
+      setOpenCount(0);
+      setSession(null); setJoins([]); setAdmissionRequests([]); setPoll(null); setAnswers([]); setBroadcast(null);
+      setChallenge(null); setBoard([]); setLiveFlow(null);
+      setEndNotice(openList.length ? `Ended ${openList.length} open session${openList.length === 1 ? "" : "s"}. Nothing else is open.` : "Nothing was open.");
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "The sessions could not be ended.");
     } finally {
       setEnding(false);
     }
@@ -487,6 +562,11 @@ export default function SessionPage() {
         .se-empty { color:#b3aa97; font-weight:600; }
         .se-warn { background:#fff7e6; border:1px solid #ffe2a8; color:#92660a; border-radius:14px; padding:16px 18px; font-weight:700; line-height:1.6; }
         .se-err { background:#fdecea; border:1px solid #f5c6c0; color:#b91c1c; border-radius:12px; padding:12px 16px; font-weight:700; }
+        .se-notice { background:#e7f8f3; border:1px solid #b9ebdf; color:#0f766e; border-radius:12px; padding:12px 16px; font-weight:700; }
+        .se-end.armed { background:#ef4444; color:#fff; border-color:#ef4444; }
+        .se-open-warn { margin:10px 0 0; color:#92660a; font-size:0.88rem; font-weight:800; }
+        .se-link-inline { border:0; background:transparent; color:#b91c1c; font:inherit; font-weight:900; text-decoration:underline; cursor:pointer; padding:0; }
+        .se-link-inline:disabled { opacity:0.5; cursor:default; }
         .se-qh { margin:0 0 12px; font-size:1.1rem; font-weight:900; color:#2a2a2e; }
         .se-tally { display:grid; gap:12px; margin-top:14px; }
         .se-tallylabel { font-weight:800; color:#2a2a2e; margin-bottom:5px; }
@@ -522,6 +602,7 @@ export default function SessionPage() {
 
         {!supabase && <div className="se-warn">Supabase isn&apos;t connected yet — add your keys in Vercel and redeploy.</div>}
         {error && <div className="se-err">{error}</div>}
+        {endNotice && <div className="se-notice" role="status">{endNotice}</div>}
 
         {supabase && initializing && (
           <div className="se-card"><p className="se-empty">Checking for an open session.</p></div>
@@ -581,8 +662,16 @@ export default function SessionPage() {
               {flowNote && <p className="se-flow-note" role="status">{flowNote}</p>}
               <div className="se-code-actions">
                 <a className="se-host-link" href="/control">Open Live class host</a>
-                <button className="se-end" onClick={end} disabled={ending}>{ending ? "Ending session" : "End session"}</button>
+                <button className={`se-end${endArmed ? " armed" : ""}`} onClick={end} disabled={ending}>
+                  {ending ? "Ending session" : endArmed ? "Tap again to end" : "End session"}
+                </button>
               </div>
+              {openCount > 1 && (
+                <p className="se-open-warn" role="status">
+                  {openCount} sessions are open across your classes - this page shows {session.code}.{" "}
+                  <button className="se-link-inline" type="button" onClick={endAll} disabled={ending}>End all open sessions</button>
+                </p>
+              )}
             </div>
             <section className="se-card" aria-labelledby="classroom-screens-title">
               <h2 className="se-qh" id="classroom-screens-title">Classroom screens</h2>

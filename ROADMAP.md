@@ -49,7 +49,13 @@ class-mode broadcast), the iPad Remote stays as a link, the Challenge game
 card collapses to a toggle when idle (expands automatically while one runs),
 and the bottom "Ask a question" composer is gone - lesson steps carry the
 questions now. The open-question card survives only as the off-switch for an
-orphaned open poll) ·
+orphaned open poll. 7/22: ending got honest - End is a two-tap confirm (the
+window.confirm dialog blocked the page ~3s and read badly on iPad), ending
+one session immediately adopts and announces any OTHER open session instead
+of letting it reappear silently on the next visit, and a banner with "End
+all open sessions" shows whenever more than one is open - the "I ended it
+but it's open again" report was two separate open sessions, not a failed
+close) ·
 **Transition buffer states with music** (7/21 - Steele's insight: the room
 changing state is a real cost, so it gets its own planned minutes and its own
 music. Three new first-class states - Transition - Hustle (coral, 1 min,
