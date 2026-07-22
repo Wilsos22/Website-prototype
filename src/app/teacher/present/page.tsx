@@ -427,7 +427,11 @@ export default function ClassroomStagePage() {
   // The Warm Notebook stage: paper ground, one semantic accent. The dark
   // projector* values in the theme belong to surfaces not yet refit.
   // Transition buffers carry their own vibe color instead of a theme accent.
-  const transitionPreview = previewStage ? TRANSITION_PREVIEWS[previewStage] || null : null;
+  // Same precedence as previewSample: an explicit preview only wins when no
+  // real session holds the projector.
+  const transitionPreview = !session && !loading && previewStage
+    ? TRANSITION_PREVIEWS[previewStage] || null
+    : null;
   const accent = transitionPreview
     ? transitionPreview.accent
     : isTransition && state?.color
