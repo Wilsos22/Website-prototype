@@ -30,13 +30,23 @@ import {
   type InkPoint,
   type InkStroke,
 } from "@/lib/inkSync";
-import { fillDot, fillOutline, highlightOutline, strokeOutline, type InkRenderPoint } from "@/lib/inkGeometry";
+import { fillDot, fillOutline, fitSnapShape, highlightOutline, snapLinePoints, strokeOutline, type InkRenderPoint } from "@/lib/inkGeometry";
 
-export type InkTool = "pen" | "hl" | "erase";
+// erase = STROKE eraser (touch a stroke, the whole stroke vanishes - the one
+// you want mid-lesson); pixel = the classic rub-out; laser = a fading pointer
+// trail the room sees but nothing keeps.
+export type InkTool = "pen" | "hl" | "erase" | "pixel" | "laser";
 
 const HL_ALPHA = 0.36;
-const ERASE_SCALE = 5; // eraser is 5x the dialled pen width, as before
+const ERASE_SCALE = 5; // pixel eraser is 5x the dialled pen width, as before
 const HL_SCALE = 3; // highlighter band is 3x the dialled pen width
+const LASER_MS = 850; // how long the laser trail lingers
+const HOLD_SNAP_MS = 600; // hold the pen still this long to straighten the stroke
+const HOLD_SNAP_RADIUS = 8; // "still" = within this many px
+
+// One entry per user action, so undo restores exactly what the action did:
+// un-drawing a stroke, or bringing back everything one eraser swipe removed.
+type InkOp = { kind: "draw"; stroke: InkStroke } | { kind: "erase"; strokes: InkStroke[] };
 
 interface InkBoardProps {
   room: string;
@@ -51,8 +61,11 @@ interface InkBoardProps {
   passThrough?: boolean; // display overlay: never intercept pointer events
   announceView?: boolean; // display side: broadcast this surface's aspect ratio
   clearSignal?: number; // bump to clear
+  undoSignal?: number; // bump to undo the last action
+  redoSignal?: number; // bump to redo
   exportSignal?: number; // bump to export the board as a PNG
   onExport?: (dataUrl: string) => void; // receives the flattened PNG; if absent, downloads
+  onHistoryChange?: (canUndo: boolean, canRedo: boolean) => void;
   onConnectionChange?: (status: InkConnectionStatus) => void;
 }
 
@@ -79,8 +92,11 @@ export default function InkBoard({
   passThrough = false,
   announceView = false,
   clearSignal = 0,
+  undoSignal = 0,
+  redoSignal = 0,
   exportSignal = 0,
   onExport,
+  onHistoryChange,
   onConnectionChange,
 }: InkBoardProps) {
   const hlRef = useRef<HTMLCanvasElement | null>(null);
@@ -103,6 +119,18 @@ export default function InkBoard({
   const emaRef = useRef(0.5);
   const lastMoveRef = useRef<{ x: number; y: number; t: number } | null>(null);
   const frameRef = useRef<number | null>(null);
+
+  // Phase 2 state: history, stroke-eraser gesture, shape snap, laser, taps.
+  const historyRef = useRef<InkOp[]>([]);
+  const redoRef = useRef<InkOp[]>([]);
+  const eraseSweepRef = useRef<InkStroke[]>([]); // strokes removed by the current eraser drag
+  const snapRef = useRef<{ anchor: InkRenderPoint; kind: "line" } | null>(null); // after a snap, moves adjust the line's far end
+  const snapTimerRef = useRef<number | null>(null);
+  const holdAnchorRef = useRef<{ x: number; y: number; t: number } | null>(null);
+  const laserRef = useRef<Map<string, { pts: { x: number; y: number; t: number }[] }>>(new Map());
+  const laserIdRef = useRef<string | null>(null);
+  const touchTapsRef = useRef<Map<number, { x: number; y: number; t: number; moved: boolean; up: boolean }>>(new Map());
+  const lastStatusRef = useRef<InkConnectionStatus>("connecting");
 
   // Latest tool settings, read inside pointer handlers.
   const colorRef = useRef(color);
@@ -204,15 +232,58 @@ export default function InkBoard({
       paintStroke(ctx, a.stroke, px);
     }
     const hover = hoverRef.current;
-    if (hover && interactive && toolRef.current === "erase" && !drawingRef.current) {
+    const t = toolRef.current;
+    if (hover && interactive && (t === "erase" || t === "pixel") && !drawingRef.current) {
       ctx.globalCompositeOperation = "source-over";
       ctx.strokeStyle = "rgba(32,30,26,0.55)";
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.arc(hover.x, hover.y, (widthRef.current * ERASE_SCALE) / 2, 0, Math.PI * 2);
+      const ringR = t === "pixel" ? (widthRef.current * ERASE_SCALE) / 2 : Math.max(9, widthRef.current * 1.6);
+      ctx.arc(hover.x, hover.y, ringR, 0, Math.PI * 2);
       ctx.stroke();
     }
+
+    // Laser trails: a glowing coral streak that fades out on its own. Points
+    // older than LASER_MS are pruned; while any remain the wet layer keeps
+    // repainting itself so the fade is smooth on every surface.
+    const now = performance.now();
+    let laserAlive = false;
+    for (const [id, trail] of laserRef.current) {
+      trail.pts = trail.pts.filter((p) => now - p.t < LASER_MS);
+      if (trail.pts.length < 1) { laserRef.current.delete(id); continue; }
+      laserAlive = true;
+      ctx.globalCompositeOperation = "source-over";
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      for (let i = 1; i < trail.pts.length; i += 1) {
+        const a = trail.pts[i - 1], b = trail.pts[i];
+        const age = now - b.t;
+        const alpha = Math.max(0, 1 - age / LASER_MS);
+        ctx.shadowColor = "rgba(249,83,53,0.9)";
+        ctx.shadowBlur = 14 * alpha;
+        ctx.strokeStyle = `rgba(249,83,53,${0.8 * alpha})`;
+        ctx.lineWidth = 9;
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = `rgba(255,244,238,${0.9 * alpha})`;
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      }
+      const head = trail.pts[trail.pts.length - 1];
+      const headAge = now - head.t;
+      const headAlpha = Math.max(0, 1 - headAge / LASER_MS);
+      ctx.fillStyle = `rgba(255,255,255,${0.95 * headAlpha})`;
+      ctx.shadowColor = "rgba(249,83,53,0.95)";
+      ctx.shadowBlur = 18 * headAlpha;
+      ctx.beginPath(); ctx.arc(head.x, head.y, 5.5, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+    if (laserAlive) scheduleWetRef.current?.();
   }, [ctxOf, interactive, paintStroke, size]);
+
+  // paintWet needs to re-arm itself while laser trails fade; the scheduler is
+  // defined just below, so it reaches it through a ref.
+  const scheduleWetRef = useRef<(() => void) | null>(null);
 
   const scheduleWet = useCallback(() => {
     if (frameRef.current !== null) return;
@@ -221,6 +292,7 @@ export default function InkBoard({
       paintWet();
     });
   }, [paintWet]);
+  useEffect(() => { scheduleWetRef.current = scheduleWet; }, [scheduleWet]);
 
   const redrawAll = useCallback(() => {
     const { w, h } = size();
@@ -240,6 +312,72 @@ export default function InkBoard({
     const r = rectRef.current;
     if (r.height > 0) channelRef.current?.send({ t: "view", ar: r.width / r.height });
   }, []);
+
+  // ── History + shared mutations (undo/redo, stroke eraser, snap) ────────────
+
+  const notifyHistory = useCallback(() => {
+    onHistoryChange?.(historyRef.current.length > 0, redoRef.current.length > 0);
+  }, [onHistoryChange]);
+
+  const redrawDirtyRef = useRef(false);
+  const scheduleRedraw = useCallback(() => {
+    if (redrawDirtyRef.current) return;
+    redrawDirtyRef.current = true;
+    window.requestAnimationFrame(() => {
+      redrawDirtyRef.current = false;
+      redrawAll();
+    });
+  }, [redrawAll]);
+
+  const removeStrokes = useCallback((ids: string[], broadcast: boolean): InkStroke[] => {
+    const idSet = new Set(ids);
+    const removed: InkStroke[] = [];
+    strokesRef.current = strokesRef.current.filter((s) => {
+      if (idSet.has(s.id)) { removed.push(s); return false; }
+      return true;
+    });
+    for (const id of idSet) { byIdRef.current.delete(id); activeRef.current.delete(id); }
+    if (removed.length) {
+      scheduleRedraw();
+      if (broadcast) channelRef.current?.send({ t: "remove", ids: removed.map((s) => s.id) });
+    }
+    return removed;
+  }, [scheduleRedraw]);
+
+  const restoreStroke = useCallback((stroke: InkStroke, broadcast: boolean) => {
+    if (byIdRef.current.has(stroke.id)) return;
+    byIdRef.current.set(stroke.id, stroke);
+    strokesRef.current.push(stroke);
+    scheduleRedraw();
+    if (broadcast) channelRef.current?.send({ t: "restore", stroke });
+  }, [scheduleRedraw]);
+
+  // Undo inverts the op and moves it to the redo stack; redo re-applies it and
+  // moves it back. "draw" holds the stroke object itself so restoring is exact.
+  const performUndo = useCallback(() => {
+    const op = historyRef.current.pop();
+    if (!op) return;
+    if (op.kind === "draw") removeStrokes([op.stroke.id], true);
+    else for (const s of op.strokes) restoreStroke(s, true);
+    redoRef.current.push(op);
+    notifyHistory();
+  }, [notifyHistory, removeStrokes, restoreStroke]);
+
+  const performRedo = useCallback(() => {
+    const op = redoRef.current.pop();
+    if (!op) return;
+    if (op.kind === "draw") restoreStroke(op.stroke, true);
+    else removeStrokes(op.strokes.map((s) => s.id), true);
+    historyRef.current.push(op);
+    notifyHistory();
+  }, [notifyHistory, removeStrokes, restoreStroke]);
+
+  const recordOp = useCallback((op: InkOp) => {
+    historyRef.current.push(op);
+    if (historyRef.current.length > 200) historyRef.current.shift();
+    redoRef.current = []; // a new action forks history - the redo branch dies
+    notifyHistory();
+  }, [notifyHistory]);
 
   const resize = useCallback(() => {
     const wrap = wrapRef.current;
@@ -263,9 +401,15 @@ export default function InkBoard({
     byIdRef.current.clear();
     activeRef.current.clear();
     predictedRef.current = [];
+    laserRef.current.clear();
+    eraseSweepRef.current = [];
+    // Clear is deliberate and destructive - history does not survive it.
+    historyRef.current = [];
+    redoRef.current = [];
+    onHistoryChange?.(false, false);
     const { w, h } = size();
     for (const c of [hlRef.current, dryRef.current, wetRef.current]) ctxOf(c)?.clearRect(0, 0, w, h);
-  }, [ctxOf, size]);
+  }, [ctxOf, onHistoryChange, size]);
 
   // Apply one incoming/local segment.
   const applySeg = useCallback((seg: Extract<InkMessage, { t: "seg" }>) => {
@@ -307,7 +451,22 @@ export default function InkBoard({
       else if (m.t === "clear") clearLocal();
       else if (m.t === "bg") setBgUrl(m.url);
       else if (m.t === "problem") setProblemText(m.text);
-      else if (m.t === "hello") {
+      else if (m.t === "remove") removeStrokes(m.ids, false);
+      else if (m.t === "restore") restoreStroke(m.stroke, false);
+      else if (m.t === "replace") {
+        const existing = byIdRef.current.get(m.stroke.id);
+        if (existing) existing.points = m.stroke.points;
+        else { byIdRef.current.set(m.stroke.id, m.stroke); strokesRef.current.push(m.stroke); }
+        activeRef.current.delete(m.stroke.id);
+        scheduleRedraw();
+      } else if (m.t === "laser") {
+        const now = performance.now();
+        let trail = laserRef.current.get(m.id);
+        if (!trail) { trail = { pts: [] }; laserRef.current.set(m.id, trail); }
+        const { w, h } = size();
+        for (const p of m.pts) trail.pts.push({ x: p.x * w, y: p.y * h, t: now });
+        scheduleWet();
+      } else if (m.t === "hello") {
         if (interactive) {
           channel.send({ t: "state", strokes: strokesRef.current, bg: bgUrlRef.current, problem: problemRef.current });
         }
@@ -322,7 +481,15 @@ export default function InkBoard({
         setProblemText(m.problem);
         redrawAll();
       }
-    }, onConnectionChange);
+    }, (status) => {
+      // A display that drops and comes back re-asks for the whole board, so a
+      // wifi blip mid-lesson can never leave the wall missing strokes.
+      if (!interactive && status === "connected" && lastStatusRef.current === "disconnected") {
+        channel.send({ t: "hello" });
+      }
+      lastStatusRef.current = status;
+      onConnectionChange?.(status);
+    });
     channelRef.current = channel;
     if (!interactive) channel.send({ t: "hello" }); // ask the pen for current state
     if (announceView) announce();
@@ -374,8 +541,24 @@ export default function InkBoard({
     channelRef.current?.send({ t: "problem", text: problem });
   }, [problem, interactive]);
 
+  useEffect(() => { notifyHistory(); }, [notifyHistory]);
+
+  // Undo / redo signals from the toolbar.
+  const lastUndoRef = useRef(undoSignal);
+  useEffect(() => {
+    if (undoSignal === lastUndoRef.current) return;
+    lastUndoRef.current = undoSignal;
+    if (undoSignal !== 0) performUndo();
+  }, [undoSignal, performUndo]);
+  const lastRedoRef = useRef(redoSignal);
+  useEffect(() => {
+    if (redoSignal === lastRedoRef.current) return;
+    lastRedoRef.current = redoSignal;
+    if (redoSignal !== 0) performRedo();
+  }, [redoSignal, performRedo]);
+
   // Clear signal from the toolbar.
-  const lastClearRef = useRef(0);
+  const lastClearRef = useRef(clearSignal);
   useEffect(() => {
     if (clearSignal === lastClearRef.current) return;
     lastClearRef.current = clearSignal;
@@ -448,7 +631,7 @@ export default function InkBoard({
     return out;
   }, []);
 
-  const lastExportRef = useRef(0);
+  const lastExportRef = useRef(exportSignal);
   useEffect(() => {
     if (exportSignal === lastExportRef.current) return;
     lastExportRef.current = exportSignal;
@@ -521,43 +704,219 @@ export default function InkBoard({
 
   useEffect(() => () => flushQueuedSegment(), [flushQueuedSegment]);
 
+  // Stroke-eraser hit test: does this point touch any finished stroke? Bounding
+  // boxes are cached per stroke (invalidated when the point count changes) so
+  // the fine distance test only runs on likely candidates.
+  const bboxCache = useRef(new WeakMap<InkStroke, { n: number; minX: number; minY: number; maxX: number; maxY: number }>());
+  const strokesAt = useCallback((x: number, y: number, reach: number): string[] => {
+    const { w, h } = size();
+    const hits: string[] = [];
+    for (const s of strokesRef.current) {
+      if (s.erase || activeRef.current.has(s.id)) continue;
+      let bb = bboxCache.current.get(s);
+      if (!bb || bb.n !== s.points.length) {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const p of s.points) {
+          if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+          if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+        }
+        bb = { n: s.points.length, minX: minX * w, minY: minY * h, maxX: maxX * w, maxY: maxY * h };
+        bboxCache.current.set(s, bb);
+      }
+      const strokeR = Math.max(2, (s.widthFrac * w) / 2) * 1.4;
+      const pad = reach + strokeR;
+      if (x < bb.minX - pad || x > bb.maxX + pad || y < bb.minY - pad || y > bb.maxY + pad) continue;
+      const pts = s.points;
+      let hit = false;
+      for (let i = 0; i < pts.length && !hit; i += 1) {
+        const ax = pts[i].x * w, ay = pts[i].y * h;
+        if (i + 1 < pts.length) {
+          const bx = pts[i + 1].x * w, by = pts[i + 1].y * h;
+          const dx = bx - ax, dy = by - ay;
+          const L2 = dx * dx + dy * dy;
+          const t = L2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / L2)) : 0;
+          const px = ax + dx * t, py = ay + dy * t;
+          hit = Math.hypot(x - px, y - py) <= pad;
+        } else {
+          hit = Math.hypot(x - ax, y - ay) <= pad;
+        }
+      }
+      if (hit) hits.push(s.id);
+    }
+    return hits;
+  }, [size]);
+
+  const eraseAt = useCallback((x: number, y: number) => {
+    const reach = Math.max(9, widthRef.current * 1.6);
+    const ids = strokesAt(x, y, reach);
+    if (!ids.length) return;
+    const removed = removeStrokes(ids, true);
+    eraseSweepRef.current.push(...removed);
+  }, [removeStrokes, strokesAt]);
+
+  // Hold the pen still mid-stroke and the scribble snaps to the clean shape.
+  const clearSnapTimer = useCallback(() => {
+    if (snapTimerRef.current !== null) { window.clearTimeout(snapTimerRef.current); snapTimerRef.current = null; }
+  }, []);
+  const trySnap = useCallback(() => {
+    snapTimerRef.current = null;
+    const id = activeIdRef.current;
+    if (!drawingRef.current || !id || snapRef.current) return;
+    const active = activeRef.current.get(id);
+    const stroke = id ? byIdRef.current.get(id) : null;
+    if (!active || !stroke || stroke.erase) return;
+    const fit = fitSnapShape(active.px);
+    if (!fit) return;
+    const { w, h } = size();
+    active.px = fit.points;
+    stroke.points = fit.points.map((p) => ({ x: p.x / w, y: p.y / h, p: p.p }));
+    // A snapped LINE stays live - keep the pen down and the far end follows
+    // it. Circles and rectangles freeze as fitted.
+    snapRef.current = fit.kind === "line" ? { anchor: fit.points[0], kind: "line" } : null;
+    predictedRef.current = [];
+    // After a snap the increments stop streaming; the display keeps the raw
+    // scribble until pen-up delivers the clean replacement in one message.
+    frozenShapeRef.current = true;
+    scheduleWet();
+  }, [scheduleWet, size]);
+  const frozenShapeRef = useRef(false);
+  const armSnapTimer = useCallback(() => {
+    clearSnapTimer();
+    snapTimerRef.current = window.setTimeout(trySnap, HOLD_SNAP_MS);
+  }, [clearSnapTimer, trySnap]);
+
+  // Two-finger tap = undo, three-finger tap = redo (fingers are free for
+  // gestures because they never draw unless "Finger draws" is on).
+  const noteTouchDown = useCallback((e: React.PointerEvent) => {
+    touchTapsRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY, t: performance.now(), moved: false, up: false });
+  }, []);
+  const noteTouchMove = useCallback((e: React.PointerEvent) => {
+    const rec = touchTapsRef.current.get(e.pointerId);
+    if (rec && Math.hypot(e.clientX - rec.x, e.clientY - rec.y) > 14) rec.moved = true;
+  }, []);
+  const noteTouchUp = useCallback((e: React.PointerEvent) => {
+    const rec = touchTapsRef.current.get(e.pointerId);
+    if (!rec) return;
+    rec.up = true;
+    const all = [...touchTapsRef.current.values()];
+    if (!all.every((r) => r.up)) return;
+    const now = performance.now();
+    const clean = all.every((r) => !r.moved && now - r.t < 500);
+    const n = all.length;
+    touchTapsRef.current.clear();
+    if (!clean) return;
+    if (n === 2) performUndo();
+    else if (n === 3) performRedo();
+  }, [performRedo, performUndo]);
+
   const onDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!interactive) return;
-    if (e.pointerType === "touch" && !fingerRef.current) return; // palms never mark
+    if (e.pointerType === "touch" && !fingerRef.current) { noteTouchDown(e); return; } // palms never mark; fingers become gestures
     measure();
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* stale pointer id - drawing still works */ }
     drawingRef.current = true;
     emaRef.current = e.pointerType === "pen" && e.pressure > 0 ? e.pressure : 0.55;
     lastMoveRef.current = null;
     predictedRef.current = [];
+    const r = rectRef.current;
+    const t = toolRef.current;
+
+    if (t === "laser") {
+      const id = crypto.randomUUID();
+      laserIdRef.current = id;
+      const pt = toNorm(e.clientX, e.clientY, 0.5);
+      const { w, h } = size();
+      let trail = laserRef.current.get(id);
+      if (!trail) { trail = { pts: [] }; laserRef.current.set(id, trail); }
+      trail.pts.push({ x: pt.x * w, y: pt.y * h, t: performance.now() });
+      channelRef.current?.send({ t: "laser", id, pts: [pt] });
+      scheduleWet();
+      return;
+    }
+
+    if (t === "erase") {
+      eraseSweepRef.current = [];
+      hoverRef.current = { x: e.clientX - r.left, y: e.clientY - r.top };
+      eraseAt(e.clientX - r.left, e.clientY - r.top);
+      scheduleWet();
+      return;
+    }
+
     const id = crypto.randomUUID();
     activeIdRef.current = id;
+    snapRef.current = null;
+    frozenShapeRef.current = false;
     const { w } = size();
-    const t = toolRef.current;
-    const effPx = t === "erase" ? widthRef.current * ERASE_SCALE : t === "hl" ? widthRef.current * HL_SCALE : widthRef.current;
+    const effPx = t === "pixel" ? widthRef.current * ERASE_SCALE : t === "hl" ? widthRef.current * HL_SCALE : widthRef.current;
     const p = smoothedPressure(e.nativeEvent, e.clientX, e.clientY);
     const seg: Extract<InkMessage, { t: "seg" }> = {
-      t: "seg", id, color: colorRef.current, erase: t === "erase",
+      t: "seg", id, color: colorRef.current, erase: t === "pixel",
       ...(t === "hl" ? { m: "h" as const } : {}),
       widthFrac: effPx / w, pts: [toNorm(e.clientX, e.clientY, p)], start: true,
     };
     applySeg(seg);
     channelRef.current?.send(seg);
-  }, [applySeg, interactive, measure, size, smoothedPressure, toNorm]);
+    if (t !== "pixel") {
+      holdAnchorRef.current = { x: e.clientX, y: e.clientY, t: performance.now() };
+      armSnapTimer();
+    }
+  }, [applySeg, armSnapTimer, eraseAt, interactive, measure, noteTouchDown, scheduleWet, size, smoothedPressure, toNorm]);
 
   const onMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!interactive) return;
+    if (e.pointerType === "touch" && !fingerRef.current) { noteTouchMove(e); return; }
     const r = rectRef.current;
     if (!drawingRef.current) {
-      if (toolRef.current === "erase") {
+      if (toolRef.current === "erase" || toolRef.current === "pixel") {
         hoverRef.current = { x: e.clientX - r.left, y: e.clientY - r.top };
         scheduleWet();
       }
       return;
     }
+
+    // Laser: stream the trail; nothing is stored.
+    const laserId = laserIdRef.current;
+    if (laserId) {
+      const pt = toNorm(e.clientX, e.clientY, 0.5);
+      const { w, h } = size();
+      const trail = laserRef.current.get(laserId);
+      if (trail) trail.pts.push({ x: pt.x * w, y: pt.y * h, t: performance.now() });
+      channelRef.current?.send({ t: "laser", id: laserId, pts: [pt] });
+      scheduleWet();
+      return;
+    }
+
+    // Stroke eraser: every touched stroke vanishes whole.
+    if (toolRef.current === "erase") {
+      hoverRef.current = { x: e.clientX - r.left, y: e.clientY - r.top };
+      const native = e.nativeEvent;
+      const coalesced = typeof native.getCoalescedEvents === "function" ? native.getCoalescedEvents() : [];
+      const sources = coalesced.length ? coalesced : [native];
+      for (const ev of sources) eraseAt(ev.clientX - r.left, ev.clientY - r.top);
+      scheduleWet();
+      return;
+    }
+
     const id = activeIdRef.current;
     const stroke = id ? byIdRef.current.get(id) : null;
     if (!id || !stroke) return;
+
+    // After a snap: a line's far end follows the pen; other shapes are frozen.
+    if (frozenShapeRef.current) {
+      const snap = snapRef.current;
+      if (snap) {
+        const active = activeRef.current.get(id);
+        if (active) {
+          const { w, h } = size();
+          const pts = snapLinePoints(snap.anchor, { x: e.clientX - r.left, y: e.clientY - r.top });
+          active.px = pts;
+          stroke.points = pts.map((p) => ({ x: p.x / w, y: p.y / h, p: p.p }));
+          scheduleWet();
+        }
+      }
+      return;
+    }
+
     const native = e.nativeEvent;
     const coalesced = typeof native.getCoalescedEvents === "function" ? native.getCoalescedEvents() : [];
     const sources = coalesced.length ? coalesced : [native];
@@ -569,6 +928,15 @@ export default function InkBoard({
         x: ev.clientX - r.left, y: ev.clientY - r.top, p: lastP,
       }));
     }
+    // Hold-to-straighten: moving past the still-radius re-arms the timer; a
+    // pen held inside it lets the timer fire and snap the stroke.
+    if (!stroke.erase) {
+      const anchor = holdAnchorRef.current;
+      if (!anchor || Math.hypot(e.clientX - anchor.x, e.clientY - anchor.y) > HOLD_SNAP_RADIUS) {
+        holdAnchorRef.current = { x: e.clientX, y: e.clientY, t: performance.now() };
+        armSnapTimer();
+      }
+    }
     const seg: Extract<InkMessage, { t: "seg" }> = {
       t: "seg", id, color: stroke.color, erase: stroke.erase,
       ...(stroke.m === "h" ? { m: "h" as const } : {}),
@@ -576,29 +944,66 @@ export default function InkBoard({
     };
     applySeg(seg);
     queueSegment(seg);
-  }, [applySeg, interactive, queueSegment, scheduleWet, smoothedPressure, toNorm]);
+  }, [applySeg, armSnapTimer, eraseAt, interactive, noteTouchMove, queueSegment, scheduleWet, size, smoothedPressure, toNorm]);
 
   const onUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (interactive && e.pointerType === "touch" && !fingerRef.current) {
+      if (e.type === "pointercancel") touchTapsRef.current.clear();
+      else noteTouchUp(e);
+      return;
+    }
     try { if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* already released */ }
     const wasDrawing = drawingRef.current;
     const id = activeIdRef.current;
     drawingRef.current = false;
     activeIdRef.current = null;
     predictedRef.current = [];
+    clearSnapTimer();
+    holdAnchorRef.current = null;
+
+    const laserId = laserIdRef.current;
+    if (laserId) {
+      laserIdRef.current = null;
+      channelRef.current?.send({ t: "laser", id: laserId, pts: [], end: true });
+      return; // the trail fades out on its own
+    }
+
+    if (interactive && wasDrawing && toolRef.current === "erase") {
+      if (eraseSweepRef.current.length) {
+        recordOp({ kind: "erase", strokes: eraseSweepRef.current });
+        eraseSweepRef.current = [];
+      }
+      return;
+    }
+
     if (interactive && wasDrawing && id) {
       const stroke = byIdRef.current.get(id);
       if (stroke) {
-        flushQueuedSegment();
-        const endSeg: Extract<InkMessage, { t: "seg" }> = {
-          t: "seg", id, color: stroke.color, erase: stroke.erase,
-          ...(stroke.m === "h" ? { m: "h" as const } : {}),
-          widthFrac: stroke.widthFrac, pts: [], end: true,
-        };
-        applySeg(endSeg);
-        channelRef.current?.send(endSeg);
+        if (frozenShapeRef.current) {
+          // The stroke snapped to a shape: the display has the raw scribble,
+          // so hand it the clean replacement in one message and bake locally.
+          frozenShapeRef.current = false;
+          snapRef.current = null;
+          flushQueuedSegment();
+          queuedSegmentRef.current = null;
+          activeRef.current.delete(id);
+          bake(stroke);
+          scheduleWet();
+          channelRef.current?.send({ t: "replace", stroke });
+        } else {
+          flushQueuedSegment();
+          const endSeg: Extract<InkMessage, { t: "seg" }> = {
+            t: "seg", id, color: stroke.color, erase: stroke.erase,
+            ...(stroke.m === "h" ? { m: "h" as const } : {}),
+            widthFrac: stroke.widthFrac, pts: [], end: true,
+          };
+          applySeg(endSeg);
+          channelRef.current?.send(endSeg);
+        }
+        recordOp({ kind: "draw", stroke });
       }
     }
-  }, [applySeg, flushQueuedSegment, interactive]);
+  }, [applySeg, bake, clearSnapTimer, flushQueuedSegment, interactive, noteTouchUp, recordOp, scheduleWet]);
 
   const onLeave = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     hoverRef.current = null;
@@ -660,7 +1065,7 @@ export default function InkBoard({
           ...layerStyle,
           pointerEvents: passThrough || !interactive ? "none" : "auto",
           touchAction: "none",
-          cursor: interactive ? (tool === "erase" ? "none" : "crosshair") : "default",
+          cursor: interactive ? (tool === "erase" || tool === "pixel" ? "none" : "crosshair") : "default",
         }}
         onPointerDown={onDown}
         onPointerMove={onMove}

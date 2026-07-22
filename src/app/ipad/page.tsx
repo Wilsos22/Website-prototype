@@ -49,6 +49,10 @@ export default function IpadPage() {
   const [showProblem, setShowProblem] = useState(false);
   const [clearSignal, setClearSignal] = useState(0);
   const [screenClearSignal, setScreenClearSignal] = useState(0);
+  const [undoSignal, setUndoSignal] = useState(0);
+  const [redoSignal, setRedoSignal] = useState(0);
+  const [scratchUndoSignal, setScratchUndoSignal] = useState(0);
+  const [history, setHistory] = useState<{ undo: boolean; redo: boolean }>({ undo: false, redo: false });
   const [exportSignal, setExportSignal] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const [showTemplates, setShowTemplates] = useState(false);
@@ -212,10 +216,10 @@ export default function IpadPage() {
           {COLORS.map((c) => (
             <button
               key={c}
-              className={`ip-sw${tool !== "erase" && color === c ? " on" : ""}`}
+              className={`ip-sw${tool !== "erase" && tool !== "pixel" && tool !== "laser" && color === c ? " on" : ""}`}
               style={{ background: c }}
               aria-label={`Color ${c}`}
-              onClick={() => { setColor(c); if (tool === "erase") setTool("pen"); }}
+              onClick={() => { setColor(c); if (tool === "erase" || tool === "pixel" || tool === "laser") setTool("pen"); }}
             />
           ))}
         </div>
@@ -223,7 +227,12 @@ export default function IpadPage() {
 
         <button className={`ip-btn${tool === "pen" ? " on" : ""}`} onClick={() => setTool("pen")}>Pen</button>
         <button className={`ip-btn${tool === "hl" ? " on" : ""}`} onClick={() => setTool("hl")}>Highlight</button>
+        <button className={`ip-btn${tool === "laser" ? " on" : ""}`} onClick={() => setTool("laser")}>Laser</button>
         <button className={`ip-btn${tool === "erase" ? " on" : ""}`} onClick={() => setTool("erase")}>Eraser</button>
+        <button className={`ip-btn${tool === "pixel" ? " on" : ""}`} onClick={() => setTool("pixel")}>Pixel</button>
+        <span className="ip-divider" />
+        <button className="ip-btn" disabled={!history.undo} style={!history.undo ? { opacity: 0.4 } : undefined} onClick={() => setUndoSignal((n) => n + 1)}>Undo</button>
+        <button className="ip-btn" disabled={!history.redo} style={!history.redo ? { opacity: 0.4 } : undefined} onClick={() => setRedoSignal((n) => n + 1)}>Redo</button>
 
         <div className="ip-group" role="group" aria-label="Width">
           {WIDTHS.map((w) => (
@@ -287,8 +296,11 @@ export default function IpadPage() {
               background={background}
               problem={problem}
               clearSignal={clearSignal}
+              undoSignal={undoSignal}
+              redoSignal={redoSignal}
               exportSignal={exportSignal}
               onExport={handleExport}
+              onHistoryChange={(undo, redo) => setHistory({ undo, redo })}
               onConnectionChange={setBoardStatus}
             />
             {scratchOpen && (
@@ -296,6 +308,7 @@ export default function IpadPage() {
                 <div className="ip-scratch-bar">
                   <span className="ip-scratch-title">Scratch</span>
                   <span className="ip-spacer" />
+                  <button className="ip-btn" onClick={() => setScratchUndoSignal((n) => n + 1)}>Undo</button>
                   <button className="ip-btn warn" onClick={() => setScratchClear((n) => n + 1)}>Clear</button>
                   <button className="ip-btn" onClick={toggleScratch}>Done</button>
                 </div>
@@ -308,6 +321,7 @@ export default function IpadPage() {
                     penWidth={penWidth}
                     fingerDraws={fingerDraws}
                     clearSignal={scratchClear}
+                    undoSignal={scratchUndoSignal}
                   />
                 </div>
               </div>
@@ -330,6 +344,9 @@ export default function IpadPage() {
                 penWidth={penWidth}
                 fingerDraws={fingerDraws}
                 clearSignal={screenClearSignal}
+                undoSignal={undoSignal}
+                redoSignal={redoSignal}
+                onHistoryChange={(undo, redo) => setHistory({ undo, redo })}
                 onConnectionChange={setBoardStatus}
               />
               <span className="ip-screen-note">Writing over the class screen</span>
