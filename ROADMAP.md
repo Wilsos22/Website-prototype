@@ -50,6 +50,18 @@ card collapses to a toggle when idle (expands automatically while one runs),
 and the bottom "Ask a question" composer is gone - lesson steps carry the
 questions now. The open-question card survives only as the off-switch for an
 orphaned open poll) ·
+**Long Division choreography rebuild** (7/21 - Steele's frame-by-frame spec
+from the Vercel toolbar: the digits themselves now drag from the house to the
+side equation one at a time (7 highlights, drags by the divide sign; the
+divisor follows), the finished equation wave-highlights left to right before
+the answer appears, and the answer drags back into the house - up into the
+quotient on Divide, down under the digit on Multiply. Subtract draws its
+minus sign and bar in the house stroke by stroke, wave-highlights the column
+downward, and fades the difference in slowly; Bring down draws its arrow
+before the digit lands. New Back button re-enters the previous step from its
+first frame for rewatching, and Auto-lead now runs the full choreography on
+EVERY problem - it only ran on problem 1, which is why it was hard to
+follow) ·
 **Projectors: staged hook + scene transitions** (7/21 - Steele's ask: the
 warm-up anchor ("Puzzle of the day") now enters as a staged moment - kicker
 settles, an accent rule draws itself beneath, the question rises in, then the
