@@ -285,9 +285,12 @@ export default function InkBoard({
         : a.px;
       paintStroke(ctx, a.stroke, px);
     }
+    // The eraser ring follows the pointer while hovering AND while dragging -
+    // erasing paints straight onto the dry layers, so without this repaint
+    // the ring freezes at the touch-down point and the erase turns invisible.
     const hover = hoverRef.current;
     const t = toolRef.current;
-    if (hover && interactive && (t === "erase" || t === "pixel") && !drawingRef.current) {
+    if (hover && interactive && (t === "erase" || t === "pixel")) {
       ctx.globalCompositeOperation = "source-over";
       ctx.strokeStyle = "rgba(32,30,26,0.55)";
       ctx.lineWidth = 1.5;
@@ -1047,7 +1050,10 @@ export default function InkBoard({
     };
     applySeg(seg);
     channelRef.current?.send(seg);
-    if (t !== "pixel") {
+    if (t === "pixel") {
+      hoverRef.current = toPagePx(e.clientX, e.clientY);
+      scheduleWet();
+    } else {
       holdAnchorRef.current = { x: e.clientX, y: e.clientY, t: performance.now() };
       armSnapTimer();
     }
@@ -1138,6 +1144,12 @@ export default function InkBoard({
     };
     applySeg(seg);
     queueSegment(seg);
+    // Pixel erase paints destination-out on the dry layers and never touches
+    // the wet layer on its own - move the ring and repaint so it tracks.
+    if (stroke.erase) {
+      hoverRef.current = toPagePx(e.clientX, e.clientY);
+      scheduleWet();
+    }
   }, [applySeg, armSnapTimer, eraseAt, interactive, noteTouchMove, queueSegment, scheduleWet, size, smoothedPressure, toNorm, toPagePx]);
 
   const onUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
