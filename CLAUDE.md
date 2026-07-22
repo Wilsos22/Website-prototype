@@ -350,7 +350,15 @@ Design is locked (Steele's "Independent Proficiency System") - build it, do not 
   tabs are fully hidden at 0x0 - `tabs_select` alone does not give a tab a viewport (a screenshot
   against that tabId does), `position:fixed` elements measure zero there, and canvases sized from
   such a rect stay 1x1 - so verify cross-tab sync SEQUENTIALLY, fronting one tab at a time, and
-  guard app code against zero-rect measurements. Route changes in
+  guard app code against zero-rect measurements (a mount-time retry interval that keeps re-measuring
+  until the rect is real recovers automatically, and is what saves the projector-behind-/control
+  case in production too). BroadcastChannel DID span pane tabs on 2026-07-22 (live ink sync
+  ipad-tab -> board-tab worked), where 2026-07-21 testing found it did not - treat cross-tab BC as
+  unreliable-but-possible: try the direct cross-tab path first, fall back to posting into the
+  target tab's own context. On the webpack dev server, an IFRAME of a same-app route that has not
+  been compiled yet (e.g. /ipad embedding /teacher/present) can trigger "Fast Refresh had to
+  perform a full reload" of the PARENT page, silently resetting its React state mid-verification -
+  curl the route once to pre-compile it before driving iframes. Route changes in
   the pane are FULL document loads even through next/link and `window.next.router.push`, and
   parent-page intervals are throttled - so a `window.fetch` override cannot survive navigation and
   loses the race against mount effects. To exercise a data-backed page without Supabase/Notion env,
