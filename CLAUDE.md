@@ -337,7 +337,11 @@ Design is locked (Steele's "Independent Proficiency System") - build it, do not 
   synthetic `dispatchEvent` clicks BATCH under React 18 - one state-advancing synthetic click per
   `javascript_tool` call is the reliable rhythm. `window.innerWidth` can report the pane frame
   rather than the emulated viewport (and misreports under real browser zoom), so in tool code size
-  from the measured container (`clientWidth` on a ref), not `window.innerWidth`. Route changes in
+  from the measured container (`clientWidth` on a ref), not `window.innerWidth`. Non-fronted pane
+  tabs are fully hidden at 0x0 - `tabs_select` alone does not give a tab a viewport (a screenshot
+  against that tabId does), `position:fixed` elements measure zero there, and canvases sized from
+  such a rect stay 1x1 - so verify cross-tab sync SEQUENTIALLY, fronting one tab at a time, and
+  guard app code against zero-rect measurements. Route changes in
   the pane are FULL document loads even through next/link and `window.next.router.push`, and
   parent-page intervals are throttled - so a `window.fetch` override cannot survive navigation and
   loses the race against mount effects. To exercise a data-backed page without Supabase/Notion env,
