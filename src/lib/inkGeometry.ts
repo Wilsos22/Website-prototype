@@ -111,3 +111,99 @@ export function highlightOutline(raw: InkRenderPoint[], width: number): number[]
   const flat = raw.map((p) => ({ ...p, p: 0.58 })); // 0.45 + 0.95*0.58 = ~1.0 => width as dialled
   return strokeOutline(flat, width, false);
 }
+
+// ── Hold-to-straighten shape fitting ────────────────────────────────────────
+//
+// Finish a stroke and hold the pen still: the scribble snaps to the clean
+// shape it was trying to be. Open paths become straight lines (with the angle
+// snapped to 0/45/90 when close); closed paths become a circle when the
+// radius is steady, otherwise an axis-aligned rectangle. The result is
+// returned as ORDINARY STROKE POINTS sampled along the ideal path, so the
+// wire format, history, and every renderer treat a snapped shape exactly like
+// any other stroke.
+
+export type SnapKind = "line" | "circle" | "rect";
+export interface SnapResult { kind: SnapKind; points: InkRenderPoint[] }
+
+const SNAP_PRESSURE = 0.6;
+
+function pathLength(pts: InkRenderPoint[]): number {
+  let len = 0;
+  for (let i = 1; i < pts.length; i += 1) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+  return len;
+}
+
+export function sampleLine(a: { x: number; y: number }, b: { x: number; y: number }, n = 24): InkRenderPoint[] {
+  const out: InkRenderPoint[] = [];
+  for (let i = 0; i <= n; i += 1) {
+    const t = i / n;
+    out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, p: SNAP_PRESSURE });
+  }
+  return out;
+}
+
+export function fitSnapShape(raw: InkRenderPoint[]): SnapResult | null {
+  const pts = thinPoints(raw, 1.5);
+  if (pts.length < 6) return null;
+  const len = pathLength(pts);
+  if (len < 36) return null; // a dot or a tap - leave it alone
+
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, cx = 0, cy = 0;
+  for (const p of pts) {
+    minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+    minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+    cx += p.x; cy += p.y;
+  }
+  cx /= pts.length; cy /= pts.length;
+  const bw = maxX - minX, bh = maxY - minY;
+  const diag = Math.hypot(bw, bh) || 1;
+  const endGap = Math.hypot(pts[0].x - pts[pts.length - 1].x, pts[0].y - pts[pts.length - 1].y);
+
+  // Closed-ish path: the ends nearly meet and the path wraps most of the way
+  // around its own bounding box.
+  if (endGap < diag * 0.28 && len > diag * 2.2 && bw > 22 && bh > 22) {
+    const radii = pts.map((p) => Math.hypot(p.x - cx, p.y - cy));
+    const mean = radii.reduce((a, b) => a + b, 0) / radii.length;
+    const dev = Math.sqrt(radii.reduce((a, r) => a + (r - mean) * (r - mean), 0) / radii.length);
+    if (dev / mean < 0.22) {
+      const n = 40;
+      const out: InkRenderPoint[] = [];
+      for (let i = 0; i <= n; i += 1) {
+        const t = (i / n) * Math.PI * 2;
+        out.push({ x: cx + Math.cos(t) * mean, y: cy + Math.sin(t) * mean, p: SNAP_PRESSURE });
+      }
+      return { kind: "circle", points: out };
+    }
+    const corners = [
+      { x: minX, y: minY }, { x: maxX, y: minY }, { x: maxX, y: maxY }, { x: minX, y: maxY }, { x: minX, y: minY },
+    ];
+    const out: InkRenderPoint[] = [];
+    for (let i = 0; i < corners.length - 1; i += 1) out.push(...sampleLine(corners[i], corners[i + 1], 10));
+    return { kind: "rect", points: out };
+  }
+
+  // Open path: a straight line between the endpoints, angle-snapped when the
+  // hand was clearly going for flat, upright, or diagonal.
+  const a = pts[0];
+  let b = { x: pts[pts.length - 1].x, y: pts[pts.length - 1].y };
+  // Only straighten when the scribble roughly follows its own chord -
+  // a big loop that happens to end far away should not become a line.
+  if (len > Math.hypot(b.x - a.x, b.y - a.y) * 1.6) return null;
+  return { kind: "line", points: snapLinePoints(a, b) };
+}
+
+// A straight line from a to b, with the angle pulled onto 0/45/90 when the
+// hand was clearly going for flat, upright, or diagonal. Also used while
+// ADJUSTING a snapped line: keep the pen down after the snap and the far end
+// follows it.
+export function snapLinePoints(a: { x: number; y: number }, b: { x: number; y: number }): InkRenderPoint[] {
+  const angle = Math.atan2(b.y - a.y, b.x - a.x);
+  const step = Math.PI / 4;
+  const snapped = Math.round(angle / step) * step;
+  let end = b;
+  if (Math.abs(angle - snapped) < (8 * Math.PI) / 180) {
+    const d = Math.hypot(b.x - a.x, b.y - a.y);
+    end = { x: a.x + Math.cos(snapped) * d, y: a.y + Math.sin(snapped) * d };
+  }
+  return sampleLine(a, end);
+}

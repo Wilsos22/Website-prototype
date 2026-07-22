@@ -33,6 +33,10 @@ export type InkMessage =
   | { t: "problem"; text: string | null } // problem(s) to show with space to solve
   | { t: "scratch"; open: boolean } // open/close the scratch overlay on the board
   | { t: "view"; ar: number } // the display announces its stage aspect ratio so the pen surface can letterbox to match
+  | { t: "remove"; ids: string[] } // undo / stroke-eraser: these strokes vanish
+  | { t: "restore"; stroke: InkStroke } // redo / undo-of-erase: put a stroke back
+  | { t: "replace"; stroke: InkStroke } // hold-to-straighten: swap a stroke's points for the fitted shape
+  | { t: "laser"; id: string; pts: InkPoint[]; end?: boolean } // pointer trail - drawn fading, never stored
   | { t: "hello" } // a display just opened — please resend current state
   | { t: "state"; strokes: InkStroke[]; bg: string | null; problem: string | null };
 
