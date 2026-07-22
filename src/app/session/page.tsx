@@ -380,7 +380,10 @@ export default function SessionPage() {
     setFlowNote(null);
     try {
       const payload: Record<string, unknown> = { action, sessionId: session.id };
-      if (action === "start-lesson") payload.lessonCode = todayLesson?.lessonCode || "";
+      if (action === "start-lesson") {
+        payload.notionLessonId = todayLesson?.id || "";
+        payload.lessonCode = todayLesson?.lessonCode || "";
+      }
       const result = await teacherPost<{
         session?: { liveFlow: LiveClassFlowSnapshot | null };
         liveFlow?: LiveClassFlowSnapshot | null;

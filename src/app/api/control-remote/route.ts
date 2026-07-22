@@ -2,7 +2,7 @@ import { getSupabaseAdmin } from "@/lib/supabaseServer";
 import { CLOSEOUT_DIRECTIONS, DEFAULT_STATES } from "@/lib/classStates";
 import { discussionSupportsForLesson, inferClassroomStage, usesDiscussionProtocol } from "@/lib/classroomPilot";
 import { discussionRoundCompletesState, normalizeDiscussionPhaseSnapshot } from "@/lib/discussionProtocol";
-import { getLessonByCode, type LessonData } from "@/lib/notionLessons";
+import { getLessonByCode, getPublishedLessonById, type LessonData } from "@/lib/notionLessons";
 import { defaultPublicSurfaceModeForState } from "@/lib/lessonStepMetadata";
 import { normalizePublicLessonRoutineConfig } from "@/lib/lessonRoutineConfig";
 import { publicLiveLessonSnapshot } from "@/lib/liveFlowPrivacy";
@@ -730,11 +730,12 @@ async function applyLazyAutomaticTransition(
 // and its timer are exactly what control would have produced. The session
 // flips to Live Class Flow broadcast; automatic pacing then advances through
 // the lazy-transition check every time any surface polls GET here.
-async function startLessonFlow(body: { sessionId?: string; lessonCode?: string }) {
+async function startLessonFlow(body: { sessionId?: string; lessonCode?: string; notionLessonId?: string }) {
   const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
   const lessonCode = typeof body.lessonCode === "string" ? body.lessonCode.trim() : "";
+  const notionLessonId = typeof body.notionLessonId === "string" ? body.notionLessonId.trim() : "";
   if (!sessionId) return Response.json({ error: "Confirm a class session before starting the lesson." }, { status: 400 });
-  if (!lessonCode) return Response.json({ error: "No published lesson is available to start." }, { status: 400 });
+  if (!lessonCode && !notionLessonId) return Response.json({ error: "No published lesson is available to start." }, { status: 400 });
   const db = getSupabaseAdmin();
   if (!db) return Response.json({ error: "Database not configured." }, { status: 503 });
   const { data: sessionRow, error: sessionError } = await db
@@ -746,14 +747,26 @@ async function startLessonFlow(body: { sessionId?: string; lessonCode?: string }
   if (sessionError) return Response.json({ error: "The class session could not be checked." }, { status: 500 });
   if (!sessionRow) return Response.json({ error: "That session is not open." }, { status: 404 });
 
+  // Prefer the Notion page id - the exact lookup /control's own run path uses.
+  // The code lookup stays as the fallback for callers that only know the code.
   let lesson: LessonData | null = null;
   try {
-    lesson = await getLessonByCode(lessonCode);
+    lesson = notionLessonId ? await getPublishedLessonById(notionLessonId) : null;
   } catch {
     lesson = null;
   }
-  if (!lesson?.steps.length) {
-    return Response.json({ error: `No timed lesson steps were found for ${lessonCode}.` }, { status: 404 });
+  if (!lesson && lessonCode) {
+    try {
+      lesson = await getLessonByCode(lessonCode);
+    } catch {
+      lesson = null;
+    }
+  }
+  if (!lesson) {
+    return Response.json({ error: `The published lesson ${lessonCode || notionLessonId} could not be loaded from Notion.` }, { status: 404 });
+  }
+  if (!lesson.steps.length) {
+    return Response.json({ error: `${lesson.lessonCode || lessonCode} has no timed Lesson Steps in Notion yet.` }, { status: 404 });
   }
   const steps = stepsFromLesson(lesson);
   const seedFlow: LiveClassFlowSnapshot = {
@@ -816,7 +829,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  let body: { action?: string; sessionId?: string; lessonCode?: string; expectedStateId?: string; expectedSequenceIndex?: number };
+  let body: { action?: string; sessionId?: string; lessonCode?: string; notionLessonId?: string; expectedStateId?: string; expectedSequenceIndex?: number };
   try {
     body = await request.json();
   } catch {
