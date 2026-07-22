@@ -21,6 +21,11 @@ bars and live misconception grouping).
   `node_modules` with ` 2`-suffixed duplicate files at least six separate times. Never move this
   repo back inside a cloud-synced folder).
 - Teacher/owner: Steele Wilson. Mascot: Abbie (Steele's dog).
+- Priority signal (Steele, 2026-07-21): the iPad ink surface - /ipad, /board, and the glass sheet
+  over /teacher/present - is the most important feature of the whole system after data collection
+  (the proficiency spine). Treat ink regressions as urgent, protect its in-class reliability, and
+  weight its roadmap phases (undo/gestures/stroke-eraser/shape-snap/laser, then zoom/pages) above
+  other queued work.
 
 ## Hard rules (non-negotiable)
 
