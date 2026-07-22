@@ -112,8 +112,11 @@ bars and live misconception grouping).
   everything server-side - POST `start-lesson` (sessionId + notionLessonId, lessonCode as fallback -
   the by-code Notion lookup returned empty on the first live run, so prefer the page id) builds the
   flow from Notion and
-  enters step 0 through the same navigateFlow as Next, POST next/previous/toggle-timer drive it, and
-  GET applies the lazy automatic-pacing transition, so pacing advances as long as ANY surface (Remote,
+  enters step 0 through the same navigateFlow as Next, POST next/previous/toggle-timer drive it,
+  POST `transition-now` (vibe + seconds) opens an ad-hoc interlude that pauses the state clock while
+  both projectors count it down (flow.interlude - an overlay, never a sequence mutation), and
+  GET applies the lazy automatic-pacing transition (which also expires interludes and resumes the
+  paused clock), so pacing advances as long as ANY surface (Remote,
   /session's toolbar) is polling. `/control` remains the full host; `/session` carries a minimal
   Start / Back / Pause / Next toolbar for rush days.
 - API: gated - `/api/form-responses`, `/api/mastery` (+`/history`,`/recompute`), `/api/live/*`,
