@@ -59,6 +59,7 @@ export interface LessonStepData {
 
 export interface LessonData {
   id: string;
+  coverUrl: string;
   lessonCode: string;
   title: string;
   subtitle: string;
@@ -145,7 +146,19 @@ interface NotionPage {
     data_source_id?: string;
     database_id?: string;
   };
+  cover?: {
+    type?: string;
+    external?: { url?: string };
+    file?: { url?: string };
+  } | null;
   properties: Record<string, NotionProperty>;
+}
+
+// The page's cover image. Notion-hosted files carry short-lived signed URLs,
+// so covers must always travel through a per-request route (/api/today), never
+// get stored.
+function extractCoverUrl(page: NotionPage): string {
+  return page.cover?.external?.url || page.cover?.file?.url || "";
 }
 
 interface NotionQueryResponse {
@@ -490,6 +503,7 @@ async function mapPage(
 
   return {
     id: page.id,
+    coverUrl: extractCoverUrl(page),
     lessonCode: extractText(p["Lesson Code"]),
     title: extractText(p["Lesson"]),
     subtitle: extractText(p["Subtitle"]),

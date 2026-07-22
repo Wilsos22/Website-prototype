@@ -28,6 +28,12 @@ L2-D2 skate park are live) ·
 **Warm Notebook rollout complete** (7/21 - all four surfaces plus landing,
 lessons archive, and Screen Studio wear the decided look; the teacher Remote
 is dark per the 12d design; projectors have A-/A+ text scaling to 2.5x) ·
+**Notion lesson cover on the student home base** (7/22 - the lesson page's
+Notion cover image bands across the top of the landing's lesson card, both
+before and after the warm-up opens. It rides /api/today per request because
+Notion-hosted covers use short-lived signed URLs (never store them); a
+code-match guard skips the art when the session's assigned lesson differs
+from today's dated lesson, and a missing cover renders nothing) ·
 **Instant warm-up + student home base** (7/21 - permanent period class codes
 (`periods.class_code`, DOG2-DOG5/DOG7/MOCK) open the day's warm-up the moment
 a student types the code: `/api/student/warmup-start` reuses or auto-creates

@@ -5,6 +5,7 @@ import { publicSuccessCriterion } from "./successCriterion";
 // stay private because the live session releases one state at a time.
 const PUBLIC_TODAY_LESSON_FIELDS = [
   "id",
+  "coverUrl",
   "lessonCode",
   "title",
   "subtitle",

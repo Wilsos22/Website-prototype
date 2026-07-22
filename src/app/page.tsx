@@ -52,6 +52,7 @@ export default function StudentLanding() {
   const [warmupHref, setWarmupHref] = useState<string | null>(null);
   const [warmupToken, setWarmupToken] = useState<string | null>(null);
   const [warmupOpenedFor, setWarmupOpenedFor] = useState<string | null>(null);
+  const [todayCover, setTodayCover] = useState<{ url: string; lessonCode: string } | null>(null);
   const [sessionLesson, setSessionLesson] = useState<WarmupSessionLesson | null>(null);
   const [identityReady, setIdentityReady] = useState(false);
   const [helpRequestCode, setHelpRequestCode] = useState<string | null>(null);
@@ -148,6 +149,23 @@ export default function StudentLanding() {
       lesson: data.lesson || null,
     };
   }
+
+  // The Notion lesson cover dresses the lesson card. It rides /api/today on
+  // every load because Notion-hosted covers use short-lived signed URLs -
+  // never store this value.
+  useEffect(() => {
+    if (!pendingCode) { setTodayCover(null); return; }
+    let cancelled = false;
+    fetch("/api/today", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data: { lesson: { coverUrl?: string; lessonCode?: string } | null }) => {
+        if (!cancelled && data.lesson?.coverUrl) {
+          setTodayCover({ url: data.lesson.coverUrl, lessonCode: data.lesson.lessonCode || "" });
+        }
+      })
+      .catch(() => { /* the card simply stays coverless */ });
+    return () => { cancelled = true; };
+  }, [pendingCode]);
 
   function resetPendingSession(message: string | null = null) {
     setPendingCode(null);
@@ -441,7 +459,8 @@ export default function StudentLanding() {
         .st-joinerr { color:var(--bdb-coral); font-weight:600; font-size:0.9rem; margin-top:10px; }
         .st-warmup { display:grid; gap:10px; text-align:left; }
         .st-lesson-card { display:grid; gap:10px; border:1px solid #E3D9C2; border-left:5px solid var(--bdb-teal); border-radius:16px;
-          background:#fff; padding:16px; box-shadow:0 2px 10px rgba(40,32,20,0.05); }
+          background:#fff; padding:16px; box-shadow:0 2px 10px rgba(40,32,20,0.05); overflow:hidden; }
+        .st-lesson-cover { width:calc(100% + 32px); height:clamp(96px,18vw,150px); margin:-16px -16px 2px; object-fit:cover; display:block; }
         .st-lesson-kicker { margin:0; color:#2A6162; font-size:0.7rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
         .st-lesson-title { margin:0; color:#2E4A54; font-size:clamp(1.35rem,3vw,1.8rem); font-weight:800; line-height:1.12; }
         .st-lesson-meta { display:flex; flex-wrap:wrap; gap:7px; }
@@ -516,6 +535,15 @@ export default function StudentLanding() {
           {pendingCode ? (
             <div className="st-warmup">
               <section className="st-lesson-card" aria-label="Today's lesson">
+                {todayCover && (!sessionLesson?.code || sessionLesson.code === todayCover.lessonCode) && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    className="st-lesson-cover"
+                    src={todayCover.url}
+                    alt=""
+                    onError={(event) => { event.currentTarget.style.display = "none"; }}
+                  />
+                )}
                 <p className="st-lesson-kicker">Today&apos;s lesson</p>
                 <h2 className="st-lesson-title">{sessionLesson?.title || "Your teacher is connecting today's lesson"}</h2>
                 <div className="st-lesson-meta">
