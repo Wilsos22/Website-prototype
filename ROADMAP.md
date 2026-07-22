@@ -69,7 +69,12 @@ hear. The main projector renders a dedicated scene - vibe word, movement
 directions, giant countdown, draining bar, "Up next" - and automatic pacing
 sweeps into the next activity when the buffer ends, so transitions stop
 eating the next state's clock. Preview: /teacher/present?preview=
-transition-hustle) ·
+transition-hustle. Plus TRANSITION NOW (same day): ad-hoc movement windows
+from the iPad Remote's pacing deck or /session's transport - Hustle 15s /
+Hustle 30s / Settle 30s. An interlude overlay pauses the state clock, both
+projectors show the countdown scene with "Up next: Back to <state>", control
+plays the vibe's track, and the lazy pacing check clears it at zero and
+resumes the paused clock; Next/Back cancels it early) ·
 **Long Division choreography rebuild** (7/21 - Steele's frame-by-frame spec
 from the Vercel toolbar: the digits themselves now drag from the house to the
 side equation one at a time (7 highlights, drags by the divide sign; the

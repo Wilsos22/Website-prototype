@@ -23,7 +23,7 @@ import {
 import type { LessonRoutineConfig } from "@/lib/lessonRoutineConfig";
 import { defaultPublicSurfaceModeForState } from "@/lib/lessonStepMetadata";
 import type { LessonStepData } from "@/lib/notionLessons";
-import { ABBIE_REMOTE_BUTTONS, SOUND_REMOTE_BUTTONS, type RemoteDeckButton } from "@/lib/remoteDeck";
+import { ABBIE_REMOTE_BUTTONS, SOUND_REMOTE_BUTTONS, TRANSITION_NOW_BUTTONS, type RemoteDeckButton } from "@/lib/remoteDeck";
 import { speakerNoteItems } from "@/lib/speakerNotes";
 
 const REMOTE_SESSION_KEY = "bdm-remote-session";
@@ -543,6 +543,7 @@ export default function TeacherRemotePage() {
         body: JSON.stringify({
           action: button.action,
           sessionId: session.id,
+          ...(button.payload || {}),
           ...(expectedStateId ? {
             expectedStateId,
             expectedSequenceIndex: session.liveFlow?.sequence?.currentIndex,
@@ -1123,6 +1124,14 @@ export default function TeacherRemotePage() {
                         </div>
                       </div>
                     ) : null}
+                    <div className="remote-control-block">
+                      <h3 className="deck-section-title">Transition now</h3>
+                      <div className="deck-grid">
+                        {TRANSITION_NOW_BUTTONS.map((button) => (
+                          <DeckKey key={button.label} button={button} busy={busy} disabled={controlsDisabled} onSend={send} />
+                        ))}
+                      </div>
+                    </div>
                     <div className="remote-control-block">
                       <h3 className="deck-section-title">This slide</h3>
                       <div className="deck-grid spinner-control">

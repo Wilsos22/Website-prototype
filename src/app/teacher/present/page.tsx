@@ -306,6 +306,12 @@ export default function ClassroomStagePage() {
   // learning intention instead of its own question.
   const isLearningCheck = state?.id === "learning-check";
   const isTransition = Boolean(state?.id?.startsWith("transition"));
+  // Ad-hoc "Transition now": the interlude overlay trumps every other view
+  // while the room moves; the paused state returns when it clears.
+  const interlude = flow?.interlude || null;
+  const interludeSeconds = interlude
+    ? Math.max(0, Math.round((Date.parse(interlude.endsAt) - Date.now()) / 1000))
+    : 0;
   const selectedCriterion = publicSuccessCriterion(lesson?.selectedSuccessCriterion);
   const embeddedResourceUrl = resource?.url.includes("docs.google.com/forms")
     ? `${resource.url}${resource.url.includes("?") ? "&" : "?"}embedded=true`
@@ -432,11 +438,13 @@ export default function ClassroomStagePage() {
   const transitionPreview = !session && !loading && previewStage
     ? TRANSITION_PREVIEWS[previewStage] || null
     : null;
-  const accent = transitionPreview
-    ? transitionPreview.accent
-    : isTransition && state?.color
-      ? state.color
-      : WARM_ACCENTS[activeThemeId] || theme.accent;
+  const accent = interlude
+    ? interlude.color
+    : transitionPreview
+      ? transitionPreview.accent
+      : isTransition && state?.color
+        ? state.color
+        : WARM_ACCENTS[activeThemeId] || theme.accent;
   const style = {
     "--acc": accent,
   } as CSSProperties;
@@ -445,7 +453,9 @@ export default function ClassroomStagePage() {
   // rise-and-fade and the accent sweep redraws - so every state change is a
   // visible scene change, not a hard swap. Repeating the same state at a new
   // sequence index still counts as a new moment.
-  const sceneKey = previewSample
+  const sceneKey = interlude
+    ? `interlude:${interlude.endsAt}`
+    : previewSample
     ? `preview:${previewStage}`
     : loading || !session || !flow || !state
       ? "idle"
@@ -659,7 +669,7 @@ export default function ClassroomStagePage() {
       <section className="stage-frame">
         <div className="stage-topbar">
           <span className="stage-dot" aria-hidden="true" />
-          <span className="stage-chip">{transitionPreview ? `Transition - ${transitionPreview.vibe}` : previewSample ? previewSample.label : state?.label || "Big Dog Math"}</span>
+          <span className="stage-chip">{interlude ? `Transition - ${interlude.label}` : transitionPreview ? `Transition - ${transitionPreview.vibe}` : previewSample ? previewSample.label : state?.label || "Big Dog Math"}</span>
           <div className="stage-topbar-copy">
             <h1 className="stage-title">{previewSample ? "Preview" : presentation?.title || state?.label || "Waiting for the lesson"}</h1>
             {lesson?.title ? <p className="stage-lesson">{lesson.title}{lesson.code ? ` · ${lesson.code}` : ""}</p> : null}
@@ -715,6 +725,14 @@ export default function ClassroomStagePage() {
             ) : (
               <div className="stage-empty"><div><h1>Ready for class</h1><p>{sessionMessage}</p></div></div>
             )
+          ) : interlude ? (
+            <TransitionScene
+              vibe={interlude.label}
+              directions={interlude.directions}
+              seconds={interludeSeconds}
+              total={interlude.totalSeconds}
+              next={state.label ? `Back to ${state.label}` : null}
+            />
           ) : overrideUrl ? (
             <iframe
               className="stage-override"
