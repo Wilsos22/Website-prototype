@@ -120,6 +120,32 @@ cross-day memory note in the console woven into her context; personality tuned
 to complaining-teen, less Red Bull, shorter replies)
 
 ## In progress
+- **iPad ink engine + the glass sheet** (7/21, commit c68da00) — Phase 1 of the
+  "get the pen surface as close to Notability as the web allows" push. Strokes
+  are now filled variable-width polygons: width flows continuously with
+  EMA-smoothed Pencil pressure, both ends taper (mouse and finger get a light
+  velocity synthesis). Three stacked canvases — translucent highlighter under,
+  baked dry ink, and a per-frame wet layer carrying in-flight strokes, the
+  Pencil's PREDICTED points (drawn, never stored or sent), and the eraser
+  preview ring; only the wet layer uses a desynchronized context because the
+  dry layers feed Export readback. Surface rect cached per stroke (no layout
+  read per move event), zero-rects can never poison coordinates, and a surface
+  opened in a background tab (projector behind /control) now sizes itself the
+  moment it first lays out instead of staying 1x1 and silently painting
+  nothing. New Highlight tool, Pencil-first palm rejection ("Finger draws"
+  toggle; no first-touch window), and a screen wake lock. NEW "Write on
+  screen" mode — the glass sheet: /teacher/present mounts a transparent
+  pass-through ink overlay across the whole stage, and the iPad renders the
+  same live view in an iframe under a transparent pen layer, letterboxed to
+  the aspect ratio the projector announces, so strokes land on the wall
+  exactly where the pen put them — over the lesson, poll results, any state.
+  Board mode, scratch, templates, problems, and export unchanged. Verified
+  end to end locally with synthetic Pencil pressure ramps across two tabs
+  (taper geometry on the wire, display bake, palm rejection, highlighter
+  layering, eraser, background-tab recovery, and an iPad-drawn circle landing
+  exactly around the target on the present stage). Pencil-in-hand feel test
+  is Steele's; phases 2 (undo/gestures/stroke-eraser/shape-snap/laser) and 3
+  (zoom/pages) queued.
 - **Ladder Method — rule rail redesign + Factor Trees mode** (7/21, commit
   c9206cc) — /ladder-method now follows the three-column manipulative
   convention: the divisibility rules sit in the LARGE LEFT RAIL (same wording
