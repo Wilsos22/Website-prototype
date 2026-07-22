@@ -389,6 +389,16 @@ export default function ClassroomStagePage() {
     "--acc": accent,
   } as CSSProperties;
 
+  // One key per on-stage moment. When it changes, the scene re-enters with a
+  // rise-and-fade and the accent sweep redraws - so every state change is a
+  // visible scene change, not a hard swap. Repeating the same state at a new
+  // sequence index still counts as a new moment.
+  const sceneKey = previewSample
+    ? `preview:${previewStage}`
+    : loading || !session || !flow || !state
+      ? "idle"
+      : `${state.id}:${flow.sequence?.currentIndex ?? -1}`;
+
   return (
     <main className="stage-page" style={style}>
       <style>{`
@@ -401,8 +411,23 @@ export default function ClassroomStagePage() {
           background-color:#F3F0E7;
           background-image:radial-gradient(circle,#CBC4B2 1px,transparent 1.3px);
           background-size:18px 18px;
-          color:var(--ink); font-family:var(--bdb-font); }
+          color:var(--ink); font-family:var(--bdb-font);
+          --stage-ease:cubic-bezier(0.2,0.7,0.2,1); }
         .stage-frame { position:relative; z-index:1; width:100%; height:100%; display:grid; grid-template-rows:66px minmax(0,1fr); }
+        /* Scene change: each lesson state enters as its own moment - a calm
+           rise-and-fade for the content and a thin sweep of the incoming
+           state's accent drawing across the top. Keyed remount restarts both. */
+        .stage-scene { position:absolute; inset:0; animation:sceneEnter 520ms var(--stage-ease) both; }
+        .stage-sweep { position:absolute; z-index:7; inset:0 0 auto 0; height:5px; background:var(--acc); transform-origin:left; pointer-events:none;
+          animation:sceneSweep 760ms var(--stage-ease) both; }
+        @keyframes sceneEnter { from { opacity:0; transform:translateY(18px); } to { opacity:1; transform:none; } }
+        @keyframes sceneSweep { 0% { transform:scaleX(0); opacity:1; } 62% { transform:scaleX(1); opacity:1; } 100% { transform:scaleX(1); opacity:0; } }
+        .stage-chip, .stage-dot { transition:background-color 420ms ease; }
+        .stage-timer::before { transition:background-color 420ms ease; }
+        @media (prefers-reduced-motion:reduce) {
+          .stage-scene, .stage-sweep, .stage-anchor-kicker, .stage-anchor-rule, .stage-anchor-text,
+          .stage-anchor-direction, .stage-anchor-note { animation:none !important; }
+        }
         .stage-topbar { z-index:8; width:100%; box-sizing:border-box; display:flex; align-items:center; gap:13px; border-bottom:1px solid rgba(120,110,90,0.18); padding:0 32px; background:rgba(243,240,231,0.86); }
         .stage-mark { display:none; }
         .stage-dot { width:12px; height:12px; flex:none; border-radius:3px; background:var(--acc); }
@@ -430,10 +455,19 @@ export default function ClassroomStagePage() {
         .stage-directions-inner { width:min(100%,1500px); display:grid; gap:22px; justify-items:center; }
         .stage-main-prompt { margin:0; max-width:92%; color:var(--head); text-align:center; white-space:pre-wrap; font-size:clamp(3.1rem,6.3vw,6.9rem); line-height:1.08; font-weight:800; letter-spacing:-0.02em; text-wrap:balance; }
         .stage-action-chip { border-radius:999px; background:var(--acc); color:#fff; padding:9px 20px; font-size:clamp(0.72rem,1.1vw,0.9rem); font-weight:800; letter-spacing:0.1em; text-transform:uppercase; }
-        .stage-anchor-kicker { margin:0; color:var(--acc-deep); font-size:clamp(0.78rem,1.3vw,1rem); font-weight:900; letter-spacing:0.16em; text-transform:uppercase; }
-        .stage-anchor-text { font-size:clamp(1.9rem,3.6vw,3.8rem); line-height:1.16; max-width:30ch; }
+        .stage-anchor-kicker { margin:0; color:var(--acc-deep); font-size:clamp(0.78rem,1.3vw,1rem); font-weight:900; letter-spacing:0.16em; text-transform:uppercase;
+          animation:hookRise 560ms 180ms var(--stage-ease) both; }
+        .stage-anchor-rule { width:clamp(64px,7vw,110px); height:6px; border-radius:999px; background:var(--acc); transform-origin:center;
+          animation:hookRule 640ms 480ms var(--stage-ease) both, hookBreathe 4.6s 2.2s ease-in-out infinite; }
+        .stage-anchor-text { font-size:clamp(1.9rem,3.6vw,3.8rem); line-height:1.16; max-width:30ch;
+          animation:hookRise 680ms 640ms var(--stage-ease) both; }
         .stage-anchor-text.long { font-size:clamp(1.5rem,2.6vw,2.7rem); max-width:44ch; }
-        .stage-anchor-note { margin:0; max-width:70ch; border-top:1px solid var(--hair); padding-top:14px; color:var(--soft); font-size:clamp(0.9rem,1.4vw,1.1rem); line-height:1.4; font-weight:650; white-space:pre-wrap; }
+        .stage-anchor-direction { animation:hookRise 560ms 1150ms var(--stage-ease) both; }
+        .stage-anchor-note { margin:0; max-width:70ch; border-top:1px solid var(--hair); padding-top:14px; color:var(--soft); font-size:clamp(0.9rem,1.4vw,1.1rem); line-height:1.4; font-weight:650; white-space:pre-wrap;
+          animation:hookRise 560ms 1500ms var(--stage-ease) both; }
+        @keyframes hookRise { from { opacity:0; transform:translateY(22px); } to { opacity:1; transform:none; } }
+        @keyframes hookRule { from { transform:scaleX(0); } to { transform:scaleX(1); } }
+        @keyframes hookBreathe { 0%, 100% { opacity:1; } 50% { opacity:0.55; } }
         .stage-routine { position:absolute; inset:0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:clamp(12px,2vw,22px); align-content:center; padding:clamp(24px,4vw,60px); }
         .stage-routine article { display:grid; align-content:center; gap:8px; min-height:120px; border:1px solid var(--hair); border-top:5px solid var(--acc); border-radius:16px; background:var(--card); padding:clamp(16px,2.4vw,28px); box-shadow:0 2px 10px rgba(40,32,20,0.06); }
         .stage-routine .stage-routine-lead { grid-column:1 / -1; min-height:100px; grid-template-columns:1fr auto; align-items:end; }
@@ -583,6 +617,8 @@ export default function ClassroomStagePage() {
               <p className="stage-success-text">{selectedCriterion}</p>
             </aside>
           ) : null}
+          <div className="stage-sweep" key={`sweep:${sceneKey}`} aria-hidden="true" />
+          <div className="stage-scene" key={sceneKey}>
           {loading ? (
             <div className="stage-empty"><div><h1>Connecting to the classroom</h1><p>{sessionMessage}</p></div></div>
           ) : !session || !flow || !state ? (
@@ -592,8 +628,9 @@ export default function ClassroomStagePage() {
                   {previewSample.anchor ? (
                     <>
                       <p className="stage-anchor-kicker">Puzzle of the day</p>
+                      <span className="stage-anchor-rule" aria-hidden="true" />
                       <h2 className={`stage-main-prompt stage-anchor-text${previewSample.anchor.length > 150 ? " long" : ""}`}>{previewSample.anchor}</h2>
-                      <p className="stage-learning">{previewSample.direction}</p>
+                      <p className="stage-learning stage-anchor-direction">{previewSample.direction}</p>
                     </>
                   ) : (
                     <>
@@ -750,8 +787,9 @@ export default function ClassroomStagePage() {
               <div className="stage-directions">
                 <div className="stage-directions-inner">
                   <p className="stage-anchor-kicker">{anchorMode === "pose" ? "Puzzle of the day" : "This morning's puzzle"}</p>
+                  <span className="stage-anchor-rule" aria-hidden="true" />
                   <h2 className={`stage-main-prompt stage-anchor-text${anchorText.length > 150 ? " long" : ""}`}>{anchorText}</h2>
-                  <p className="stage-learning">
+                  <p className="stage-learning stage-anchor-direction">
                     {anchorMode === "pose"
                       ? slideBody || "Warm-up first. Then see how far you can get on this."
                       : "You can answer it now. Use what you learned today."}
@@ -768,6 +806,7 @@ export default function ClassroomStagePage() {
             </div>
             )
           )}
+          </div>
           {showBoardPanel && session ? (
             <aside className="stage-board-panel" aria-label="Live writing workspace">
               <InkBoard room={session.id} interactive={false} />

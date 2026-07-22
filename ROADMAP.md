@@ -50,6 +50,15 @@ card collapses to a toggle when idle (expands automatically while one runs),
 and the bottom "Ask a question" composer is gone - lesson steps carry the
 questions now. The open-question card survives only as the off-switch for an
 orphaned open poll) ·
+**Main projector: staged hook + scene transitions** (7/21 - Steele's ask: the
+warm-up anchor ("Puzzle of the day") now enters as a staged moment - kicker
+settles, an accent rule draws itself beneath, the question rises in, then the
+quiet direction line; after settling the rule breathes slowly so the screen
+stays alive across warm-up. The closeout payoff reuses the same entrance.
+Every lesson-state change now enters as a scene - a calm rise-and-fade on the
+content plus a thin sweep of the incoming state's accent drawing across the
+top, and the topbar chip and dot crossfade their accent instead of snapping.
+All motion honors prefers-reduced-motion) ·
 **Warm Notebook screen kit** (7/20 — `public/screens/`: one hand-owned,
 projector-ready HTML file per lesson state in the decided turn-12 Warm Notebook
 look, scaled to any display by `_system/frame.js`; `_system/frame.css` is
