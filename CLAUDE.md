@@ -101,7 +101,12 @@ bars and live misconception grouping).
 - Teacher (gated): `/teacher` and `/teacher/*` (analytics, assignments, challenges, checkpoint-upload,
   checkpoints, exit-tickets, mastery, rightnow), `/control`, `/session`, `/roster`, `/start-question`.
   `/teacher/growth` redirects to `/teacher/rightnow`. Note: `/builder` and `/abbie` are teacher-ish but
-  NOT gated.
+  NOT gated. The lesson flow does NOT require `/control` to run: `/api/control-remote` executes
+  everything server-side - POST `start-lesson` (sessionId + lessonCode) builds the flow from Notion and
+  enters step 0 through the same navigateFlow as Next, POST next/previous/toggle-timer drive it, and
+  GET applies the lazy automatic-pacing transition, so pacing advances as long as ANY surface (Remote,
+  /session's toolbar) is polling. `/control` remains the full host; `/session` carries a minimal
+  Start / Back / Pause / Next toolbar for rush days.
 - API: gated - `/api/form-responses`, `/api/mastery` (+`/history`,`/recompute`), `/api/live/*`,
   `/api/roster/sync`, `/api/checkpoints/upload`. Public - `/api/today`, `/api/lessons`,
   `/api/warmup-summaries`, `/api/abbie` (+`/voice`), `/api/session/*`, `/api/auth/login`,
