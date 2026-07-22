@@ -4,6 +4,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import ClassroomSpinner from "@/components/ClassroomSpinner";
 import InkBoard from "@/components/InkBoard";
 import LessonVisual from "@/components/LessonVisual";
+import ScreenInkOverlay from "@/components/ScreenInkOverlay";
 import { CLOSEOUT_DIRECTIONS } from "@/lib/classStates";
 import { CLASSROOM_STAGE_THEMES, classroomStageTheme, discussionSupportsForLesson } from "@/lib/classroomPilot";
 import { normalizeDiscussionPhaseSnapshot } from "@/lib/discussionProtocol";
@@ -67,6 +68,18 @@ function previewStageParam() {
     return new URLSearchParams(window.location.search).get("preview")?.trim() || null;
   } catch {
     return null;
+  }
+}
+
+// The glass sheet pairs by ink room, same defaulting as /ipad and /board.
+// ?embed=1 marks the copy rendered INSIDE the iPad's Write-on-screen mirror,
+// which must not mount its own overlay (the iPad draws the ink itself).
+function inkOverlayParams() {
+  try {
+    const p = new URLSearchParams(window.location.search);
+    return { room: p.get("room")?.trim() || "main", embed: p.get("embed") === "1" };
+  } catch {
+    return { room: "main", embed: false };
   }
 }
 
@@ -155,6 +168,7 @@ export default function ClassroomStagePage() {
   const [sessionMessage, setSessionMessage] = useState("Connecting to the confirmed class session.");
   const [pollAnswers, setPollAnswers] = useState<PollAnswer[]>([]);
   const [previewStage, setPreviewStage] = useState<string | null>(null);
+  const [inkOverlay, setInkOverlay] = useState<{ room: string; embed: boolean } | null>(null);
   const [overrideUrl, setOverrideUrl] = useState<string | null>(null);
   const [overrideFrame, setOverrideFrame] = useState<HTMLIFrameElement | null>(null);
   // Room-tunable text size: A- / A+ scale the whole content stage so every
@@ -164,6 +178,7 @@ export default function ClassroomStagePage() {
 
   useEffect(() => {
     setPreviewStage(previewStageParam());
+    setInkOverlay(inkOverlayParams());
     try {
       const stored = Number(localStorage.getItem("bdm-present-textscale"));
       if (stored >= 1 && stored <= 2.5) setTextScale(stored);
@@ -828,6 +843,7 @@ export default function ClassroomStagePage() {
         ) : null}
 
       </section>
+      {inkOverlay && !inkOverlay.embed && <ScreenInkOverlay room={inkOverlay.room} />}
     </main>
   );
 }
