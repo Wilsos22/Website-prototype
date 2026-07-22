@@ -159,6 +159,7 @@ function lessonSnapshotFromNotion(lesson: LessonData): NonNullable<LiveClassFlow
     bigDogChallenge: lesson.bigDogChallenge,
     dueAndTurnIn: lesson.dueAndTurnIn,
     helpPath: lesson.helpPath,
+    anchorProblem: lesson.anchorProblem,
   };
 }
 
