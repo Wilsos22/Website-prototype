@@ -226,7 +226,10 @@ to complaining-teen, less Red Bull, shorter replies)
   painted while backgrounded. Zoom is deliberately absent from the glass
   sheet (ink must stay aligned to the screen under it) and gestures still
   need "Finger draws" OFF. Phase 4 candidates: Warm Notebook template pages,
-  glass-sheet export, per-page export-all.
+  per-page export-all. (Glass-sheet export was considered and DECLINED by
+  Steele 7/22 - the export would need DOM rasterization of the present stage
+  to include what is under the ink, and in-the-moment annotations do not
+  need to become artifacts. Do not re-propose.)
 - **Ladder Method — rule rail redesign + Factor Trees mode** (7/21, commit
   c9206cc) — /ladder-method now follows the three-column manipulative
   convention: the divisibility rules sit in the LARGE LEFT RAIL (same wording
