@@ -23,9 +23,13 @@ bars and live misconception grouping).
 - Teacher/owner: Steele Wilson. Mascot: Abbie (Steele's dog).
 - Priority signal (Steele, 2026-07-21): the iPad ink surface - /ipad, /board, and the glass sheet
   over /teacher/present - is the most important feature of the whole system after data collection
-  (the proficiency spine). Treat ink regressions as urgent, protect its in-class reliability, and
-  weight its roadmap phases (undo/gestures/stroke-eraser/shape-snap/laser, then zoom/pages) above
-  other queued work.
+  (the proficiency spine). Treat ink regressions as urgent and protect its in-class reliability.
+  The planned buildout is COMPLETE as of 2026-07-22 (Phase 1 strokes/glass sheet, Phase 2
+  undo/gestures/stroke-eraser/shape-snap/laser, Phase 3 zoom/pages/dotted paper all shipped);
+  Steele is deliberately living with it as-is to let real classroom use surface any gaps, and
+  declined glass-sheet export. Do NOT queue or propose new ink features without his word - the
+  standing priority is reliability, and the open loop is his Pencil feel test (tuning constants in
+  InkBoard.tsx/inkGeometry.ts are the dials).
 
 ## Hard rules (non-negotiable)
 

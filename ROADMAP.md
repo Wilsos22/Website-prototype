@@ -225,11 +225,14 @@ to complaining-teen, less Red Bull, shorter replies)
   (212=212 samples), and a second tab's display followed live pageflips and
   painted while backgrounded. Zoom is deliberately absent from the glass
   sheet (ink must stay aligned to the screen under it) and gestures still
-  need "Finger draws" OFF. Phase 4 candidates: Warm Notebook template pages,
-  per-page export-all. (Glass-sheet export was considered and DECLINED by
-  Steele 7/22 - the export would need DOM rasterization of the present stage
-  to include what is under the ink, and in-the-moment annotations do not
-  need to become artifacts. Do not re-propose.)
+  need "Finger draws" OFF. COMPLETE FOR NOW (Steele, 7/22): "ill live with
+  the ipad strokes for a bit and see if anything that isnt there needs to
+  be." No further ink phases are queued - real classroom use decides what
+  comes next, and glass-sheet export was considered and declined (annotations
+  do not need to become artifacts; including the under-screen would take DOM
+  rasterization of the present stage). Open loop: his Pencil feel test -
+  pressure curve, snap timing, eraser reach, laser fade, zoom ceiling, dot
+  pitch are all one-number dials.
 - **Ladder Method — rule rail redesign + Factor Trees mode** (7/21, commit
   c9206cc) — /ladder-method now follows the three-column manipulative
   convention: the divisibility rules sit in the LARGE LEFT RAIL (same wording
