@@ -724,6 +724,81 @@ async function applyLazyAutomaticTransition(
   }
 }
 
+// Start the day's lesson on an open session without the control panel: build
+// the full flow from the published Notion lesson and enter step 0 through the
+// same navigateFlow the Remote's Next uses, so the opening state, its poll,
+// and its timer are exactly what control would have produced. The session
+// flips to Live Class Flow broadcast; automatic pacing then advances through
+// the lazy-transition check every time any surface polls GET here.
+async function startLessonFlow(body: { sessionId?: string; lessonCode?: string }) {
+  const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+  const lessonCode = typeof body.lessonCode === "string" ? body.lessonCode.trim() : "";
+  if (!sessionId) return Response.json({ error: "Confirm a class session before starting the lesson." }, { status: 400 });
+  if (!lessonCode) return Response.json({ error: "No published lesson is available to start." }, { status: 400 });
+  const db = getSupabaseAdmin();
+  if (!db) return Response.json({ error: "Database not configured." }, { status: 503 });
+  const { data: sessionRow, error: sessionError } = await db
+    .from("sessions")
+    .select("id,period_id,join_code,remote_command,started_at,live_flow")
+    .eq("id", sessionId)
+    .eq("status", "open")
+    .maybeSingle();
+  if (sessionError) return Response.json({ error: "The class session could not be checked." }, { status: 500 });
+  if (!sessionRow) return Response.json({ error: "That session is not open." }, { status: 404 });
+
+  let lesson: LessonData | null = null;
+  try {
+    lesson = await getLessonByCode(lessonCode);
+  } catch {
+    lesson = null;
+  }
+  if (!lesson?.steps.length) {
+    return Response.json({ error: `No timed lesson steps were found for ${lessonCode}.` }, { status: 404 });
+  }
+  const steps = stepsFromLesson(lesson);
+  const seedFlow: LiveClassFlowSnapshot = {
+    version: 2,
+    updatedAt: new Date().toISOString(),
+    state: null,
+    phase: null,
+    timer: null,
+    poll: null,
+    resource: null,
+    presentation: null,
+    tool: null,
+    lesson: lessonSnapshotFromNotion(lesson),
+    sequence: {
+      currentIndex: -1,
+      totalSteps: steps.length,
+      nextLabel: steps[0]?.label || null,
+      nextDirections: null,
+      advanceMode: "automatic",
+      steps,
+    },
+  };
+  let createdPollId: string | null = null;
+  try {
+    const navigation = await navigateFlow(db, { ...(sessionRow as RemoteSessionRow), live_flow: seedFlow }, "next");
+    createdPollId = navigation.createdPollId;
+    const { data: updated, error: updateError } = await db
+      .from("sessions")
+      .update({ live_flow: navigation.liveFlow, broadcast: LIVE_FLOW_MODE })
+      .eq("id", sessionId)
+      .eq("status", "open")
+      .select("id,period_id,join_code,remote_command,started_at,live_flow")
+      .maybeSingle();
+    if (updateError || !updated) throw new Error(updateError?.message || "The lesson could not start.");
+    await closeOpenPolls(db, sessionId, createdPollId);
+    return Response.json({ connected: true, session: serializeSession(updated as RemoteSessionRow) });
+  } catch (error) {
+    await closePollById(db, createdPollId);
+    return Response.json(
+      { error: error instanceof Error ? error.message : "The lesson could not start." },
+      { status: 500 },
+    );
+  }
+}
+
 export async function GET(request: Request) {
   const requestedSessionId = new URL(request.url).searchParams.get("sessionId") || "";
   const result = await openSessions(requestedSessionId);
@@ -741,11 +816,14 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  let body: { action?: string; sessionId?: string; expectedStateId?: string; expectedSequenceIndex?: number };
+  let body: { action?: string; sessionId?: string; lessonCode?: string; expectedStateId?: string; expectedSequenceIndex?: number };
   try {
     body = await request.json();
   } catch {
     return Response.json({ error: "Invalid request." }, { status: 400 });
+  }
+  if (body.action === "start-lesson") {
+    return startLessonFlow(body);
   }
   const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
   if (!sessionId) return Response.json({ error: "Confirm a class session before sending a command." }, { status: 400 });

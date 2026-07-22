@@ -36,14 +36,20 @@ the day's session seeded with today's published form, and the teacher's
 response verifies - the landing becomes a home base: today's lesson card plus
 Today's lesson / Challenge games / Explore the tools links that unlock when
 the warm-up connects, keeping the origin tab's verification polling alive) ·
-**Session page as in-class cockpit** (7/21 - Steele's ask: /session now opens
-with Begin today's lesson (today's published Notion lesson straight into
-/control?run=1) under the join code, the Classroom screens card shows LIVE
-scaled iframe previews of Main, Pace + Support, and the Student view (the
-student preview follows the class-mode broadcast), the iPad Remote stays as a
-link, and the bottom "Ask a question" composer is gone - lesson steps carry
-the questions now. The open-question card survives only as the off-switch for
-an orphaned open poll) ·
+**Session page as in-class cockpit** (7/21 - Steele's ask, two rounds: /session
+runs class start to finish without /control. The join-code card carries a
+lesson transport - Start today's lesson (new server-side
+/api/control-remote start-lesson action builds the flow from the published
+Notion lesson and enters step 0 through the Remote's own navigateFlow), then
+Back / Pause / Next state with the live state name, step count, and ticking
+countdown; automatic pacing keeps advancing through the endpoint's lazy
+transition while the page polls. The Classroom screens card shows LIVE scaled
+iframe previews of Main, Pace + Support, and the Student view (follows the
+class-mode broadcast), the iPad Remote stays as a link, the Challenge game
+card collapses to a toggle when idle (expands automatically while one runs),
+and the bottom "Ask a question" composer is gone - lesson steps carry the
+questions now. The open-question card survives only as the off-switch for an
+orphaned open poll) ·
 **Warm Notebook screen kit** (7/20 — `public/screens/`: one hand-owned,
 projector-ready HTML file per lesson state in the decided turn-12 Warm Notebook
 look, scaled to any display by `_system/frame.js`; `_system/frame.css` is

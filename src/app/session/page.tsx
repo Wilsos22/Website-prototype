@@ -10,7 +10,9 @@ import {
   LIVE_FLOW_MODE,
   clearStoredTeacherSession,
   getStoredTeacherSession,
+  liveTimerSeconds,
   saveTeacherSession,
+  type LiveClassFlowSnapshot,
 } from "@/lib/liveClassFlow";
 import { SKILLS } from "@/lib/challengeSkills";
 import {
@@ -114,6 +116,10 @@ export default function SessionPage() {
   const ansRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [broadcast, setBroadcast] = useState<string | null>(null);
   const [todayLesson, setTodayLesson] = useState<TodayLesson | null>(null);
+  const [liveFlow, setLiveFlow] = useState<LiveClassFlowSnapshot | null>(null);
+  const [flowBusy, setFlowBusy] = useState<string | null>(null);
+  const [flowNote, setFlowNote] = useState<string | null>(null);
+  const [, setTimerTick] = useState(0);
 
   // Live challenge (game) state
   const [chSkill, setChSkill] = useState(SKILLS[0].key);
@@ -338,6 +344,59 @@ export default function SessionPage() {
     { label: "Live Class Flow", value: LIVE_FLOW_MODE },
   ];
 
+  // Lesson transport: watch the live flow through the Remote's own endpoint.
+  // The GET also runs the server's lazy automatic-pacing check, so a lesson
+  // started here keeps advancing while this page is open - no control panel
+  // needed. Returns nothing until the session is in Live Class Flow mode.
+  useEffect(() => {
+    if (!session) { setLiveFlow(null); return; }
+    let stopped = false;
+    const check = async () => {
+      try {
+        const result = await teacherApiRequest<{ session: { liveFlow: LiveClassFlowSnapshot | null } | null }>(
+          `/api/control-remote?sessionId=${encodeURIComponent(session.id)}`,
+        );
+        if (!stopped) {
+          setLiveFlow(result.session?.liveFlow || null);
+          if (result.session) setBroadcast(LIVE_FLOW_MODE);
+        }
+      } catch { /* transient - retry next tick */ }
+    };
+    void check();
+    const interval = setInterval(check, 3000);
+    return () => { stopped = true; clearInterval(interval); };
+  }, [session]);
+
+  // One-second tick so the toolbar countdown runs between polls.
+  useEffect(() => {
+    if (!liveFlow?.timer?.running) return;
+    const interval = setInterval(() => setTimerTick((tick) => tick + 1), 1000);
+    return () => clearInterval(interval);
+  }, [liveFlow?.timer?.running]);
+
+  async function sendFlowAction(action: "start-lesson" | "previous" | "toggle-timer" | "next") {
+    if (!session || flowBusy) return;
+    setFlowBusy(action);
+    setFlowNote(null);
+    try {
+      const payload: Record<string, unknown> = { action, sessionId: session.id };
+      if (action === "start-lesson") payload.lessonCode = todayLesson?.lessonCode || "";
+      const result = await teacherPost<{
+        session?: { liveFlow: LiveClassFlowSnapshot | null };
+        liveFlow?: LiveClassFlowSnapshot | null;
+      }>("/api/control-remote", payload);
+      const nextFlow = result.session?.liveFlow || result.liveFlow || null;
+      if (nextFlow) {
+        setLiveFlow(nextFlow);
+        setBroadcast(LIVE_FLOW_MODE);
+      }
+    } catch (actionError) {
+      setFlowNote(actionError instanceof Error ? actionError.message : "The lesson control did not go through.");
+    } finally {
+      setFlowBusy(null);
+    }
+  }
+
   // Ad-hoc questions now come from the lesson steps, so this page no longer
   // composes polls. The open-question card below survives purely as the
   // off-switch: an orphaned open poll otherwise blocks every student who joins.
@@ -378,6 +437,27 @@ export default function SessionPage() {
         .se-begin-wrap { display:grid; justify-items:center; gap:7px; margin:6px 0 14px; }
         .se-begin-lesson { color:#5a5346; font-size:0.92rem; font-weight:800; }
         .se-begin-wrap .se-start { display:inline-block; text-decoration:none; font-size:1.1rem; padding:15px 34px; }
+        .se-flowbar { display:grid; justify-items:center; gap:10px; margin:6px 0 14px; }
+        .se-flow-now { display:grid; gap:2px; }
+        .se-flow-state { color:#1c1d22; font-size:1.15rem; font-weight:900; }
+        .se-flow-meta { color:#7a7468; font-size:0.85rem; font-weight:800; font-variant-numeric:tabular-nums; }
+        .se-flow-keys { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
+        .se-flow-key { min-height:52px; min-width:110px; border:2px solid #e7dec9; border-radius:12px; background:#fbf7ef;
+          color:#2a2a2e; padding:0 20px; font:inherit; font-size:1rem; font-weight:900; cursor:pointer; }
+        .se-flow-key:hover:not(:disabled) { border-color:#14b8a6; }
+        .se-flow-key:disabled { opacity:0.55; cursor:not-allowed; }
+        .se-flow-key.primary { background:#14b8a6; border-color:#14b8a6; color:#04231f; }
+        .se-flow-note { margin:0 0 10px; color:#92660a; font-size:0.88rem; font-weight:800; }
+        .se-flow-none { margin:6px 0 14px; color:#a89f8c; font-size:0.9rem; font-weight:700; }
+        .se-code-actions { display:flex; gap:14px; align-items:center; justify-content:center; }
+        .se-host-link { color:#7a7468; font-size:0.86rem; font-weight:800; text-decoration:underline; }
+        .se-host-link:hover { color:#14b8a6; }
+        .se-collapse > summary { list-style:none; cursor:pointer; }
+        .se-collapse > summary::-webkit-details-marker { display:none; }
+        .se-collapse-summary { display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+        .se-collapse-hint { color:#a89f8c; font-size:0.82rem; font-weight:800; }
+        .se-collapse[open] .se-collapse-hint { display:none; }
+        .se-collapse[open] > summary { margin-bottom:12px; }
         .se-screen-intro { margin:0 0 14px; color:#5a5346; font-size:0.92rem; font-weight:650; line-height:1.5; }
         .se-screen-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
         .se-screen-link { min-height:82px; box-sizing:border-box; display:flex; flex-direction:column; justify-content:center; gap:5px;
@@ -462,17 +542,44 @@ export default function SessionPage() {
             <div className="se-card se-code-wrap">
               <div className="se-code-label">{session.periodName} · code</div>
               <div className="se-code">{session.code}</div>
-              {todayLesson && (
+              {liveFlow?.sequence ? (
+                <div className="se-flowbar">
+                  <div className="se-flow-now">
+                    <span className="se-flow-state">{liveFlow.state?.label || "Lesson running"}</span>
+                    <span className="se-flow-meta">
+                      Step {liveFlow.sequence.currentIndex + 1} of {liveFlow.sequence.totalSteps}
+                      {liveFlow.timer ? ` · ${Math.floor(liveTimerSeconds(liveFlow.timer) / 60)}:${String(liveTimerSeconds(liveFlow.timer) % 60).padStart(2, "0")}` : ""}
+                    </span>
+                  </div>
+                  <div className="se-flow-keys">
+                    <button className="se-flow-key" onClick={() => sendFlowAction("previous")} disabled={Boolean(flowBusy)}>
+                      {flowBusy === "previous" ? "Sending" : "Back"}
+                    </button>
+                    <button className="se-flow-key" onClick={() => sendFlowAction("toggle-timer")} disabled={Boolean(flowBusy)}>
+                      {flowBusy === "toggle-timer" ? "Sending" : liveFlow.timer?.running ? "Pause" : "Resume"}
+                    </button>
+                    <button className="se-flow-key primary" onClick={() => sendFlowAction("next")} disabled={Boolean(flowBusy)}>
+                      {flowBusy === "next" ? "Sending" : "Next state"}
+                    </button>
+                  </div>
+                </div>
+              ) : todayLesson ? (
                 <div className="se-begin-wrap">
                   <div className="se-begin-lesson">
                     {[todayLesson.lessonCode, todayLesson.title].filter(Boolean).join(" · ") || "Today's published lesson"}
                   </div>
-                  <a className="se-start" href={`/control?notionLessonId=${encodeURIComponent(todayLesson.id)}&run=1`}>
-                    Begin today&apos;s lesson
-                  </a>
+                  <button className="se-start" onClick={() => sendFlowAction("start-lesson")} disabled={Boolean(flowBusy)}>
+                    {flowBusy === "start-lesson" ? "Starting" : "Start today's lesson"}
+                  </button>
                 </div>
+              ) : (
+                <p className="se-flow-none">No lesson is published for today, so there is nothing to start yet.</p>
               )}
-              <button className="se-end" onClick={end} disabled={ending}>{ending ? "Ending session" : "End session"}</button>
+              {flowNote && <p className="se-flow-note" role="status">{flowNote}</p>}
+              <div className="se-code-actions">
+                <a className="se-host-link" href="/control">Open Live class host</a>
+                <button className="se-end" onClick={end} disabled={ending}>{ending ? "Ending session" : "End session"}</button>
+              </div>
             </div>
             <section className="se-card" aria-labelledby="classroom-screens-title">
               <h2 className="se-qh" id="classroom-screens-title">Classroom screens</h2>
@@ -568,14 +675,40 @@ export default function SessionPage() {
               </p>
             </div>
 
-            <div className="se-card" id="challenge" style={{ scrollMarginTop: 80 }}>
-              <h3 className="se-qh">Challenge - live game</h3>
+            {challenge ? (
+              <div className="se-card" id="challenge" style={{ scrollMarginTop: 80 }}>
+                <h3 className="se-qh">Challenge - live game</h3>
+                <div className="se-row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                  <div className="se-chtitle">{challenge.title}</div>
+                  <button className="se-end" onClick={stopChallenge}>End challenge</button>
+                </div>
+                <div className="se-count" style={{ marginTop: 12 }}>Live leaderboard · {board.length} playing</div>
+                {board.length === 0 ? (
+                  <span className="se-empty">Waiting for the first answers…</span>
+                ) : (
+                  <div className="se-lb">
+                    {board.slice(0, 10).map((r, i) => (
+                      <div className="se-lb-row" key={r.key}>
+                        <span className="se-lb-rank">{i + 1}</span>
+                        <span className="se-lb-name">{r.name}</span>
+                        <span className="se-lb-acc">{r.total ? Math.round((r.correct / r.total) * 100) : 0}%</span>
+                        <span className="se-lb-pts">{r.points}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+            <details className="se-card se-collapse" id="challenge" style={{ scrollMarginTop: 80 }}>
+              <summary className="se-collapse-summary">
+                <span className="se-qh" style={{ margin: 0 }}>Challenge - live game</span>
+                <span className="se-collapse-hint">Open to launch a quick game</span>
+              </summary>
               {chSetup && (
-                <div className="se-warn" style={{ marginBottom: 12 }}>
+                <div className="se-warn" style={{ margin: "12px 0" }}>
                   One-time setup: open the Supabase SQL Editor and run <b>supabase/challenges.sql</b>, then try again.
                 </div>
               )}
-              {!challenge ? (
                 <>
                   <div className="se-fld">Skill</div>
                   <div className="se-skills">
@@ -610,30 +743,8 @@ export default function SessionPage() {
                   </button>
                   {!joins.length && <p className="se-empty" style={{ marginTop: 8 }}>Students need to join first.</p>}
                 </>
-              ) : (
-                <>
-                  <div className="se-row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-                    <div className="se-chtitle">{challenge.title}</div>
-                    <button className="se-end" onClick={stopChallenge}>End challenge</button>
-                  </div>
-                  <div className="se-count" style={{ marginTop: 12 }}>Live leaderboard · {board.length} playing</div>
-                  {board.length === 0 ? (
-                    <span className="se-empty">Waiting for the first answers…</span>
-                  ) : (
-                    <div className="se-lb">
-                      {board.slice(0, 10).map((r, i) => (
-                        <div className="se-lb-row" key={r.key}>
-                          <span className="se-lb-rank">{i + 1}</span>
-                          <span className="se-lb-name">{r.name}</span>
-                          <span className="se-lb-acc">{r.total ? Math.round((r.correct / r.total) * 100) : 0}%</span>
-                          <span className="se-lb-pts">{r.points}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
+            </details>
+            )}
 
             {poll && (
               <div className="se-card">
