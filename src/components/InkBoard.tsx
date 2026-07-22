@@ -43,6 +43,10 @@ const HL_SCALE = 3; // highlighter band is 3x the dialled pen width
 const LASER_MS = 850; // how long the laser trail lingers
 const HOLD_SNAP_MS = 600; // hold the pen still this long to straighten the stroke
 const HOLD_SNAP_RADIUS = 8; // "still" = within this many px
+const ZOOM_MAX = 5; // pinch zoom ceiling; floor is always 1 (the full page)
+const DOT_PITCH = 26; // Warm Notebook dot spacing at 100%
+const DOT_COLOR = "rgba(165,156,141,0.5)"; // ink-faint dots on the cream ground
+const PAPER_CREAM = "#faf6ee"; // --bdb-ground
 
 // One entry per user action, so undo restores exactly what the action did:
 // un-drawing a stroke, or bringing back everything one eraser swipe removed.
@@ -60,6 +64,9 @@ interface InkBoardProps {
   transparent?: boolean; // no white ground - used for the over-screen glass sheet
   passThrough?: boolean; // display overlay: never intercept pointer events
   announceView?: boolean; // display side: broadcast this surface's aspect ratio
+  allowZoom?: boolean; // pen surface only: pinch to zoom, finger-drag to pan while zoomed
+  hidden?: boolean; // an inactive page: strokes/history/channel stay live, canvases shrink to free memory
+  paper?: "white" | "dots"; // dots = the Warm Notebook dotted ground
   clearSignal?: number; // bump to clear
   undoSignal?: number; // bump to undo the last action
   redoSignal?: number; // bump to redo
@@ -91,6 +98,9 @@ export default function InkBoard({
   transparent = false,
   passThrough = false,
   announceView = false,
+  allowZoom = false,
+  hidden = false,
+  paper = "white",
   clearSignal = 0,
   undoSignal = 0,
   redoSignal = 0,
@@ -129,8 +139,18 @@ export default function InkBoard({
   const holdAnchorRef = useRef<{ x: number; y: number; t: number } | null>(null);
   const laserRef = useRef<Map<string, { pts: { x: number; y: number; t: number }[] }>>(new Map());
   const laserIdRef = useRef<string | null>(null);
-  const touchTapsRef = useRef<Map<number, { x: number; y: number; t: number; moved: boolean; up: boolean }>>(new Map());
+  const touchTapsRef = useRef<Map<number, { x0: number; y0: number; x: number; y: number; t: number; moved: boolean; up: boolean }>>(new Map());
   const lastStatusRef = useRef<InkConnectionStatus>("connecting");
+
+  // Phase 3 state: the view transform (pinch zoom + pan, pen surface only) and
+  // page visibility. screen px = page px * s + (x, y); strokes always live in
+  // page space, so the wire format and every other surface are untouched.
+  const viewRef = useRef({ s: 1, x: 0, y: 0 });
+  const [zoomPct, setZoomPct] = useState(100);
+  const pageLayerRef = useRef<HTMLDivElement | null>(null);
+  const allowZoomRef = useRef(allowZoom);
+  useEffect(() => { allowZoomRef.current = allowZoom; }, [allowZoom]);
+  const hiddenRef = useRef(hidden);
 
   // Latest tool settings, read inside pointer handlers.
   const colorRef = useRef(color);
@@ -166,6 +186,39 @@ export default function InkBoard({
     rectRef.current = { left: r.left, top: r.top, width: r.width, height: r.height };
   }, []);
 
+  // ── View transform (zoom + pan) ────────────────────────────────────────────
+
+  const clampView = useCallback((v: { s: number; x: number; y: number }) => {
+    const { w, h } = size();
+    const s = Math.min(ZOOM_MAX, Math.max(1, v.s < 1.02 ? 1 : v.s));
+    return {
+      s,
+      x: Math.min(0, Math.max(w * (1 - s), v.x)),
+      y: Math.min(0, Math.max(h * (1 - s), v.y)),
+    };
+  }, [size]);
+
+  // Painting happens in page px under this transform; input inverts it. Every
+  // surface with the default identity view behaves exactly as before.
+  const applyView = useCallback((ctx: CanvasRenderingContext2D) => {
+    const dpr = window.devicePixelRatio || 1;
+    const v = viewRef.current;
+    ctx.setTransform(dpr * v.s, 0, 0, dpr * v.s, dpr * v.x, dpr * v.y);
+  }, []);
+
+  const clearFull = useCallback((ctx: CanvasRenderingContext2D) => {
+    const dpr = window.devicePixelRatio || 1;
+    const { w, h } = size();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+  }, [size]);
+
+  const toPagePx = useCallback((clientX: number, clientY: number) => {
+    const r = rectRef.current;
+    const v = viewRef.current;
+    return { x: (clientX - r.left - v.x) / v.s, y: (clientY - r.top - v.y) / v.s };
+  }, []);
+
   // ── Painting ───────────────────────────────────────────────────────────────
 
   const toPx = useCallback((p: InkPoint): InkRenderPoint => {
@@ -194,6 +247,7 @@ export default function InkBoard({
     for (const c of [hlRef.current, dryRef.current]) {
       const ctx = ctxOf(c);
       if (!ctx) continue;
+      applyView(ctx);
       ctx.globalCompositeOperation = "destination-out";
       ctx.strokeStyle = "#000";
       ctx.lineWidth = lw;
@@ -209,21 +263,21 @@ export default function InkBoard({
       ctx.stroke();
       ctx.globalCompositeOperation = "source-over";
     }
-  }, [ctxOf, size]);
+  }, [applyView, ctxOf, size]);
 
   const bake = useCallback((s: InkStroke) => {
     if (s.erase) return; // erase already applied as it streamed
     const px = s.points.map(toPx);
     const ctx = ctxOf(s.m === "h" ? hlRef.current : dryRef.current);
-    if (ctx) paintStroke(ctx, s, px);
-  }, [ctxOf, paintStroke, toPx]);
+    if (ctx) { applyView(ctx); paintStroke(ctx, s, px); }
+  }, [applyView, ctxOf, paintStroke, toPx]);
 
   // The wet layer: every in-flight stroke + local prediction + the eraser ring.
   const paintWet = useCallback(() => {
     const ctx = ctxOf(wetRef.current);
     if (!ctx) return;
-    const { w, h } = size();
-    ctx.clearRect(0, 0, w, h);
+    clearFull(ctx);
+    applyView(ctx);
     for (const [id, a] of activeRef.current) {
       if (a.stroke.erase) continue;
       const px = id === activeIdRef.current && predictedRef.current.length
@@ -279,7 +333,7 @@ export default function InkBoard({
       ctx.shadowBlur = 0;
     }
     if (laserAlive) scheduleWetRef.current?.();
-  }, [ctxOf, interactive, paintStroke, size]);
+  }, [applyView, clearFull, ctxOf, interactive, paintStroke]);
 
   // paintWet needs to re-arm itself while laser trails fade; the scheduler is
   // defined just below, so it reaches it through a ref.
@@ -295,8 +349,10 @@ export default function InkBoard({
   useEffect(() => { scheduleWetRef.current = scheduleWet; }, [scheduleWet]);
 
   const redrawAll = useCallback(() => {
-    const { w, h } = size();
-    for (const c of [hlRef.current, dryRef.current, wetRef.current]) ctxOf(c)?.clearRect(0, 0, w, h);
+    for (const c of [hlRef.current, dryRef.current, wetRef.current]) {
+      const ctx = ctxOf(c);
+      if (ctx) clearFull(ctx);
+    }
     for (const s of strokesRef.current) {
       if (s.erase) paintEraseSegment(s, null, s.points.map(toPx));
       else bake(s);
@@ -306,7 +362,7 @@ export default function InkBoard({
       a.lastErase = null;
     }
     paintWet();
-  }, [bake, ctxOf, paintEraseSegment, paintWet, size, toPx]);
+  }, [bake, clearFull, ctxOf, paintEraseSegment, paintWet, toPx]);
 
   const announce = useCallback(() => {
     const r = rectRef.current;
@@ -315,9 +371,14 @@ export default function InkBoard({
 
   // ── History + shared mutations (undo/redo, stroke eraser, snap) ────────────
 
+  // Read through a ref so an inline onHistoryChange prop (new identity every
+  // parent render) cannot restart the mount-notify effect - with setState in
+  // the callback that loop is "Maximum update depth exceeded".
+  const onHistoryChangeRef = useRef(onHistoryChange);
+  useEffect(() => { onHistoryChangeRef.current = onHistoryChange; }, [onHistoryChange]);
   const notifyHistory = useCallback(() => {
-    onHistoryChange?.(historyRef.current.length > 0, redoRef.current.length > 0);
-  }, [onHistoryChange]);
+    onHistoryChangeRef.current?.(historyRef.current.length > 0, redoRef.current.length > 0);
+  }, []);
 
   const redrawDirtyRef = useRef(false);
   const scheduleRedraw = useCallback(() => {
@@ -328,6 +389,47 @@ export default function InkBoard({
       redrawAll();
     });
   }, [redrawAll]);
+
+  // A view change repaints the canvases AND carries the page furniture with
+  // it: the dotted paper, the background image, and the problem cards all
+  // scale with the ink so grid templates stay under what was written on them.
+  const syncViewStyles = useCallback(() => {
+    const v = viewRef.current;
+    const layer = pageLayerRef.current;
+    if (layer) {
+      layer.style.transformOrigin = "0 0";
+      layer.style.transform = v.s === 1 && v.x === 0 && v.y === 0 ? "" : `translate(${v.x}px, ${v.y}px) scale(${v.s})`;
+    }
+    const wrap = wrapRef.current;
+    if (wrap && paper === "dots" && !transparent) {
+      wrap.style.backgroundSize = `${DOT_PITCH * v.s}px ${DOT_PITCH * v.s}px`;
+      wrap.style.backgroundPosition = `${v.x}px ${v.y}px`;
+    }
+    setZoomPct(Math.round(v.s * 100));
+  }, [paper, transparent]);
+
+  const applyViewChange = useCallback(() => {
+    viewRef.current = clampView(viewRef.current);
+    syncViewStyles();
+    scheduleRedraw();
+  }, [clampView, scheduleRedraw, syncViewStyles]);
+
+  const resetView = useCallback(() => {
+    viewRef.current = { s: 1, x: 0, y: 0 };
+    applyViewChange();
+  }, [applyViewChange]);
+
+  // Pinch/pan core: rescale about a fixed screen point (c0 before, c1 after),
+  // so the page point under the fingers stays under the fingers.
+  const pinchApply = useCallback((ratio: number, c0: { x: number; y: number }, c1: { x: number; y: number }) => {
+    const r = rectRef.current;
+    const v = viewRef.current;
+    const s2 = Math.min(ZOOM_MAX, Math.max(1, v.s * ratio));
+    const pgX = (c0.x - r.left - v.x) / v.s;
+    const pgY = (c0.y - r.top - v.y) / v.s;
+    viewRef.current = { s: s2, x: c1.x - r.left - pgX * s2, y: c1.y - r.top - pgY * s2 };
+    applyViewChange();
+  }, [applyViewChange]);
 
   const removeStrokes = useCallback((ids: string[], broadcast: boolean): InkStroke[] => {
     const idSet = new Set(ids);
@@ -380,6 +482,7 @@ export default function InkBoard({
   }, [notifyHistory]);
 
   const resize = useCallback(() => {
+    if (hiddenRef.current) return; // hidden pages hold at 1x1 until they return
     const wrap = wrapRef.current;
     if (!wrap) return;
     const r = wrap.getBoundingClientRect();
@@ -392,9 +495,11 @@ export default function InkBoard({
       if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
     measure();
+    viewRef.current = clampView(viewRef.current);
+    syncViewStyles();
     redrawAll();
     if (announceView) announce();
-  }, [announce, announceView, ctxOf, measure, redrawAll]);
+  }, [announce, announceView, clampView, ctxOf, measure, redrawAll, syncViewStyles]);
 
   const clearLocal = useCallback(() => {
     strokesRef.current = [];
@@ -406,10 +511,12 @@ export default function InkBoard({
     // Clear is deliberate and destructive - history does not survive it.
     historyRef.current = [];
     redoRef.current = [];
-    onHistoryChange?.(false, false);
-    const { w, h } = size();
-    for (const c of [hlRef.current, dryRef.current, wetRef.current]) ctxOf(c)?.clearRect(0, 0, w, h);
-  }, [ctxOf, onHistoryChange, size]);
+    onHistoryChangeRef.current?.(false, false);
+    for (const c of [hlRef.current, dryRef.current, wetRef.current]) {
+      const ctx = ctxOf(c);
+      if (ctx) clearFull(ctx);
+    }
+  }, [clearFull, ctxOf]);
 
   // Apply one incoming/local segment.
   const applySeg = useCallback((seg: Extract<InkMessage, { t: "seg" }>) => {
@@ -515,6 +622,7 @@ export default function InkBoard({
     // (the projector tab opened behind /control, for example). Retry until
     // the wrapper has real size, then stop.
     const tick = window.setInterval(() => {
+      if (hiddenRef.current) return; // a hidden page sizes itself when it returns
       const r = wrapRef.current?.getBoundingClientRect();
       if (r && r.width > 1 && rectRef.current.width <= 1) resize();
       if (rectRef.current.width > 1) window.clearInterval(tick);
@@ -526,6 +634,36 @@ export default function InkBoard({
       if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
     };
   }, [resize]);
+
+  // Inactive pages keep their strokes, history, and channel, but release the
+  // canvas backing stores (an 11-inch iPad canvas is ~20MB x 3 layers x pages).
+  useEffect(() => {
+    hiddenRef.current = hidden;
+    if (hidden) {
+      for (const c of [hlRef.current, dryRef.current, wetRef.current]) {
+        if (c) { c.width = 1; c.height = 1; }
+      }
+    } else {
+      resize();
+    }
+  }, [hidden, resize]);
+
+  // Trackpad pinch (ctrl+wheel) zooms about the cursor. Native listener
+  // because React registers wheel as passive, which blocks preventDefault.
+  useEffect(() => {
+    if (!allowZoom) return;
+    const c = wetRef.current;
+    if (!c) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      measure();
+      const pt = { x: e.clientX, y: e.clientY };
+      pinchApply(Math.exp(-e.deltaY * 0.008), pt, pt);
+    };
+    c.addEventListener("wheel", onWheel, { passive: false });
+    return () => c.removeEventListener("wheel", onWheel);
+  }, [allowZoom, measure, pinchApply]);
 
   // Pen page controls the background; broadcast it.
   useEffect(() => {
@@ -567,20 +705,41 @@ export default function InkBoard({
     channelRef.current?.send({ t: "clear" });
   }, [clearSignal, clearLocal]);
 
-  // Flatten everything (white + background + problems + highlighter + ink) to a PNG.
+  // Flatten everything (paper + background + problems + highlighter + ink) to
+  // a PNG. If the view is zoomed, repaint at 100% first so the export is the
+  // whole page, then put the view back.
   const buildExportCanvas = useCallback((): HTMLCanvasElement | null => {
     const dry = dryRef.current, hl = hlRef.current;
     if (!dry || !hl) return null;
+    const savedView = viewRef.current;
+    const zoomed = savedView.s !== 1 || savedView.x !== 0 || savedView.y !== 0;
+    if (zoomed) {
+      viewRef.current = { s: 1, x: 0, y: 0 };
+      redrawAll();
+    }
     const rect = rectRef.current;
     const W = rect.width, H = rect.height, scale = 2;
     const out = document.createElement("canvas");
     out.width = Math.max(1, Math.floor(W * scale));
     out.height = Math.max(1, Math.floor(H * scale));
     const o = out.getContext("2d");
-    if (!o) return null;
+    if (!o) { if (zoomed) { viewRef.current = savedView; redrawAll(); } return null; }
     o.scale(scale, scale);
-    o.fillStyle = "#ffffff";
-    o.fillRect(0, 0, W, H);
+    if (paper === "dots") {
+      o.fillStyle = PAPER_CREAM;
+      o.fillRect(0, 0, W, H);
+      o.fillStyle = DOT_COLOR;
+      for (let y = DOT_PITCH / 2; y < H; y += DOT_PITCH) {
+        for (let x = DOT_PITCH / 2; x < W; x += DOT_PITCH) {
+          o.beginPath();
+          o.arc(x, y, 1.1, 0, Math.PI * 2);
+          o.fill();
+        }
+      }
+    } else {
+      o.fillStyle = "#ffffff";
+      o.fillRect(0, 0, W, H);
+    }
 
     const img = bgImgRef.current;
     if (img && img.complete && img.naturalWidth > 0) {
@@ -628,8 +787,13 @@ export default function InkBoard({
 
     o.drawImage(hl, 0, 0, W, H);
     o.drawImage(dry, 0, 0, W, H);
+    if (zoomed) {
+      viewRef.current = savedView;
+      syncViewStyles();
+      redrawAll();
+    }
     return out;
-  }, []);
+  }, [paper, redrawAll, syncViewStyles]);
 
   const lastExportRef = useRef(exportSignal);
   useEffect(() => {
@@ -670,8 +834,9 @@ export default function InkBoard({
 
   const toNorm = useCallback((clientX: number, clientY: number, p: number): InkPoint => {
     const r = rectRef.current;
-    return { x: (clientX - r.left) / r.width, y: (clientY - r.top) / r.height, p };
-  }, []);
+    const pg = toPagePx(clientX, clientY);
+    return { x: pg.x / r.width, y: pg.y / r.height, p };
+  }, [toPagePx]);
 
   const queuedSegmentRef = useRef<Extract<InkMessage, { t: "seg" }> | null>(null);
   const sendFrameRef = useRef<number | null>(null);
@@ -786,14 +951,40 @@ export default function InkBoard({
   }, [clearSnapTimer, trySnap]);
 
   // Two-finger tap = undo, three-finger tap = redo (fingers are free for
-  // gestures because they never draw unless "Finger draws" is on).
+  // gestures because they never draw unless "Finger draws" is on). Once a
+  // finger MOVES past the tap radius the taps are dead and, where zoom is
+  // allowed, the same two fingers become pinch-to-zoom and one finger pans.
   const noteTouchDown = useCallback((e: React.PointerEvent) => {
-    touchTapsRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY, t: performance.now(), moved: false, up: false });
-  }, []);
+    measure();
+    touchTapsRef.current.set(e.pointerId, { x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, t: performance.now(), moved: false, up: false });
+  }, [measure]);
   const noteTouchMove = useCallback((e: React.PointerEvent) => {
     const rec = touchTapsRef.current.get(e.pointerId);
-    if (rec && Math.hypot(e.clientX - rec.x, e.clientY - rec.y) > 14) rec.moved = true;
-  }, []);
+    if (!rec) return;
+    const prevX = rec.x, prevY = rec.y;
+    rec.x = e.clientX;
+    rec.y = e.clientY;
+    if (Math.hypot(e.clientX - rec.x0, e.clientY - rec.y0) > 14) rec.moved = true;
+    if (!allowZoomRef.current) return;
+    const act = [...touchTapsRef.current.values()].filter((r) => !r.up);
+    if (act.length === 2) {
+      const other = act.find((r) => r !== rec);
+      if (!other || !act.some((r) => r.moved)) return;
+      const d0 = Math.hypot(prevX - other.x, prevY - other.y);
+      const d1 = Math.hypot(rec.x - other.x, rec.y - other.y);
+      if (d0 > 0) {
+        pinchApply(
+          d1 / d0,
+          { x: (prevX + other.x) / 2, y: (prevY + other.y) / 2 },
+          { x: (rec.x + other.x) / 2, y: (rec.y + other.y) / 2 },
+        );
+      }
+    } else if (act.length === 1 && rec.moved && viewRef.current.s > 1.001) {
+      const v = viewRef.current;
+      viewRef.current = { s: v.s, x: v.x + (rec.x - prevX), y: v.y + (rec.y - prevY) };
+      applyViewChange();
+    }
+  }, [applyViewChange, pinchApply]);
   const noteTouchUp = useCallback((e: React.PointerEvent) => {
     const rec = touchTapsRef.current.get(e.pointerId);
     if (!rec) return;
@@ -818,7 +1009,6 @@ export default function InkBoard({
     emaRef.current = e.pointerType === "pen" && e.pressure > 0 ? e.pressure : 0.55;
     lastMoveRef.current = null;
     predictedRef.current = [];
-    const r = rectRef.current;
     const t = toolRef.current;
 
     if (t === "laser") {
@@ -836,8 +1026,9 @@ export default function InkBoard({
 
     if (t === "erase") {
       eraseSweepRef.current = [];
-      hoverRef.current = { x: e.clientX - r.left, y: e.clientY - r.top };
-      eraseAt(e.clientX - r.left, e.clientY - r.top);
+      const pg = toPagePx(e.clientX, e.clientY);
+      hoverRef.current = pg;
+      eraseAt(pg.x, pg.y);
       scheduleWet();
       return;
     }
@@ -860,15 +1051,14 @@ export default function InkBoard({
       holdAnchorRef.current = { x: e.clientX, y: e.clientY, t: performance.now() };
       armSnapTimer();
     }
-  }, [applySeg, armSnapTimer, eraseAt, interactive, measure, noteTouchDown, scheduleWet, size, smoothedPressure, toNorm]);
+  }, [applySeg, armSnapTimer, eraseAt, interactive, measure, noteTouchDown, scheduleWet, size, smoothedPressure, toNorm, toPagePx]);
 
   const onMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!interactive) return;
     if (e.pointerType === "touch" && !fingerRef.current) { noteTouchMove(e); return; }
-    const r = rectRef.current;
     if (!drawingRef.current) {
       if (toolRef.current === "erase" || toolRef.current === "pixel") {
-        hoverRef.current = { x: e.clientX - r.left, y: e.clientY - r.top };
+        hoverRef.current = toPagePx(e.clientX, e.clientY);
         scheduleWet();
       }
       return;
@@ -888,11 +1078,14 @@ export default function InkBoard({
 
     // Stroke eraser: every touched stroke vanishes whole.
     if (toolRef.current === "erase") {
-      hoverRef.current = { x: e.clientX - r.left, y: e.clientY - r.top };
+      hoverRef.current = toPagePx(e.clientX, e.clientY);
       const native = e.nativeEvent;
       const coalesced = typeof native.getCoalescedEvents === "function" ? native.getCoalescedEvents() : [];
       const sources = coalesced.length ? coalesced : [native];
-      for (const ev of sources) eraseAt(ev.clientX - r.left, ev.clientY - r.top);
+      for (const ev of sources) {
+        const pg = toPagePx(ev.clientX, ev.clientY);
+        eraseAt(pg.x, pg.y);
+      }
       scheduleWet();
       return;
     }
@@ -908,7 +1101,7 @@ export default function InkBoard({
         const active = activeRef.current.get(id);
         if (active) {
           const { w, h } = size();
-          const pts = snapLinePoints(snap.anchor, { x: e.clientX - r.left, y: e.clientY - r.top });
+          const pts = snapLinePoints(snap.anchor, toPagePx(e.clientX, e.clientY));
           active.px = pts;
           stroke.points = pts.map((p) => ({ x: p.x / w, y: p.y / h, p: p.p }));
           scheduleWet();
@@ -924,9 +1117,10 @@ export default function InkBoard({
     // Predicted points: drawn on the wet layer this frame, never stored or sent.
     if (!stroke.erase && typeof native.getPredictedEvents === "function") {
       const lastP = pts.length ? pressureOf(pts[pts.length - 1].p) : emaRef.current;
-      predictedRef.current = native.getPredictedEvents().slice(0, 4).map((ev) => ({
-        x: ev.clientX - r.left, y: ev.clientY - r.top, p: lastP,
-      }));
+      predictedRef.current = native.getPredictedEvents().slice(0, 4).map((ev) => {
+        const pg = toPagePx(ev.clientX, ev.clientY);
+        return { x: pg.x, y: pg.y, p: lastP };
+      });
     }
     // Hold-to-straighten: moving past the still-radius re-arms the timer; a
     // pen held inside it lets the timer fire and snap the stroke.
@@ -944,7 +1138,7 @@ export default function InkBoard({
     };
     applySeg(seg);
     queueSegment(seg);
-  }, [applySeg, armSnapTimer, eraseAt, interactive, noteTouchMove, queueSegment, scheduleWet, size, smoothedPressure, toNorm]);
+  }, [applySeg, armSnapTimer, eraseAt, interactive, noteTouchMove, queueSegment, scheduleWet, size, smoothedPressure, toNorm, toPagePx]);
 
   const onUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     if (interactive && e.pointerType === "touch" && !fingerRef.current) {
@@ -1020,41 +1214,55 @@ export default function InkBoard({
       ref={wrapRef}
       style={{
         position: "absolute", inset: 0,
-        background: transparent ? "transparent" : "#ffffff",
+        background: transparent ? "transparent" : paper === "dots" ? PAPER_CREAM : "#ffffff",
+        ...(paper === "dots" && !transparent
+          ? {
+              backgroundImage: `radial-gradient(circle, ${DOT_COLOR} 1.1px, transparent 1.5px)`,
+              backgroundSize: `${DOT_PITCH}px ${DOT_PITCH}px`,
+              backgroundPosition: "0px 0px",
+            }
+          : {}),
         overflow: "hidden",
         pointerEvents: passThrough ? "none" : undefined,
+        display: hidden ? "none" : undefined,
       }}
     >
-      {bgUrl && !transparent && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          ref={bgImgRef}
-          src={bgUrl}
-          alt=""
-          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none", userSelect: "none" }}
-        />
-      )}
-      {displayedProblem && displayedProblem.trim() && !transparent && (
-        <div
-          style={{
-            position: "absolute", inset: 0, padding: "clamp(18px,3.5vw,44px)",
-            display: "flex", flexDirection: "column", gap: "clamp(22px,7vh,80px)",
-            pointerEvents: "none", userSelect: "none",
-          }}
-        >
-          {displayedProblem.split("\n").map((line) => line.trim()).filter(Boolean).map((line, i) => (
+      {/* Page furniture (background image, problem cards) lives in one layer
+          so the zoom transform can carry it along with the ink. */}
+      {!transparent && (
+        <div ref={pageLayerRef} style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+          {bgUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              ref={bgImgRef}
+              src={bgUrl}
+              alt=""
+              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none", userSelect: "none" }}
+            />
+          )}
+          {displayedProblem && displayedProblem.trim() && (
             <div
-              key={i}
               style={{
-                alignSelf: "flex-start", maxWidth: "74%",
-                background: "#fbf7ef", border: "1px solid #ece4d4", borderRadius: 14,
-                padding: "12px 22px", fontFamily: "var(--bdb-font)", fontWeight: 700,
-                fontSize: "clamp(1.25rem,2.7vw,2.1rem)", lineHeight: 1.25, color: "#201e1a",
+                position: "absolute", inset: 0, padding: "clamp(18px,3.5vw,44px)",
+                display: "flex", flexDirection: "column", gap: "clamp(22px,7vh,80px)",
+                pointerEvents: "none", userSelect: "none",
               }}
             >
-              {line}
+              {displayedProblem.split("\n").map((line) => line.trim()).filter(Boolean).map((line, i) => (
+                <div
+                  key={i}
+                  style={{
+                    alignSelf: "flex-start", maxWidth: "74%",
+                    background: paper === "dots" ? "#ffffff" : "#fbf7ef", border: "1px solid #ece4d4", borderRadius: 14,
+                    padding: "12px 22px", fontFamily: "var(--bdb-font)", fontWeight: 700,
+                    fontSize: "clamp(1.25rem,2.7vw,2.1rem)", lineHeight: 1.25, color: "#201e1a",
+                  }}
+                >
+                  {line}
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
       )}
       <canvas ref={hlRef} style={layerStyle} />
@@ -1073,6 +1281,28 @@ export default function InkBoard({
         onPointerCancel={onUp}
         onPointerLeave={onLeave}
       />
+      {allowZoom && zoomPct > 100 && (
+        <div
+          style={{
+            position: "absolute", left: 12, bottom: 12, zIndex: 4,
+            display: "inline-flex", alignItems: "center", gap: 10,
+            background: "rgba(32,30,26,0.85)", color: "#fff", borderRadius: 999,
+            padding: "7px 8px 7px 16px", fontFamily: "var(--bdb-font)", fontWeight: 800, fontSize: "0.82rem",
+          }}
+        >
+          {zoomPct}%
+          <button
+            onClick={resetView}
+            style={{
+              font: "inherit", fontWeight: 800, border: "none", borderRadius: 999,
+              padding: "5px 12px", background: "#fcaf38", color: "#201e1a", cursor: "pointer",
+              touchAction: "manipulation",
+            }}
+          >
+            Fit
+          </button>
+        </div>
+      )}
     </div>
   );
 }

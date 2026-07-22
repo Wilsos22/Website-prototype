@@ -37,6 +37,20 @@ const WIDTHS: { label: string; px: number }[] = [
 
 type Surface = "board" | "screen";
 
+// Per-page controls: each board page carries its own signals and furniture,
+// so Undo, Clear, Background, and Problem always act on the page in view.
+type PageState = {
+  clear: number;
+  undo: number;
+  redo: number;
+  exportSig: number;
+  bg: string | null;
+  problem: string | null;
+};
+
+const freshPage = (): PageState => ({ clear: 0, undo: 0, redo: 0, exportSig: 0, bg: null, problem: null });
+const MAX_PAGES = 8;
+
 export default function IpadPage() {
   const [room, setRoom] = useState("main");
   const [surface, setSurface] = useState<Surface>("board");
@@ -44,16 +58,14 @@ export default function IpadPage() {
   const [tool, setTool] = useState<InkTool>("pen");
   const [penWidth, setPenWidth] = useState(6);
   const [fingerDraws, setFingerDraws] = useState(false);
-  const [background, setBackground] = useState<string | null>(null);
-  const [problem, setProblem] = useState<string | null>(null);
+  const [pages, setPages] = useState<PageState[]>([freshPage()]);
+  const [activePage, setActivePage] = useState(0);
   const [showProblem, setShowProblem] = useState(false);
-  const [clearSignal, setClearSignal] = useState(0);
   const [screenClearSignal, setScreenClearSignal] = useState(0);
   const [undoSignal, setUndoSignal] = useState(0);
   const [redoSignal, setRedoSignal] = useState(0);
   const [scratchUndoSignal, setScratchUndoSignal] = useState(0);
   const [history, setHistory] = useState<{ undo: boolean; redo: boolean }>({ undo: false, redo: false });
-  const [exportSignal, setExportSignal] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const [showTemplates, setShowTemplates] = useState(false);
   const [scratchOpen, setScratchOpen] = useState(false);
@@ -62,6 +74,42 @@ export default function IpadPage() {
   const [screenAr, setScreenAr] = useState(16 / 9);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const ctrlRef = useRef<InkChannel | null>(null);
+
+  // Live values the ctrl-channel handler and history callbacks read.
+  const activePageRef = useRef(0);
+  useEffect(() => { activePageRef.current = activePage; }, [activePage]);
+  const pageCountRef = useRef(1);
+  useEffect(() => { pageCountRef.current = pages.length; }, [pages.length]);
+  const scratchOpenRef = useRef(false);
+  useEffect(() => { scratchOpenRef.current = scratchOpen; }, [scratchOpen]);
+  const surfaceRef = useRef<Surface>("board");
+  useEffect(() => { surfaceRef.current = surface; }, [surface]);
+  const historiesRef = useRef<Record<number, { undo: boolean; redo: boolean }>>({});
+  const screenHistoryRef = useRef({ undo: false, redo: false });
+
+  const page = pages[activePage] ?? pages[0];
+
+  function patchPage(i: number, patch: Partial<PageState>) {
+    setPages((ps) => ps.map((p, j) => (j === i ? { ...p, ...patch } : p)));
+  }
+  function bumpPage(key: "clear" | "undo" | "redo" | "exportSig") {
+    setPages((ps) => ps.map((p, j) => (j === activePage ? { ...p, [key]: p[key] + 1 } : p)));
+  }
+  function flipTo(i: number) {
+    setActivePage(i);
+    setHistory(historiesRef.current[i] ?? { undo: false, redo: false });
+  }
+  function addPage() {
+    if (pages.length >= MAX_PAGES) return;
+    setPages((ps) => [...ps, freshPage()]);
+    flipTo(pages.length);
+  }
+  function switchSurface(next: Surface) {
+    setSurface(next);
+    setHistory(next === "board"
+      ? historiesRef.current[activePage] ?? { undo: false, redo: false }
+      : screenHistoryRef.current);
+  }
 
   function flashToast(message: string) {
     setToast(message);
@@ -119,12 +167,24 @@ export default function IpadPage() {
     };
   }, []);
 
-  // Control channel: open/close the scratch overlay on the board.
+  // Control channel: scratch overlay open/close and page flips. A display
+  // that joins (or reconnects) says hello; answer with where we are.
   useEffect(() => {
-    const ctrl = joinInkRoom(`${room}__ctrl`, (m) => { if (m.t === "scratch") setScratchOpen(m.open); });
+    const ctrl = joinInkRoom(`${room}__ctrl`, (m) => {
+      if (m.t === "scratch") setScratchOpen(m.open);
+      else if (m.t === "hello") {
+        ctrl.send({ t: "pageflip", index: activePageRef.current, count: pageCountRef.current });
+        if (scratchOpenRef.current) ctrl.send({ t: "scratch", open: true });
+      }
+    });
     ctrlRef.current = ctrl;
     return () => ctrl.close();
   }, [room]);
+
+  // Tell the displays which page is up whenever it changes.
+  useEffect(() => {
+    ctrlRef.current?.send({ t: "pageflip", index: activePage, count: pages.length });
+  }, [activePage, pages.length]);
 
   // The projector overlay announces its aspect ratio; letterbox to match so
   // strokes land on the wall exactly where the pen put them.
@@ -147,8 +207,9 @@ export default function IpadPage() {
   function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    const target = activePage;
     const reader = new FileReader();
-    reader.onload = () => setBackground(typeof reader.result === "string" ? reader.result : null);
+    reader.onload = () => patchPage(target, { bg: typeof reader.result === "string" ? reader.result : null });
     reader.readAsDataURL(file);
     e.target.value = "";
   }
@@ -207,9 +268,19 @@ export default function IpadPage() {
           {boardStatus === "connected" ? "Connected" : boardStatus === "disconnected" ? "Reconnecting" : "Connecting"}
         </span>
         <div className="ip-seg" role="group" aria-label="Writing surface">
-          <button className={onBoard ? "on" : ""} onClick={() => setSurface("board")}>Board</button>
-          <button className={!onBoard ? "on" : ""} onClick={() => setSurface("screen")}>Write on screen</button>
+          <button className={onBoard ? "on" : ""} onClick={() => switchSurface("board")}>Board</button>
+          <button className={!onBoard ? "on" : ""} onClick={() => switchSurface("screen")}>Write on screen</button>
         </div>
+        {onBoard && (
+          <div className="ip-group" role="group" aria-label="Pages">
+            {pages.map((_, i) => (
+              <button key={i} className={`ip-btn${i === activePage ? " on" : ""}`} onClick={() => flipTo(i)}>{i + 1}</button>
+            ))}
+            {pages.length < MAX_PAGES && (
+              <button className="ip-btn" aria-label="Add page" onClick={addPage}>+</button>
+            )}
+          </div>
+        )}
         <span className="ip-divider" />
 
         <div className="ip-group" role="group" aria-label="Colors">
@@ -231,8 +302,8 @@ export default function IpadPage() {
         <button className={`ip-btn${tool === "erase" ? " on" : ""}`} onClick={() => setTool("erase")}>Eraser</button>
         <button className={`ip-btn${tool === "pixel" ? " on" : ""}`} onClick={() => setTool("pixel")}>Pixel</button>
         <span className="ip-divider" />
-        <button className="ip-btn" disabled={!history.undo} style={!history.undo ? { opacity: 0.4 } : undefined} onClick={() => setUndoSignal((n) => n + 1)}>Undo</button>
-        <button className="ip-btn" disabled={!history.redo} style={!history.redo ? { opacity: 0.4 } : undefined} onClick={() => setRedoSignal((n) => n + 1)}>Redo</button>
+        <button className="ip-btn" disabled={!history.undo} style={!history.undo ? { opacity: 0.4 } : undefined} onClick={() => { if (onBoard) bumpPage("undo"); else setUndoSignal((n) => n + 1); }}>Undo</button>
+        <button className="ip-btn" disabled={!history.redo} style={!history.redo ? { opacity: 0.4 } : undefined} onClick={() => { if (onBoard) bumpPage("redo"); else setRedoSignal((n) => n + 1); }}>Redo</button>
 
         <div className="ip-group" role="group" aria-label="Width">
           {WIDTHS.map((w) => (
@@ -246,9 +317,9 @@ export default function IpadPage() {
             <button className={`ip-btn${showProblem ? " on" : ""}`} onClick={() => setShowProblem((v) => !v)}>Problem</button>
             <button className={`ip-btn${showTemplates ? " on" : ""}`} onClick={() => setShowTemplates((v) => !v)}>Templates</button>
             <button className="ip-btn" onClick={() => fileRef.current?.click()}>Background</button>
-            {background && <button className="ip-btn warn" onClick={() => setBackground(null)}>Remove bg</button>}
+            {page.bg && <button className="ip-btn warn" onClick={() => patchPage(activePage, { bg: null })}>Remove bg</button>}
             <button className={`ip-btn${scratchOpen ? " on" : ""}`} onClick={toggleScratch}>Scratch</button>
-            <button className="ip-btn warn" onClick={() => setClearSignal((n) => n + 1)}>Clear</button>
+            <button className="ip-btn warn" onClick={() => bumpPage("clear")}>Clear</button>
           </>
         )}
         {!onBoard && (
@@ -257,7 +328,7 @@ export default function IpadPage() {
 
         <span className="ip-spacer" />
         <button className={`ip-btn${fingerDraws ? " on" : ""}`} onClick={() => setFingerDraws((v) => !v)}>Finger draws</button>
-        {onBoard && <button className="ip-btn" onClick={() => setExportSignal((n) => n + 1)}>Export</button>}
+        {onBoard && <button className="ip-btn" onClick={() => bumpPage("exportSig")}>Export</button>}
         <button className="ip-btn" onClick={toggleFullscreen}>Full screen</button>
         <input ref={fileRef} type="file" accept="image/*" onChange={onPickFile} style={{ display: "none" }} />
       </div>
@@ -267,92 +338,105 @@ export default function IpadPage() {
           <textarea
             className="ip-problem-in"
             placeholder="One problem per line - they show on the board with space to solve."
-            value={problem ?? ""}
-            onChange={(e) => setProblem(e.target.value ? e.target.value : null)}
+            value={page.problem ?? ""}
+            onChange={(e) => patchPage(activePage, { problem: e.target.value ? e.target.value : null })}
             rows={2}
           />
-          <button className="ip-btn warn" onClick={() => setProblem(null)}>Clear problem</button>
+          <button className="ip-btn warn" onClick={() => patchPage(activePage, { problem: null })}>Clear problem</button>
         </div>
       )}
 
       {onBoard && showTemplates && (
         <div className="ip-templates">
           {BOARD_TEMPLATES.map((t) => (
-            <button key={t.id} className="ip-btn" onClick={() => { setBackground(t.build()); setShowTemplates(false); }}>{t.label}</button>
+            <button key={t.id} className="ip-btn" onClick={() => { patchPage(activePage, { bg: t.build() }); setShowTemplates(false); }}>{t.label}</button>
           ))}
         </div>
       )}
 
       <div className="ip-stage">
-        {onBoard ? (
-          <>
-            <InkBoard
-              room={room}
-              interactive
-              color={color}
-              tool={tool}
-              penWidth={penWidth}
-              fingerDraws={fingerDraws}
-              background={background}
-              problem={problem}
-              clearSignal={clearSignal}
-              undoSignal={undoSignal}
-              redoSignal={redoSignal}
-              exportSignal={exportSignal}
-              onExport={handleExport}
-              onHistoryChange={(undo, redo) => setHistory({ undo, redo })}
-              onConnectionChange={setBoardStatus}
-            />
-            {scratchOpen && (
-              <div className="ip-scratch">
-                <div className="ip-scratch-bar">
-                  <span className="ip-scratch-title">Scratch</span>
-                  <span className="ip-spacer" />
-                  <button className="ip-btn" onClick={() => setScratchUndoSignal((n) => n + 1)}>Undo</button>
-                  <button className="ip-btn warn" onClick={() => setScratchClear((n) => n + 1)}>Clear</button>
-                  <button className="ip-btn" onClick={toggleScratch}>Done</button>
-                </div>
-                <div className="ip-scratch-stage">
-                  <InkBoard
-                    room={`${room}__scratch`}
-                    interactive
-                    color={color}
-                    tool={tool}
-                    penWidth={penWidth}
-                    fingerDraws={fingerDraws}
-                    clearSignal={scratchClear}
-                    undoSignal={scratchUndoSignal}
-                  />
-                </div>
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="ip-screen-stage">
-            <div className="ip-screen-box" style={{ aspectRatio: String(screenAr) }}>
+        {/* Every page stays mounted (hidden pages park at 1x1 canvases) so
+            strokes, history, and sync survive page flips AND surface
+            switches - toggling to Write on screen no longer discards the
+            iPad's copy of the board. */}
+        {pages.map((p, i) => (
+          <InkBoard
+            key={i}
+            room={i === 0 ? room : `${room}__p${i}`}
+            interactive
+            hidden={!onBoard || i !== activePage}
+            allowZoom
+            paper="dots"
+            color={color}
+            tool={tool}
+            penWidth={penWidth}
+            fingerDraws={fingerDraws}
+            background={p.bg}
+            problem={p.problem}
+            clearSignal={p.clear}
+            undoSignal={p.undo}
+            redoSignal={p.redo}
+            exportSignal={p.exportSig}
+            onExport={handleExport}
+            onHistoryChange={(undo, redo) => {
+              historiesRef.current[i] = { undo, redo };
+              if (surfaceRef.current === "board" && i === activePageRef.current) setHistory({ undo, redo });
+            }}
+            onConnectionChange={i === 0 ? setBoardStatus : undefined}
+          />
+        ))}
+        {onBoard && scratchOpen && (
+          <div className="ip-scratch">
+            <div className="ip-scratch-bar">
+              <span className="ip-scratch-title">Scratch</span>
+              <span className="ip-spacer" />
+              <button className="ip-btn" onClick={() => setScratchUndoSignal((n) => n + 1)}>Undo</button>
+              <button className="ip-btn warn" onClick={() => setScratchClear((n) => n + 1)}>Clear</button>
+              <button className="ip-btn" onClick={toggleScratch}>Done</button>
+            </div>
+            <div className="ip-scratch-stage">
+              <InkBoard
+                room={`${room}__scratch`}
+                interactive
+                color={color}
+                tool={tool}
+                penWidth={penWidth}
+                fingerDraws={fingerDraws}
+                clearSignal={scratchClear}
+                undoSignal={scratchUndoSignal}
+              />
+            </div>
+          </div>
+        )}
+        <div className="ip-screen-stage" style={onBoard ? { display: "none" } : undefined}>
+          <div className="ip-screen-box" style={{ aspectRatio: String(screenAr) }}>
+            {!onBoard && (
               <iframe
                 className="ip-screen-frame"
                 src={`/teacher/present?embed=1${room !== "main" ? `&room=${encodeURIComponent(room)}` : ""}`}
                 title="Live class screen"
               />
-              <InkBoard
-                room={`${room}__over`}
-                interactive
-                transparent
-                color={color}
-                tool={tool}
-                penWidth={penWidth}
-                fingerDraws={fingerDraws}
-                clearSignal={screenClearSignal}
-                undoSignal={undoSignal}
-                redoSignal={redoSignal}
-                onHistoryChange={(undo, redo) => setHistory({ undo, redo })}
-                onConnectionChange={setBoardStatus}
-              />
-              <span className="ip-screen-note">Writing over the class screen</span>
-            </div>
+            )}
+            <InkBoard
+              room={`${room}__over`}
+              interactive
+              transparent
+              hidden={onBoard}
+              color={color}
+              tool={tool}
+              penWidth={penWidth}
+              fingerDraws={fingerDraws}
+              clearSignal={screenClearSignal}
+              undoSignal={undoSignal}
+              redoSignal={redoSignal}
+              onHistoryChange={(undo, redo) => {
+                screenHistoryRef.current = { undo, redo };
+                if (surfaceRef.current === "screen") setHistory({ undo, redo });
+              }}
+            />
+            <span className="ip-screen-note">Writing over the class screen</span>
           </div>
-        )}
+        </div>
       </div>
 
       {toast && (

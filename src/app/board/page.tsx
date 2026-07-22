@@ -2,14 +2,18 @@
 
 // Board display — runs on the computer driving the interactive panel.
 // Shows whatever the paired iPad (same room) writes, live. Read-only.
+// Follows the iPad's page flips; every page stays mounted (inactive pages
+// park at 1x1 canvases) so flipping back is instant and complete.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import InkBoard from "@/components/InkBoard";
-import { joinInkRoom } from "@/lib/inkSync";
+import { joinInkRoom, type InkConnectionStatus } from "@/lib/inkSync";
 
 export default function BoardPage() {
   const [room, setRoom] = useState("main");
   const [scratchOpen, setScratchOpen] = useState(false);
+  const [pageView, setPageView] = useState({ index: 0, count: 1 });
+  const lastCtrlStatus = useRef<InkConnectionStatus>("connecting");
   useEffect(() => {
     try {
       const r = new URLSearchParams(window.location.search).get("room");
@@ -17,15 +21,34 @@ export default function BoardPage() {
     } catch { /* ignore */ }
   }, []);
 
-  // Mirror the iPad's scratch overlay open/close.
+  // Mirror the iPad's scratch overlay and page flips. Ask where things stand
+  // on join, and ask again after a connection drop.
   useEffect(() => {
-    const ctrl = joinInkRoom(`${room}__ctrl`, (m) => { if (m.t === "scratch") setScratchOpen(m.open); });
+    const ctrl = joinInkRoom(`${room}__ctrl`, (m) => {
+      if (m.t === "scratch") setScratchOpen(m.open);
+      else if (m.t === "pageflip") {
+        const count = Math.max(1, m.count);
+        setPageView({ index: Math.min(Math.max(0, m.index), count - 1), count });
+      }
+    }, (status) => {
+      if (status === "connected" && lastCtrlStatus.current === "disconnected") ctrl.send({ t: "hello" });
+      lastCtrlStatus.current = status;
+    });
+    ctrl.send({ t: "hello" });
     return () => ctrl.close();
   }, [room]);
 
   return (
-    <main style={{ position: "fixed", inset: 0, background: "#ffffff" }}>
-      <InkBoard room={room} interactive={false} />
+    <main style={{ position: "fixed", inset: 0, background: "#faf6ee" }}>
+      {Array.from({ length: pageView.count }, (_, i) => (
+        <InkBoard
+          key={i}
+          room={i === 0 ? room : `${room}__p${i}`}
+          interactive={false}
+          hidden={i !== pageView.index}
+          paper="dots"
+        />
+      ))}
       {scratchOpen && (
         <div style={{ position: "absolute", inset: 0, zIndex: 3, background: "#ffffff" }}>
           <InkBoard room={`${room}__scratch`} interactive={false} />
@@ -41,7 +64,7 @@ export default function BoardPage() {
         }}
       >
         <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#14b8a6", display: "inline-block" }} />
-        Board · {room}
+        Board · {room}{pageView.count > 1 ? ` · Page ${pageView.index + 1} of ${pageView.count}` : ""}
       </div>
     </main>
   );
