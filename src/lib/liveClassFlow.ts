@@ -58,6 +58,7 @@ export const TEACHER_REMOTE_ACTIONS = [
   ...DISCUSSION_REMOTE_ACTIONS,
   "reveal-results",
   "reveal-final-score",
+  "transition-now",
   "play-warning",
   "play-countdown",
   "play-times-up",
@@ -276,6 +277,18 @@ export interface LiveClassFlowSnapshot {
     nextDirections: string | null;
     advanceMode: "manual" | "automatic";
     steps?: LiveFlowSequenceStep[];
+  } | null;
+  // An ad-hoc "Transition now" moment: the room moves while the state clock
+  // pauses. Cleared by the lazy pacing check when endsAt passes (the paused
+  // clock resumes), or by any Next/Back navigation.
+  interlude?: {
+    stateId: string;
+    label: string;
+    color: string;
+    directions: string;
+    totalSeconds: number;
+    endsAt: string;
+    resumeRunning: boolean;
   } | null;
   paper?: {
     task: string;

@@ -32,6 +32,59 @@ export const dynamic = "force-dynamic";
 
 const ACTIONS = new Set<string>(TEACHER_REMOTE_ACTIONS);
 const DIRECT_TIMER_ACTIONS = new Set<TeacherRemoteAction>(["toggle-timer", "add-30", "subtract-30", "reset-timer"]);
+
+// Ad-hoc "Transition now" vibes. These reuse the planned transition states'
+// ids so the classroom laptop plays the same uploaded music slot.
+const INTERLUDE_VIBES: Record<string, { stateId: string; label: string; color: string; directions: string }> = {
+  hustle: { stateId: "transition-hustle", label: "Hustle", color: "#f95335", directions: "Move now. Materials away, next spot, eyes up before the music ends." },
+  reset: { stateId: "transition-reset", label: "Reset", color: "#fcaf38", directions: "Reset the room: new groups, new materials, new station." },
+  settle: { stateId: "transition-settle", label: "Settle", color: "#50a3a4", directions: "Bring it down. Voices off, seats found, breathe." },
+};
+
+// Pause the state clock and open a short movement window. The lazy pacing
+// check clears it when endsAt passes and resumes the paused clock.
+function startInterlude(flow: LiveClassFlowSnapshot, vibeKey: unknown, secondsRaw: unknown): LiveClassFlowSnapshot {
+  const vibe = INTERLUDE_VIBES[String(vibeKey || "hustle")] || INTERLUDE_VIBES.hustle;
+  const seconds = Math.max(10, Math.min(180, Math.round(Number(secondsRaw) || 30)));
+  const now = Date.now();
+  const remaining = flow.timer ? liveTimerSeconds(flow.timer, now) : 0;
+  return {
+    ...flow,
+    updatedAt: new Date(now).toISOString(),
+    timer: flow.timer
+      ? { ...flow.timer, secondsLeft: remaining, running: false, endsAt: null }
+      : flow.timer,
+    interlude: {
+      stateId: vibe.stateId,
+      label: vibe.label,
+      color: vibe.color,
+      directions: vibe.directions,
+      totalSeconds: seconds,
+      endsAt: new Date(now + seconds * 1000).toISOString(),
+      resumeRunning: Boolean(flow.timer?.running),
+    },
+  };
+}
+
+// Clear an expired interlude and resume the clock it paused.
+function endInterlude(flow: LiveClassFlowSnapshot): LiveClassFlowSnapshot {
+  const interlude = flow.interlude;
+  const now = Date.now();
+  const secondsLeft = flow.timer?.secondsLeft ?? 0;
+  const resumeRunning = Boolean(interlude?.resumeRunning && flow.timer && secondsLeft > 0);
+  return {
+    ...flow,
+    updatedAt: new Date(now).toISOString(),
+    interlude: null,
+    timer: flow.timer
+      ? {
+          ...flow.timer,
+          running: resumeRunning,
+          endsAt: resumeRunning ? new Date(now + secondsLeft * 1000).toISOString() : null,
+        }
+      : flow.timer,
+  };
+}
 const DIRECT_BOARD_ACTIONS = new Set<TeacherRemoteAction>(["show-board", "hide-board"]);
 const CLAIMED_FLOW_ACTIONS = new Set<TeacherRemoteAction>([
   "next",
@@ -297,6 +350,7 @@ async function navigateFlow(
     liveFlow: {
       ...flow,
       version: 2,
+      interlude: null,
       updatedAt: new Date().toISOString(),
       lesson: publicLiveLessonSnapshot(contract.lesson),
       state: {
@@ -682,6 +736,24 @@ async function applyLazyAutomaticTransition(
 ): Promise<RemoteSessionRow> {
   const flow = session.live_flow;
   if (!flow || (session.remote_command && !session.remote_command.receivedAt)) return session;
+  // An interlude freezes normal pacing entirely; when its clock runs out,
+  // clear it and resume the state the room left - nothing else advances.
+  if (flow.interlude) {
+    if (Date.parse(flow.interlude.endsAt) > Date.now()) return session;
+    const resumedFlow = endInterlude(flow);
+    const resumeCommand: TeacherRemoteCommand = {
+      nonce: crypto.randomUUID(),
+      action: "toggle-timer",
+      issuedAt: new Date().toISOString(),
+      receivedAt: new Date().toISOString(),
+    };
+    try {
+      const persisted = await persistDirectFlow(db, session, resumedFlow, resumeCommand);
+      return { ...session, live_flow: persisted, remote_command: resumeCommand };
+    } catch {
+      return await reloadRemoteSession(db, session.id) || session;
+    }
+  }
   const transition = automaticTransitionDue(flow, Date.now());
   if (!transition) return session;
 
@@ -830,7 +902,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  let body: { action?: string; sessionId?: string; lessonCode?: string; notionLessonId?: string; expectedStateId?: string; expectedSequenceIndex?: number };
+  let body: { action?: string; sessionId?: string; lessonCode?: string; notionLessonId?: string; vibe?: string; seconds?: number; expectedStateId?: string; expectedSequenceIndex?: number };
   try {
     body = await request.json();
   } catch {
@@ -931,6 +1003,10 @@ export async function POST(request: Request) {
       if (!liveFlow) throw new Error("Load a discussion before choosing a sharer.");
       const selectedName = await chooseSharerName(result.db, workingSession);
       liveFlow = selectDiscussionSharer(liveFlow, selectedName);
+      handledDirectly = true;
+    } else if (action === "transition-now") {
+      if (!liveFlow) throw new Error("Load a lesson before starting a transition.");
+      liveFlow = startInterlude(liveFlow, body.vibe, body.seconds);
       handledDirectly = true;
     } else if (DIRECT_TIMER_ACTIONS.has(action)) {
       if (!liveFlow) throw new Error("Load a lesson before controlling its timer.");

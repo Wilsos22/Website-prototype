@@ -449,12 +449,15 @@ export default function SessionPage() {
     return () => clearInterval(interval);
   }, [liveFlow?.timer?.running]);
 
-  async function sendFlowAction(action: "start-lesson" | "previous" | "toggle-timer" | "next") {
+  async function sendFlowAction(
+    action: "start-lesson" | "previous" | "toggle-timer" | "next" | "transition-now",
+    extra?: Record<string, unknown>,
+  ) {
     if (!session || flowBusy) return;
     setFlowBusy(action);
     setFlowNote(null);
     try {
-      const payload: Record<string, unknown> = { action, sessionId: session.id };
+      const payload: Record<string, unknown> = { action, sessionId: session.id, ...(extra || {}) };
       if (action === "start-lesson") {
         payload.notionLessonId = todayLesson?.id || "";
         payload.lessonCode = todayLesson?.lessonCode || "";
@@ -525,6 +528,8 @@ export default function SessionPage() {
         .se-flow-key:hover:not(:disabled) { border-color:#14b8a6; }
         .se-flow-key:disabled { opacity:0.55; cursor:not-allowed; }
         .se-flow-key.primary { background:#14b8a6; border-color:#14b8a6; color:#04231f; }
+        .se-flow-key.mini { min-height:40px; min-width:0; padding:0 14px; font-size:0.84rem; }
+        .se-flow-transitions { gap:6px; }
         .se-flow-note { margin:0 0 10px; color:#92660a; font-size:0.88rem; font-weight:800; }
         .se-flow-none { margin:6px 0 14px; color:#a89f8c; font-size:0.9rem; font-weight:700; }
         .se-code-actions { display:flex; gap:14px; align-items:center; justify-content:center; }
@@ -644,6 +649,17 @@ export default function SessionPage() {
                     </button>
                     <button className="se-flow-key primary" onClick={() => sendFlowAction("next")} disabled={Boolean(flowBusy)}>
                       {flowBusy === "next" ? "Sending" : "Next state"}
+                    </button>
+                  </div>
+                  <div className="se-flow-keys se-flow-transitions">
+                    <button className="se-flow-key mini" onClick={() => sendFlowAction("transition-now", { vibe: "hustle", seconds: 15 })} disabled={Boolean(flowBusy)}>
+                      Hustle 15s
+                    </button>
+                    <button className="se-flow-key mini" onClick={() => sendFlowAction("transition-now", { vibe: "hustle", seconds: 30 })} disabled={Boolean(flowBusy)}>
+                      Hustle 30s
+                    </button>
+                    <button className="se-flow-key mini" onClick={() => sendFlowAction("transition-now", { vibe: "settle", seconds: 30 })} disabled={Boolean(flowBusy)}>
+                      Settle 30s
                     </button>
                   </div>
                 </div>

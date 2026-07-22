@@ -202,7 +202,12 @@ export default function PaceSupportPage() {
   const previewTheme = previewStage ? classroomStageTheme(previewStage) : null;
   const activeThemeId = previewSample && previewTheme ? previewTheme.id : theme.id;
   // Warm Notebook stage (turn 12b): paper ground, one semantic accent.
-  const accent = WARM_ACCENTS[activeThemeId] || theme.accent;
+  // Ad-hoc "Transition now": mirrors the Main projector while the room moves.
+  const interlude = connected ? flow?.interlude || null : null;
+  const interludeSeconds = interlude
+    ? Math.max(0, Math.round((Date.parse(interlude.endsAt) - Date.now()) / 1000))
+    : 0;
+  const accent = interlude ? interlude.color : WARM_ACCENTS[activeThemeId] || theme.accent;
   const style = {
     "--acc": accent,
   } as CSSProperties;
@@ -222,13 +227,16 @@ export default function PaceSupportPage() {
   const anchorText = flow?.lesson?.anchorProblem?.trim() || "";
   const anchorPose = Boolean(connected && anchorText && state?.id === "warmup");
 
+
   // Mirror of the Main projector's scene keying: every state change re-enters
   // as a scene with the incoming accent sweeping across the top.
-  const sceneKey = previewSample
-    ? `preview:${previewStage}`
-    : !connected || !state
-      ? "idle"
-      : `${state.id}:${flow?.sequence?.currentIndex ?? -1}`;
+  const sceneKey = interlude
+    ? `interlude:${interlude.endsAt}`
+    : previewSample
+      ? `preview:${previewStage}`
+      : !connected || !state
+        ? "idle"
+        : `${state.id}:${flow?.sequence?.currentIndex ?? -1}`;
 
   return (
     <main className="pace-page" style={style}>
@@ -255,6 +263,7 @@ export default function PaceSupportPage() {
         .pw-chip, .pw-dot { transition:background-color 420ms ease; }
         .pw-timer::before { transition:background-color 420ms ease; }
         .pw-hook-inner { display:grid; gap:20px; justify-items:center; }
+        .pw-interlude-clock { color:var(--acc-deep); font-size:clamp(3.4rem,9vw,7rem); line-height:0.9; font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:-0.04em; }
         .pw-hook-kicker { margin:0; color:var(--acc-deep); font-size:clamp(0.78rem,1.3vw,1rem); font-weight:900; letter-spacing:0.16em; text-transform:uppercase;
           animation:pwHookRise 560ms 180ms var(--stage-ease) both; }
         .pw-hook-rule { width:clamp(64px,7vw,110px); height:6px; border-radius:999px; background:var(--acc); transform-origin:center;
@@ -329,7 +338,7 @@ export default function PaceSupportPage() {
 
       <header className="pw-top">
         <span className="pw-dot" aria-hidden="true" />
-        <span className="pw-chip">{previewSample ? previewSample.label : state?.label || "Big Dog Math"}</span>
+        <span className="pw-chip">{interlude ? `Transition - ${interlude.label}` : previewSample ? previewSample.label : state?.label || "Big Dog Math"}</span>
         <h1 className="pw-title">{previewSample ? "Preview" : flow?.presentation?.title || state?.label || "Waiting for the lesson"}</h1>
         {flow?.lesson?.title ? <p className="pw-lesson">{flow.lesson.title}</p> : null}
         <span className="pw-textbtns" aria-label="Text size">
@@ -389,6 +398,15 @@ export default function PaceSupportPage() {
               </div>
             </div>
           )
+        ) : interlude ? (
+          <div className="pw-center">
+            <div className="pw-hook-inner">
+              <p className="pw-hook-kicker">Transition</p>
+              <h2 className="pw-hook-text">{interlude.label}</h2>
+              <p className="pw-hook-direction">{interlude.directions}</p>
+              <span className="pw-interlude-clock">{formatTime(interludeSeconds)}</span>
+            </div>
+          </div>
         ) : anchorPose ? (
           <div className="pw-center">
             <div className="pw-hook-inner">

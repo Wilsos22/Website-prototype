@@ -5,7 +5,17 @@ export interface RemoteDeckButton {
   label: string;
   detail: string;
   tone: string;
+  // Extra fields sent with the command body (e.g. transition-now vibe/seconds).
+  payload?: Record<string, string | number>;
 }
+
+// Ad-hoc movement windows: music plays, the state clock pauses, and the room
+// gets a short countdown before the lesson resumes where it was.
+export const TRANSITION_NOW_BUTTONS: readonly RemoteDeckButton[] = [
+  { action: "transition-now", label: "Hustle 15s", detail: "Quick move", tone: "orange", payload: { vibe: "hustle", seconds: 15 } },
+  { action: "transition-now", label: "Hustle 30s", detail: "Task switch", tone: "orange", payload: { vibe: "hustle", seconds: 30 } },
+  { action: "transition-now", label: "Settle 30s", detail: "Bring it down", tone: "teal", payload: { vibe: "settle", seconds: 30 } },
+];
 
 export interface AbbieRemoteDeckButton extends RemoteDeckButton {
   direction: string;

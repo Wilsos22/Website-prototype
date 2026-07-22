@@ -974,6 +974,26 @@ export default function ControlPage() {
     musicRef.current = a;
   }, [soundUrls, stopMusic]);
 
+  // Ad-hoc "Transition now" interludes (fired from the Remote or /session)
+  // arrive through the synced session row. Play the vibe's track while the
+  // interlude runs; when it clears, hand the speakers back to the resumed
+  // state's music, or go quiet if its clock is paused.
+  const interludeKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const flow = teacherSession?.live_flow;
+    const interlude = flow?.interlude || null;
+    const key = interlude ? `${interlude.stateId}:${interlude.endsAt}` : null;
+    if (key === interludeKeyRef.current) return;
+    const hadInterlude = Boolean(interludeKeyRef.current);
+    interludeKeyRef.current = key;
+    if (interlude) {
+      startMusicFor(interlude.stateId);
+    } else if (hadInterlude) {
+      if (flow?.timer?.running && flow.state) startMusicFor(flow.state.id);
+      else stopMusic();
+    }
+  }, [teacherSession, startMusicFor, stopMusic]);
+
   // Restore the active pacing state once when Control reconnects to an open
   // session. Subsequent live updates continue through the normal sync path.
   useEffect(() => {
