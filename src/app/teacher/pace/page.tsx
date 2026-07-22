@@ -11,8 +11,13 @@ import { LIVE_FLOW_MODE, getStoredTeacherSessionId, liveTimerSeconds, type LiveC
 import { WARM_ACCENTS } from "@/lib/warmNotebook";
 
 // ?preview=<stage id> renders the shell with sample content and no session.
-const PREVIEW_SAMPLES: Record<string, { label: string; action: string; steps: string[] }> = {
-  evergreen: { label: "Warm-up", action: "Screens up. Open the warm-up.", steps: ["Work silently", "Five questions plus the bonus", "Submit when finished"] },
+const PREVIEW_SAMPLES: Record<string, { label: string; action: string; steps: string[]; anchor?: string }> = {
+  evergreen: {
+    label: "Warm-up",
+    action: "Screens up. Open the warm-up.",
+    steps: ["Work silently", "Five questions plus the bonus", "Submit when finished"],
+    anchor: "A concert venue is splitting its floor into a standing area and a VIP section. The floor is 6 rows by 28 squares. Where would you put the dividing line - and how could you prove the two sections still add up to the whole floor?",
+  },
   scenario: { label: "Launch", action: "Screens low - not closed.", steps: ["Think silently for 10 seconds", "Tell your partner one sum", "What changed? What stayed the same?"] },
   concrete: { label: "Concrete", action: "Build it with counters.", steps: ["Trackpads parked", "Predict", "Build", "Freeze"] },
   discussion: { label: "Discussion", action: "Talk in rounds.", steps: ["Think first", "Use a stem", "Revise your answer"] },
@@ -211,6 +216,20 @@ export default function PaceSupportPage() {
 
   const vocabCards = discussionVocabulary.slice(0, 3).map(splitVocab);
 
+  // The hook question shows on BOTH projector panels during warm-up. Here it
+  // takes the stage and the big clock card stands down - the small topbar
+  // timer pill carries the time.
+  const anchorText = flow?.lesson?.anchorProblem?.trim() || "";
+  const anchorPose = Boolean(connected && anchorText && state?.id === "warmup");
+
+  // Mirror of the Main projector's scene keying: every state change re-enters
+  // as a scene with the incoming accent sweeping across the top.
+  const sceneKey = previewSample
+    ? `preview:${previewStage}`
+    : !connected || !state
+      ? "idle"
+      : `${state.id}:${flow?.sequence?.currentIndex ?? -1}`;
+
   return (
     <main className="pace-page" style={style}>
       <style>{`
@@ -224,7 +243,34 @@ export default function PaceSupportPage() {
           background-color:#F3F0E7;
           background-image:radial-gradient(circle,#CBC4B2 1px,transparent 1.3px);
           background-size:18px 18px;
-          color:var(--ink); font-family:var(--bdb-font); display:grid; grid-template-rows:64px minmax(0,1fr); }
+          color:var(--ink); font-family:var(--bdb-font); display:grid; grid-template-rows:64px minmax(0,1fr);
+          --stage-ease:cubic-bezier(0.2,0.7,0.2,1); }
+        /* Scene change, mirroring the Main projector: content re-enters with a
+           rise-and-fade and the incoming state's accent sweeps the top. */
+        .pw-scene { position:absolute; inset:0; animation:pwSceneEnter 520ms var(--stage-ease) both; }
+        .pw-sweep { position:absolute; z-index:7; inset:0 0 auto 0; height:5px; background:var(--acc); transform-origin:left; pointer-events:none;
+          animation:pwSceneSweep 760ms var(--stage-ease) both; }
+        @keyframes pwSceneEnter { from { opacity:0; transform:translateY(18px); } to { opacity:1; transform:none; } }
+        @keyframes pwSceneSweep { 0% { transform:scaleX(0); opacity:1; } 62% { transform:scaleX(1); opacity:1; } 100% { transform:scaleX(1); opacity:0; } }
+        .pw-chip, .pw-dot { transition:background-color 420ms ease; }
+        .pw-timer::before { transition:background-color 420ms ease; }
+        .pw-hook-inner { display:grid; gap:20px; justify-items:center; }
+        .pw-hook-kicker { margin:0; color:var(--acc-deep); font-size:clamp(0.78rem,1.3vw,1rem); font-weight:900; letter-spacing:0.16em; text-transform:uppercase;
+          animation:pwHookRise 560ms 180ms var(--stage-ease) both; }
+        .pw-hook-rule { width:clamp(64px,7vw,110px); height:6px; border-radius:999px; background:var(--acc); transform-origin:center;
+          animation:pwHookRule 640ms 480ms var(--stage-ease) both, pwHookBreathe 4.6s 2.2s ease-in-out infinite; }
+        .pw-hook-text { margin:0; max-width:30ch; color:var(--head); text-align:center; white-space:pre-wrap; text-wrap:balance;
+          font-size:clamp(1.9rem,3.6vw,3.8rem); line-height:1.16; font-weight:800; letter-spacing:-0.02em;
+          animation:pwHookRise 680ms 640ms var(--stage-ease) both; }
+        .pw-hook-text.long { font-size:clamp(1.5rem,2.6vw,2.7rem); max-width:44ch; }
+        .pw-hook-direction { margin:0; color:var(--soft); font-size:clamp(0.95rem,1.7vw,1.3rem); font-weight:700;
+          animation:pwHookRise 560ms 1150ms var(--stage-ease) both; }
+        @keyframes pwHookRise { from { opacity:0; transform:translateY(22px); } to { opacity:1; transform:none; } }
+        @keyframes pwHookRule { from { transform:scaleX(0); } to { transform:scaleX(1); } }
+        @keyframes pwHookBreathe { 0%, 100% { opacity:1; } 50% { opacity:0.55; } }
+        @media (prefers-reduced-motion:reduce) {
+          .pw-scene, .pw-sweep, .pw-hook-kicker, .pw-hook-rule, .pw-hook-text, .pw-hook-direction { animation:none !important; }
+        }
         .pw-top { display:flex; align-items:center; gap:12px; padding:0 30px; border-bottom:1px solid rgba(120,110,90,0.18); background:rgba(243,240,231,0.86); }
         .pw-dot { width:12px; height:12px; flex:none; border-radius:3px; background:var(--acc); }
         .pw-chip { flex:none; border-radius:6px; background:var(--acc); color:#fff; padding:5px 11px; font-size:0.66rem; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; }
@@ -296,8 +342,19 @@ export default function PaceSupportPage() {
       </header>
 
       <section className="pw-body" aria-label="Pace and support" style={{ zoom: textScale }}>
+        <div className="pw-sweep" key={`sweep:${sceneKey}`} aria-hidden="true" />
+        <div className="pw-scene" key={sceneKey}>
         {!connected || !session || !flow || !state ? (
-          previewSample ? (
+          previewSample?.anchor ? (
+            <div className="pw-center">
+              <div className="pw-hook-inner">
+                <p className="pw-hook-kicker">Puzzle of the day</p>
+                <span className="pw-hook-rule" aria-hidden="true" />
+                <h2 className={`pw-hook-text${previewSample.anchor.length > 150 ? " long" : ""}`}>{previewSample.anchor}</h2>
+                <p className="pw-hook-direction">{previewSample.action}</p>
+              </div>
+            </div>
+          ) : previewSample ? (
             <div className="pw-cols">
               <div className="pw-left">
                 <h2 className="pw-action">{previewSample.action}</h2>
@@ -332,6 +389,15 @@ export default function PaceSupportPage() {
               </div>
             </div>
           )
+        ) : anchorPose ? (
+          <div className="pw-center">
+            <div className="pw-hook-inner">
+              <p className="pw-hook-kicker">Puzzle of the day</p>
+              <span className="pw-hook-rule" aria-hidden="true" />
+              <h2 className={`pw-hook-text${anchorText.length > 150 ? " long" : ""}`}>{anchorText}</h2>
+              {paceAction ? <p className="pw-hook-direction">{paceAction}</p> : null}
+            </div>
+          </div>
         ) : linkedSpinnerMode ? (
           <div className="pw-spinner">
             <ClassroomSpinner
@@ -439,6 +505,7 @@ export default function PaceSupportPage() {
             </div>
           </div>
         )}
+        </div>
       </section>
     </main>
   );
