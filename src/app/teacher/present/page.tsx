@@ -83,6 +83,32 @@ function inkOverlayParams() {
   }
 }
 
+// Transition buffer states: the room changing state is the activity, so time
+// is the hero - the vibe word, the movement directions, a huge countdown, a
+// draining bar, and what comes next. The music from the classroom laptop is
+// the audible version of the same clock.
+const TRANSITION_PREVIEWS: Record<string, { vibe: string; accent: string; directions: string; seconds: number; total: number; next: string }> = {
+  "transition-hustle": { vibe: "Hustle", accent: "#f95335", directions: "Move now. Materials away, next spot, eyes up before the music ends.", seconds: 42, total: 60, next: "Independent Paper Work" },
+  "transition-reset": { vibe: "Reset", accent: "#fcaf38", directions: "Reset the room: new groups, new materials, new station. Set up and seated before the music ends.", seconds: 84, total: 120, next: "Small Group Rotations" },
+  "transition-settle": { vibe: "Settle", accent: "#50a3a4", directions: "Bring it down. Voices off, seats found, breathe. Ready to focus when the music ends.", seconds: 31, total: 60, next: "Exit Ticket" },
+};
+
+function TransitionScene({ vibe, directions, seconds, total, next }: {
+  vibe: string; directions: string; seconds: number; total: number; next: string | null;
+}) {
+  const pct = total > 0 ? Math.max(0, Math.min(100, (seconds / total) * 100)) : 0;
+  return (
+    <section className="stage-transition" aria-label={`Transition: ${vibe}`}>
+      <p className="stage-transition-kicker">Transition</p>
+      <h2 className="stage-transition-vibe">{vibe}</h2>
+      <p className="stage-transition-directions">{directions}</p>
+      <div className="stage-transition-clock">{formatTime(seconds)}</div>
+      <div className="stage-transition-bar" aria-hidden="true"><div style={{ width: `${pct}%` }} /></div>
+      {next ? <p className="stage-transition-next">Up next: <strong>{next}</strong></p> : null}
+    </section>
+  );
+}
+
 function toolUrl(flow: LiveClassFlowSnapshot) {
   const tool = flow.tool;
   if (!tool) return null;
@@ -279,6 +305,7 @@ export default function ClassroomStagePage() {
   // Keying this off the theme would make a readiness question display the
   // learning intention instead of its own question.
   const isLearningCheck = state?.id === "learning-check";
+  const isTransition = Boolean(state?.id?.startsWith("transition"));
   const selectedCriterion = publicSuccessCriterion(lesson?.selectedSuccessCriterion);
   const embeddedResourceUrl = resource?.url.includes("docs.google.com/forms")
     ? `${resource.url}${resource.url.includes("?") ? "&" : "?"}embedded=true`
@@ -399,7 +426,13 @@ export default function ClassroomStagePage() {
   const activeThemeId = previewSample && previewTheme ? previewTheme.id : theme.id;
   // The Warm Notebook stage: paper ground, one semantic accent. The dark
   // projector* values in the theme belong to surfaces not yet refit.
-  const accent = WARM_ACCENTS[activeThemeId] || theme.accent;
+  // Transition buffers carry their own vibe color instead of a theme accent.
+  const transitionPreview = previewStage ? TRANSITION_PREVIEWS[previewStage] || null : null;
+  const accent = transitionPreview
+    ? transitionPreview.accent
+    : isTransition && state?.color
+      ? state.color
+      : WARM_ACCENTS[activeThemeId] || theme.accent;
   const style = {
     "--acc": accent,
   } as CSSProperties;
@@ -483,6 +516,17 @@ export default function ClassroomStagePage() {
         @keyframes hookRise { from { opacity:0; transform:translateY(22px); } to { opacity:1; transform:none; } }
         @keyframes hookRule { from { transform:scaleX(0); } to { transform:scaleX(1); } }
         @keyframes hookBreathe { 0%, 100% { opacity:1; } 50% { opacity:0.55; } }
+        /* Transition buffer: time is the hero. Vibe word, movement directions,
+           a huge countdown, a draining bar timed to the music, and up next. */
+        .stage-transition { position:absolute; inset:0; display:grid; align-content:center; justify-items:center; gap:clamp(8px,1.6vw,18px); padding:clamp(30px,5vw,80px); text-align:center; }
+        .stage-transition-kicker { margin:0; color:var(--acc-deep); font-size:clamp(0.78rem,1.3vw,1rem); font-weight:900; letter-spacing:0.16em; text-transform:uppercase; }
+        .stage-transition-vibe { margin:0; color:var(--head); font-size:clamp(3rem,7vw,7.5rem); line-height:0.95; font-weight:800; letter-spacing:-0.03em; }
+        .stage-transition-directions { margin:0; max-width:36ch; color:var(--soft); font-size:clamp(1.1rem,2.2vw,1.8rem); line-height:1.35; font-weight:700; text-wrap:balance; }
+        .stage-transition-clock { margin-top:clamp(4px,1vw,12px); color:var(--acc-deep); font-size:clamp(4.4rem,11vw,10rem); line-height:0.9; font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:-0.04em; }
+        .stage-transition-bar { width:min(100%,880px); height:14px; overflow:hidden; border:1px solid var(--hair); border-radius:999px; background:#ECE7DD; }
+        .stage-transition-bar > div { height:100%; border-radius:inherit; background:var(--acc); transition:width 1s linear; }
+        .stage-transition-next { margin:clamp(2px,0.8vw,10px) 0 0; color:var(--soft); font-size:clamp(1rem,1.9vw,1.5rem); font-weight:700; }
+        .stage-transition-next strong { color:var(--ink); font-weight:800; }
         .stage-routine { position:absolute; inset:0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:clamp(12px,2vw,22px); align-content:center; padding:clamp(24px,4vw,60px); }
         .stage-routine article { display:grid; align-content:center; gap:8px; min-height:120px; border:1px solid var(--hair); border-top:5px solid var(--acc); border-radius:16px; background:var(--card); padding:clamp(16px,2.4vw,28px); box-shadow:0 2px 10px rgba(40,32,20,0.06); }
         .stage-routine .stage-routine-lead { grid-column:1 / -1; min-height:100px; grid-template-columns:1fr auto; align-items:end; }
@@ -611,7 +655,7 @@ export default function ClassroomStagePage() {
       <section className="stage-frame">
         <div className="stage-topbar">
           <span className="stage-dot" aria-hidden="true" />
-          <span className="stage-chip">{previewSample ? previewSample.label : state?.label || "Big Dog Math"}</span>
+          <span className="stage-chip">{transitionPreview ? `Transition - ${transitionPreview.vibe}` : previewSample ? previewSample.label : state?.label || "Big Dog Math"}</span>
           <div className="stage-topbar-copy">
             <h1 className="stage-title">{previewSample ? "Preview" : presentation?.title || state?.label || "Waiting for the lesson"}</h1>
             {lesson?.title ? <p className="stage-lesson">{lesson.title}{lesson.code ? ` · ${lesson.code}` : ""}</p> : null}
@@ -637,7 +681,15 @@ export default function ClassroomStagePage() {
           {loading ? (
             <div className="stage-empty"><div><h1>Connecting to the classroom</h1><p>{sessionMessage}</p></div></div>
           ) : !session || !flow || !state ? (
-            previewSample ? (
+            transitionPreview ? (
+              <TransitionScene
+                vibe={transitionPreview.vibe}
+                directions={transitionPreview.directions}
+                seconds={transitionPreview.seconds}
+                total={transitionPreview.total}
+                next={transitionPreview.next}
+              />
+            ) : previewSample ? (
               <div className="stage-directions">
                 <div className="stage-directions-inner">
                   {previewSample.anchor ? (
@@ -692,6 +744,14 @@ export default function ClassroomStagePage() {
               syncScope={spinnerSyncScope}
               role="controller"
               remoteCommand={session.remote_command}
+            />
+          ) : isTransition ? (
+            <TransitionScene
+              vibe={(state.label || "Transition").split("-").pop()?.trim() || "Transition"}
+              directions={slideBody || state.description || "Be ready before the music ends."}
+              seconds={timerSeconds}
+              total={timer?.totalSeconds || 0}
+              next={flow.sequence?.nextLabel || null}
             />
           ) : isLearningCheck ? (
             <section className="stage-targets" aria-label="Today's learning intention and success criterion">

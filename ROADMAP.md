@@ -50,6 +50,20 @@ card collapses to a toggle when idle (expands automatically while one runs),
 and the bottom "Ask a question" composer is gone - lesson steps carry the
 questions now. The open-question card survives only as the off-switch for an
 orphaned open poll) ·
+**Transition buffer states with music** (7/21 - Steele's insight: the room
+changing state is a real cost, so it gets its own planned minutes and its own
+music. Three new first-class states - Transition - Hustle (coral, 1 min,
+quick task switch), Transition - Reset (amber, 2 min, bigger room change),
+Transition - Settle (teal, 1 min, bring the energy down) - drop into any
+lesson as ordinary Notion steps (State ID transition-hustle / -reset /
+-settle) or /builder lineups. Because control already plays music per state,
+each vibe gains an upload slot automatically and the classroom laptop starts
+and stops the track with the state: the song ending IS the deadline students
+hear. The main projector renders a dedicated scene - vibe word, movement
+directions, giant countdown, draining bar, "Up next" - and automatic pacing
+sweeps into the next activity when the buffer ends, so transitions stop
+eating the next state's clock. Preview: /teacher/present?preview=
+transition-hustle) ·
 **Long Division choreography rebuild** (7/21 - Steele's frame-by-frame spec
 from the Vercel toolbar: the digits themselves now drag from the house to the
 side equation one at a time (7 highlights, drags by the divide sign; the

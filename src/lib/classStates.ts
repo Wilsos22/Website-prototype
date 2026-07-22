@@ -31,6 +31,14 @@ export const DEFAULT_STATES: ClassState[] = [
   { id: "small-group", label: "Small Group Rotations", minutes: 16, color: "#357f7d", desc: "Complete the assigned group task while the teacher meets with a focused group.", paceAction: "Work with your group and show your thinking.", studentAction: "Complete the group task on paper.", remoteAction: "Use the private pull, focus, activity, and check plan. Keep student names off public screens." },
   { id: "independent", label: "Independent Paper Work", minutes: 14, color: "#36557f", desc: "Complete the full required paper set and use the help path if needed.", paceAction: "Start the required paper set.", studentAction: "Work through your paper set." },
   { id: "exit", label: "Exit Ticket", minutes: 3, color: "#8a3d50", desc: "Complete and submit the assigned exit ticket on your own.", paceAction: "Show what you know.", studentAction: "Complete and submit your exit ticket." },
+  // Buffer states: the room itself changing state is a real cost, so it gets
+  // its own planned minutes and its own music. The uploaded track for each
+  // vibe is the audible clock - students learn that the song ending is the
+  // deadline. Hustle = quick task switch, Reset = bigger room change,
+  // Settle = bring the energy down.
+  { id: "transition-hustle", label: "Transition - Hustle", minutes: 1, color: "#f95335", desc: "Move now. Materials away, next spot, eyes up before the music ends.", paceAction: "Quick change - beat the music.", studentAction: "Move fast and quiet. Be ready before the music ends." },
+  { id: "transition-reset", label: "Transition - Reset", minutes: 2, color: "#fcaf38", desc: "Reset the room: new groups, new materials, new station. Set up and seated before the music ends.", paceAction: "Reset to the next setup.", studentAction: "Reset your area and be seated before the music ends." },
+  { id: "transition-settle", label: "Transition - Settle", minutes: 1, color: "#50a3a4", desc: "Bring it down. Voices off, seats found, breathe. Ready to focus when the music ends.", paceAction: "Settle and refocus.", studentAction: "Settle in quietly before the music ends." },
   { id: "closeout", label: "Closeout", minutes: 1, color: "#8a6b2f", desc: CLOSEOUT_DIRECTIONS, paceAction: CLOSEOUT_DIRECTIONS, studentAction: CLOSEOUT_DIRECTIONS, remoteAction: "Scan the room, then end the session when supplies are away and areas are clean." },
   { id: "i-do", label: "Direct Instruction (I do)", minutes: 4, color: "#a86735", desc: "Watch and take notes. I'll model each step." },
   { id: "we-do", label: "Guided Practice (We do)", minutes: 5, color: "#357f7d", desc: "We'll solve these together — try each step with me." },
