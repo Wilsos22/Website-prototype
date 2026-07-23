@@ -220,6 +220,15 @@ sets the cookie). Unauth: `/api/*` gets JSON 401; pages redirect to `/teacher-lo
   deliberately, and running it in the SQL Editor. Order matters: `schema.sql` -> `proficiency.sql` ->
   `evidence.sql` (which makes `responses.problem_id` nullable and adds `source/domain/standard_id/
   item_ref/dedupe_key`).
+- Roster sync is an UPSERT that NEVER deletes (`/api/roster/sync`, Vercel cron daily 13:00 UTC).
+  Students missing from Notion are reported, not removed. Consequence: wiping `students` in Supabase
+  without first clearing the Notion roster database silently undoes itself the next morning - the
+  cron recreates every student, name and district email included. Clear Notion first, then run
+  `supabase/end-of-year-student-wipe.sql` (which also deletes child rows explicitly, because several
+  FKs are ON DELETE SET NULL and would otherwise strand rows still carrying `display_name`).
+- Student PII never leaves district systems. `/api/live/next-move` used to send student NAMES to the
+  Anthropic API with their misconception; it now sends `studentCount` only (2026-07-22). Any new
+  outbound call must pass counts/archetypes, never names or student work.
 - Two distinct "assignment" concepts: `assignments` (manipulative) vs `practice_assignments` (targeted
   practice) - do not conflate.
 
