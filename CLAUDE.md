@@ -128,6 +128,12 @@ bars and live misconception grouping).
   `/api/warmup-summaries`, `/api/abbie` (+`/voice`), `/api/session/*`, `/api/auth/login`,
   `/api/evidence` (authed separately by header, see Notion pipeline).
 
+Slide overlays: `/teacher/slides` is the Canva-lite editor writing the Lesson Step's `Slide Overlay`
+Notion property (percent-based element JSON via `src/lib/slideOverlay.ts`; rich_text values chunk at
+1900 chars in `notionLessonStepWrites`). The overlay rides `LiveFlowSequenceStep.slideOverlay`
+through every flow builder and `SlideOverlayLayer` renders it on `/teacher/present` above the auto
+slide (below ink on board states). A step with an empty property renders exactly as before.
+
 Adding a tool: also add a lowercase entry to `TOOL_ROUTES` in `src/app/lesson/page.tsx` or the Notion
 `Tool:` name renders as a dead pill. SiteNav link sets are hardcoded arrays - add nav entries manually.
 
