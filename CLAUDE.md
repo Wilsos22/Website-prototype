@@ -193,6 +193,21 @@ sets the cookie). Unauth: `/api/*` gets JSON 401; pages redirect to `/teacher-lo
   auth, not wired into any page. Do not confuse it with the real gate.
 - Student "session" is unauthenticated trust: `localStorage['bdm-student-session'] = {sessionId,
   studentId, name}` written client-side. Never rely on it for authorization.
+- Class-mode following is `ClassSync` in the root layout: every student device polls
+  `/api/student/session-state` every 3s and navigates by `sessions.broadcast` ("free" releases,
+  an explicit route sends, "live-flow" follows the lesson state - students are deliberately HELD
+  on the student homepage during the warmup state and only start moving on the first advance past
+  it). Every start path flips broadcast to live-flow (`/api/control-remote start-lesson` does it
+  atomically; /control's four launch paths call `switchSessionToLiveFlow`). TESTING TRAP (cost a
+  live debugging session 2026-07-22): on a device that has ever held a TEACHER session, a tab only
+  follows if it carries the per-tab student marker (`sessionStorage['bdm-student-tab']`, set when
+  the verified join completes, DIES on tab close and on Safari tab restore) - a reopened student
+  tab on the teacher's own browser silently stops following forever; re-entering the class code
+  re-arms it. Real student Chromebooks (no teacher session) never hit the guard. Also know:
+  ClassSync treats every session-state failure (wrong period, missing session_joins row, expired
+  anon auth) as transient and retries silently, so ALL of them present identically as "the student
+  screen just stays put" - check the class-mode selector on /session and the joins list before
+  suspecting the follower itself.
 
 ## Data layer (Supabase)
 
