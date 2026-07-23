@@ -101,6 +101,19 @@ before the digit lands. New Back button re-enters the previous step from its
 first frame for rewatching, and Auto-lead now runs the full choreography on
 EVERY problem - it only ran on problem 1, which is why it was hard to
 follow) ·
+**Slide extras editor (Canva-lite overlays)** (7/22 - Steele's ask, built on
+his green light: /teacher/slides is a drag-and-drop decoration editor over
+the auto-generated slides. Pick a published lesson and step, place text,
+math-font equations (italic variables, x^2 powers, {3}/{4} stacked
+fractions), rectangles, circles, lines, arrows, and images-by-URL on a 16:9
+stage, drag and resize, and save. Storage is a new Slide Overlay rich-text
+property on the Math 6 Lesson Steps database (percent-based element JSON,
+chunked at Notion's 2000-char limit), guarded by the same
+expectedLastEditedTime conflict check as Studio saves. The overlay rides the
+live-flow sequence steps through every builder and renders on the main
+projector above the auto slide - and below the teacher's ink on board
+states - so auto and hand-made coexist; a step with no overlay renders
+exactly as before. Teacher home gained the Slide extras card) ·
 **Main projector: universal state headers + equation-chain layout** (7/22 -
 round two: slide titles are now the UNIVERSAL state words (I Do / We Do /
 You Do, Launch, Review, Exit Ticket - identical lesson to lesson so students

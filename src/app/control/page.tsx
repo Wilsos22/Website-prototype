@@ -420,6 +420,7 @@ async function idbDel(key: string): Promise<void> {
 // lesson as one sequence instead of rebuilding it by hand.
 interface TodayLessonStep {
   id: string;
+  slideOverlay?: string;
   title: string;
   duration: number;
   stateId: string;
@@ -1031,6 +1032,7 @@ export default function ControlPage() {
         vocabulary: step.vocabulary?.join("\n"),
         responseMode: step.responseMode,
         workSpaceAvailable: step.workSpaceAvailable,
+        slideOverlay: step.slideOverlay || undefined,
         publicSurfaceMode: step.publicSurfaceMode,
         routineConfig: step.routineConfig,
       })));
@@ -1934,6 +1936,7 @@ export default function ControlPage() {
           vocabulary: step.vocabulary,
           responseMode: step.responseMode,
           workSpaceAvailable: step.workSpaceAvailable,
+          slideOverlay: step.slideOverlay || undefined,
           publicSurfaceMode: step.publicSurfaceMode,
           routineConfig: step.routineConfig,
         }))
@@ -2423,6 +2426,7 @@ export default function ControlPage() {
           vocabulary: step.vocabulary?.join("\n"),
           responseMode: step.responseMode,
           workSpaceAvailable: step.workSpaceAvailable,
+          slideOverlay: step.slideOverlay || undefined,
           publicSurfaceMode: step.publicSurfaceMode,
           routineConfig: step.routineConfig,
         })));

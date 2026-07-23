@@ -188,6 +188,7 @@ function stepsFromLesson(lesson: LessonData): LiveFlowSequenceStep[] {
         : [],
       responseMode: step.responseMode || "",
       workSpaceAvailable: step.workSpaceAvailable,
+      slideOverlay: step.slideOverlay || undefined,
       publicSurfaceMode: step.publicSurfaceMode,
       routineConfig: step.routineConfig,
     };
