@@ -142,6 +142,9 @@ function resolveAreaModelVisual(
   if (!AREA_MODEL_LESSONS.test((lessonCode || "").trim())) return null;
   if (AREA_MODEL_SKIP_STATES.has(stateId)) return null;
   for (const text of candidates) {
+    // Equation-chain steps (two equals signs, or fill-in blanks) deliberately
+    // remove the model - the chain layout is the scaffold there.
+    if (/=[^=]*=/.test(text) || /_{2,}/.test(text)) continue;
     const factors = text.match(AREA_FACTORS_PATTERN);
     if (!factors) continue;
     let factorA = Number(factors[1]);

@@ -101,6 +101,18 @@ before the digit lands. New Back button re-enters the previous step from its
 first frame for rewatching, and Auto-lead now runs the full choreography on
 EVERY problem - it only ran on problem 1, which is why it was hard to
 follow) ·
+**Main projector: universal state headers + equation-chain layout** (7/22 -
+round two: slide titles are now the UNIVERSAL state words (I Do / We Do /
+You Do, Launch, Review, Exit Ticket - identical lesson to lesson so students
+recognize the phase; the step's specific name stays in the topbar), and
+Steele's hand-made title graphics drop into public/state-titles/<slug>.png
+(we-do.png, i-do.png, you-do.png...) to replace the typographic title
+wherever one exists - HEAD-checked per state, typographic fallback.
+Equation-chain steps (text with stacked equals or __ blanks, like the
+equation-only phase) now render as an aligned worked-equation stack - head
+expression, one row per equals step, blanks drawn as real outlined boxes -
+and the area-model resolver skips them on purpose: that step removes the
+model by design) ·
 **Main projector: slide titles + area-model scaffold** (7/22 - Steele's ask:
 the phase name is now a designed title built into the slide - board states
 (I Do / We Do) get a slim accent-ruled title band above the ink surface with

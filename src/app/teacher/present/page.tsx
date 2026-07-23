@@ -43,6 +43,54 @@ function formatTime(totalSeconds: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
+// Universal state headers: the same familiar word for a state on every
+// lesson (Steele, 7/22), so students recognize the phase at a glance. The
+// step's specific name stays in the topbar. Hand-made title graphics drop
+// into public/state-titles/<slug>.png and replace the typographic title.
+const UNIVERSAL_STATE_TITLES: Record<string, string> = {
+  "i-do": "I Do",
+  "we-do": "We Do",
+  independent: "You Do",
+  abstract: "You Do",
+  launch: "Launch",
+  review: "Review",
+  warmup: "Warm-Up",
+  question: "Question",
+  exit: "Exit Ticket",
+  closeout: "Closeout",
+};
+
+function universalStateTitle(stateId: string | undefined, stateLabel: string | undefined): string {
+  return UNIVERSAL_STATE_TITLES[(stateId || "").trim()] || (stateLabel || "").trim();
+}
+
+function stateTitleSlug(title: string): string {
+  return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+// Hand-made title art check, cached per slug for the session.
+const stateTitleArtCache = new Map<string, boolean>();
+
+// An equation chain like "4 x 17 = 4(__ + __) = 4 x __ + 4 x __ = __":
+// head expression, then one aligned row per equals step, blanks as boxes.
+function parseEquationChain(text: string): { head: string; steps: string[] } | null {
+  const single = text.replace(/\s+/g, " ").trim();
+  if (!single.includes("=")) return null;
+  const parts = single.split("=").map((part) => part.trim());
+  if (parts.length < 3 && !/_{2,}/.test(single)) return null;
+  if (parts.length < 2) return null;
+  if (parts.some((part) => part.length > 60)) return null;
+  return { head: parts[0], steps: parts.slice(1) };
+}
+
+function equationTokens(expression: string) {
+  return expression.split(/(_{2,})/).filter(Boolean).map((token, index) => (
+    /^_{2,}$/.test(token)
+      ? <span className="stage-eq-blank" key={index} aria-label="blank" />
+      : <span key={index}>{token}</span>
+  ));
+}
+
 // The slide renders its own designed title now, so a body authored as
 // "We Do: build it" does not say the title twice. Strips any leading
 // occurrence of the given titles (and the bare phase words) plus separator.
@@ -349,8 +397,27 @@ export default function ClassroomStagePage() {
       : null;
   // The phase name is a designed title built into the slide; the directions
   // below it stay in the working font (Steele, 7/22).
-  const slideTitle = (presentation?.title || state?.label || "").trim();
-  const strippedBody = stripSlideTitlePrefix(slideBody, slideTitle, state?.label);
+  const slideTitle = universalStateTitle(state?.id, state?.label);
+  const strippedBody = stripSlideTitlePrefix(slideBody, slideTitle, presentation?.title, state?.label);
+  const equationChain = parseEquationChain(strippedBody || slideBody);
+  const titleArtSlug = stateTitleSlug(slideTitle);
+  const [titleArtReady, setTitleArtReady] = useState<string | null>(null);
+  useEffect(() => {
+    if (!titleArtSlug) { setTitleArtReady(null); return; }
+    if (stateTitleArtCache.has(titleArtSlug)) {
+      setTitleArtReady(stateTitleArtCache.get(titleArtSlug) ? titleArtSlug : null);
+      return;
+    }
+    let stopped = false;
+    fetch(`/state-titles/${titleArtSlug}.png`, { method: "HEAD" })
+      .then((response) => {
+        stateTitleArtCache.set(titleArtSlug, response.ok);
+        if (!stopped) setTitleArtReady(response.ok ? titleArtSlug : null);
+      })
+      .catch(() => { if (!stopped) setTitleArtReady(null); });
+    return () => { stopped = true; };
+  }, [titleArtSlug]);
+  const titleArtUrl = titleArtReady === titleArtSlug && titleArtSlug ? `/state-titles/${titleArtSlug}.png` : null;
   const activeSequenceStep = flow?.sequence?.steps?.[flow.sequence.currentIndex] || null;
   const lessonVisual = flow ? resolveLessonVisual({
     lessonCode: lesson?.code || activeSequenceStep?.lessonCode,
@@ -547,6 +614,13 @@ export default function ClassroomStagePage() {
         .stage-board-wrap { position:relative; min-height:0; }
         .stage-figure-float { position:absolute; z-index:4; top:14px; right:14px; width:min(30vw,380px); pointer-events:none;
           border:1px solid var(--hair); border-top:4px solid var(--acc); border-radius:16px; background:var(--card); padding:12px 14px 10px; box-shadow:0 12px 32px rgba(40,32,20,0.10); }
+        .stage-band-art { height:clamp(30px,3.4vw,46px); width:auto; display:block; }
+        .stage-slide-title-art { max-height:clamp(64px,9vw,128px); max-width:min(70vw,760px); width:auto; display:block; }
+        .stage-eq-chain { display:grid; justify-items:start; gap:clamp(8px,1.4vw,18px); margin:0 auto; text-align:left; }
+        .stage-eq-head, .stage-eq-row { display:flex; align-items:center; gap:16px; margin:0; color:var(--head); font-size:clamp(2rem,4.4vw,4.4rem); line-height:1.1; font-weight:800; letter-spacing:-0.01em; font-variant-numeric:tabular-nums; }
+        .stage-eq-head { padding-left:calc(1ch + 16px); }
+        .stage-eq-sign { width:1ch; flex:none; color:var(--acc-deep); text-align:center; }
+        .stage-eq-blank { display:inline-block; width:1.7ch; height:0.95em; margin:0 0.12ch; vertical-align:-0.12em; border:3px solid var(--acc); border-radius:10px; background:var(--card); }
         .stage-anchor-kicker { margin:0; color:var(--acc-deep); font-size:clamp(0.78rem,1.3vw,1rem); font-weight:900; letter-spacing:0.16em; text-transform:uppercase;
           animation:hookRise 560ms 180ms var(--stage-ease) both; }
         .stage-anchor-rule { width:clamp(64px,7vw,110px); height:6px; border-radius:999px; background:var(--acc); transform-origin:center;
@@ -868,7 +942,12 @@ export default function ClassroomStagePage() {
               {slideTitle ? (
                 <div className="stage-band">
                   <span className="stage-band-rule" aria-hidden="true" />
-                  <h2>{slideTitle}</h2>
+                  {titleArtUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img className="stage-band-art" src={titleArtUrl} alt={slideTitle} />
+                  ) : (
+                    <h2>{slideTitle}</h2>
+                  )}
                 </div>
               ) : null}
               <div className="stage-board-wrap">
@@ -886,7 +965,12 @@ export default function ClassroomStagePage() {
                 <div className="stage-directions-inner">
                   {slideTitle ? (
                     <div className="stage-slide-title">
-                      <h2>{slideTitle}</h2>
+                      {titleArtUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img className="stage-slide-title-art" src={titleArtUrl} alt={slideTitle} />
+                      ) : (
+                        <h2>{slideTitle}</h2>
+                      )}
                       <span className="stage-slide-rule" aria-hidden="true" />
                     </div>
                   ) : null}
@@ -962,11 +1046,28 @@ export default function ClassroomStagePage() {
                 {showLessonTargets && lesson?.learningIntention ? <p className="stage-learning">{lesson.learningIntention}</p> : null}
                 {slideTitle && slideTitle !== slideBody.trim() ? (
                   <div className="stage-slide-title">
-                    <h2>{slideTitle}</h2>
+                    {titleArtUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img className="stage-slide-title-art" src={titleArtUrl} alt={slideTitle} />
+                    ) : (
+                      <h2>{slideTitle}</h2>
+                    )}
                     <span className="stage-slide-rule" aria-hidden="true" />
                   </div>
                 ) : null}
-                <h2 className={`stage-main-prompt${slideTitle && slideTitle !== slideBody.trim() ? " with-title" : ""}`}>{strippedBody || slideBody}</h2>
+                {equationChain ? (
+                  <div className="stage-eq-chain" aria-label="Equation steps">
+                    <p className="stage-eq-head">{equationTokens(equationChain.head)}</p>
+                    {equationChain.steps.map((step, index) => (
+                      <p className="stage-eq-row" key={index}>
+                        <span className="stage-eq-sign">=</span>
+                        <span className="stage-eq-expr">{equationTokens(step)}</span>
+                      </p>
+                    ))}
+                  </div>
+                ) : (
+                  <h2 className={`stage-main-prompt${slideTitle && slideTitle !== slideBody.trim() ? " with-title" : ""}`}>{strippedBody || slideBody}</h2>
+                )}
               </div>
             </div>
             )
