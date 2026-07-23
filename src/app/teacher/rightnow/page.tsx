@@ -107,7 +107,7 @@ export default function RightNowPage() {
           misconception: c.misconception,
           archetype: m.archetype,
           domain: c.domain || undefined,
-          students: m.students,
+          studentCount: m.students.length,
           corroborated: c.corroborated || undefined,
           templateMove: m.move,
         }),

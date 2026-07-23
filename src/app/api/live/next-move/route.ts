@@ -32,6 +32,11 @@ interface Body {
   archetype?: string;
   standardId?: string;
   domain?: string;
+  // Group SIZE only. Student names must never leave the district's systems:
+  // a name bound to a specific misconception is exactly the record that
+  // should not reach a third-party API, and the coaching move does not need
+  // it. Callers may still send `students`; it is counted, never forwarded.
+  studentCount?: number;
   students?: string[];
   corroborated?: number;
   templateMove?: string;
@@ -50,7 +55,9 @@ export async function POST(req: Request) {
 
   const archetype = body.archetype || "growth";
   const intent = ARCHETYPE_INTENT[archetype] || ARCHETYPE_INTENT.growth;
-  const students = Array.isArray(body.students) ? body.students.filter(Boolean) : [];
+  const groupSize = Number.isFinite(body.studentCount)
+    ? Math.max(0, Math.floor(Number(body.studentCount)))
+    : Array.isArray(body.students) ? body.students.filter(Boolean).length : 0;
 
   const system =
     "You are a 6th-grade math instructional coach helping a teacher act in the moment. Given a small " +
@@ -64,7 +71,7 @@ export async function POST(req: Request) {
     `Misconception: "${misconception}"` +
     (body.standardId ? ` (standard ${body.standardId}${body.domain ? `, ${body.domain}` : ""})` : "") + ".\n" +
     `Group archetype: ${archetype} — ${intent}.\n` +
-    (students.length ? `Students (${students.length}): ${students.join(", ")}.\n` : "") +
+    (groupSize ? `Group size: ${groupSize} student${groupSize === 1 ? "" : "s"}.\n` : "") +
     (body.corroborated ? `i-Ready corroborates the gap for ${body.corroborated} of them.\n` : "") +
     (body.templateMove ? `Starting template (sharpen it, make it specific to THIS misconception): "${body.templateMove}".\n` : "") +
     "Write the one move.";
