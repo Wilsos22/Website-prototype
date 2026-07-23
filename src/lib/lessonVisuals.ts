@@ -44,6 +44,14 @@ export type LessonVisual =
       prompt: string;
     }
   | {
+      kind: "area-model";
+      factorA: number;
+      factorB: number;
+      split: [number, number] | null;
+      expression: string;
+      prompt: string;
+    }
+  | {
       kind: "ratio-forms";
       quantities: [LessonVisualQuantity, LessonVisualQuantity];
       comparisons: Array<{
@@ -115,6 +123,56 @@ export function normalizeLessonVisualText(text: string): string {
 
 function supportsLessonVisuals(lessonCode: string | undefined): boolean {
   return /^M2\.T1\.L1(?:-|$)/i.test((lessonCode || "").trim());
+}
+
+// The distributive-property lessons keep the area model on screen as the
+// scaffold even while the words move toward the equation: any step text that
+// names an a x b product earns a figure. A split like "(10 + 6)" or
+// "into 10 + 6" draws the partition.
+const AREA_MODEL_LESSONS = /^M1\.T1\.L1(?:-|$)/i;
+const AREA_MODEL_SKIP_STATES = new Set(["warmup", "closeout", "exit", "learning-check"]);
+const AREA_FACTORS_PATTERN = /\b(\d{1,2})\s*[x\u00d7]\s*(\d{1,3})\b/i;
+const AREA_SPLIT_PATTERN = /\(\s*(\d{1,3})\s*\+\s*(\d{1,3})\s*\)|\b(?:into|as)\s+(\d{1,3})\s*\+\s*(\d{1,3})\b/i;
+
+function resolveAreaModelVisual(
+  lessonCode: string | undefined,
+  stateId: string,
+  candidates: string[],
+): LessonVisual | null {
+  if (!AREA_MODEL_LESSONS.test((lessonCode || "").trim())) return null;
+  if (AREA_MODEL_SKIP_STATES.has(stateId)) return null;
+  for (const text of candidates) {
+    const factors = text.match(AREA_FACTORS_PATTERN);
+    if (!factors) continue;
+    let factorA = Number(factors[1]);
+    let factorB = Number(factors[2]);
+    if (!Number.isSafeInteger(factorA) || !Number.isSafeInteger(factorB)) continue;
+    if (factorA < 2 || factorA > 30 || factorB < 2 || factorB > 400) continue;
+    let split: [number, number] | null = null;
+    const splitMatch = text.match(AREA_SPLIT_PATTERN);
+    if (splitMatch) {
+      const first = Number(splitMatch[1] ?? splitMatch[3]);
+      const second = Number(splitMatch[2] ?? splitMatch[4]);
+      if (Number.isSafeInteger(first) && Number.isSafeInteger(second)) {
+        if (first + second === factorB) split = [first, second];
+        else if (first + second === factorA) {
+          const swapped = factorA;
+          factorA = factorB;
+          factorB = swapped;
+          split = [first, second];
+        }
+      }
+    }
+    return {
+      kind: "area-model",
+      factorA,
+      factorB,
+      split,
+      expression: `${factorA} \u00d7 ${factorB}`,
+      prompt: "",
+    };
+  }
+  return null;
 }
 
 export function lessonStoryImages(text: string): LessonStoryImage[] {
@@ -244,6 +302,9 @@ export function resolveLessonVisual(input: LessonVisualInput): LessonVisual | nu
   const importedImages = candidates.flatMap(lessonStoryImages).filter((image, index, images) => (
     images.findIndex((candidate) => candidate.url === image.url) === index
   ));
+
+  const areaModel = resolveAreaModelVisual(input.lessonCode, stateId, candidates);
+  if (areaModel) return areaModel;
 
   if (importedImages.length && (stateId === "launch" || stateId === "scenario")) {
     for (const candidate of candidates) {

@@ -43,6 +43,20 @@ function formatTime(totalSeconds: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
+// The slide renders its own designed title now, so a body authored as
+// "We Do: build it" does not say the title twice. Strips any leading
+// occurrence of the given titles (and the bare phase words) plus separator.
+function stripSlideTitlePrefix(body: string, ...titles: Array<string | undefined>) {
+  let out = (body || "").trim();
+  for (const candidate of [...titles, "we do", "i do"]) {
+    const title = (candidate || "").trim();
+    if (!title) continue;
+    const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    out = out.replace(new RegExp(`^${escaped}\\s*[:\\-]\\s*`, "i"), "").trim();
+  }
+  return out;
+}
+
 // ?preview=<stage id> renders the shell with sample content and no session -
 // the way to check the projector skin without starting Live Class Flow.
 const PREVIEW_SAMPLES: Record<string, { label: string; headline: string; direction: string; anchor?: string }> = {
@@ -333,6 +347,10 @@ export default function ClassroomStagePage() {
     : anchorText && theme.id === "closeout"
       ? "payoff" as const
       : null;
+  // The phase name is a designed title built into the slide; the directions
+  // below it stay in the working font (Steele, 7/22).
+  const slideTitle = (presentation?.title || state?.label || "").trim();
+  const strippedBody = stripSlideTitlePrefix(slideBody, slideTitle, state?.label);
   const activeSequenceStep = flow?.sequence?.steps?.[flow.sequence.currentIndex] || null;
   const lessonVisual = flow ? resolveLessonVisual({
     lessonCode: lesson?.code || activeSequenceStep?.lessonCode,
@@ -517,6 +535,18 @@ export default function ClassroomStagePage() {
         .stage-directions-inner { width:min(100%,1500px); display:grid; gap:22px; justify-items:center; }
         .stage-main-prompt { margin:0; max-width:92%; color:var(--head); text-align:center; white-space:pre-wrap; font-size:clamp(3.1rem,6.3vw,6.9rem); line-height:1.08; font-weight:800; letter-spacing:-0.02em; text-wrap:balance; }
         .stage-action-chip { border-radius:999px; background:var(--acc); color:#fff; padding:9px 20px; font-size:clamp(0.72rem,1.1vw,0.9rem); font-weight:800; letter-spacing:0.1em; text-transform:uppercase; }
+        .stage-slide-title { display:grid; justify-items:center; gap:11px; }
+        .stage-slide-title h2 { margin:0; color:var(--head); text-align:center; font-size:clamp(2.1rem,4.4vw,4.4rem); line-height:1; font-weight:800; letter-spacing:-0.025em; }
+        .stage-slide-rule { width:clamp(56px,6vw,96px); height:6px; border-radius:999px; background:var(--acc); }
+        .stage-main-prompt.with-title { color:var(--ink); font-size:clamp(1.5rem,3vw,3rem); line-height:1.22; font-weight:700; letter-spacing:-0.01em; }
+        .stage-area-figure { width:min(100%,620px); }
+        .stage-board-scene { position:absolute; inset:0; display:grid; grid-template-rows:auto minmax(0,1fr); }
+        .stage-band { display:flex; align-items:center; gap:14px; border-bottom:1px solid var(--hair); background:rgba(243,240,231,0.92); padding:10px 28px; }
+        .stage-band-rule { width:34px; height:6px; flex:none; border-radius:999px; background:var(--acc); }
+        .stage-band h2 { margin:0; overflow:hidden; color:var(--head); text-overflow:ellipsis; white-space:nowrap; font-size:clamp(1.15rem,2.1vw,1.9rem); font-weight:800; letter-spacing:-0.01em; }
+        .stage-board-wrap { position:relative; min-height:0; }
+        .stage-figure-float { position:absolute; z-index:4; top:14px; right:14px; width:min(30vw,380px); pointer-events:none;
+          border:1px solid var(--hair); border-top:4px solid var(--acc); border-radius:16px; background:var(--card); padding:12px 14px 10px; box-shadow:0 12px 32px rgba(40,32,20,0.10); }
         .stage-anchor-kicker { margin:0; color:var(--acc-deep); font-size:clamp(0.78rem,1.3vw,1rem); font-weight:900; letter-spacing:0.16em; text-transform:uppercase;
           animation:hookRise 560ms 180ms var(--stage-ease) both; }
         .stage-anchor-rule { width:clamp(64px,7vw,110px); height:6px; border-radius:999px; background:var(--acc); transform-origin:center;
@@ -834,16 +864,48 @@ export default function ClassroomStagePage() {
           ) : liveToolUrl ? (
             <iframe className="stage-tool" src={liveToolUrl} title={flow.tool?.label || "Lesson tool"} />
           ) : presentation?.mode === "board" ? (
-            <InkBoard room={session.id} interactive problem={presentation.body} />
-          ) : lessonVisual ? (
-            <section className="stage-lesson-visual">
-              <LessonVisual
-                visual={lessonVisual}
-                variant="projector"
-                accent={accent}
-                scoreboardStage={presentation?.scoreboardStage}
-              />
-            </section>
+            <div className="stage-board-scene">
+              {slideTitle ? (
+                <div className="stage-band">
+                  <span className="stage-band-rule" aria-hidden="true" />
+                  <h2>{slideTitle}</h2>
+                </div>
+              ) : null}
+              <div className="stage-board-wrap">
+                <InkBoard room={session.id} interactive problem={stripSlideTitlePrefix(presentation.body, slideTitle, state?.label)} />
+                {lessonVisual?.kind === "area-model" ? (
+                  <aside className="stage-figure-float" aria-label="Area model support">
+                    <LessonVisual visual={lessonVisual} variant="projector" accent={accent} />
+                  </aside>
+                ) : null}
+              </div>
+            </div>
+          ) : lessonVisual && !anchorMode ? (
+            lessonVisual.kind === "area-model" ? (
+              <div className="stage-directions">
+                <div className="stage-directions-inner">
+                  {slideTitle ? (
+                    <div className="stage-slide-title">
+                      <h2>{slideTitle}</h2>
+                      <span className="stage-slide-rule" aria-hidden="true" />
+                    </div>
+                  ) : null}
+                  {strippedBody ? <p className="stage-main-prompt with-title">{strippedBody}</p> : null}
+                  <div className="stage-area-figure">
+                    <LessonVisual visual={lessonVisual} variant="projector" accent={accent} />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <section className="stage-lesson-visual">
+                <LessonVisual
+                  visual={lessonVisual}
+                  variant="projector"
+                  accent={accent}
+                  scoreboardStage={presentation?.scoreboardStage}
+                />
+              </section>
+            )
           ) : theme.id === "discussion" ? (
             <section className="stage-discussion" aria-label="Discussion prompt and supports">
               <div className="stage-discussion-main">
@@ -898,7 +960,13 @@ export default function ClassroomStagePage() {
             <div className="stage-directions">
               <div className="stage-directions-inner">
                 {showLessonTargets && lesson?.learningIntention ? <p className="stage-learning">{lesson.learningIntention}</p> : null}
-                <h2 className="stage-main-prompt">{slideBody}</h2>
+                {slideTitle && slideTitle !== slideBody.trim() ? (
+                  <div className="stage-slide-title">
+                    <h2>{slideTitle}</h2>
+                    <span className="stage-slide-rule" aria-hidden="true" />
+                  </div>
+                ) : null}
+                <h2 className={`stage-main-prompt${slideTitle && slideTitle !== slideBody.trim() ? " with-title" : ""}`}>{strippedBody || slideBody}</h2>
               </div>
             </div>
             )

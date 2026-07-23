@@ -101,6 +101,18 @@ before the digit lands. New Back button re-enters the previous step from its
 first frame for rewatching, and Auto-lead now runs the full choreography on
 EVERY problem - it only ran on problem 1, which is why it was hard to
 follow) ·
+**Main projector: slide titles + area-model scaffold** (7/22 - Steele's ask:
+the phase name is now a designed title built into the slide - board states
+(I Do / We Do) get a slim accent-ruled title band above the ink surface with
+the directions in problem cards below it minus the duplicated "We Do:"
+prefix, and directions slides get a centered title lockup with the drawn
+accent rule, directions staying in the working font one size tier down. And
+the support scaffold stays on screen while the words move toward the
+equation: for the M1.T1.L1 lessons, any step text naming an a x b product
+earns an auto-drawn area-model figure (new "area-model" LessonVisual kind) -
+side lengths labeled, split partition dashed when the text says "into 10 +
+6", regions left empty for the class to fill. Floats top-right of the ink
+board on board states, sits under the directions on independent states) ·
 **Projectors: staged hook + scene transitions** (7/21 - Steele's ask: the
 warm-up anchor ("Puzzle of the day") now enters as a staged moment - kicker
 settles, an accent rule draws itself beneath, the question rises in, then the

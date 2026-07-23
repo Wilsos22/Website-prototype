@@ -46,6 +46,34 @@ function fraction(numerator: number, denominator: number) {
   );
 }
 
+function AreaModelFigure({ visual }: { visual: Extract<LessonVisualModel, { kind: "area-model" }> }) {
+  const { factorA, factorB, split } = visual;
+  const width = 520;
+  const height = Math.max(130, Math.min(280, Math.round(width * (factorA / factorB))));
+  const pad = 48;
+  const svgWidth = width + pad + 14;
+  const svgHeight = height + pad + 16;
+  const splitX = split ? pad + (split[0] / factorB) * width : null;
+  return (
+    <div className="lv-area" aria-label={`Area model for ${visual.expression}`}>
+      <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} role="img">
+        {split && splitX != null ? (
+          <>
+            <text x={pad + (splitX - pad) / 2} y={32} className="lv-area-label">{split[0]}</text>
+            <text x={splitX + (pad + width - splitX) / 2} y={32} className="lv-area-label">{split[1]}</text>
+          </>
+        ) : (
+          <text x={pad + width / 2} y={32} className="lv-area-label">{factorB}</text>
+        )}
+        <text x={24} y={pad + height / 2 + 9} className="lv-area-label">{factorA}</text>
+        <rect x={pad} y={pad} width={width} height={height} className="lv-area-rect" />
+        {splitX != null ? <line x1={splitX} y1={pad} x2={splitX} y2={pad + height} className="lv-area-split" /> : null}
+      </svg>
+      <p className="lv-area-caption">{visual.expression}</p>
+    </div>
+  );
+}
+
 function StoryFrames({ images }: { images: LessonStoryImage[] }) {
   return (
     <div className={`lv-story-frames count-${Math.min(images.length, 3)}`}>
@@ -180,12 +208,20 @@ export default function LessonVisual({
           .lv-for-every { font-size:0.66rem; }
           .lv-ratio-cards { grid-template-columns:1fr; }
         }
+        .lv-area { display:grid; gap:6px; justify-items:center; width:100%; }
+        .lv-area svg { width:100%; height:auto; display:block; }
+        .lv-area-rect { fill:#fff; stroke:#201e1a; stroke-width:3; }
+        .lv-area-split { stroke:var(--lv-accent,#50a3a4); stroke-width:3.5; stroke-dasharray:11 9; stroke-linecap:round; }
+        .lv-area-label { font-family:var(--bdb-font); font-size:27px; font-weight:800; fill:#2E4A54; text-anchor:middle; }
+        .lv-area-caption { margin:0; font-family:var(--bdb-font); font-weight:800; color:#5C6E75; font-size:clamp(0.95rem,1.6vw,1.3rem); }
         @media (prefers-reduced-motion:reduce) {
           .lesson-visual.scoreboard.is-final .lv-scoreboard { animation:none; }
         }
       `}</style>
 
-      {visual.kind === "scoreboard" ? (
+      {visual.kind === "area-model" ? (
+        <AreaModelFigure visual={visual} />
+      ) : visual.kind === "scoreboard" ? (
         <div className={`lv-score-layout${visual.storyImages?.length ? " with-story" : ""}`} aria-label={`${scoreboardStage === "final" ? "Final" : "Halftime"} scoreboard visual`}>
           {visual.storyImages?.length ? <StoryFrames images={visual.storyImages.slice(0, 3)} /> : null}
           <div className="lv-scoreboard">
