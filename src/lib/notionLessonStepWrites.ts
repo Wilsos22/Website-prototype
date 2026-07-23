@@ -155,6 +155,7 @@ const TEXT_PROPERTIES = {
   remoteActions: { notionName: "Remote Actions", type: "rich_text" },
   discussionStems: { notionName: "Discussion Stems", type: "rich_text" },
   vocabulary: { notionName: "Vocabulary", type: "rich_text" },
+  slideOverlay: { notionName: "Slide Overlay", type: "rich_text" },
 } as const;
 
 const NUMBER_PROPERTIES = {
@@ -614,7 +615,14 @@ function validateText(field: string, value: unknown): string {
 }
 
 function textValue(value: string): { type: "text"; text: { content: string } }[] {
-  return value ? [{ type: "text", text: { content: value } }] : [];
+  // Notion caps a single text object at 2000 characters; long values (like a
+  // slide overlay's JSON) are split across objects and read back joined.
+  if (!value) return [];
+  const chunks: { type: "text"; text: { content: string } }[] = [];
+  for (let index = 0; index < value.length; index += 1900) {
+    chunks.push({ type: "text", text: { content: value.slice(index, index + 1900) } });
+  }
+  return chunks;
 }
 
 function validateChanges(input: unknown): Record<string, unknown> {

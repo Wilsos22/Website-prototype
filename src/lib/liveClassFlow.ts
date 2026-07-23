@@ -197,6 +197,7 @@ export interface LiveFlowSequenceStep {
   workSpaceAvailable?: boolean;
   publicSurfaceMode?: PublicSurfaceMode;
   routineConfig?: PublicLessonRoutineConfig | null;
+  slideOverlay?: string;
 }
 
 export interface LiveClassFlowSnapshot {

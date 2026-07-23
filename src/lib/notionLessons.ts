@@ -53,6 +53,7 @@ export interface LessonStepData {
   discussionStems: string;
   vocabulary: string;
   responseMode: string;
+  slideOverlay: string;
   workSpaceAvailable?: boolean;
 }
 
@@ -494,6 +495,7 @@ async function mapPage(
       discussionStems: extractText(step["Discussion Stems"]),
       vocabulary: extractText(step["Vocabulary"]),
       responseMode: extractText(step["Response Mode"]),
+      slideOverlay: extractText(step["Slide Overlay"]),
       workSpaceAvailable: step["Work Space Available"]?.type === "checkbox"
         ? step["Work Space Available"].checkbox
         : undefined,

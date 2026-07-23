@@ -40,6 +40,7 @@ const LEARN: LinkItem[] = [
 // Manage the class.
 const MANAGE: LinkItem[] = [
   { href: "/teacher/studio", label: "Screen studio", letter: "S", color: "#cf6b42", desc: "Preview and edit every lesson screen" },
+  { href: "/teacher/slides", label: "Slide extras", letter: "X", color: "#7c5cd6", desc: "Place text, equations, shapes, and images over any slide" },
   { href: "/teacher/audio", label: "Audio library", letter: "A", color: "#7c5cd6", desc: "Upload music and timer sounds for this classroom laptop" },
   { href: "/roster", label: "Rosters", letter: "R", color: "#50a3a4", desc: "Periods and students" },
   { href: "/teacher/parent-outreach", label: "Parent outreach", letter: "@", color: "#f95335", desc: "Draft notes home — nudges and praise" },

@@ -5,6 +5,7 @@ import ClassroomSpinner from "@/components/ClassroomSpinner";
 import InkBoard from "@/components/InkBoard";
 import LessonVisual from "@/components/LessonVisual";
 import ScreenInkOverlay from "@/components/ScreenInkOverlay";
+import SlideOverlayLayer from "@/components/SlideOverlayLayer";
 import { CLOSEOUT_DIRECTIONS } from "@/lib/classStates";
 import { CLASSROOM_STAGE_THEMES, classroomStageTheme, discussionSupportsForLesson } from "@/lib/classroomPilot";
 import { normalizeDiscussionPhaseSnapshot } from "@/lib/discussionProtocol";
@@ -20,6 +21,7 @@ import {
   type TeacherRemoteCommand,
 } from "@/lib/liveClassFlow";
 import { WARM_ACCENTS } from "@/lib/warmNotebook";
+import { parseSlideOverlay } from "@/lib/slideOverlay";
 
 interface StageSession {
   id: string;
@@ -419,6 +421,9 @@ export default function ClassroomStagePage() {
   }, [titleArtSlug]);
   const titleArtUrl = titleArtReady === titleArtSlug && titleArtSlug ? `/state-titles/${titleArtSlug}.png` : null;
   const activeSequenceStep = flow?.sequence?.steps?.[flow.sequence.currentIndex] || null;
+  // Teacher-placed slide extras (the Slide Overlay property, edited in
+  // /teacher/slides) render above the auto slide and below the ink.
+  const slideOverlayData = parseSlideOverlay(activeSequenceStep?.slideOverlay);
   const lessonVisual = flow ? resolveLessonVisual({
     lessonCode: lesson?.code || activeSequenceStep?.lessonCode,
     stateId: theme.id,
@@ -951,6 +956,7 @@ export default function ClassroomStagePage() {
                 </div>
               ) : null}
               <div className="stage-board-wrap">
+                {slideOverlayData ? <SlideOverlayLayer overlay={slideOverlayData} /> : null}
                 <InkBoard room={session.id} interactive problem={stripSlideTitlePrefix(presentation.body, slideTitle, state?.label)} />
                 {lessonVisual?.kind === "area-model" ? (
                   <aside className="stage-figure-float" aria-label="Area model support">
@@ -1072,6 +1078,9 @@ export default function ClassroomStagePage() {
             </div>
             )
           )}
+          {slideOverlayData && !interlude && presentation?.mode !== "board" ? (
+            <SlideOverlayLayer overlay={slideOverlayData} />
+          ) : null}
           </div>
           {showBoardPanel && session ? (
             <aside className="stage-board-panel" aria-label="Live writing workspace">
